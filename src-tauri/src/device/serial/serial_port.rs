@@ -1,6 +1,7 @@
+use std::cell::RefCell;
 use std::io::{self, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -11,10 +12,10 @@ use crate::error::{ComBridgeError, Result};
 use super::serial_config::{DataBits, FlowControl, Parity, PortInfo, SerialPortConfig, StopBits};
 
 pub struct SerialPort {
-    port: Box<dyn SerialPortTrait>,
+    port: Arc<Mutex<Box<dyn SerialPortTrait>>>,
     config: SerialPortConfig,
     is_open: Arc<AtomicBool>,
-    read_thread: Option<JoinHandle<()>>,
+    read_thread: RefCell<Option<JoinHandle<()>>>,
 }
 
 impl SerialPort {
@@ -53,10 +54,10 @@ impl SerialPort {
         info!("串口 {} 已打开", config.port_name);
 
         Ok(Self {
-            port,
+            port: Arc::new(Mutex::new(port)),
             config,
             is_open: Arc::new(AtomicBool::new(true)),
-            read_thread: None,
+            read_thread: RefCell::new(None),
         })
     }
 
@@ -72,30 +73,29 @@ impl SerialPort {
         &self.config
     }
 
-    pub fn write(&mut self, data: &[u8]) -> Result<usize> {
+    pub fn write(&self, data: &[u8]) -> Result<usize> {
         if !self.is_open() {
             return Err(ComBridgeError::serial("串口未打开"));
         }
 
-        self.port
-            .write_all(data)
+        let mut port = self.port.lock().unwrap();
+        port.write_all(data)
             .map_err(|e| ComBridgeError::serial(format!("写入数据失败: {}", e)))?;
 
-        self.port
-            .flush()
+        port.flush()
             .map_err(|e| ComBridgeError::serial(format!("刷新缓冲区失败: {}", e)))?;
 
         debug!("串口 {} 写入 {} 字节", self.config.port_name, data.len());
         Ok(data.len())
     }
 
-    pub fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    pub fn read(&self, buf: &mut [u8]) -> Result<usize> {
         if !self.is_open() {
             return Err(ComBridgeError::serial("串口未打开"));
         }
 
-        let size = self
-            .port
+        let mut port = self.port.lock().unwrap();
+        let size = port
             .read(buf)
             .map_err(|e| ComBridgeError::serial(format!("读取数据失败: {}", e)))?;
 
@@ -103,95 +103,92 @@ impl SerialPort {
         Ok(size)
     }
 
-    pub fn start_read_loop<F>(&mut self, mut callback: F)
+    pub fn start_read_loop<F>(&self, mut callback: F)
     where
         F: FnMut(&str, &[u8]) + Send + 'static,
     {
         let is_open = Arc::clone(&self.is_open);
+        let port = Arc::clone(&self.port);
         let port_name = self.config.port_name.clone();
-        let timeout = Duration::from_millis(self.config.timeout_ms);
-
-        let mut port_clone = serialport::new(&self.config.port_name, self.config.baud_rate.into())
-            .timeout(timeout)
-            .open()
-            .ok();
-
-        if port_clone.is_none() {
-            error!("无法克隆串口 {} 用于读取线程", port_name);
-            return;
-        }
 
         let handle = thread::spawn(move || {
             let mut buffer = [0u8; 4096];
             info!("串口 {} 读取线程已启动", port_name);
 
             while is_open.load(Ordering::SeqCst) {
-                if let Some(ref mut port) = port_clone {
-                    match port.read(&mut buffer) {
-                        Ok(size) if size > 0 => {
-                            debug!("串口 {} 收到 {} 字节", port_name, size);
-                            callback(&port_name, &buffer[..size]);
-                        }
-                        Ok(_) => {}
-                        Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
+                let result = {
+                    let mut port_guard = match port.lock() {
+                        Ok(guard) => guard,
+                        Err(e) => {
+                            warn!("串口 {} 锁被占用: {}", port_name, e);
                             continue;
                         }
-                        Err(e) => {
-                            if is_open.load(Ordering::SeqCst) {
-                                warn!("串口 {} 读取错误: {}", port_name, e);
-                            }
-                            break;
-                        }
+                    };
+                    port_guard.read(&mut buffer)
+                };
+
+                match result {
+                    Ok(size) if size > 0 => {
+                        debug!("串口 {} 收到 {} 字节", port_name, size);
+                        callback(&port_name, &buffer[..size]);
                     }
-                } else {
-                    break;
+                    Ok(_) => {}
+                    Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
+                        continue;
+                    }
+                    Err(e) => {
+                        if is_open.load(Ordering::SeqCst) {
+                            warn!("串口 {} 读取错误: {}", port_name, e);
+                        }
+                        break;
+                    }
                 }
             }
 
             info!("串口 {} 读取线程已退出", port_name);
         });
 
-        self.read_thread = Some(handle);
+        *self.read_thread.borrow_mut() = Some(handle);
     }
 
-    pub fn close(&mut self) -> Result<()> {
+    pub fn close(&self) -> Result<()> {
         if !self.is_open() {
             return Ok(());
         }
 
         self.is_open.store(false, Ordering::SeqCst);
-        info!("串口 {} 已关闭", self.config.port_name);
+        info!("串口 {} 正在关闭...", self.config.port_name);
 
-        if let Some(handle) = self.read_thread.take() {
+        if let Some(handle) = self.read_thread.borrow_mut().take() {
             let _ = handle.join();
         }
 
+        info!("串口 {} 已关闭", self.config.port_name);
         Ok(())
     }
 
-    pub fn clear_buffer(&mut self) -> Result<()> {
+    pub fn clear_buffer(&self) -> Result<()> {
         if !self.is_open() {
             return Err(ComBridgeError::serial("串口未打开"));
         }
 
-        self.port
-            .clear(serialport::ClearBuffer::All)
+        let port = self.port.lock().unwrap();
+        port.clear(serialport::ClearBuffer::All)
             .map_err(|e| ComBridgeError::serial(format!("清除缓冲区失败: {}", e)))?;
 
         debug!("串口 {} 缓冲区已清除", self.config.port_name);
         Ok(())
     }
 
-    pub fn set_timeout(&mut self, timeout_ms: u64) -> Result<()> {
+    pub fn set_timeout(&self, timeout_ms: u64) -> Result<()> {
         if !self.is_open() {
             return Err(ComBridgeError::serial("串口未打开"));
         }
 
-        self.port
-            .set_timeout(Duration::from_millis(timeout_ms))
+        let mut port = self.port.lock().unwrap();
+        port.set_timeout(Duration::from_millis(timeout_ms))
             .map_err(|e| ComBridgeError::serial(format!("设置超时失败: {}", e)))?;
 
-        self.config.timeout_ms = timeout_ms;
         Ok(())
     }
 }
@@ -242,25 +239,11 @@ pub fn scan_ports() -> Result<Vec<PortInfo>> {
                     manufacturer: None,
                     product: None,
                     serial_number: None,
-                },
+                }
             };
             port_type
         })
         .collect();
 
-    info!("扫描到 {} 个串口", port_infos.len());
     Ok(port_infos)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_scan_ports() {
-        let ports = scan_ports().unwrap();
-        for port in ports {
-            println!("端口: {} ({})", port.name, port.port_type);
-        }
-    }
 }

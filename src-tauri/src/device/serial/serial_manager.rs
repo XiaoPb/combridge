@@ -67,8 +67,7 @@ impl SerialManager {
                 .ok_or_else(|| ComBridgeError::serial(format!("串口 {} 未打开", port_name)))?
         };
 
-        let mut port = port.lock().unwrap();
-        port.close()?;
+        port.lock().unwrap().close()?;
 
         info!("串口 {} 已关闭并从管理器移除", port_name);
         Ok(())
@@ -91,14 +90,16 @@ impl SerialManager {
     }
 
     pub fn send_data(&self, port_name: &str, data: &[u8]) -> Result<usize> {
-        let ports = self.ports.read().unwrap();
+        let port = {
+            let ports = self.ports.read().unwrap();
+            ports.get(port_name).map(|p| Arc::clone(p)).ok_or_else(|| ComBridgeError::serial(format!("串口 {} 未打开", port_name)))?
+        };
 
-        let port = ports
-            .get(port_name)
-            .ok_or_else(|| ComBridgeError::serial(format!("串口 {} 未打开", port_name)))?;
-
-        let mut port = port.lock().unwrap();
-        port.write(data)
+        let result = {
+            let mut port_guard = port.lock().unwrap();
+            port_guard.write(data)
+        };
+        result
     }
 
     pub fn is_port_open(&self, port_name: &str) -> bool {
@@ -127,11 +128,12 @@ impl SerialManager {
     }
 
     pub fn get_port_config(&self, port_name: &str) -> Option<SerialPortConfig> {
-        let ports = self.ports.read().unwrap();
-        ports.get(port_name).and_then(|p| {
-            let port = p.lock().unwrap();
-            Some(port.config().clone())
-        })
+        let port = {
+            let ports = self.ports.read().unwrap();
+            ports.get(port_name).map(|p| Arc::clone(p))?
+        };
+        let config = port.lock().unwrap().config().clone();
+        Some(config)
     }
 }
 

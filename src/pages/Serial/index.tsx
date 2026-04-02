@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Layout, Card, Button, Select, Spin, Typography, Space, Alert, Input, Segmented, Switch, Empty, Tag, Tabs as AntTabs } from 'antd';
-import { ReloadOutlined, UsbOutlined, DisconnectOutlined, SendOutlined, ClearOutlined, DownloadOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ArrowDownOutlined, ArrowUpOutlined } from '@ant-design/icons';
+import { ReloadOutlined, UsbOutlined, DisconnectOutlined, SendOutlined, ClearOutlined, DownloadOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useSerial } from '../../hooks/useSerial';
 import { formatTimestamp, formatData } from '../../stores/serialStore';
-import type { DataEntry } from '../../stores/serialStore';
 import { DEFAULT_BAUD_RATES, DEFAULT_SERIAL_CONFIG } from '../../types';
 import type { SerialConfig } from '../../types';
 
@@ -42,7 +41,7 @@ const SerialPage: React.FC = () => {
   const [selectedPort, setSelectedPort] = useState<string | null>(null);
   const [tempConfig, setTempConfig] = useState<SerialConfig>(DEFAULT_SERIAL_CONFIG);
 
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<any>(null);
   const lastDataCountRef = useRef(0);
 
   useEffect(() => {
@@ -50,7 +49,6 @@ const SerialPage: React.FC = () => {
   }, []);
 
   const connectedPorts = tabs.filter((t) => t.isConnected).map((t) => t.portName);
-
   const availablePorts = (ports || []).filter(
     (p) => !connectedPorts.includes(p.name) || p.name === activeTab?.portName
   );
@@ -108,8 +106,8 @@ const SerialPage: React.FC = () => {
     : activeTab?.sentData;
 
   useEffect(() => {
-    if (autoScroll && containerRef.current && (filteredData?.length || 0) !== lastDataCountRef.current) {
-      lastDataCountRef.current = filteredData?.length || 0;
+    if (autoScroll && containerRef.current && filteredData && (filteredData?.length || 0) !== lastDataCountRef.current) {
+      lastDataCountRef.current = filteredData.length;
       requestAnimationFrame(() => {
         if (containerRef.current) {
           containerRef.current.scrollTop = containerRef.current.scrollHeight;
@@ -118,7 +116,7 @@ const SerialPage: React.FC = () => {
     }
   }, [filteredData, autoScroll]);
 
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+  const handleScroll = useCallback((e: React.UIEvent<HTMLTextAreaElement>) => {
     const target = e.currentTarget;
     const isAtBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 10;
     setAutoScroll(isAtBottom);
@@ -126,12 +124,12 @@ const SerialPage: React.FC = () => {
 
   const handleExport = () => {
     if (!filteredData || filteredData.length === 0) return;
-    const content = filteredData
+    const content = (filteredData || [])
       .map((entry) => {
         const timestamp = formatTimestamp(entry.timestamp);
         const direction = entry.direction === 'receive' ? 'RX' : 'TX';
         const data = formatData(entry.data, displayFormat);
-        return `[${timestamp}] ${direction}: ${data}`;
+        return `[${timestamp}] [${direction}] [${(entry.data || []).length} byte] ${data}`;
       })
       .join('\n');
 
@@ -270,7 +268,6 @@ const SerialPage: React.FC = () => {
                   />
                 </div>
               </div>
-
               <div style={{ display: 'flex', gap: 8 }}>
                 <div style={{ flex: 1 }}>
                   <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>校验位</Text>
@@ -313,7 +310,6 @@ const SerialPage: React.FC = () => {
                   />
                 </div>
               </div>
-
               <div style={{ marginTop: 16 }}>
                 {activeTab.isConnected ? (
                   <Button
@@ -402,9 +398,16 @@ const SerialPage: React.FC = () => {
                 </Space>
               }
             >
-              <div
-                ref={containerRef}
+              <TextArea
                 onScroll={handleScroll}
+                value={(filteredData || [])
+                  .map((entry) => {
+                    const timestamp = formatTimestamp(entry.timestamp);
+                    const direction = entry.direction === 'receive' ? 'RX' : 'TX';
+                    const data = formatData(entry.data, displayFormat);
+                    return `[${timestamp}][${direction}][${(entry.data || []).length} byte] ${data}`;
+                  })
+                  .join('\n')}
                 style={{
                   flex: '1 1 0',
                   overflow: 'auto',
@@ -413,40 +416,13 @@ const SerialPage: React.FC = () => {
                   borderRadius: 4,
                   fontFamily: 'Consolas, Monaco, monospace',
                   fontSize: 13,
+                  lineHeight: 1.4,
                   minHeight: 0,
+                  resize: 'none',
                 }}
-              >
-                {(filteredData?.length || 0) === 0 ? (
-                  <Empty description="暂无数据" style={{ marginTop: 100 }} />
-                ) : (
-                  (filteredData || []).map((entry: DataEntry) => (
-                    <div
-                      key={entry.id}
-                      style={{
-                        padding: '4px 8px',
-                        marginBottom: 4,
-                        background: entry.direction === 'receive' ? 'rgba(82, 196, 26, 0.1)' : 'rgba(24, 144, 255, 0.1)',
-                        borderRadius: 4,
-                        borderLeft: `3px solid ${entry.direction === 'receive' ? '#52c41a' : '#1890ff'}`,
-                      }}
-                    >
-                      <Space size={8}>
-                        <Tag color={entry.direction === 'receive' ? 'success' : 'processing'}>
-                          {entry.direction === 'receive' ? <ArrowDownOutlined /> : <ArrowUpOutlined />}
-                          <span style={{ marginLeft: 4 }}>{entry.direction === 'receive' ? 'RX' : 'TX'}</span>
-                        </Tag>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          {formatTimestamp(entry.timestamp)}
-                        </Text>
-                        <Text>[{(entry.data || []).length} bytes]</Text>
-                      </Space>
-                      <div style={{ marginTop: 4, wordBreak: 'break-all' }}>
-                        {formatData(entry.data, displayFormat)}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+                readOnly
+                placeholder={(filteredData?.length || 0) === 0 ? '暂无数据' : ''}
+              />
             </Card>
 
             <Card
@@ -514,9 +490,10 @@ const SerialPage: React.FC = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ marginBottom: 12 }}>
+      <div style={{ marginBottom: 8, flexShrink: 0 }}>
         <AntTabs
           type="editable-card"
+          size="small"
           activeKey={activeTabKey || undefined}
           onChange={(key) => setActiveTab(key)}
           onEdit={(targetKey, action) => {
@@ -529,11 +506,11 @@ const SerialPage: React.FC = () => {
           items={tabs.map((tab) => ({
             key: tab.key,
             label: (
-              <span>
+              <span style={{ fontSize: 12 }}>
                 {tab.portName}
                 {tab.isConnected && (
                   <Tag color="success" style={{ marginLeft: 4, fontSize: 10 }}>
-                    已连接
+                    ●
                   </Tag>
                 )}
               </span>

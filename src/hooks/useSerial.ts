@@ -5,6 +5,75 @@ import { onSerialData, onSerialError, onSerialConnected, onSerialDisconnected } 
 import { useSerialStore, generateId, parseData } from '../stores/serialStore';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 
+let globalSerialListeners: {
+  data?: UnlistenFn;
+  error?: UnlistenFn;
+  connected?: UnlistenFn;
+  disconnected?: UnlistenFn;
+} = {};
+
+let listenerCount = 0;
+
+async function setupGlobalListeners(
+  addReceivedData: (entry: any) => void,
+  setError: (error: string | null) => void,
+  removeOpenPort: (portName: string) => void
+) {
+  if (listenerCount > 0) {
+    listenerCount++;
+    return;
+  }
+
+  globalSerialListeners.data = await onSerialData((event) => {
+    addReceivedData({
+      id: generateId(),
+      timestamp: event.timestamp ?? Date.now(),
+      data: event.data,
+      direction: 'receive',
+      format: 'hex',
+    });
+  });
+
+  globalSerialListeners.error = await onSerialError((event) => {
+    setError(event.error);
+    message.error(`串口错误: ${event.error}`);
+  });
+
+  globalSerialListeners.connected = await onSerialConnected((portName) => {
+    message.success(`串口 ${portName} 已连接`);
+  });
+
+  globalSerialListeners.disconnected = await onSerialDisconnected((portName) => {
+    removeOpenPort(portName);
+    message.info(`串口 ${portName} 已断开`);
+  });
+
+  listenerCount++;
+}
+
+async function cleanupGlobalListeners() {
+  listenerCount--;
+  if (listenerCount <= 0) {
+    listenerCount = 0;
+    if (globalSerialListeners.data) {
+      globalSerialListeners.data();
+      globalSerialListeners.data = undefined;
+    }
+    if (globalSerialListeners.error) {
+      globalSerialListeners.error();
+      globalSerialListeners.error = undefined;
+    }
+    if (globalSerialListeners.connected) {
+      globalSerialListeners.connected();
+      globalSerialListeners.connected = undefined;
+    }
+    if (globalSerialListeners.disconnected) {
+      globalSerialListeners.disconnected();
+      globalSerialListeners.disconnected = undefined;
+    }
+  }
+}
+
 export const useSerial = () => {
   const {
     ports,
@@ -27,42 +96,17 @@ export const useSerial = () => {
     setError,
   } = useSerialStore();
 
-  const listenersRef = useRef<UnlistenFn[]>([]);
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
-    const setupListeners = async () => {
-      const unlistenData = await onSerialData((event) => {
-        addReceivedData({
-          id: generateId(),
-          timestamp: event.timestamp ?? Date.now(),
-          data: event.data,
-          direction: 'receive',
-          format: 'hex',
-        });
-      });
+    if (isMountedRef.current) return;
+    isMountedRef.current = true;
 
-      const unlistenError = await onSerialError((event) => {
-        setError(event.error);
-        message.error(`串口错误: ${event.error}`);
-      });
-
-      const unlistenConnected = await onSerialConnected((portName) => {
-        message.success(`串口 ${portName} 已连接`);
-      });
-
-      const unlistenDisconnected = await onSerialDisconnected((portName) => {
-        removeOpenPort(portName);
-        message.info(`串口 ${portName} 已断开`);
-      });
-
-      listenersRef.current = [unlistenData, unlistenError, unlistenConnected, unlistenDisconnected];
-    };
-
-    setupListeners();
+    setupGlobalListeners(addReceivedData, setError, removeOpenPort);
 
     return () => {
-      listenersRef.current.forEach((unlisten) => unlisten());
-      listenersRef.current = [];
+      isMountedRef.current = false;
+      cleanupGlobalListeners();
     };
   }, [addReceivedData, setError, removeOpenPort]);
 

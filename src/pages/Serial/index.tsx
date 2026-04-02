@@ -51,7 +51,7 @@ const SerialPage: React.FC = () => {
     <div>
       {error && (
         <Alert
-          message="错误"
+          title="错误"
           description={error}
           type="error"
           closable

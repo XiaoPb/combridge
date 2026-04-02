@@ -52,7 +52,7 @@ const SerialToolbar: React.FC<SerialToolbarProps> = ({
           value={currentPort}
           onChange={onSelectPort}
           disabled={isConnected}
-          options={ports.map((port) => ({
+        options={(ports || []).map((port) => ({
             value: port.portName,
             label: (
               <div>

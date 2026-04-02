@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Row, Col, Card, Button, Space, Input, Modal, Typography, Alert, Tabs, Divider } from 'antd';
+import { Card, Button, Space, Input, Modal, Typography, Alert, Tabs } from 'antd';
 import {
   FolderOpenOutlined,
   ReloadOutlined,
@@ -86,18 +86,18 @@ const ProtocolPage: React.FC = () => {
   const selectedProtocol = protocols.find((p) => p.id === currentProtocol);
 
   return (
-    <div>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {error && (
         <Alert
           message="错误"
           description={error}
           type="error"
           closable
-          style={{ marginBottom: 16 }}
+          style={{ marginBottom: 8, flexShrink: 0 }}
         />
       )}
 
-      <Card size="small" style={{ marginBottom: 16 }}>
+      <Card size="small" style={{ flex: '0 0 auto', marginBottom: 8, padding: 8 }} bodyStyle={{ padding: 8 }}>
         <Space wrap>
           <Button
             type="primary"
@@ -113,7 +113,6 @@ const ProtocolPage: React.FC = () => {
           >
             刷新列表
           </Button>
-          <Divider orientation="vertical" />
           <Text type="secondary">
             共 {protocols.length} 个协议，
             {protocols.filter((p) => p.state === 'Enabled').length} 个已启用
@@ -121,8 +120,8 @@ const ProtocolPage: React.FC = () => {
         </Space>
       </Card>
 
-      <Row gutter={16}>
-        <Col xs={24} lg={14}>
+      <div style={{ flex: '1 1 0', display: 'flex', gap: 8, minHeight: 0, overflow: 'hidden' }}>
+        <div style={{ flex: '1 1 0', minWidth: 0, overflow: 'auto' }}>
           <ProtocolList
             protocols={protocols}
             loading={isLoading}
@@ -133,8 +132,9 @@ const ProtocolPage: React.FC = () => {
             onUnload={handleUnload}
             onEdit={handleEdit}
           />
-        </Col>
-        <Col xs={24} lg={10}>
+        </div>
+
+        <div style={{ flex: '1 1 0', minWidth: 0, overflow: 'auto' }}>
           <Tabs
             defaultActiveKey="editor"
             items={[
@@ -171,8 +171,8 @@ const ProtocolPage: React.FC = () => {
               },
             ]}
           />
-        </Col>
-      </Row>
+        </div>
+      </div>
 
       <Modal
         title="加载协议"

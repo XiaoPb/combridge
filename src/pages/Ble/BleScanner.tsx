@@ -72,7 +72,7 @@ const BleScanner: React.FC<BleScannerProps> = ({
       width: 150,
       render: (rssi?: number) =>
         rssi ? (
-          <Space direction="vertical" size={0} style={{ width: '100%' }}>
+          <Space vertical size={0} style={{ width: '100%' }}>
             <Tag color={getRssiColor(rssi)}>{rssi} dBm</Tag>
             <Progress
               percent={getRssiPercent(rssi)}
@@ -156,7 +156,7 @@ const BleScanner: React.FC<BleScannerProps> = ({
         </Space>
       }
     >
-      <Space direction="vertical" style={{ width: '100%', marginBottom: 16 }}>
+      <Space vertical style={{ width: '100%', marginBottom: 16 }}>
         <Search
           placeholder="按名称过滤设备"
           value={filterName}

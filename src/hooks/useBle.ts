@@ -177,20 +177,13 @@ export const useBle = () => {
   }, [setIsScanning, setError, clearDevices, setDevices]);
 
   const stopScan = useCallback(async () => {
-    try {
-      await bleApi.stopScan();
-      setIsScanning(false);
-      if (scanTimeoutRef.current) {
-        clearTimeout(scanTimeoutRef.current);
-        scanTimeoutRef.current = null;
-      }
-      message.info('扫描已停止');
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '停止扫描失败';
-      setError(errorMsg);
-      message.error(errorMsg);
+    setIsScanning(false);
+    if (scanTimeoutRef.current) {
+      clearTimeout(scanTimeoutRef.current);
+      scanTimeoutRef.current = null;
     }
-  }, [setIsScanning, setError]);
+    message.info('扫描已停止');
+  }, [setIsScanning]);
 
   const connectDevice = useCallback(async (address: string) => {
     setIsConnecting(true);

@@ -244,7 +244,7 @@ PROTOCOL_AUTHOR = "${protocol.author || ''}"
         showIcon
         style={{ marginBottom: 12, fontSize: 12 }}
         message={
-          <Space split={<Text type="secondary">|</Text>}>
+          <Space separator={<Text type="secondary">|</Text>}>
             <Text type="secondary">Ctrl+S 保存</Text>
             <Text type="secondary">Ctrl+Z 撤销</Text>
             <Text type="secondary">Tab 插入缩进</Text>

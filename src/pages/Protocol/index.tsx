@@ -113,7 +113,7 @@ const ProtocolPage: React.FC = () => {
           >
             刷新列表
           </Button>
-          <Divider type="vertical" />
+          <Divider orientation="vertical" />
           <Text type="secondary">
             共 {protocols.length} 个协议，
             {protocols.filter((p) => p.state === 'Enabled').length} 个已启用
@@ -183,7 +183,7 @@ const ProtocolPage: React.FC = () => {
         cancelText="取消"
         confirmLoading={isLoading}
       >
-        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+        <Space vertical style={{ width: '100%' }} size="middle">
           <div>
             <Text>协议 ID</Text>
             <Input

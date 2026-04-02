@@ -135,7 +135,7 @@ const BindConfig: React.FC<BindConfigProps> = ({
       }
       size="small"
     >
-      <Space direction="vertical" style={{ width: '100%' }} size="middle">
+      <Space vertical style={{ width: '100%' }} size="middle">
         <Space wrap>
           <Select
             placeholder="选择协议"

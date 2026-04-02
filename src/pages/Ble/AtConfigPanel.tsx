@@ -116,9 +116,9 @@ const AtConfigPanel: React.FC<AtConfigPanelProps> = ({
 
   return (
     <Card title="AT 指令配置" size="small">
-      <Space direction="vertical" style={{ width: '100%' }}>
+      <Space vertical style={{ width: '100%' }}>
         <Alert
-          message="AT 模式说明"
+          title="AT 模式说明"
           description="通过串口发送 AT 指令控制 BLE 模块。请先选择串口并确保模块已正确连接。"
           type="info"
           showIcon

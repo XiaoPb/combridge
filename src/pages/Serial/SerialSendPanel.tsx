@@ -81,7 +81,7 @@ const SerialSendPanel: React.FC<SerialSendPanelProps> = ({
         </Space>
       }
     >
-      <Space direction="vertical" style={{ width: '100%' }} size="middle">
+      <Space vertical style={{ width: '100%' }} size="middle">
         <div style={{ display: 'flex', gap: 8 }}>
           <TextArea
             value={inputData}

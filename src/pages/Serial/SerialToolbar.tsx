@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Select, Space, Spin, Typography } from 'antd';
+import { Button, Select, Spin, Typography, Flex } from 'antd';
 import { ReloadOutlined, UsbOutlined, DisconnectOutlined } from '@ant-design/icons';
 import type { SerialConfig } from '../../types';
 import { DEFAULT_BAUD_RATES } from '../../types';
@@ -37,7 +37,7 @@ const SerialToolbar: React.FC<SerialToolbarProps> = ({
 }) => {
   return (
     <div style={{ padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px' }}>
-      <Space size="middle" wrap>
+      <Flex gap="middle" wrap="wrap">
         <Button
           icon={isScanning ? <Spin size="small" /> : <ReloadOutlined />}
           onClick={onScan}
@@ -133,7 +133,7 @@ const SerialToolbar: React.FC<SerialToolbarProps> = ({
             打开串口
           </Button>
         )}
-      </Space>
+      </Flex>
     </div>
   );
 };

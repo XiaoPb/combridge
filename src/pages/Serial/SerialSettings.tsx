@@ -134,7 +134,7 @@ const SerialSettings: React.FC<SerialSettingsProps> = ({
 
         <Divider />
 
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <Space vertical style={{ width: '100%' }}>
           <Text type="secondary" style={{ fontSize: 12 }}>
             当前配置:
           </Text>

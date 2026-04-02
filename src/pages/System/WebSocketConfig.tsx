@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Card, Form, Input, InputNumber, Switch, Button, Space, message, Divider, Typography } from 'antd';
+import { Card, Form, Input, InputNumber, Switch, Button, Space, message, Divider, Typography, Flex } from 'antd';
 import { SaveOutlined, ReloadOutlined, LinkOutlined, DisconnectOutlined } from '@ant-design/icons';
+import { websocketApi } from '../../api/tauri';
 
 const { Text } = Typography;
 
@@ -17,31 +18,39 @@ const WebSocketConfig: React.FC = () => {
   const [form] = Form.useForm<WebSocketConfig>();
   const [connecting, setConnecting] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [connectionId, setConnectionId] = useState<string | null>(null);
 
   const handleConnect = async () => {
     try {
       const values = await form.validateFields();
       setConnecting(true);
 
-      console.log('Connecting to:', values.url);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
+      const id = `ws-${Date.now()}`;
+      await websocketApi.connect(id, values.url, values.autoReconnect);
+      
+      setConnectionId(id);
       setConnected(true);
       message.success(`已连接到 ${values.url}`);
     } catch (err) {
-      message.error('连接失败: ' + (err instanceof Error ? err.message : '未知错误'));
+      const errorMsg = err instanceof Error ? err.message : '未知错误';
+      console.error('WebSocket连接失败:', errorMsg);
+      message.error('连接失败: ' + errorMsg);
     } finally {
       setConnecting(false);
     }
   };
 
   const handleDisconnect = async () => {
+    if (!connectionId) return;
+    
     try {
-      console.log('Disconnecting...');
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await websocketApi.disconnect(connectionId);
       setConnected(false);
+      setConnectionId(null);
       message.info('已断开连接');
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '未知错误';
+      console.error('WebSocket断开失败:', errorMsg);
       message.error('断开连接失败');
     }
   };
@@ -49,9 +58,11 @@ const WebSocketConfig: React.FC = () => {
   const handleSaveConfig = async () => {
     try {
       const values = await form.validateFields();
-      console.log('Saving config:', values);
+      localStorage.setItem('websocket-config', JSON.stringify(values));
       message.success('配置已保存');
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '未知错误';
+      console.error('保存配置失败:', errorMsg);
       message.error('保存配置失败');
     }
   };
@@ -188,7 +199,7 @@ const WebSocketConfig: React.FC = () => {
         </Form.Item>
 
         <Form.Item>
-          <Space>
+          <Flex gap="middle">
             <Button
               type="primary"
               icon={<SaveOutlined />}
@@ -202,21 +213,21 @@ const WebSocketConfig: React.FC = () => {
             >
               重置
             </Button>
-          </Space>
+          </Flex>
         </Form.Item>
       </Form>
 
       {connected && (
         <>
           <Divider>连接状态</Divider>
-          <Space direction="vertical" style={{ width: '100%' }}>
+          <Flex vertical gap="small">
             <Text>
               状态: <Text type="success">已连接</Text>
             </Text>
             <Text type="secondary">
               已发送: 1,234 字节 | 已接收: 5,678 字节
             </Text>
-          </Space>
+          </Flex>
         </>
       )}
     </Card>

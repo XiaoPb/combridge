@@ -56,7 +56,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
 
   return (
     <Card title="特征操作面板" size="small">
-      <Space direction="vertical" style={{ width: '100%' }}>
+      <Space vertical style={{ width: '100%' }}>
         <Descriptions size="small" column={1} bordered>
           <Descriptions.Item label="UUID">
             <Text code style={{ fontSize: '11px' }}>
@@ -75,7 +75,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
           </Descriptions.Item>
           {value && (
             <Descriptions.Item label="当前值">
-              <Space direction="vertical" style={{ width: '100%' }}>
+              <Space vertical style={{ width: '100%' }}>
                 <Space>
                   <Text code>{formatBleData(value, 'hex')}</Text>
                   <Button

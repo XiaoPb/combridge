@@ -22,7 +22,7 @@ const BleModeSelector: React.FC<BleModeSelectorProps> = ({
 }) => {
   return (
     <Card title="BLE 模式配置" size="small">
-      <Space direction="vertical" style={{ width: '100%' }}>
+      <Space vertical style={{ width: '100%' }}>
         <div>
           <Text type="secondary">选择 BLE 工作模式：</Text>
           <Radio.Group
@@ -47,7 +47,7 @@ const BleModeSelector: React.FC<BleModeSelectorProps> = ({
 
         {mode === 'native' && (
           <Alert
-            message="Native 模式"
+            title="Native 模式"
             description="使用系统原生 BLE 适配器进行蓝牙通信，支持完整的 BLE 功能。"
             type="info"
             showIcon
@@ -70,7 +70,7 @@ const BleModeSelector: React.FC<BleModeSelectorProps> = ({
               />
             </div>
             <Alert
-              message="AT 模式"
+              title="AT 模式"
               description="通过串口连接 BLE 模块（如 HC-08、CC2541 等），使用 AT 指令进行通信。"
               type="info"
               showIcon

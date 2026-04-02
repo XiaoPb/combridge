@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Card, Button, Input, Table, Space, Tag, Progress, Empty, InputNumber } from 'antd';
+import { Card, Button, Input, Table, Space, Tag, Progress, Empty, InputNumber, Typography, Flex } from 'antd';
 import { SearchOutlined, StopOutlined } from '@ant-design/icons';
 import type { BleDeviceInfo } from '../../types';
 import { formatBleTimestamp } from '../../stores/bleStore';
 
+const { Text } = Typography;
 const { Search } = Input;
 
 interface BleScannerProps {
@@ -24,7 +25,12 @@ const BleScanner: React.FC<BleScannerProps> = ({
   const [filterName, setFilterName] = useState('');
   const [scanTimeout, setScanTimeout] = useState(10);
 
-  const filteredDevices = devices.filter((device) => {
+  if (import.meta.env.DEV) {
+    console.debug('[BleScanner] props:', { devices, isScanning, onScan, onStopScan, onConnect });
+    console.debug('[BleScanner] devices:', devices);
+  }
+
+  const filteredDevices = (devices || []).filter((device) => {
     if (filterName && device.name) {
       return device.name.toLowerCase().includes(filterName.toLowerCase());
     }
@@ -72,7 +78,7 @@ const BleScanner: React.FC<BleScannerProps> = ({
       width: 150,
       render: (rssi?: number) =>
         rssi ? (
-          <Space vertical size={0} style={{ width: '100%' }}>
+          <Flex vertical gap="small" style={{ width: '100%' }}>
             <Tag color={getRssiColor(rssi)}>{rssi} dBm</Tag>
             <Progress
               percent={getRssiPercent(rssi)}
@@ -80,7 +86,7 @@ const BleScanner: React.FC<BleScannerProps> = ({
               showInfo={false}
               strokeColor={getRssiColor(rssi) === 'green' ? '#52c41a' : getRssiColor(rssi) === 'blue' ? '#1890ff' : getRssiColor(rssi) === 'orange' ? '#fa8c16' : '#f5222d'}
             />
-          </Space>
+          </Flex>
         ) : (
           <Text type="secondary">-</Text>
         ),
@@ -126,15 +132,18 @@ const BleScanner: React.FC<BleScannerProps> = ({
       size="small"
       extra={
         <Space>
-          <InputNumber
-            min={1}
-            max={60}
-            value={scanTimeout}
-            onChange={(v) => setScanTimeout(v || 10)}
-            addonAfter="秒"
-            style={{ width: 100 }}
-            disabled={isScanning}
-          />
+          <Flex align="center" gap={4}>
+            <Text type="secondary">扫描时长</Text>
+            <InputNumber
+              min={1}
+              max={60}
+              value={scanTimeout}
+              onChange={(v) => setScanTimeout(v || 10)}
+              style={{ width: 80 }}
+              disabled={isScanning}
+            />
+            <Text type="secondary">秒</Text>
+          </Flex>
           {isScanning ? (
             <Button
               type="primary"
@@ -178,7 +187,7 @@ const BleScanner: React.FC<BleScannerProps> = ({
         </div>
       )}
 
-      {filteredDevices.length > 0 ? (
+      {(filteredDevices || []).length > 0 ? (
         <Table
           dataSource={filteredDevices}
           columns={columns}
@@ -197,8 +206,5 @@ const BleScanner: React.FC<BleScannerProps> = ({
     </Card>
   );
 };
-
-const Text = Typography.Text;
-import { Typography } from 'antd';
 
 export default BleScanner;

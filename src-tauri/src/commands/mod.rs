@@ -1,6 +1,7 @@
 pub mod ble;
 pub mod protocol;
 pub mod serial;
+pub mod system;
 pub mod websocket;
 
 pub use ble::{
@@ -16,6 +17,11 @@ pub use protocol::{
 pub use serial::{
     close_serial_port, get_open_ports, is_port_open, open_serial_port, scan_serial_ports,
     send_serial_data, SerialDataEvent, SerialPortConfigDto,
+};
+pub use system::{
+    configure_log, get_app_version, get_log_config, get_platform, get_runtime_status,
+    get_system_info, get_system_status, open_url, show_in_folder, DiskUsage, LogConfig,
+    RuntimeStatus, SystemInfo, SystemStatus,
 };
 pub use websocket::{
     connect_websocket, disconnect_websocket, get_all_websocket_connections,

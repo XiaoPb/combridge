@@ -1,0 +1,201 @@
+import React, { useState, useMemo } from 'react';
+import { Card, Table, Tag, Space, Button, Select, Input, Typography, Empty, Tooltip } from 'antd';
+import {
+  ClearOutlined,
+  DownloadOutlined,
+  FilterOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
+} from '@ant-design/icons';
+import LogEntry from './LogEntry';
+import LogFilter from './LogFilter';
+
+const { Text } = Typography;
+const { Search } = Input;
+
+export interface DataLogEntry {
+  id: string;
+  timestamp: number;
+  direction: 'send' | 'receive';
+  data: number[];
+  format: 'hex' | 'text' | 'binary';
+  source?: string;
+  note?: string;
+}
+
+interface DataLoggerProps {
+  entries: DataLogEntry[];
+  onClear?: () => void;
+  onExport?: () => void;
+  maxHeight?: number;
+  showFilter?: boolean;
+  showExport?: boolean;
+  autoScroll?: boolean;
+}
+
+const formatTimestamp = (timestamp: number): string => {
+  const date = new Date(timestamp);
+  return date.toLocaleString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    fractionalSecondDigits: 3,
+  });
+};
+
+const formatData = (data: number[], format: 'hex' | 'text' | 'binary'): string => {
+  switch (format) {
+    case 'hex':
+      return data.map((b) => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+    case 'text':
+      return new TextDecoder().decode(new Uint8Array(data));
+    case 'binary':
+      return data.map((b) => b.toString(2).padStart(8, '0')).join(' ');
+    default:
+      return data.map((b) => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+  }
+};
+
+const DataLogger: React.FC<DataLoggerProps> = ({
+  entries,
+  onClear,
+  onExport,
+  maxHeight = 400,
+  showFilter = true,
+  showExport = true,
+  autoScroll = true,
+}) => {
+  const [directionFilter, setDirectionFilter] = useState<'all' | 'send' | 'receive'>('all');
+  const [formatFilter, setFormatFilter] = useState<'hex' | 'text' | 'binary'>('hex');
+  const [searchText, setSearchText] = useState('');
+
+  const filteredEntries = useMemo(() => {
+    let filtered = entries;
+
+    if (directionFilter !== 'all') {
+      filtered = filtered.filter((entry) => entry.direction === directionFilter);
+    }
+
+    if (searchText) {
+      filtered = filtered.filter((entry) => {
+        const dataStr = formatData(entry.data, formatFilter);
+        return dataStr.toLowerCase().includes(searchText.toLowerCase());
+      });
+    }
+
+    return filtered;
+  }, [entries, directionFilter, formatFilter, searchText]);
+
+  const handleExport = () => {
+    if (onExport) {
+      onExport();
+      return;
+    }
+
+    const content = filteredEntries
+      .map((entry) => {
+        const dir = entry.direction === 'send' ? 'TX' : 'RX';
+        const data = formatData(entry.data, formatFilter);
+        return `[${formatTimestamp(entry.timestamp)}] [${dir}] ${data}`;
+      })
+      .join('\n');
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `combridge-log-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const columns = [
+    {
+      title: '时间',
+      dataIndex: 'timestamp',
+      key: 'timestamp',
+      width: 100,
+      render: (timestamp: number) => (
+        <Text style={{ fontSize: 11, fontFamily: 'monospace' }}>
+          {formatTimestamp(timestamp)}
+        </Text>
+      ),
+    },
+    {
+      title: '方向',
+      dataIndex: 'direction',
+      key: 'direction',
+      width: 60,
+      render: (direction: 'send' | 'receive') => (
+        <Tag color={direction === 'send' ? 'blue' : 'green'} style={{ margin: 0 }}>
+          {direction === 'send' ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
+        </Tag>
+      ),
+    },
+    {
+      title: '数据',
+      dataIndex: 'data',
+      key: 'data',
+      render: (data: number[], record: DataLogEntry) => (
+        <LogEntry data={data} format={formatFilter} />
+      ),
+    },
+    {
+      title: '长度',
+      dataIndex: 'data',
+      key: 'length',
+      width: 60,
+      render: (data: number[]) => <Text type="secondary">{data.length}</Text>,
+    },
+  ];
+
+  return (
+    <Card
+      size="small"
+      extra={
+        <Space>
+          {showExport && (
+            <Tooltip title="导出日志">
+              <Button size="small" icon={<DownloadOutlined />} onClick={handleExport}>
+                导出
+              </Button>
+            </Tooltip>
+          )}
+          <Tooltip title="清空日志">
+            <Button size="small" icon={<ClearOutlined />} onClick={onClear} danger>
+              清空
+            </Button>
+          </Tooltip>
+        </Space>
+      }
+    >
+      {showFilter && (
+        <LogFilter
+          directionFilter={directionFilter}
+          formatFilter={formatFilter}
+          searchText={searchText}
+          onDirectionChange={setDirectionFilter}
+          onFormatChange={setFormatFilter}
+          onSearchChange={setSearchText}
+        />
+      )}
+
+      <div style={{ maxHeight, overflow: 'auto' }}>
+        {filteredEntries.length > 0 ? (
+          <Table
+            dataSource={filteredEntries}
+            columns={columns}
+            rowKey="id"
+            size="small"
+            pagination={false}
+            showHeader={true}
+          />
+        ) : (
+          <Empty description="暂无数据" style={{ padding: 20 }} />
+        )}
+      </div>
+    </Card>
+  );
+};
+
+export default DataLogger;

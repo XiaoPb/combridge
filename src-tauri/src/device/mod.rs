@@ -1,4 +1,5 @@
 pub mod ble;
+pub mod device_manager;
 pub mod serial;
 
 pub use ble::{
@@ -8,4 +9,7 @@ pub use ble::{
 pub use serial::{
     BaudRate, DataBits, FlowControl, Parity, PortInfo, SerialManager, SerialManagerRef,
     SerialPortConfig, StopBits,
+};
+pub use device_manager::{
+    DataFilter, DataRoute, DeviceInfo, DeviceManager, DeviceManagerRef, DeviceType,
 };

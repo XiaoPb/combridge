@@ -21,12 +21,30 @@ export type BleDataEvent = {
 export type BleConnectionEvent = {
   deviceId: string;
   address: string;
+  name?: string;
   connected: boolean;
 };
 
 export type BleErrorEvent = {
   deviceId?: string;
   error: string;
+};
+
+export type BleScanResultEvent = {
+  device: {
+    address: string;
+    name?: string;
+    rssi?: number;
+    isConnectable: boolean;
+    services?: string[];
+    manufacturerData?: Record<string, number[]>;
+  };
+  timestamp: number;
+};
+
+export type BleModeChangedEvent = {
+  mode: 'native' | 'at';
+  serialPort?: string;
 };
 
 export const TauriEvents = {
@@ -39,6 +57,7 @@ export const TauriEvents = {
   BLE_DISCONNECTED: 'ble-disconnected',
   BLE_ERROR: 'ble-error',
   BLE_SCAN_RESULT: 'ble-scan-result',
+  BLE_MODE_CHANGED: 'ble-mode-changed',
 } as const;
 
 export function onSerialData(callback: (event: SerialDataEvent) => void): Promise<UnlistenFn> {
@@ -102,6 +121,21 @@ export function onBleScanResult(callback: (device: unknown) => void): Promise<Un
   });
 }
 
+export function onBleModeChanged(callback: (event: BleModeChangedEvent) => void): Promise<UnlistenFn> {
+  return listen<BleModeChangedEvent>(TauriEvents.BLE_MODE_CHANGED, (event) => {
+    callback(event.payload);
+  });
+}
+
+export const bleEvents = {
+  onData: onBleData,
+  onConnected: onBleConnected,
+  onDisconnected: onBleDisconnected,
+  onError: onBleError,
+  onScanResult: onBleScanResult,
+  onModeChanged: onBleModeChanged,
+};
+
 export interface EventListeners {
   serialData?: UnlistenFn;
   serialError?: UnlistenFn;
@@ -112,6 +146,7 @@ export interface EventListeners {
   bleDisconnected?: UnlistenFn;
   bleError?: UnlistenFn;
   bleScanResult?: UnlistenFn;
+  bleModeChanged?: UnlistenFn;
 }
 
 export async function cleanupListeners(listeners: EventListeners): Promise<void> {

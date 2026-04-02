@@ -16,6 +16,7 @@ fn format_hex(data: &[u8]) -> String {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SerialPortConfigDto {
     pub port_name: String,
     pub baud_rate: Option<String>,

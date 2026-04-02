@@ -43,13 +43,13 @@ export const serialApi = {
   async open(portName: string, config: SerialConfig): Promise<void> {
     await invoke<void>('open_serial_port', {
       config: {
-        port_name: portName,
-        baud_rate: String(config.baudRate),
-        data_bits: config.dataBits,
+        portName: portName,
+        baudRate: String(config.baudRate),
+        dataBits: config.dataBits,
         parity: config.parity,
-        stop_bits: config.stopBits,
-        flow_control: config.flowControl,
-        pack_timeout_ms: 50,
+        stopBits: config.stopBits,
+        flowControl: config.flowControl,
+        packTimeoutMs: 50,
       },
     });
   },
@@ -63,7 +63,7 @@ export const serialApi = {
    * 对应后端命令: close_serial_port
    */
   async close(portName: string): Promise<void> {
-    await invoke<void>('close_serial_port', { port_name: portName });
+    await invoke<void>('close_serial_port', { portName });
   },
 
   closePort(portName: string): Promise<void> {
@@ -75,7 +75,7 @@ export const serialApi = {
    * 对应后端命令: send_serial_data
    */
   async write(portName: string, data: number[]): Promise<void> {
-    await invoke<void>('send_serial_data', { port_name: portName, data });
+    await invoke<void>('send_serial_data', { portName, data });
   },
 
   sendData(portName: string, data: number[]): Promise<void> {
@@ -95,7 +95,7 @@ export const serialApi = {
    * 对应后端命令: is_port_open
    */
   async isConnected(portName: string): Promise<boolean> {
-    return invoke<boolean>('is_port_open', { port_name: portName });
+    return invoke<boolean>('is_port_open', { portName });
   },
 };
 

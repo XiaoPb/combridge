@@ -66,6 +66,15 @@ pub fn run() {
             commands::protocol::list_protocols,
             commands::protocol::get_protocol,
             commands::protocol::get_bound_protocols,
+            commands::system::get_system_info,
+            commands::system::get_system_status,
+            commands::system::configure_log,
+            commands::system::get_log_config,
+            commands::system::get_runtime_status,
+            commands::system::get_app_version,
+            commands::system::get_platform,
+            commands::system::open_url,
+            commands::system::show_in_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -32,4 +32,6 @@ tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
 futures-util = "0.3"
 uuid = { version = "1", features = ["v4"] }
 mlua = { version = "0.9", features = ["lua54", "vendored"] }
+sysinfo = "0.30"
+open = "5"
 

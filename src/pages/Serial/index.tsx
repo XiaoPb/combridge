@@ -103,8 +103,8 @@ const SerialPage: React.FC = () => {
   const filteredData = displayMode === 'all'
     ? allData
     : displayMode === 'receive'
-    ? activeTab?.receivedData
-    : activeTab?.sentData;
+    ? (activeTab?.receivedData || [])
+    : (activeTab?.sentData || []);
 
   useEffect(() => {
     if (autoScroll && containerRef.current && filteredData && (filteredData?.length || 0) !== lastDataCountRef.current) {
@@ -124,8 +124,10 @@ const SerialPage: React.FC = () => {
   }, []);
 
   const handleExport = () => {
-    if (!filteredData || filteredData.length === 0) return;
-    const content = (filteredData || [])
+    if (!filteredData || filteredData.length === 0) {
+      return;
+    }
+    const content = filteredData
       .map((entry) => {
         const timestamp = formatTimestamp(entry.timestamp);
         const direction = entry.direction === 'receive' ? 'RX' : 'TX';
@@ -139,7 +141,9 @@ const SerialPage: React.FC = () => {
     const a = document.createElement('a');
     a.href = url;
     a.download = `serial-data-${activeTab?.portName || 'unknown'}-${Date.now()}.txt`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
@@ -390,10 +394,10 @@ const SerialPage: React.FC = () => {
                       { value: 'text', label: 'TEXT' },
                     ]}
                   />
-                  <Button icon={<DownloadOutlined />} onClick={handleExport} disabled={(filteredData?.length || 0) === 0} size="small">
+                  <Button icon={<DownloadOutlined />} onClick={handleExport} disabled={filteredData.length === 0} size="small">
                     导出
                   </Button>
-                  <Button icon={<ClearOutlined />} onClick={() => activeTabKey && clearTabData(activeTabKey)} disabled={(filteredData?.length || 0) === 0} size="small">
+                  <Button icon={<ClearOutlined />} onClick={() => activeTabKey && clearTabData(activeTabKey)} disabled={filteredData.length === 0} size="small">
                     清空
                   </Button>
                 </Space>

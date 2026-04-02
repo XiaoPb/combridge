@@ -30,7 +30,7 @@ const SerialPage: React.FC = () => {
     setError,
   } = useSerial();
 
-  const [siderCollapsed, setSiderCollapsed] = useState(false);
+  const [siderCollapsed, setSiderCollapsed] = useState(true);
   const [displayFormat, setDisplayFormat] = useState<'hex' | 'text'>('hex');
   const [displayMode, setDisplayMode] = useState<'all' | 'receive' | 'send'>('all');
   const [autoScroll, setAutoScroll] = useState(true);
@@ -60,6 +60,7 @@ const SerialPage: React.FC = () => {
     }
     await openPort(selectedPort, tempConfig);
     setSelectedPort(null);
+    setSiderCollapsed(true);
   };
 
   const handleClosePort = async () => {
@@ -163,13 +164,13 @@ const SerialPage: React.FC = () => {
           style={{
             background: 'var(--bg-secondary)',
             borderRadius: '8px',
-            marginRight: siderCollapsed ? 0 : 16,
+            marginRight: siderCollapsed ? 0 : 8,
             overflow: 'hidden',
             transition: 'all 0.2s',
           }}
         >
-          <div style={{ padding: 16, height: '100%', overflow: 'auto' }}>
-            <Title level={5} style={{ marginBottom: 16 }}>串口设置</Title>
+          <div style={{ padding: 8, height: '100%', overflow: 'auto' }}>
+            <Title level={5} style={{ marginBottom: 8 }}>串口设置</Title>
             
             <Space direction="vertical" style={{ width: '100%' }} size="middle">
               <div>
@@ -310,7 +311,7 @@ const SerialPage: React.FC = () => {
                   />
                 </div>
               </div>
-              <div style={{ marginTop: 16 }}>
+              <div style={{ marginTop: 8 }}>
                 {activeTab.isConnected ? (
                   <Button
                     type="primary"
@@ -334,7 +335,7 @@ const SerialPage: React.FC = () => {
                 )}
               </div>
 
-              <div style={{ marginTop: 16, padding: 12, background: 'var(--bg-primary)', borderRadius: 4 }}>
+              <div style={{ marginTop: 8, padding: 8, background: 'var(--bg-primary)', borderRadius: 4 }}>
                 <Text type="secondary" style={{ fontSize: 12 }}>当前配置:</Text>
                 <Text code style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
                   {activeTab.config?.baudRate || tempConfig.baudRate}, {activeTab.config?.dataBits || tempConfig.dataBits}{activeTab.config?.stopBits || tempConfig.stopBits}, {activeTab.config?.parity || tempConfig.parity}, {activeTab.config?.flowControl || tempConfig.flowControl}
@@ -352,14 +353,14 @@ const SerialPage: React.FC = () => {
                 type="error"
                 closable
                 onClose={() => setError(null)}
-                style={{ marginBottom: 12, flexShrink: 0 }}
+                style={{ marginBottom: 8, flexShrink: 0 }}
               />
             )}
 
             <Card
               size="small"
-              style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', marginBottom: 12, minHeight: 0 }}
-              bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 12, overflow: 'hidden', minHeight: 0 }}
+              style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', marginBottom: 8, minHeight: 0 }}
+              bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden', minHeight: 0 }}
               title={
                 <Space>
                   <Button
@@ -428,7 +429,7 @@ const SerialPage: React.FC = () => {
             <Card
               size="small"
               style={{ flex: '0 0 auto', flexShrink: 0 }}
-              bodyStyle={{ padding: 12 }}
+              bodyStyle={{ padding: 8 }}
               title={
                 <Space>
                   <span>发送面板</span>
@@ -490,7 +491,7 @@ const SerialPage: React.FC = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ marginBottom: 8, flexShrink: 0 }}>
+      <div style={{ marginBottom: 4, flexShrink: 0 }}>
         <AntTabs
           type="editable-card"
           size="small"

@@ -57,12 +57,13 @@ pub struct DataFilter {
 
 pub type DataCallback = Arc<dyn Fn(&str, DeviceType, &[u8]) + Send + Sync>;
 
+#[derive(Clone)]
 pub struct DeviceManager {
     serial_manager: SerialManagerRef,
     ble_manager: BleManagerRef,
-    devices: RwLock<HashMap<String, DeviceInfo>>,
-    routes: RwLock<Vec<DataRoute>>,
-    callbacks: RwLock<Vec<DataCallback>>,
+    devices: Arc<RwLock<HashMap<String, DeviceInfo>>>,
+    routes: Arc<RwLock<Vec<DataRoute>>>,
+    callbacks: Arc<RwLock<Vec<DataCallback>>>,
 }
 
 impl DeviceManager {
@@ -70,9 +71,9 @@ impl DeviceManager {
         Self {
             serial_manager,
             ble_manager,
-            devices: RwLock::new(HashMap::new()),
-            routes: RwLock::new(Vec::new()),
-            callbacks: RwLock::new(Vec::new()),
+            devices: Arc::new(RwLock::new(HashMap::new())),
+            routes: Arc::new(RwLock::new(Vec::new())),
+            callbacks: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -269,7 +270,20 @@ impl DeviceManager {
 
     pub async fn open_serial(&self, config: SerialPortConfig) -> Result<()> {
         let device_id = format!("serial-{}", config.port_name);
-        self.serial_manager.open_port(config.clone())?;
+        let device_id_clone = device_id.clone();
+        let manager = self.clone();
+        
+        self.serial_manager.open_port(config.clone(), move |_name, data| {
+            let data = data.to_vec();
+            let device_id_clone = device_id_clone.clone();
+            let manager = manager.clone();
+            
+            if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                handle.spawn(async move {
+                    manager.notify_callbacks(&device_id_clone, DeviceType::Serial, &data).await;
+                });
+            }
+        })?;
 
         let device = DeviceInfo {
             id: device_id.clone(),

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use async_trait::async_trait;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::error::{ComBridgeError, Result};
 use super::super::ble_traits::{
@@ -33,6 +33,37 @@ impl NativeBleBackend {
             .or_insert_with(|| Arc::new(GattClient::new(address)))
             .clone()
     }
+
+    fn check_platform_support() -> Result<()> {
+        #[cfg(target_os = "windows")]
+        {
+            warn!("Windows 平台的原生 BLE 支持尚未完全实现，建议使用 AT 模式");
+            return Err(ComBridgeError::ble(
+                "Windows 平台原生 BLE 支持尚未完全实现。请使用 AT 模式通过串口连接 BLE 模块，或等待后续版本更新。"
+            ));
+        }
+        
+        #[cfg(target_os = "linux")]
+        {
+            warn!("Linux 平台的原生 BLE 支持尚未完全实现，建议使用 AT 模式");
+            return Err(ComBridgeError::ble(
+                "Linux 平台原生 BLE 支持尚未完全实现。请使用 AT 模式通过串口连接 BLE 模块，或等待后续版本更新。"
+            ));
+        }
+        
+        #[cfg(target_os = "macos")]
+        {
+            warn!("macOS 平台的原生 BLE 支持尚未完全实现，建议使用 AT 模式");
+            return Err(ComBridgeError::ble(
+                "macOS 平台原生 BLE 支持尚未完全实现。请使用 AT 模式通过串口连接 BLE 模块，或等待后续版本更新。"
+            ));
+        }
+
+        #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+        {
+            Err(ComBridgeError::ble("当前平台不支持原生 BLE 功能"))
+        }
+    }
 }
 
 impl Default for NativeBleBackend {
@@ -45,6 +76,8 @@ impl Default for NativeBleBackend {
 impl BleBackend for NativeBleBackend {
     async fn configure(&mut self) -> Result<()> {
         info!("配置原生BLE后端");
+        
+        Self::check_platform_support()?;
         
         let adapter = BleAdapter::new()?;
         adapter.power_on().await?;

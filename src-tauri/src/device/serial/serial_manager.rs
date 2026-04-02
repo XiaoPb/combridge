@@ -11,14 +11,14 @@ pub type DataCallback = Arc<dyn Fn(&str, &[u8]) + Send + Sync>;
 
 pub struct SerialManager {
     ports: RwLock<HashMap<String, Arc<Mutex<SerialPort>>>>,
-    callbacks: RwLock<Vec<DataCallback>>,
+    callbacks: RwLock<HashMap<String, DataCallback>>,
 }
 
 impl SerialManager {
     pub fn new() -> Self {
         Self {
             ports: RwLock::new(HashMap::new()),
-            callbacks: RwLock::new(Vec::new()),
+            callbacks: RwLock::new(HashMap::new()),
         }
     }
 
@@ -26,7 +26,10 @@ impl SerialManager {
         scan_ports()
     }
 
-    pub fn open_port(&self, config: SerialPortConfig) -> Result<()> {
+    pub fn open_port<F>(&self, config: SerialPortConfig, callback: F) -> Result<()>
+    where
+        F: Fn(&str, &[u8]) + Send + Sync + 'static,
+    {
         let port_name = config.port_name.clone();
 
         {
@@ -39,13 +42,17 @@ impl SerialManager {
             }
         }
 
-        let mut port = SerialPort::open(config)?;
+        let callback_arc: DataCallback = Arc::new(callback);
+        {
+            let mut callbacks = self.callbacks.write().unwrap();
+            callbacks.insert(port_name.clone(), Arc::clone(&callback_arc));
+        }
 
-        let callbacks = self.callbacks.read().unwrap().clone();
+        let port = SerialPort::open(config)?;
+        
+        let callback_clone = Arc::clone(&callback_arc);
         port.start_read_loop(move |name, data| {
-            for callback in callbacks.iter() {
-                callback(name, data);
-            }
+            callback_clone(name, data);
         });
 
         let port = Arc::new(Mutex::new(port));
@@ -66,6 +73,12 @@ impl SerialManager {
                 .remove(port_name)
                 .ok_or_else(|| ComBridgeError::serial(format!("串口 {} 未打开", port_name)))?
         };
+
+        {
+            let mut callbacks = self.callbacks.write().unwrap();
+            callbacks.remove(port_name);
+            debug!("已移除串口 {} 的回调", port_name);
+        }
 
         port.lock().unwrap().close()?;
 
@@ -96,7 +109,7 @@ impl SerialManager {
         };
 
         let result = {
-            let mut port_guard = port.lock().unwrap();
+            let port_guard = port.lock().unwrap();
             port_guard.write(data)
         };
         result
@@ -112,13 +125,20 @@ impl SerialManager {
         ports.keys().cloned().collect()
     }
 
-    pub fn register_callback<F>(&self, callback: F)
+    pub fn register_callback<F>(&self, port_name: &str, callback: F)
     where
         F: Fn(&str, &[u8]) + Send + Sync + 'static,
     {
         let mut callbacks = self.callbacks.write().unwrap();
-        callbacks.push(Arc::new(callback));
-        debug!("已注册数据回调，当前共 {} 个回调", callbacks.len());
+        callbacks.insert(port_name.to_string(), Arc::new(callback));
+        debug!("已为串口 {} 注册数据回调", port_name);
+    }
+
+    pub fn unregister_callback(&self, port_name: &str) {
+        let mut callbacks = self.callbacks.write().unwrap();
+        if callbacks.remove(port_name).is_some() {
+            debug!("已移除串口 {} 的数据回调", port_name);
+        }
     }
 
     pub fn clear_callbacks(&self) {
@@ -174,11 +194,11 @@ mod tests {
         let call_count = Arc::new(Mutex::new(0));
         let count_clone = Arc::clone(&call_count);
 
-        manager.register_callback(move |_name, _data| {
+        manager.register_callback("test_port", move |_name, _data| {
             let mut count = count_clone.lock().unwrap();
             *count += 1;
         });
 
-        drop(manager);
+        manager.unregister_callback("test_port");
     }
 }

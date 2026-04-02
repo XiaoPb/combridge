@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "skills": {
+    "Log Analyzer": {
+      "source": "huifer/skill-security-scan",
+      "sourceType": "github",
+      "computedHash": "e56514d34e70591db438b408331911ece793cd4ab9c82a32939726b3a6ac5399"
+    },
+    "tauri-agents-project-scaffolder": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "2bc54c7255b9b8d536912bf9a7044b5fc0fa13168392a9d2d3b3a21f30c210ce"
+    },
+    "tauri-agents-review": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "04bc1f2d663cf1983f4234646bbbef257499bfa15269fd5910c16d13f2a2ecdc"
+    },
+    "tauri-core-architecture": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "b1fc4f4b79572e909f408d4bf6d9c8d102d6f0766c55a51fb9f15a20928e4ccc"
+    },
+    "tauri-core-config": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "58d996f744a0a7c69e0807d5bafe3c913fe2b13af4a6e9f01777aec7b2691933"
+    },
+    "tauri-core-runtime": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "6e4cf54c84cc8a7daeda7e1ae3a70eef828e4ec1eb2663c6ac780991a3b2753b"
+    },
+    "tauri-errors-build": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "af461471f7d2fb36feeeabfea6a105be32552c568432854cb267d3a807df9a7a"
+    },
+    "tauri-errors-ipc": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "5e66f0521a9003b95282fe5854f50ed7b5b2231fc1d7c70c992ad24a66cb8e94"
+    },
+    "tauri-errors-permissions": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "af720f3c530a560187fa65aa3f6fe700d514d14c44ff896b9e869cd90b38964a"
+    },
+    "tauri-errors-runtime": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "a82b6b5372e675b39bd7a6c9e01fd02497ffa76be020a2724786e487ccacb03b"
+    },
+    "tauri-impl-build-deploy": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "5f269468858632594853a237e40ad92a4461c13cbbb6e388c4f6b4aa22aba17b"
+    },
+    "tauri-impl-database": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "e1b86a66a31ef3444f1a0232f50226c8228aa7d8747c6f33924f9e086aa33628"
+    },
+    "tauri-impl-design-patterns": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "a1c8489d6dc2e167a517cdcf6bd19ed3933a8c39f9130c62e3ec46814d6d5753"
+    },
+    "tauri-impl-migration": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "cc87f81d02f48661eae8af058440c054e5281aa690ed46a515d0ebd1924a272f"
+    },
+    "tauri-impl-mobile": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "2685d5b292a0bc13e142ec1d313d2adcaaac1a483555081459180772541c0012"
+    },
+    "tauri-impl-multi-window": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "362960ea98e1f735ffd79f870ec26965646bd1da06186d3d2787aa0055d9364f"
+    },
+    "tauri-impl-plugin-development": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "c746cd4f4614fb8c86d7c8c0edbd474bf84f64cff8938cff45f0637fc09c6d4e"
+    },
+    "tauri-impl-project-setup": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "594484a3a7475daea488dcaeadf6f7ca95d4c43fa48a0697753604d36719b9c0"
+    },
+    "tauri-impl-security": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "985f179c76f1fba48735277311be6901cbf50f5bd303c4c99980b396e9a5d010"
+    },
+    "tauri-impl-testing": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "501a03fb70209f3da431c1381bfc795dd3d1ff0f513e952c294ffa7604506707"
+    },
+    "tauri-syntax-commands": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "b1146f0ac343d48a72b108b0555051cacdf97e0e989ccbe85ea7232c969f9cfa"
+    },
+    "tauri-syntax-events": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "3878d51c4e70327ba8af9cbaaf8063440f2117f917149dd5aa2496ac7a3ebea4"
+    },
+    "tauri-syntax-menu": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "5387fd2873f89d4b43578a2e7f04b60455ea72875936f4aca5ce851b5f1ad7ff"
+    },
+    "tauri-syntax-permissions": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "78aa4eb1a2b38fe8f87bfb5bf8a72c12bbd4d6acd76a71b9eec2ec2268bd3685"
+    },
+    "tauri-syntax-plugins-api": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "40494c58f19b150a16299eedfd6a54d91e20f847261998f34749ca29b13ad53c"
+    },
+    "tauri-syntax-state": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "2dc926952823d17156d65de0a40524b36779c97fa866b0a5e72df744c78d310e"
+    },
+    "tauri-syntax-webview": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "a0a855ad15e54845d60bdd19bf24630207f1dfc7bb49dcc6df1d15eb98e6c50e"
+    },
+    "tauri-syntax-window": {
+      "source": "OpenAEC-Foundation/Tauri-2-Claude-Skill-Package",
+      "sourceType": "github",
+      "computedHash": "685020957853e62e76f4598ae8f76c714087a9048b345af4955a40862bd83fae"
+    },
+    "vercel-react-best-practices": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "257b84bf218a7d3b2cba56e929b7e933cf71cb89f2e24ab601759c599d1c23f2"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "d8e7d3afe37dcc8a97b99ffb5afdb4d0919ae0092ea8b68f44eb201f035e33ac"
+    }
+  }
+}

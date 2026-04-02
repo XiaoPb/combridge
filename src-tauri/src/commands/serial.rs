@@ -15,7 +15,6 @@ fn format_hex(data: &[u8]) -> String {
         .join(" ")
 }
 
-/// 串口配置DTO，用于前端传递配置参数
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerialPortConfigDto {
     pub port_name: String,
@@ -25,6 +24,7 @@ pub struct SerialPortConfigDto {
     pub stop_bits: Option<u8>,
     pub flow_control: Option<String>,
     pub timeout_ms: Option<u64>,
+    pub pack_timeout_ms: Option<u64>,
 }
 
 impl TryFrom<SerialPortConfigDto> for SerialPortConfig {
@@ -87,6 +87,7 @@ impl TryFrom<SerialPortConfigDto> for SerialPortConfig {
             stop_bits,
             flow_control,
             timeout_ms: dto.timeout_ms.unwrap_or(1000),
+            pack_timeout_ms: dto.pack_timeout_ms.unwrap_or(50),
         };
 
         debug!("串口配置转换成功: {:?}", config);
@@ -141,16 +142,12 @@ fn parse_flow_control(s: &str) -> Result<FlowControl> {
     }
 }
 
-/// 串口数据事件，用于向前端推送接收到的数据
 #[derive(Debug, Clone, Serialize)]
 pub struct SerialDataEvent {
     pub port_name: String,
     pub data: Vec<u8>,
 }
 
-/// 扫描可用串口列表
-/// 
-/// 返回系统中所有可用的串口设备信息，包括端口名称、厂商、产品等信息
 #[tauri::command]
 pub async fn scan_serial_ports(
     manager: State<'_, SerialManagerRef>,
@@ -173,9 +170,6 @@ pub async fn scan_serial_ports(
     }
 }
 
-/// 打开串口
-/// 
-/// 根据配置打开指定的串口设备，并注册数据接收回调
 #[tauri::command]
 pub async fn open_serial_port(
     manager: State<'_, SerialManagerRef>,
@@ -196,16 +190,14 @@ pub async fn open_serial_port(
     let port_name = config.port_name.clone();
     let app_clone = app.clone();
     
-    manager.register_callback(move |name, data| {
+    match manager.open_port(config, move |name, data| {
         let event = SerialDataEvent {
             port_name: name.to_string(),
             data: data.to_vec(),
         };
         debug!("串口 {} 接收到 {} 字节数据", name, data.len());
         let _ = app_clone.emit("serial-data", &event);
-    });
-
-    match manager.open_port(config) {
+    }) {
         Ok(()) => {
             info!("串口 {} 打开成功", port_name);
             Ok(())
@@ -217,59 +209,48 @@ pub async fn open_serial_port(
     }
 }
 
-/// 关闭串口
-/// 
-/// 关闭指定的串口设备并释放资源
 #[tauri::command]
 pub async fn close_serial_port(
     manager: State<'_, SerialManagerRef>,
-    #[allow(non_snake_case)]
-    portName: String,
+    port_name: String,
 ) -> Result<()> {
-    info!("尝试关闭串口: {}", portName);
+    info!("尝试关闭串口: {}", port_name);
 
     let manager = manager.inner();
-    match manager.close_port(&portName) {
+    match manager.close_port(&port_name) {
         Ok(()) => {
-            info!("串口 {} 关闭成功", portName);
+            info!("串口 {} 关闭成功", port_name);
             Ok(())
         }
         Err(e) => {
-            error!("串口 {} 关闭失败: {}", portName, e);
+            error!("串口 {} 关闭失败: {}", port_name, e);
             Err(e)
         }
     }
 }
 
-/// 发送串口数据
-///
-/// 向指定串口发送数据
 #[tauri::command]
 pub async fn send_serial_data(
     manager: State<'_, SerialManagerRef>,
-    #[allow(non_snake_case)]
-    portName: String,
+    port_name: String,
     data: Vec<u8>,
 ) -> Result<usize> {
     let data_hex = format_hex(&data);
-    info!("[SEND] 串口 {} 发送 {} 字节: {}", portName, data.len(), data_hex);
+    info!("[SEND] 串口 {} 发送 {} 字节: {}", port_name, data.len(), data_hex);
 
     let manager = manager.inner();
-    match manager.send_data(&portName, &data) {
+    match manager.send_data(&port_name, &data) {
         Ok(bytes_written) => {
-            info!("[SEND] 串口 {} 发送成功，{} 字节", portName, bytes_written);
+            info!("[SEND] 串口 {} 发送成功，{} 字节", port_name, bytes_written);
             Ok(bytes_written)
         }
         Err(e) => {
-            error!("[SEND] 串口 {} 发送失败: {}", portName, e);
+            error!("[SEND] 串口 {} 发送失败: {}", port_name, e);
             Err(e)
         }
     }
 }
 
-/// 获取已打开的端口列表
-/// 
-/// 返回当前已打开的所有串口名称列表
 #[tauri::command]
 pub async fn get_open_ports(
     manager: State<'_, SerialManagerRef>,
@@ -282,9 +263,6 @@ pub async fn get_open_ports(
     Ok(ports)
 }
 
-/// 检查端口是否已打开
-/// 
-/// 检查指定的串口是否处于打开状态
 #[tauri::command]
 pub async fn is_port_open(
     manager: State<'_, SerialManagerRef>,

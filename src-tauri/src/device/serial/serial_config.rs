@@ -110,10 +110,16 @@ pub struct SerialPortConfig {
     pub flow_control: FlowControl,
     #[serde(default = "default_timeout")]
     pub timeout_ms: u64,
+    #[serde(default = "default_pack_timeout")]
+    pub pack_timeout_ms: u64,
 }
 
 fn default_timeout() -> u64 {
     1000
+}
+
+fn default_pack_timeout() -> u64 {
+    50
 }
 
 impl Default for SerialPortConfig {
@@ -126,6 +132,7 @@ impl Default for SerialPortConfig {
             stop_bits: StopBits::default(),
             flow_control: FlowControl::default(),
             timeout_ms: default_timeout(),
+            pack_timeout_ms: default_pack_timeout(),
         }
     }
 }
@@ -165,6 +172,11 @@ impl SerialPortConfig {
 
     pub fn timeout_ms(mut self, timeout_ms: u64) -> Self {
         self.timeout_ms = timeout_ms;
+        self
+    }
+
+    pub fn pack_timeout_ms(mut self, pack_timeout_ms: u64) -> Self {
+        self.pack_timeout_ms = pack_timeout_ms;
         self
     }
 }

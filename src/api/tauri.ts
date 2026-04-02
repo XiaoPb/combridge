@@ -49,6 +49,7 @@ export const serialApi = {
         parity: config.parity,
         stop_bits: config.stopBits,
         flow_control: config.flowControl,
+        pack_timeout_ms: 50,
       },
     });
   },
@@ -62,7 +63,7 @@ export const serialApi = {
    * 对应后端命令: close_serial_port
    */
   async close(portName: string): Promise<void> {
-    await invoke<void>('close_serial_port', { portName });
+    await invoke<void>('close_serial_port', { port_name: portName });
   },
 
   closePort(portName: string): Promise<void> {
@@ -74,7 +75,7 @@ export const serialApi = {
    * 对应后端命令: send_serial_data
    */
   async write(portName: string, data: number[]): Promise<void> {
-    await invoke<void>('send_serial_data', { portName, data });
+    await invoke<void>('send_serial_data', { port_name: portName, data });
   },
 
   sendData(portName: string, data: number[]): Promise<void> {

@@ -7,9 +7,10 @@ const { Header: AntHeader } = Layout;
 interface HeaderProps {
   collapsed: boolean;
   onCollapse: (collapsed: boolean) => void;
+  onSettingsClick: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ collapsed, onCollapse }) => {
+const Header: React.FC<HeaderProps> = ({ collapsed, onCollapse, onSettingsClick }) => {
   return (
     <AntHeader
       style={{
@@ -53,6 +54,7 @@ const Header: React.FC<HeaderProps> = ({ collapsed, onCollapse }) => {
           type="text"
           icon={<SettingOutlined />}
           style={{ fontSize: '16px' }}
+          onClick={onSettingsClick}
         >
           设置
         </Button>

@@ -11,7 +11,7 @@ interface MainLayoutProps {
 }
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
@@ -29,7 +29,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             padding: '24px',
             background: 'var(--bg-primary)',
             borderRadius: 'var(--border-radius)',
-            overflow: 'auto',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
           }}
         >
           {children}

@@ -140,41 +140,41 @@ pub async fn scan_ble_devices(
 #[tauri::command]
 pub async fn connect_ble(
     manager: State<'_, BleManagerRef>,
-    address: String,
+    device_id: String,
 ) -> Result<BleConnection> {
-    info!("尝试连接BLE设备: {}", address);
-    
+    info!("尝试连接BLE设备: {}", device_id);
+
     let manager = manager.inner();
-    match manager.connect(&address).await {
+    match manager.connect(&device_id).await {
         Ok(conn) => {
-            info!("BLE设备连接成功: {}", address);
+            info!("BLE设备连接成功: {}", device_id);
             Ok(conn)
         }
         Err(e) => {
-            error!("BLE设备连接失败 {}: {}", address, e);
+            error!("BLE设备连接失败 {}: {}", device_id, e);
             Err(e)
         }
     }
 }
 
 /// 断开BLE连接
-/// 
+///
 /// 断开与指定BLE设备的连接
 #[tauri::command]
 pub async fn disconnect_ble(
     manager: State<'_, BleManagerRef>,
-    address: String,
+    device_id: String,
 ) -> Result<()> {
-    info!("尝试断开BLE设备: {}", address);
-    
+    info!("尝试断开BLE设备: {}", device_id);
+
     let manager = manager.inner();
-    match manager.disconnect(&address).await {
+    match manager.disconnect(&device_id).await {
         Ok(()) => {
-            info!("BLE设备已断开: {}", address);
+            info!("BLE设备已断开: {}", device_id);
             Ok(())
         }
         Err(e) => {
-            error!("BLE设备断开失败 {}: {}", address, e);
+            error!("BLE设备断开失败 {}: {}", device_id, e);
             Err(e)
         }
     }
@@ -208,12 +208,12 @@ pub async fn get_ble_connections(
 #[tauri::command]
 pub async fn discover_ble_services(
     manager: State<'_, BleManagerRef>,
-    address: String,
+    device_id: String,
 ) -> Result<Vec<BleService>> {
-    info!("发现BLE设备GATT服务: {}", address);
+    info!("发现BLE设备GATT服务: {}", device_id);
     
     let manager = manager.inner();
-    match manager.discover_services(&address).await {
+    match manager.discover_services(&device_id).await {
         Ok(services) => {
             info!("发现 {} 个GATT服务", services.len());
             for service in &services {
@@ -222,7 +222,7 @@ pub async fn discover_ble_services(
             Ok(services)
         }
         Err(e) => {
-            error!("发现GATT服务失败 {}: {}", address, e);
+            error!("发现GATT服务失败 {}: {}", device_id, e);
             Err(e)
         }
     }
@@ -234,13 +234,13 @@ pub async fn discover_ble_services(
 #[tauri::command]
 pub async fn discover_ble_characteristics(
     manager: State<'_, BleManagerRef>,
-    address: String,
+    device_id: String,
     service_uuid: String,
 ) -> Result<Vec<BleCharacteristic>> {
-    info!("发现GATT特征，设备: {}, 服务: {}", address, service_uuid);
+    info!("发现GATT特征，设备: {}, 服务: {}", device_id, service_uuid);
     
     let manager = manager.inner();
-    match manager.discover_characteristics(&address, &service_uuid).await {
+    match manager.discover_characteristics(&device_id, &service_uuid).await {
         Ok(characteristics) => {
             info!("发现 {} 个GATT特征", characteristics.len());
             for char in &characteristics {
@@ -255,7 +255,7 @@ pub async fn discover_ble_characteristics(
             Ok(characteristics)
         }
         Err(e) => {
-            error!("发现GATT特征失败，设备: {}, 服务: {}: {}", address, service_uuid, e);
+            error!("发现GATT特征失败，设备: {}, 服务: {}: {}", device_id, service_uuid, e);
             Err(e)
         }
     }
@@ -267,19 +267,19 @@ pub async fn discover_ble_characteristics(
 #[tauri::command]
 pub async fn read_ble_characteristic(
     manager: State<'_, BleManagerRef>,
-    address: String,
-    char_uuid: String,
+    device_id: String,
+    characteristic_uuid: String,
 ) -> Result<Vec<u8>> {
-    debug!("读取特征值，设备: {}, 特征: {}", address, char_uuid);
+    debug!("读取特征值，设备: {}, 特征: {}", device_id, characteristic_uuid);
     
     let manager = manager.inner();
-    match manager.read_characteristic(&address, &char_uuid).await {
+    match manager.read_characteristic(&device_id, &characteristic_uuid).await {
         Ok(data) => {
             debug!("读取特征值成功，长度: {} 字节", data.len());
             Ok(data)
         }
         Err(e) => {
-            error!("读取特征值失败，设备: {}, 特征: {}: {}", address, char_uuid, e);
+            error!("读取特征值失败，设备: {}, 特征: {}: {}", device_id, characteristic_uuid, e);
             Err(e)
         }
     }
@@ -291,20 +291,20 @@ pub async fn read_ble_characteristic(
 #[tauri::command]
 pub async fn write_ble_characteristic(
     manager: State<'_, BleManagerRef>,
-    address: String,
-    char_uuid: String,
+    device_id: String,
+    characteristic_uuid: String,
     data: Vec<u8>,
 ) -> Result<()> {
-    debug!("写入特征值，设备: {}, 特征: {}, 数据长度: {} 字节", address, char_uuid, data.len());
+    debug!("写入特征值，设备: {}, 特征: {}, 数据长度: {} 字节", device_id, characteristic_uuid, data.len());
     
     let manager = manager.inner();
-    match manager.write_characteristic(&address, &char_uuid, &data).await {
+    match manager.write_characteristic(&device_id, &characteristic_uuid, &data).await {
         Ok(()) => {
             debug!("写入特征值成功");
             Ok(())
         }
         Err(e) => {
-            error!("写入特征值失败，设备: {}, 特征: {}: {}", address, char_uuid, e);
+            error!("写入特征值失败，设备: {}, 特征: {}: {}", device_id, characteristic_uuid, e);
             Err(e)
         }
     }
@@ -317,33 +317,33 @@ pub async fn write_ble_characteristic(
 pub async fn subscribe_ble_notify(
     manager: State<'_, BleManagerRef>,
     app: AppHandle,
-    address: String,
-    char_uuid: String,
+    device_id: String,
+    characteristic_uuid: String,
 ) -> Result<()> {
-    info!("订阅特征通知，设备: {}, 特征: {}", address, char_uuid);
+    info!("订阅特征通知，设备: {}, 特征: {}", device_id, characteristic_uuid);
     
     let manager = manager.inner();
 
     let app_clone = app.clone();
-    let addr_clone = address.clone();
-    let char_clone = char_uuid.clone();
+    let device_id_clone = device_id.clone();
+    let char_clone = characteristic_uuid.clone();
     let callback = std::sync::Arc::new(move |_addr: &str, _char: &str, data: &[u8]| {
         debug!("收到BLE通知，设备: {}, 特征: {}, 数据长度: {}", _addr, _char, data.len());
         let event = BleNotifyEvent {
-            address: addr_clone.clone(),
+            address: device_id_clone.clone(),
             char_uuid: char_clone.clone(),
             data: data.to_vec(),
         };
         let _ = app_clone.emit("ble-notify", &event);
     });
 
-    match manager.subscribe_notify(&address, &char_uuid, callback).await {
+    match manager.subscribe_notify(&device_id, &characteristic_uuid, callback).await {
         Ok(()) => {
             info!("订阅特征通知成功");
             Ok(())
         }
         Err(e) => {
-            error!("订阅特征通知失败，设备: {}, 特征: {}: {}", address, char_uuid, e);
+            error!("订阅特征通知失败，设备: {}, 特征: {}: {}", device_id, characteristic_uuid, e);
             Err(e)
         }
     }
@@ -355,19 +355,19 @@ pub async fn subscribe_ble_notify(
 #[tauri::command]
 pub async fn unsubscribe_ble_notify(
     manager: State<'_, BleManagerRef>,
-    address: String,
-    char_uuid: String,
+    device_id: String,
+    characteristic_uuid: String,
 ) -> Result<()> {
-    info!("取消订阅特征通知，设备: {}, 特征: {}", address, char_uuid);
+    info!("取消订阅特征通知，设备: {}, 特征: {}", device_id, characteristic_uuid);
     
     let manager = manager.inner();
-    match manager.unsubscribe_notify(&address, &char_uuid).await {
+    match manager.unsubscribe_notify(&device_id, &characteristic_uuid).await {
         Ok(()) => {
             info!("取消订阅成功");
             Ok(())
         }
         Err(e) => {
-            error!("取消订阅失败，设备: {}, 特征: {}: {}", address, char_uuid, e);
+            error!("取消订阅失败，设备: {}, 特征: {}: {}", device_id, characteristic_uuid, e);
             Err(e)
         }
     }

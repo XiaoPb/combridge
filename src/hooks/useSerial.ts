@@ -34,7 +34,7 @@ export const useSerial = () => {
       const unlistenData = await onSerialData((event) => {
         addReceivedData({
           id: generateId(),
-          timestamp: event.timestamp,
+          timestamp: event.timestamp ?? Date.now(),
           data: event.data,
           direction: 'receive',
           format: 'hex',

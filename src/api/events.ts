@@ -1,9 +1,9 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 export type SerialDataEvent = {
-  portName: string;
+  port_name: string;
   data: number[];
-  timestamp: number;
+  timestamp?: number;
 };
 
 export type SerialErrorEvent = {

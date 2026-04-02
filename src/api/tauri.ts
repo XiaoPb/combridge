@@ -97,6 +97,14 @@ export const serialApi = {
   async isConnected(portName: string): Promise<boolean> {
     return invoke<boolean>('is_port_open', { portName });
   },
+
+  async exportData(portName: string, allData: Array<{timestamp: number; data: number[]; direction: string}>, rxData: number[]): Promise<{logPath: string; datPath: string}> {
+    return invoke<{logPath: string; datPath: string}>('export_serial_data', {
+      portName,
+      allData,
+      rxData,
+    });
+  },
 };
 
 /**

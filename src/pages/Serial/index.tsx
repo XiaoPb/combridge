@@ -3,6 +3,8 @@ import { Layout, Card, Button, Select, Spin, Typography, Space, Alert, Input, Se
 import { ReloadOutlined, UsbOutlined, DisconnectOutlined, SendOutlined, ClearOutlined, DownloadOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useSerial } from '../../hooks/useSerial';
 import { formatTimestamp, formatData } from '../../stores/serialStore';
+import { serialApi } from '../../api/tauri';
+import { message } from 'antd';
 import { DEFAULT_BAUD_RATES, DEFAULT_SERIAL_CONFIG } from '../../types';
 import type { SerialConfig } from '../../types';
 
@@ -123,28 +125,37 @@ const SerialPage: React.FC = () => {
     setAutoScroll(isAtBottom);
   }, []);
 
-  const handleExport = () => {
-    if (!filteredData || filteredData.length === 0) {
+  const handleExport = async () => {
+    if (!activeTab || !activeTab.portName) {
+      message.warning('请先选择串口');
       return;
     }
-    const content = filteredData
-      .map((entry) => {
-        const timestamp = formatTimestamp(entry.timestamp);
-        const direction = entry.direction === 'receive' ? 'RX' : 'TX';
-        const data = formatData(entry.data, displayFormat);
-        return `[${timestamp}] [${direction}] [${(entry.data || []).length} byte] ${data}`;
-      })
-      .join('\n');
-
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `serial-data-${activeTab?.portName || 'unknown'}-${Date.now()}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    
+    const allDataToExport = allData.map((entry) => ({
+      timestamp: entry.timestamp,
+      data: entry.data,
+      direction: entry.direction,
+    }));
+    
+    const rxData = (activeTab.receivedData || [])
+      .flatMap((entry) => entry.data);
+    
+    if (allDataToExport.length === 0) {
+      message.warning('没有数据可导出');
+      return;
+    }
+    
+    try {
+      const result = await serialApi.exportData(
+        activeTab.portName,
+        allDataToExport,
+        rxData
+      );
+      message.success(`数据已导出:\n日志: ${result.logPath}\n数据: ${result.datPath}`);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : '导出失败';
+      message.error(`导出失败: ${errorMsg}`);
+    }
   };
 
   const renderTabContent = () => {

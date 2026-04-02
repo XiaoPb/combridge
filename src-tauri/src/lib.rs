@@ -32,6 +32,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_fs::init())
         .manage(serial_manager)
         .manage(ble_manager)
         .manage(connection_pool)
@@ -43,6 +44,7 @@ pub fn run() {
             commands::serial::send_serial_data,
             commands::serial::get_open_ports,
             commands::serial::is_port_open,
+            commands::serial::export_serial_data,
             commands::ble::configure_ble,
             commands::ble::scan_ble_devices,
             commands::ble::connect_ble,

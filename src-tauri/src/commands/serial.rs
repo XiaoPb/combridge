@@ -276,3 +276,96 @@ pub async fn is_port_open(
     debug!("端口 {} 状态: {}", port_name, if is_open { "已打开" } else { "已关闭" });
     Ok(is_open)
 }
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ExportResult {
+    pub log_path: String,
+    pub dat_path: String,
+}
+
+#[tauri::command]
+pub async fn export_serial_data(
+    _app: AppHandle,
+    port_name: String,
+    all_data: Vec<ExportDataEntry>,
+    rx_data: Vec<u8>,
+) -> Result<ExportResult> {
+    use std::fs;
+    use std::io::Write;
+
+    info!("导出串口 {} 的数据", port_name);
+
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let log_dir = std::env::current_dir()
+        .map(|p| p.join("log"))
+        .unwrap_or_else(|_| std::path::PathBuf::from("log"));
+
+    if !log_dir.exists() {
+        fs::create_dir_all(&log_dir).map_err(|e| {
+            error!("创建日志目录失败: {}", e);
+            ComBridgeError::serial(format!("创建日志目录失败: {}", e))
+        })?;
+    }
+
+    let safe_port_name = port_name.replace("/", "_").replace("\\", "_");
+    let log_filename = format!("{}_all_data_{}.log", safe_port_name, timestamp);
+    let dat_filename = format!("{}_rx_data_{}.dat", safe_port_name, timestamp);
+
+    let log_path = log_dir.join(&log_filename);
+    let dat_path = log_dir.join(&dat_filename);
+
+    let log_content = all_data
+        .iter()
+        .map(|entry| {
+            let timestamp_str = format_timestamp(entry.timestamp);
+            let direction = if entry.direction == "receive" { "RX" } else { "TX" };
+            let data_hex = entry.data.iter()
+                .map(|b| format!("{:02X}", b))
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!("[{}][{}][{} byte] {}", timestamp_str, direction, entry.data.len(), data_hex)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let mut log_file = fs::File::create(&log_path).map_err(|e| {
+        error!("创建日志文件失败: {}", e);
+        ComBridgeError::serial(format!("创建日志文件失败: {}", e))
+    })?;
+    log_file.write_all(log_content.as_bytes()).map_err(|e| {
+        error!("写入日志文件失败: {}", e);
+        ComBridgeError::serial(format!("写入日志文件失败: {}", e))
+    })?;
+
+    let mut dat_file = fs::File::create(&dat_path).map_err(|e| {
+        error!("创建数据文件失败: {}", e);
+        ComBridgeError::serial(format!("创建数据文件失败: {}", e))
+    })?;
+    dat_file.write_all(&rx_data).map_err(|e| {
+        error!("写入数据文件失败: {}", e);
+        ComBridgeError::serial(format!("写入数据文件失败: {}", e))
+    })?;
+
+    info!("数据导出成功: log={}, dat={}", log_path.display(), dat_path.display());
+
+    Ok(ExportResult {
+        log_path: log_path.to_string_lossy().to_string(),
+        dat_path: dat_path.to_string_lossy().to_string(),
+    })
+}
+
+fn format_timestamp(timestamp: u64) -> String {
+    let total_ms = timestamp % 1000;
+    let total_seconds = timestamp / 1000;
+    let hours = (total_seconds / 3600) % 24;
+    let minutes = (total_seconds / 60) % 60;
+    let seconds = total_seconds % 60;
+    format!("{:02}:{:02}:{:02}.{:03}", hours, minutes, seconds, total_ms)
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExportDataEntry {
+    pub timestamp: u64,
+    pub data: Vec<u8>,
+    pub direction: String,
+}

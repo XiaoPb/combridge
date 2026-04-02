@@ -1,10 +1,9 @@
 export interface SerialPortInfo {
-  portName: string;
+  name: string;
+  port_type: string;
   manufacturer?: string;
   product?: string;
-  serialNumber?: string;
-  vid?: number;
-  pid?: number;
+  serial_number?: string;
 }
 
 export interface SerialConfig {

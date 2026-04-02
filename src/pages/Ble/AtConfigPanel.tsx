@@ -131,8 +131,8 @@ const AtConfigPanel: React.FC<AtConfigPanelProps> = ({
               onChange={onPortChange}
               placeholder="选择串口"
               options={ports.map((p) => ({
-                label: p.portName,
-                value: p.portName,
+                label: p.name,
+                value: p.name,
               }))}
             />
           </Form.Item>

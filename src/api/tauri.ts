@@ -1,9 +1,8 @@
 import type { SerialConfig, SerialPortInfo } from '../types';
 import type { BleDeviceInfo, BleScanOptions, BleConnection, BleService, BleCharacteristic } from '../types';
 import type { 
-  SerialListPortsResult, 
   SerialOpenParams, 
-  SerialWriteParams,
+  SerialWriteParams, 
   BleScanResult,
   BleWriteParams,
   BleConfigureParams,
@@ -32,8 +31,7 @@ export const serialApi = {
    * 对应后端命令: scan_serial_ports
    */
   async listPorts(): Promise<SerialPortInfo[]> {
-    const result = await invoke<SerialListPortsResult>('scan_serial_ports');
-    return result.ports;
+    return invoke<SerialPortInfo[]>('scan_serial_ports');
   },
 
   scanPorts(): Promise<SerialPortInfo[]> {

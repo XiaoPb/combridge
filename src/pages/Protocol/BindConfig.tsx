@@ -53,7 +53,7 @@ const BindConfig: React.FC<BindConfigProps> = ({
 
   const availableDevices = openPorts.length > 0
     ? openPorts.map((p) => ({ value: p.portName, label: p.portName }))
-    : ports.map((p) => ({ value: p.portName, label: p.portName }));
+    : ports.map((p) => ({ value: p.name, label: p.name }));
 
   const availablePlugins = protocols
     .filter((p) => p.state === 'Enabled')

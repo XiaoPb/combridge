@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Card, Button, Space, Segmented, Empty, Typography, Tag, message } from 'antd';
+import { Card, Button, Space, Segmented, Empty, Typography, Tag } from 'antd';
 import { ClearOutlined, DownloadOutlined, ArrowDownOutlined, ArrowUpOutlined } from '@ant-design/icons';
 import type { DataEntry } from '../../stores/serialStore';
 import { formatTimestamp, formatData } from '../../stores/serialStore';

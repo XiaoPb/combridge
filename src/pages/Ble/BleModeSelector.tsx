@@ -8,7 +8,7 @@ const { Text } = Typography;
 interface BleModeSelectorProps {
   mode: BleMode;
   serialPort: string | null;
-  ports: { portName: string }[];
+  ports: { name: string }[];
   onModeChange: (mode: BleMode) => void;
   onSerialPortChange: (port: string) => void;
 }
@@ -64,8 +64,8 @@ const BleModeSelector: React.FC<BleModeSelectorProps> = ({
                 placeholder="选择串口"
                 style={{ width: '100%', marginTop: 8 }}
                 options={ports.map((p) => ({
-                  label: p.portName,
-                  value: p.portName,
+                  label: p.name,
+                  value: p.name,
                 }))}
               />
             </div>

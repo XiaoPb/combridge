@@ -8,7 +8,8 @@ const { Text } = Typography;
 
 interface SerialToolbarProps {
   ports: Array<{
-    portName: string;
+    name: string;
+    port_type: string;
     manufacturer?: string;
     product?: string;
   }>;
@@ -53,10 +54,10 @@ const SerialToolbar: React.FC<SerialToolbarProps> = ({
           onChange={onSelectPort}
           disabled={isConnected}
         options={(ports || []).map((port) => ({
-            value: port.portName,
+            value: port.name,
             label: (
               <div>
-                <Text strong>{port.portName}</Text>
+                <Text strong>{port.name}</Text>
                 {port.manufacturer && (
                   <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
                     {port.manufacturer}

@@ -32,7 +32,7 @@ const BindConfig: React.FC<BindConfigProps> = ({
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [isBinding, setIsBinding] = useState(false);
 
-  const { ports, openPorts } = useSerialStore();
+  const { ports, tabs } = useSerialStore();
 
   useEffect(() => {
     const items: BindingItem[] = [];
@@ -51,8 +51,10 @@ const BindConfig: React.FC<BindConfigProps> = ({
     setBindings(items);
   }, [protocols]);
 
-  const availableDevices = openPorts.length > 0
-    ? openPorts.map((p) => ({ value: p.portName, label: p.portName }))
+  const connectedPorts = tabs.filter((t) => t.isConnected).map((t) => t.portName);
+  
+  const availableDevices = connectedPorts.length > 0
+    ? connectedPorts.map((name) => ({ value: name, label: name }))
     : ports.map((p) => ({ value: p.name, label: p.name }));
 
   const availablePlugins = protocols

@@ -348,22 +348,22 @@ const SerialPage: React.FC = () => {
           </div>
         </Sider>
 
-        <Layout style={{ background: 'transparent', flex: 1, minWidth: 0 }}>
-          <Content style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <Layout style={{ background: 'transparent', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <Content style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
             {error && (
               <Alert
                 message={error}
                 type="error"
                 closable
                 onClose={() => setError(null)}
-                style={{ marginBottom: 12 }}
+                style={{ marginBottom: 12, flexShrink: 0 }}
               />
             )}
 
             <Card
               size="small"
-              style={{ flex: '1 1 80%', display: 'flex', flexDirection: 'column', marginBottom: 12 }}
-              bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 12, overflow: 'hidden' }}
+              style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', marginBottom: 12, minHeight: 0 }}
+              bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 12, overflow: 'hidden', minHeight: 0 }}
               title={
                 <Space>
                   <Button
@@ -406,13 +406,14 @@ const SerialPage: React.FC = () => {
                 ref={containerRef}
                 onScroll={handleScroll}
                 style={{
-                  flex: 1,
+                  flex: '1 1 0',
                   overflow: 'auto',
                   background: 'var(--bg-primary)',
                   padding: 8,
                   borderRadius: 4,
                   fontFamily: 'Consolas, Monaco, monospace',
                   fontSize: 13,
+                  minHeight: 0,
                 }}
               >
                 {(filteredData?.length || 0) === 0 ? (
@@ -450,7 +451,7 @@ const SerialPage: React.FC = () => {
 
             <Card
               size="small"
-              style={{ flex: '0 0 auto' }}
+              style={{ flex: '0 0 auto', flexShrink: 0 }}
               bodyStyle={{ padding: 12 }}
               title={
                 <Space>

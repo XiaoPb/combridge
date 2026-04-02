@@ -132,7 +132,7 @@ impl PluginManager {
             ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e))
         })?;
 
-        if let Some(plugin) = plugins.remove(plugin_id) {
+        if let Some(_plugin) = plugins.remove(plugin_id) {
             let path = plugin_infos.get(plugin_id).map(|info| info.path.clone());
             plugin_infos.remove(plugin_id);
 

@@ -316,9 +316,9 @@ pub async fn export_serial_data(
 
     let log_content = all_data
         .iter()
+        .filter(|entry| entry.direction == "receive")
         .map(|entry| {
             let timestamp_str = format_timestamp(entry.timestamp);
-            let direction = if entry.direction == "receive" { "RX" } else { "TX" };
             let data_ascii: String = entry.data.iter()
                 .map(|b| {
                     if *b >= 32 && *b <= 126 {
@@ -328,16 +328,7 @@ pub async fn export_serial_data(
                     }
                 })
                 .collect();
-            let data_hex: String = entry.data.iter()
-                .map(|b| format!("{:02X}", b))
-                .collect::<Vec<_>>()
-                .join(" ");
-            let data_str = if direction == "RX" {
-                data_ascii
-            } else {
-                data_hex
-            };
-            format!("[{}][{}][{} byte] {}", timestamp_str, direction, entry.data.len(), data_str)
+            format!("[{}][RX][{} byte] {}", timestamp_str, entry.data.len(), data_ascii)
         })
         .collect::<Vec<_>>()
         .join("\n");

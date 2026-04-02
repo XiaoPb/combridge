@@ -110,13 +110,11 @@ export const generateId = (): string => {
 
 export const formatTimestamp = (timestamp: number): string => {
   const date = new Date(timestamp);
-  return date.toLocaleTimeString('zh-CN', {
-    hour12: false,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    fractionalSecondDigits: 3,
-  });
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  const seconds = date.getSeconds().toString().padStart(2, '0');
+  const ms = date.getMilliseconds().toString().padStart(3, '0');
+  return `${hours}:${minutes}:${seconds}.${ms}`;
 };
 
 export const formatData = (data: number[], format: 'hex' | 'text'): string => {

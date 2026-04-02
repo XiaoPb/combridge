@@ -50,6 +50,22 @@ impl LuaEngine {
         Ok(result)
     }
 
+    pub fn call_void_function(&self, name: &str, args: Vec<Value>) -> Result<()> {
+        let lua = self.lua.lock().map_err(|e| {
+            ComBridgeError::protocol(format!("Failed to lock Lua VM: {}", e))
+        })?;
+
+        let func: Function = lua
+            .globals()
+            .get(name)
+            .map_err(|e| ComBridgeError::protocol(format!("Function '{}' not found: {}", name, e)))?;
+
+        func.call::<Vec<Value>, ()>(args)
+            .map_err(|e| ComBridgeError::protocol(format!("Function call failed: {}", e)))?;
+
+        Ok(())
+    }
+
     pub fn call_function_with_data(&self, name: &str, data: &[u8]) -> Result<Vec<u8>> {
         let lua = self.lua.lock().map_err(|e| {
             ComBridgeError::protocol(format!("Failed to lock Lua VM: {}", e))

@@ -7,7 +7,7 @@ pub mod websocket;
 
 use std::sync::Arc;
 
-use device::SerialManager;
+use device::{BleManager, SerialManager};
 use protocol::PluginManager;
 use websocket::ConnectionPool;
 
@@ -19,12 +19,14 @@ fn greet(name: &str) -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let serial_manager = Arc::new(SerialManager::new());
+    let ble_manager = Arc::new(BleManager::new());
     let connection_pool = Arc::new(ConnectionPool::new());
     let plugin_manager = Arc::new(PluginManager::new());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(serial_manager)
+        .manage(ble_manager)
         .manage(connection_pool)
         .manage(plugin_manager)
         .invoke_handler(tauri::generate_handler![
@@ -35,6 +37,20 @@ pub fn run() {
             commands::serial::send_serial_data,
             commands::serial::get_open_ports,
             commands::serial::is_port_open,
+            commands::ble::configure_ble,
+            commands::ble::scan_ble_devices,
+            commands::ble::connect_ble,
+            commands::ble::disconnect_ble,
+            commands::ble::get_ble_connections,
+            commands::ble::discover_ble_services,
+            commands::ble::discover_ble_characteristics,
+            commands::ble::read_ble_characteristic,
+            commands::ble::write_ble_characteristic,
+            commands::ble::subscribe_ble_notify,
+            commands::ble::unsubscribe_ble_notify,
+            commands::ble::get_ble_rssi,
+            commands::ble::get_ble_mode,
+            commands::ble::is_ble_configured,
             commands::websocket::connect_websocket,
             commands::websocket::send_websocket_message,
             commands::websocket::disconnect_websocket,

@@ -105,7 +105,7 @@ impl HookExecutor {
                 })
             }
             _ => {
-                let _ = self.engine.call_function::<mlua::Value>(function_name, vec![]);
+                self.engine.call_void_function(function_name, vec![])?;
                 Ok(HookResult::default())
             }
         }
@@ -117,7 +117,7 @@ impl HookExecutor {
             .get(&hook_type)
             .ok_or_else(|| ComBridgeError::protocol(format!("Hook {:?} not registered", hook_type)))?;
 
-        let _ = self.engine.call_function::<mlua::Value>(function_name, vec![]);
+        self.engine.call_void_function(function_name, vec![])?;
 
         Ok(HookResult::default())
     }
@@ -130,7 +130,7 @@ impl HookExecutor {
 
         self.engine
             .set_global_string("LAST_ERROR", error_message)?;
-        let _ = self.engine.call_function::<mlua::Value>(function_name, vec![]);
+        self.engine.call_void_function(function_name, vec![])?;
 
         Ok(HookResult::default())
     }

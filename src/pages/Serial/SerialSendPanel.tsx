@@ -131,7 +131,7 @@ const SerialSendPanel: React.FC<SerialSendPanelProps> = ({
                 style={{ width: '100%' }}
                 placeholder="选择历史记录"
                 onChange={handleHistorySelect}
-                options={history.map((item, index) => ({
+                options={history.map((item) => ({
                   value: item,
                   label: (
                     <div style={{ maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis' }}>

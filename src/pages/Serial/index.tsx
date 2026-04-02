@@ -9,7 +9,6 @@ import SerialSettings from './SerialSettings';
 const SerialPage: React.FC = () => {
   const {
     ports,
-    openPorts,
     currentPort,
     config,
     receivedData,

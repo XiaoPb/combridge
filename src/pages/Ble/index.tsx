@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Alert, Tabs } from 'antd';
-import { ApiOutlined, SettingOutlined } from '@ant-design/icons';
+import { Layout, Card, Button, Alert, Typography, Space } from 'antd';
+import { ApiOutlined, SettingOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useBle } from '../../hooks/useBle';
 import { useSerialStore } from '../../stores/serialStore';
 import { serialApi } from '../../api/tauri';
@@ -11,6 +11,9 @@ import GattBrowser from './GattBrowser';
 import CharacteristicPanel from './CharacteristicPanel';
 import AtConfigPanel from './AtConfigPanel';
 import type { BleCharacteristic } from '../../types';
+
+const { Sider, Content } = Layout;
+const { Title } = Typography;
 
 const BlePage: React.FC = () => {
   const {
@@ -40,6 +43,7 @@ const BlePage: React.FC = () => {
   const { ports, setPorts } = useSerialStore();
   const [selectedCharacteristic, setSelectedCharacteristic] = useState<BleCharacteristic | null>(null);
   const [discoveringServices, setDiscoveringServices] = useState(false);
+  const [siderCollapsed, setSiderCollapsed] = useState(false);
 
   useEffect(() => {
     serialApi.listPorts().then(setPorts).catch(console.error);
@@ -101,18 +105,18 @@ const BlePage: React.FC = () => {
   };
 
   const handleSendAtCommand = (command: string) => {
-    console.log('Send AT command:', command);
+    console.debug('Send AT command:', command);
   };
 
   return (
-    <div>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {error && (
         <Alert
           message="错误"
           description={error}
           type="error"
           closable
-          style={{ marginBottom: 16 }}
+          style={{ marginBottom: 8, flexShrink: 0 }}
         />
       )}
 
@@ -121,93 +125,141 @@ const BlePage: React.FC = () => {
           message="正在连接..."
           type="info"
           showIcon
-          style={{ marginBottom: 16 }}
+          style={{ marginBottom: 8, flexShrink: 0 }}
         />
       )}
 
-      <Row gutter={16}>
-        <Col xs={24} lg={8}>
-          <Tabs
-            defaultActiveKey="mode"
-            items={[
-              {
-                key: 'mode',
-                label: (
+      <Layout style={{ flex: '1 1 0', background: 'transparent', minHeight: 0 }}>
+        <Sider
+          collapsible
+          collapsed={siderCollapsed}
+          onCollapse={setSiderCollapsed}
+          width={280}
+          collapsedWidth={0}
+          trigger={null}
+          style={{
+            background: 'var(--bg-secondary)',
+            borderRadius: '8px',
+            marginRight: siderCollapsed ? 0 : 8,
+            overflow: 'hidden',
+            transition: 'all 0.2s',
+          }}
+        >
+          <div style={{ padding: 8, height: '100%', overflow: 'auto' }}>
+            <Title level={5} style={{ marginBottom: 8 }}>BLE 配置</Title>
+
+            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+              <Card
+                size="small"
+                title={
                   <span>
-                    <SettingOutlined />
+                    <SettingOutlined style={{ marginRight: 8 }} />
                     模式配置
                   </span>
-                ),
-                children: (
-                  <BleModeSelector
-                    mode={mode}
-                    serialPort={serialPort}
-                    ports={ports}
-                    onModeChange={handleModeChange}
-                    onSerialPortChange={handleSerialPortChange}
-                  />
-                ),
-              },
-              {
-                key: 'at',
-                label: (
+                }
+                style={{ background: 'var(--bg-primary)' }}
+                bodyStyle={{ padding: 8 }}
+              >
+                <BleModeSelector
+                  mode={mode}
+                  serialPort={serialPort}
+                  ports={ports}
+                  onModeChange={handleModeChange}
+                  onSerialPortChange={handleSerialPortChange}
+                />
+              </Card>
+
+              <Card
+                size="small"
+                title={
                   <span>
-                    <ApiOutlined />
+                    <ApiOutlined style={{ marginRight: 8 }} />
                     AT 配置
                   </span>
-                ),
-                children: (
-                  <AtConfigPanel
-                    ports={ports}
-                    selectedPort={serialPort}
-                    onPortChange={handleSerialPortChange}
-                    onSendCommand={handleSendAtCommand}
-                  />
-                ),
-              },
-            ]}
-          />
+                }
+                style={{ background: 'var(--bg-primary)' }}
+                bodyStyle={{ padding: 8 }}
+              >
+                <AtConfigPanel
+                  ports={ports}
+                  selectedPort={serialPort}
+                  onPortChange={handleSerialPortChange}
+                  onSendCommand={handleSendAtCommand}
+                />
+              </Card>
 
-          <div style={{ marginTop: 16 }}>
-            <BleConnection
-              connections={connections}
-              currentDevice={currentDevice}
-              onSelect={setCurrentDevice}
-              onDisconnect={handleDisconnect}
-            />
+              <Card
+                size="small"
+                title="连接列表"
+                style={{ background: 'var(--bg-primary)' }}
+                bodyStyle={{ padding: 8 }}
+              >
+                <BleConnection
+                  connections={connections}
+                  currentDevice={currentDevice}
+                  onSelect={setCurrentDevice}
+                  onDisconnect={handleDisconnect}
+                />
+              </Card>
+            </Space>
           </div>
-        </Col>
+        </Sider>
 
-        <Col xs={24} lg={16}>
-          <BleScanner
-            devices={devices}
-            isScanning={isScanning}
-            onScan={handleScan}
-            onStopScan={stopScan}
-            onConnect={handleConnect}
-          />
+        <Layout style={{ background: 'transparent', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <Content style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <Card
+              size="small"
+              style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', marginBottom: 8, minHeight: 0 }}
+              bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden', minHeight: 0 }}
+              title={
+                <Space>
+                  <Button
+                    type="text"
+                    icon={siderCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                    onClick={() => setSiderCollapsed(!siderCollapsed)}
+                  />
+                  <span>设备扫描</span>
+                </Space>
+              }
+            >
+              <BleScanner
+                devices={devices}
+                isScanning={isScanning}
+                onScan={handleScan}
+                onStopScan={stopScan}
+                onConnect={handleConnect}
+              />
+            </Card>
 
-          <Row gutter={16} style={{ marginTop: 16 }}>
-            <Col xs={24} md={12}>
-              <GattBrowser
-                services={services}
-                loading={discoveringServices}
-                onServiceSelect={handleServiceSelect}
-                onCharacteristicSelect={handleCharacteristicSelect}
-              />
-            </Col>
-            <Col xs={24} md={12}>
-              <CharacteristicPanel
-                characteristic={selectedCharacteristic}
-                onRead={handleRead}
-                onWrite={handleWrite}
-                onSubscribe={handleSubscribe}
-                onUnsubscribe={handleUnsubscribe}
-              />
-            </Col>
-          </Row>
-        </Col>
-      </Row>
+            <Card
+              size="small"
+              style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', minHeight: 0 }}
+              bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden', minHeight: 0 }}
+              title="GATT 浏览器"
+            >
+              <div style={{ display: 'flex', gap: 8, flex: '1 1 0', minHeight: 0, overflow: 'hidden' }}>
+                <div style={{ flex: '1 1 0', minWidth: 0, overflow: 'auto' }}>
+                  <GattBrowser
+                    services={services}
+                    loading={discoveringServices}
+                    onServiceSelect={handleServiceSelect}
+                    onCharacteristicSelect={handleCharacteristicSelect}
+                  />
+                </div>
+                <div style={{ flex: '1 1 0', minWidth: 0, overflow: 'auto' }}>
+                  <CharacteristicPanel
+                    characteristic={selectedCharacteristic}
+                    onRead={handleRead}
+                    onWrite={handleWrite}
+                    onSubscribe={handleSubscribe}
+                    onUnsubscribe={handleUnsubscribe}
+                  />
+                </div>
+              </div>
+            </Card>
+          </Content>
+        </Layout>
+      </Layout>
     </div>
   );
 };

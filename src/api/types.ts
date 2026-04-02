@@ -1,5 +1,5 @@
 import type { SerialConfig, SerialPortInfo } from '../types';
-import type { BleDeviceInfo, BleConnection, BleScanOptions } from '../types';
+import type { BleDeviceInfo, BleConnection } from '../types';
 
 export interface InvokeResult {
   success: boolean;

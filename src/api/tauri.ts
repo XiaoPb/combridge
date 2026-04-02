@@ -1,12 +1,10 @@
 import type { SerialConfig, SerialPortInfo } from '../types';
 import type { BleDeviceInfo, BleScanOptions, BleConnection } from '../types';
 import type { 
-  InvokeResult, 
   SerialListPortsResult, 
   SerialOpenParams, 
   SerialWriteParams,
   BleScanResult,
-  BleConnectResult,
   BleWriteParams
 } from './types';
 

@@ -16,7 +16,7 @@ export function bytesToText(bytes: number[], encoding: string = 'utf-8'): string
   return decoder.decode(new Uint8Array(bytes));
 }
 
-export function textToBytes(text: string, encoding: string = 'utf-8'): number[] {
+export function textToBytes(text: string): number[] {
   const encoder = new TextEncoder();
   return Array.from(encoder.encode(text));
 }

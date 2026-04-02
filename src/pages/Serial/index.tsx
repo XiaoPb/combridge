@@ -38,6 +38,7 @@ const SerialPage: React.FC = () => {
   const [inputData, setInputData] = useState('');
   const [sendFormat, setSendFormat] = useState<'hex' | 'text'>('text');
   const [appendNewline, setAppendNewline] = useState(true);
+  const [newlineType, setNewlineType] = useState<'lf' | 'crlf'>('lf');
   const [selectedPort, setSelectedPort] = useState<string | null>(null);
   const [tempConfig, setTempConfig] = useState<SerialConfig>(DEFAULT_SERIAL_CONFIG);
 
@@ -73,7 +74,7 @@ const SerialPage: React.FC = () => {
     if (!inputData.trim()) return;
     let dataToSend = inputData;
     if (sendFormat === 'text' && appendNewline) {
-      dataToSend += '\n';
+      dataToSend += newlineType === 'crlf' ? '\r\n' : '\n';
     }
     if (activeTabKey) {
       await sendData(activeTabKey, dataToSend, sendFormat);
@@ -464,10 +465,23 @@ const SerialPage: React.FC = () => {
                     ]}
                   />
                   {sendFormat === 'text' && (
-                    <Space size={4}>
-                      <Text type="secondary" style={{ fontSize: 12 }}>追加换行</Text>
-                      <Switch size="small" checked={appendNewline} onChange={setAppendNewline} />
-                    </Space>
+                    <>
+                      <Space size={4}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>追加换行</Text>
+                        <Switch size="small" checked={appendNewline} onChange={setAppendNewline} />
+                      </Space>
+                      {appendNewline && (
+                        <Segmented
+                          value={newlineType}
+                          onChange={(value) => setNewlineType(value as 'lf' | 'crlf')}
+                          size="small"
+                          options={[
+                            { value: 'lf', label: 'LF (\\n)' },
+                            { value: 'crlf', label: 'CRLF (\\r\\n)' },
+                          ]}
+                        />
+                      )}
+                    </>
                   )}
                 </Space>
               }

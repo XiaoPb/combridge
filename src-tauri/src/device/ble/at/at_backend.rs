@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use crate::error::{ComBridgeError, Result};
 use super::super::ble_traits::{
@@ -15,39 +15,37 @@ use super::at_transport::AtTransport;
 use super::at_cache::AtCache;
 
 pub struct AtBleBackend {
-    transport: Option<AtTransport>,
+    transport: Arc<Mutex<Option<AtTransport>>>,
     cache: Arc<AtCache>,
-    notify_callbacks: Mutex<HashMap<String, NotifyCallback>>,
-    configured: bool,
+    notify_callbacks: Arc<Mutex<HashMap<String, NotifyCallback>>>,
+    configured: Arc<Mutex<bool>>,
 }
 
 impl AtBleBackend {
     pub fn new() -> Self {
         Self {
-            transport: None,
+            transport: Arc::new(Mutex::new(None)),
             cache: Arc::new(AtCache::new()),
-            notify_callbacks: Mutex::new(HashMap::new()),
-            configured: false,
+            notify_callbacks: Arc::new(Mutex::new(HashMap::new())),
+            configured: Arc::new(Mutex::new(false)),
         }
     }
 
     pub fn with_transport(transport: AtTransport) -> Self {
         Self {
-            transport: Some(transport),
+            transport: Arc::new(Mutex::new(Some(transport))),
             cache: Arc::new(AtCache::new()),
-            notify_callbacks: Mutex::new(HashMap::new()),
-            configured: true,
+            notify_callbacks: Arc::new(Mutex::new(HashMap::new())),
+            configured: Arc::new(Mutex::new(true)),
         }
     }
 
-    fn transport_mut(&mut self) -> Result<&mut AtTransport> {
-        self.transport.as_mut().ok_or_else(|| {
+    fn send_and_wait(&self, command: &AtCommand, timeout_ms: u64) -> Result<Vec<String>> {
+        let mut transport_guard = self.transport.lock().unwrap();
+        let transport = transport_guard.as_mut().ok_or_else(|| {
             ComBridgeError::ble("AT传输层未初始化")
-        })
-    }
-
-    fn send_and_wait(&mut self, command: &AtCommand, timeout_ms: u64) -> Result<Vec<String>> {
-        let transport = self.transport_mut()?;
+        })?;
+        
         transport.send_command(command)?;
         transport.read_response(Some(timeout_ms))
     }
@@ -72,22 +70,34 @@ impl AtBleBackend {
     }
 }
 
+impl Default for AtBleBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl BleBackend for AtBleBackend {
     async fn configure(&mut self) -> Result<()> {
-        let transport = self.transport_mut()?;
+        let mut transport_guard = self.transport.lock().unwrap();
+        let transport = transport_guard.as_mut().ok_or_else(|| {
+            ComBridgeError::ble("AT传输层未初始化")
+        })?;
+        
         transport.send_command(&AtCommand::Test)?;
         let responses = transport.read_response(Some(1000))?;
 
         Self::parse_ok_response(&responses)?;
-        self.configured = true;
+        *self.configured.lock().unwrap() = true;
         info!("AT BLE后端配置成功");
         Ok(())
     }
 
     async fn scan(&self, duration_ms: u64) -> Result<Vec<BleDevice>> {
-        let mut self_mut = unsafe { &mut *(self as *const Self as *mut Self) };
-        let transport = self_mut.transport_mut()?;
+        let mut transport_guard = self.transport.lock().unwrap();
+        let transport = transport_guard.as_mut().ok_or_else(|| {
+            ComBridgeError::ble("AT传输层未初始化")
+        })?;
         
         transport.send_command(&AtCommand::Scan { duration_ms })?;
         let responses = transport.read_response(Some(duration_ms + 2000))?;
@@ -113,15 +123,14 @@ impl BleBackend for AtBleBackend {
             }
         }
 
+        drop(transport_guard);
         Self::parse_ok_response(&responses)?;
         info!("扫描完成，发现 {} 个设备", devices.len());
         Ok(devices)
     }
 
     async fn connect(&self, address: &str) -> Result<BleConnection> {
-        let mut self_mut = unsafe { &mut *(self as *const Self as *mut Self) };
-        
-        let responses = self_mut.send_and_wait(
+        let responses = self.send_and_wait(
             &AtCommand::Connect { address: address.to_string() },
             10000
         )?;
@@ -138,9 +147,7 @@ impl BleBackend for AtBleBackend {
     }
 
     async fn disconnect(&self, address: &str) -> Result<()> {
-        let mut self_mut = unsafe { &mut *(self as *const Self as *mut Self) };
-        
-        let responses = self_mut.send_and_wait(
+        let responses = self.send_and_wait(
             &AtCommand::Disconnect { address: address.to_string() },
             5000
         )?;
@@ -163,9 +170,7 @@ impl BleBackend for AtBleBackend {
     }
 
     async fn discover_services(&self, address: &str) -> Result<Vec<BleService>> {
-        let mut self_mut = unsafe { &mut *(self as *const Self as *mut Self) };
-        
-        let responses = self_mut.send_and_wait(
+        let responses = self.send_and_wait(
             &AtCommand::DiscoverServices { address: address.to_string() },
             5000
         )?;
@@ -197,9 +202,7 @@ impl BleBackend for AtBleBackend {
     }
 
     async fn discover_characteristics(&self, address: &str, service_uuid: &str) -> Result<Vec<BleCharacteristic>> {
-        let mut self_mut = unsafe { &mut *(self as *const Self as *mut Self) };
-        
-        let responses = self_mut.send_and_wait(
+        let responses = self.send_and_wait(
             &AtCommand::DiscoverCharacteristics {
                 address: address.to_string(),
                 service_uuid: service_uuid.to_string(),
@@ -215,16 +218,17 @@ impl BleBackend for AtBleBackend {
                 if let Ok(response) = parser.parse_response(line) {
                     if let super::at_commands::AtResponse::Characteristics { characteristics: chars } = response {
                         characteristics = chars.into_iter().map(|c| {
+                            let props = BleCharacteristicProperties {
+                                read: c.can_read(),
+                                write: c.can_write(),
+                                write_without_response: c.can_write(),
+                                notify: c.can_notify(),
+                                indicate: c.can_indicate(),
+                            };
                             BleCharacteristic {
-                                uuid: c.uuid.clone(),
+                                uuid: c.uuid,
                                 service_uuid: c.service_uuid,
-                                properties: BleCharacteristicProperties {
-                                    read: c.can_read(),
-                                    write: c.can_write(),
-                                    write_without_response: c.can_write(),
-                                    notify: c.can_notify(),
-                                    indicate: c.can_indicate(),
-                                },
+                                properties: props,
                             }
                         }).collect();
                     }
@@ -249,9 +253,7 @@ impl BleBackend for AtBleBackend {
     }
 
     async fn read_characteristic(&self, address: &str, char_uuid: &str) -> Result<Vec<u8>> {
-        let mut self_mut = unsafe { &mut *(self as *const Self as *mut Self) };
-        
-        let responses = self_mut.send_and_wait(
+        let responses = self.send_and_wait(
             &AtCommand::Read {
                 address: address.to_string(),
                 char_uuid: char_uuid.to_string(),
@@ -274,9 +276,7 @@ impl BleBackend for AtBleBackend {
     }
 
     async fn write_characteristic(&self, address: &str, char_uuid: &str, data: &[u8]) -> Result<()> {
-        let mut self_mut = unsafe { &mut *(self as *const Self as *mut Self) };
-        
-        let responses = self_mut.send_and_wait(
+        let responses = self.send_and_wait(
             &AtCommand::Write {
                 address: address.to_string(),
                 char_uuid: char_uuid.to_string(),
@@ -290,9 +290,7 @@ impl BleBackend for AtBleBackend {
     }
 
     async fn subscribe_notify(&self, address: &str, char_uuid: &str, callback: NotifyCallback) -> Result<()> {
-        let mut self_mut = unsafe { &mut *(self as *const Self as *mut Self) };
-        
-        let responses = self_mut.send_and_wait(
+        let responses = self.send_and_wait(
             &AtCommand::Subscribe {
                 address: address.to_string(),
                 char_uuid: char_uuid.to_string(),
@@ -310,9 +308,7 @@ impl BleBackend for AtBleBackend {
     }
 
     async fn unsubscribe_notify(&self, address: &str, char_uuid: &str) -> Result<()> {
-        let mut self_mut = unsafe { &mut *(self as *const Self as *mut Self) };
-        
-        let responses = self_mut.send_and_wait(
+        let responses = self.send_and_wait(
             &AtCommand::Unsubscribe {
                 address: address.to_string(),
                 char_uuid: char_uuid.to_string(),
@@ -330,9 +326,7 @@ impl BleBackend for AtBleBackend {
     }
 
     async fn get_rssi(&self, address: &str) -> Result<i16> {
-        let mut self_mut = unsafe { &mut *(self as *const Self as *mut Self) };
-        
-        let responses = self_mut.send_and_wait(
+        let responses = self.send_and_wait(
             &AtCommand::GetRssi { address: address.to_string() },
             3000
         )?;
@@ -349,11 +343,5 @@ impl BleBackend for AtBleBackend {
         }
 
         Err(ComBridgeError::ble("获取RSSI失败"))
-    }
-}
-
-impl Default for AtBleBackend {
-    fn default() -> Self {
-        Self::new()
     }
 }

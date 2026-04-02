@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serialport::{SerialPort as SerialPortImpl, SerialPortType};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use crate::error::{ComBridgeError, Result};
 use super::at_commands::AtCommand;

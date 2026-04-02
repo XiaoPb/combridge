@@ -1,6 +1,6 @@
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use crate::error::{ComBridgeError, Result};
 use super::super::ble_traits::BleDevice;

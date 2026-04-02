@@ -1,13 +1,12 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 use async_trait::async_trait;
-use tracing::{debug, info, warn};
+use tracing::info;
 
 use crate::error::{ComBridgeError, Result};
 use super::super::ble_traits::{
-    BleBackend, BleDevice, BleConnection, BleService, BleCharacteristic,
-    BleCharacteristicProperties, NotifyCallback,
+    BleBackend, BleDevice, BleConnection, BleService, BleCharacteristic, NotifyCallback,
 };
 use super::adapter::BleAdapter;
 use super::gatt_client::GattClient;
@@ -66,7 +65,7 @@ impl BleBackend for NativeBleBackend {
         
         let duration = std::time::Duration::from_millis(duration_ms);
         tokio::time::sleep(duration).await;
-        
+
         adapter.stop_scan().await?;
         
         let devices = adapter.get_scanned_devices().await?;
@@ -89,8 +88,12 @@ impl BleBackend for NativeBleBackend {
     }
 
     async fn disconnect(&self, address: &str) -> Result<()> {
-        let clients = self.clients.read().unwrap();
-        if let Some(client) = clients.get(address) {
+        let client = {
+            let clients = self.clients.read().unwrap();
+            clients.get(address).cloned()
+        };
+
+        if let Some(client) = client {
             client.disconnect().await?;
         }
 

@@ -1,11 +1,11 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Mutex, RwLock};
 
 use tracing::{debug, info};
 
 use crate::error::{ComBridgeError, Result};
 use super::super::ble_traits::{
-    BleService, BleCharacteristic, BleCharacteristicProperties, NotifyCallback,
+    BleService, BleCharacteristic, NotifyCallback,
 };
 
 pub struct GattClient {

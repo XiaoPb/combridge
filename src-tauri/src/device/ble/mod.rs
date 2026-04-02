@@ -7,4 +7,4 @@ pub use ble_traits::{
     BleBackend, BleDevice, BleConnection, BleService, BleCharacteristic,
     BleCharacteristicProperties, NotifyCallback,
 };
-pub use ble_manager::{BleManager, BleManagerRef, BleMode};
+pub use ble_manager::{BleManager, BleManagerRef, BleMode, AtConfig};

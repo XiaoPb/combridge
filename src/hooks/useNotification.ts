@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import { notification, message } from 'antd';
 
 type NotificationType = 'success' | 'error' | 'warning' | 'info';
@@ -15,6 +15,7 @@ interface UseNotificationReturn {
   info: (content: string, options?: NotificationOptions) => void;
   toast: (content: string, type?: NotificationType) => void;
   destroyAll: () => void;
+  contextHolder: React.ReactNode;
 }
 
 export const useNotification = (): UseNotificationReturn => {

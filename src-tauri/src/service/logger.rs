@@ -48,6 +48,10 @@ impl LoggerService {
         Ok(LOGGER.get().unwrap())
     }
 
+    pub fn init_default() -> Result<&'static LoggerService, Box<dyn std::error::Error>> {
+        Self::init(LoggerConfig::default())
+    }
+
     fn create_service(config: LoggerConfig) -> Result<Self, Box<dyn std::error::Error>> {
         let level = Self::parse_level(&config.level);
         let mut layers = Vec::new();

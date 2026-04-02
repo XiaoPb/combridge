@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Modal, Form, Select, InputNumber, Switch, Divider, Button, Space, message, Typography } from 'antd';
 import { SettingOutlined, SoundOutlined, ReloadOutlined } from '@ant-design/icons';
 
-const { Text, Title } = Typography;
+const { Title } = Typography;
 
 interface SettingsModalProps {
   open: boolean;

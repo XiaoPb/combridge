@@ -1,5 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
-
 export interface AppConfig {
   theme: 'light' | 'dark' | 'system';
   language: 'zh-CN' | 'en-US';

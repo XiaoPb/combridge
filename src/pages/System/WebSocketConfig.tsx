@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Card, Form, Input, InputNumber, Switch, Button, Space, message, Divider, Typography } from 'antd';
 import { SaveOutlined, ReloadOutlined, LinkOutlined, DisconnectOutlined } from '@ant-design/icons';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 interface WebSocketConfig {
   url: string;

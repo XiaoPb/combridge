@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from 'react';
-import messageParser, { type ParsedMessage, type MessageType, type MessageSchema } from '../services/messageParser';
+import messageParser, { type ParsedMessage, type MessageSchema } from '../services/messageParser';
 import dataFormatter, { type DataFormat, type FormatOptions, type ParsedData } from '../services/dataFormatter';
 
 interface UseDataParserReturn {

@@ -9,19 +9,26 @@ use std::sync::Arc;
 
 use device::{BleManager, SerialManager};
 use protocol::PluginManager;
+use service::LoggerService;
+use tracing::info;
 use websocket::ConnectionPool;
 
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+fn init_logger() {
+    let _guard = LoggerService::init_default();
+    std::mem::forget(_guard);
+    info!("ComBridge Rust 应用启动");
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    init_logger();
+
     let serial_manager = Arc::new(SerialManager::new());
     let ble_manager = Arc::new(BleManager::new());
     let connection_pool = Arc::new(ConnectionPool::new());
     let plugin_manager = Arc::new(PluginManager::new());
+
+    info!("服务初始化完成");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -30,7 +37,6 @@ pub fn run() {
         .manage(connection_pool)
         .manage(plugin_manager)
         .invoke_handler(tauri::generate_handler![
-            greet,
             commands::serial::scan_serial_ports,
             commands::serial::open_serial_port,
             commands::serial::close_serial_port,

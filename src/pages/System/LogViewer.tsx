@@ -1,9 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Card, Table, Tag, Space, Button, Select, Input, Typography, Empty } from 'antd';
 import {
   ClearOutlined,
   DownloadOutlined,
-  FilterOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
 
@@ -34,12 +33,12 @@ const levelTexts = {
 
 const formatTimestamp = (timestamp: number): string => {
   const date = new Date(timestamp);
-  return date.toLocaleString('zh-CN', {
+  const ms = String(date.getMilliseconds()).padStart(3, '0');
+  return date.toLocaleTimeString('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    fractionalSecondDigits: 3,
-  });
+  }) + '.' + ms;
 };
 
 const LogViewer: React.FC = () => {

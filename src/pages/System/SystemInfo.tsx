@@ -8,7 +8,7 @@ import {
 } from '@ant-design/icons';
 import { invoke } from '@tauri-apps/api/core';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 interface SystemInfo {
   os_name: string;
@@ -25,7 +25,7 @@ interface SystemStatus {
   memory_usage: number;
   used_memory: number;
   total_memory: number;
-  uptime_secs: u64;
+  uptime_secs: number;
   disk_usage: DiskUsage[];
 }
 

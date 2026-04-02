@@ -254,7 +254,8 @@ impl DeviceManager {
     where
         F: Fn(&str, DeviceType, &[u8]) + Send + Sync + 'static,
     {
-        let mut callbacks = futures::executor::block_on(self.callbacks.write());
+        let rt = tokio::runtime::Handle::current();
+        let mut callbacks = rt.block_on(self.callbacks.write());
         callbacks.push(Arc::new(callback));
         debug!("已注册设备数据回调，当前共 {} 个回调", callbacks.len());
     }
@@ -315,7 +316,7 @@ impl DeviceManager {
 
         let device = DeviceInfo {
             id: device_id.clone(),
-            name: connection.device_name.clone().unwrap_or_else(|| address.to_string()),
+            name: connection.name.clone().unwrap_or_else(|| address.to_string()),
             device_type: DeviceType::Ble,
             is_connected: true,
             connected_at: Some(

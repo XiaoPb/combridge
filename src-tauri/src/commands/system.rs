@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::SystemTime;
-use sysinfo::{System, SystemExt, CpuExt, ProcessExt, DiskExt};
+use sysinfo::{System, Disks, RefreshKind};
 
 use crate::error::{ComBridgeError, Result};
 
@@ -73,11 +73,11 @@ fn get_system() -> System {
 #[tauri::command]
 pub async fn get_system_info() -> Result<SystemInfo> {
     let sys = get_system();
-    
-    let os_name = System::name().unwrap_or_else(|_| "Unknown".to_string());
-    let os_version = System::os_version().unwrap_or_else(|_| "Unknown".to_string());
+
+    let os_name = System::name().unwrap_or_else(|| "Unknown".to_string());
+    let os_version = System::os_version().unwrap_or_else(|| "Unknown".to_string());
     let arch = env::consts::ARCH.to_string();
-    let hostname = System::host_name().unwrap_or_else(|_| "Unknown".to_string());
+    let hostname = System::host_name().unwrap_or_else(|| "Unknown".to_string());
     let cpu_count = sys.cpus().len();
     let total_memory = sys.total_memory();
     let app_version = env!("CARGO_PKG_VERSION").to_string();
@@ -96,7 +96,7 @@ pub async fn get_system_info() -> Result<SystemInfo> {
 #[tauri::command]
 pub async fn get_system_status() -> Result<SystemStatus> {
     let mut sys = get_system();
-    sys.refresh_all();
+    sys.refresh_specifics(RefreshKind::everything());
 
     let cpu_usage = sys.global_cpu_info().cpu_usage();
     let total_memory = sys.total_memory();
@@ -109,8 +109,8 @@ pub async fn get_system_status() -> Result<SystemStatus> {
 
     let uptime_secs = System::uptime();
 
-    let disk_usage: Vec<DiskUsage> = sys
-        .disks()
+    let disks = Disks::new_with_refreshed_list();
+    let disk_usage: Vec<DiskUsage> = disks
         .iter()
         .map(|disk| {
             let total_space = disk.total_space();
@@ -168,11 +168,11 @@ pub async fn get_runtime_status(
     plugin_manager: tauri::State<'_, std::sync::Arc<crate::protocol::PluginManager>>,
 ) -> Result<RuntimeStatus> {
     let serial_ports_open = serial_manager.inner().get_open_ports().len();
-    let ble_connections = ble_manager.inner().get_connections().len();
-    let websocket_connections = connection_pool.inner().get_all_status().len();
-    let protocols_loaded = plugin_manager.inner().list_protocols().len();
+    let ble_connections = ble_manager.inner().get_connections().await?.len();
+    let websocket_connections = connection_pool.inner().get_all_status().await.len();
+    let protocols_loaded = plugin_manager.inner().list_protocols()?.len();
 
-    let start_time = SystemTime::now()
+    let uptime_secs = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
@@ -183,7 +183,7 @@ pub async fn get_runtime_status(
         ble_connections,
         websocket_connections,
         protocols_loaded,
-        uptime_secs: start_time,
+        uptime_secs,
     })
 }
 

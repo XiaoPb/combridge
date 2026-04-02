@@ -244,12 +244,12 @@ class DataFormatter {
 
     switch (format) {
       case 'time':
+        const ms = String(date.getMilliseconds()).padStart(3, '0');
         return date.toLocaleTimeString('zh-CN', {
           hour: '2-digit',
           minute: '2-digit',
           second: '2-digit',
-          fractionalSecondDigits: 3,
-        });
+        }) + '.' + ms;
       case 'date':
         return date.toLocaleDateString('zh-CN');
       case 'full':

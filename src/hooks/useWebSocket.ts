@@ -50,7 +50,7 @@ export const useWebSocket = () => {
   });
 
   const listenersRef = useRef<UnlistenFn[]>([]);
-  const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const setupListeners = async () => {

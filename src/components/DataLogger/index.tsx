@@ -1,9 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { Card, Table, Tag, Space, Button, Select, Input, Typography, Empty, Tooltip } from 'antd';
+import { useState, useMemo } from 'react';
+import { Card, Table, Tag, Space, Button, Typography, Empty, Tooltip } from 'antd';
 import {
   ClearOutlined,
   DownloadOutlined,
-  FilterOutlined,
   ArrowUpOutlined,
   ArrowDownOutlined,
 } from '@ant-design/icons';
@@ -11,7 +10,6 @@ import LogEntry from './LogEntry';
 import LogFilter from './LogFilter';
 
 const { Text } = Typography;
-const { Search } = Input;
 
 export interface DataLogEntry {
   id: string;
@@ -35,12 +33,12 @@ interface DataLoggerProps {
 
 const formatTimestamp = (timestamp: number): string => {
   const date = new Date(timestamp);
-  return date.toLocaleString('zh-CN', {
+  const ms = String(date.getMilliseconds()).padStart(3, '0');
+  return date.toLocaleTimeString('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    fractionalSecondDigits: 3,
-  });
+  }) + '.' + ms;
 };
 
 const formatData = (data: number[], format: 'hex' | 'text' | 'binary'): string => {
@@ -63,7 +61,7 @@ const DataLogger: React.FC<DataLoggerProps> = ({
   maxHeight = 400,
   showFilter = true,
   showExport = true,
-  autoScroll = true,
+  autoScroll: _autoScroll = true,
 }) => {
   const [directionFilter, setDirectionFilter] = useState<'all' | 'send' | 'receive'>('all');
   const [formatFilter, setFormatFilter] = useState<'hex' | 'text' | 'binary'>('hex');
@@ -136,7 +134,7 @@ const DataLogger: React.FC<DataLoggerProps> = ({
       title: '数据',
       dataIndex: 'data',
       key: 'data',
-      render: (data: number[], record: DataLogEntry) => (
+      render: (data: number[], _record: DataLogEntry) => (
         <LogEntry data={data} format={formatFilter} />
       ),
     },

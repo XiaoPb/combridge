@@ -7,7 +7,7 @@ export const useDebounce = <T>(
   delay: number
 ): [T, () => void] => {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (timerRef.current) {
@@ -39,7 +39,7 @@ export const useDebouncedCallback = <T extends unknown[]>(
   callback: DebouncedFunction<T>,
   delay: number
 ): DebouncedFunction<T> => {
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const callbackRef = useRef(callback);
 
   useEffect(() => {

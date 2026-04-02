@@ -1,11 +1,20 @@
 import type { SerialConfig, SerialPortInfo } from '../types';
-import type { BleDeviceInfo, BleScanOptions, BleConnection } from '../types';
+import type { BleDeviceInfo, BleScanOptions, BleConnection, BleService, BleCharacteristic } from '../types';
 import type { 
   SerialListPortsResult, 
   SerialOpenParams, 
   SerialWriteParams,
   BleScanResult,
-  BleWriteParams
+  BleWriteParams,
+  BleConfigureParams,
+  BleConnectParams,
+  BleDiscoverServicesParams,
+  BleDiscoverCharacteristicsParams,
+  BleReadParams,
+  BleSubscribeParams,
+  PluginInfo,
+  ProtocolLoadParams,
+  ProtocolBindParams
 } from './types';
 
 export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -65,37 +74,89 @@ export const serialApi = {
 };
 
 export const bleApi = {
+  async configure(params: BleConfigureParams): Promise<void> {
+    await invoke<void>('ble_configure', { params });
+  },
+
+  configureBle(mode: 'native' | 'at', serialPort?: string): Promise<void> {
+    return this.configure({ mode, serialPort });
+  },
+
   async scan(options?: BleScanOptions): Promise<BleDeviceInfo[]> {
     const result = await invoke<BleScanResult>('ble_scan', { options });
     return result.devices;
+  },
+
+  scanBleDevices(options?: BleScanOptions): Promise<BleDeviceInfo[]> {
+    return this.scan(options);
   },
 
   async stopScan(): Promise<void> {
     await invoke<void>('ble_stop_scan');
   },
 
-  async connect(address: string): Promise<BleConnection> {
-    return invoke<BleConnection>('ble_connect', { address });
+  async connect(params: BleConnectParams): Promise<BleConnection> {
+    return invoke<BleConnection>('ble_connect', { params });
+  },
+
+  connectBle(address: string, timeout?: number): Promise<BleConnection> {
+    return this.connect({ address, timeout });
   },
 
   async disconnect(deviceId: string): Promise<void> {
     await invoke<void>('ble_disconnect', { deviceId });
   },
 
+  disconnectBle(deviceId: string): Promise<void> {
+    return this.disconnect(deviceId);
+  },
+
+  async discoverServices(params: BleDiscoverServicesParams): Promise<BleService[]> {
+    return invoke<BleService[]>('ble_discover_services', { params });
+  },
+
+  discoverBleServices(deviceId: string): Promise<BleService[]> {
+    return this.discoverServices({ deviceId });
+  },
+
+  async discoverCharacteristics(params: BleDiscoverCharacteristicsParams): Promise<BleCharacteristic[]> {
+    return invoke<BleCharacteristic[]>('ble_discover_characteristics', { params });
+  },
+
+  discoverBleCharacteristics(deviceId: string, serviceUuid: string): Promise<BleCharacteristic[]> {
+    return this.discoverCharacteristics({ deviceId, serviceUuid });
+  },
+
+  async read(params: BleReadParams): Promise<number[]> {
+    return invoke<number[]>('ble_read', { params });
+  },
+
+  readBleCharacteristic(deviceId: string, characteristicUuid: string): Promise<number[]> {
+    return this.read({ deviceId, characteristicUuid });
+  },
+
   async write(params: BleWriteParams): Promise<void> {
     await invoke<void>('ble_write', { params });
   },
 
-  async read(deviceId: string, characteristicUuid: string): Promise<number[]> {
-    return invoke<number[]>('ble_read', { deviceId, characteristicUuid });
+  writeBleCharacteristic(deviceId: string, characteristicUuid: string, data: number[], withoutResponse?: boolean): Promise<void> {
+    return this.write({ deviceId, characteristicUuid, data, withoutResponse });
   },
 
-  async subscribe(deviceId: string, characteristicUuid: string): Promise<void> {
-    await invoke<void>('ble_subscribe', { deviceId, characteristicUuid });
+  async subscribe(params: BleSubscribeParams): Promise<void> {
+    await invoke<void>('ble_subscribe', { params });
+  },
+
+  subscribeBleNotify(deviceId: string, characteristicUuid: string): Promise<void> {
+    return this.subscribe({ deviceId, characteristicUuid });
   },
 
   async unsubscribe(deviceId: string, characteristicUuid: string): Promise<void> {
     await invoke<void>('ble_unsubscribe', { deviceId, characteristicUuid });
+  },
+
+  unsubscribeBleNotify(deviceId: string, characteristicUuid: string): Promise<void> {
+    return this.unsubscribe(deviceId, characteristicUuid);
   },
 
   async isConnected(deviceId: string): Promise<boolean> {
@@ -126,5 +187,79 @@ export const systemApi = {
 
   async showInFolder(path: string): Promise<void> {
     await invoke<void>('show_in_folder', { path });
+  },
+};
+
+export const protocolApi = {
+  async load(params: ProtocolLoadParams): Promise<PluginInfo> {
+    return invoke<PluginInfo>('load_protocol', { ...params });
+  },
+
+  async loadProtocol(pluginId: string, path: string): Promise<PluginInfo> {
+    return this.load({ plugin_id: pluginId, path });
+  },
+
+  async unload(pluginId: string): Promise<void> {
+    await invoke<void>('unload_protocol', { plugin_id: pluginId });
+  },
+
+  async unloadProtocol(pluginId: string): Promise<void> {
+    return this.unload(pluginId);
+  },
+
+  async enable(pluginId: string): Promise<void> {
+    await invoke<void>('enable_protocol', { plugin_id: pluginId });
+  },
+
+  async enableProtocol(pluginId: string): Promise<void> {
+    return this.enable(pluginId);
+  },
+
+  async disable(pluginId: string): Promise<void> {
+    await invoke<void>('disable_protocol', { plugin_id: pluginId });
+  },
+
+  async disableProtocol(pluginId: string): Promise<void> {
+    return this.disable(pluginId);
+  },
+
+  async bind(params: ProtocolBindParams): Promise<void> {
+    await invoke<void>('bind_protocol', { ...params });
+  },
+
+  async bindProtocol(pluginId: string, deviceId: string): Promise<void> {
+    return this.bind({ plugin_id: pluginId, device_id: deviceId });
+  },
+
+  async unbind(params: ProtocolBindParams): Promise<void> {
+    await invoke<void>('unbind_protocol', { ...params });
+  },
+
+  async unbindProtocol(pluginId: string, deviceId: string): Promise<void> {
+    return this.unbind({ plugin_id: pluginId, device_id: deviceId });
+  },
+
+  async list(): Promise<PluginInfo[]> {
+    return invoke<PluginInfo[]>('list_protocols');
+  },
+
+  async listProtocols(): Promise<PluginInfo[]> {
+    return this.list();
+  },
+
+  async get(pluginId: string): Promise<PluginInfo> {
+    return invoke<PluginInfo>('get_protocol', { plugin_id: pluginId });
+  },
+
+  async getProtocol(pluginId: string): Promise<PluginInfo> {
+    return this.get(pluginId);
+  },
+
+  async getBound(deviceId: string): Promise<PluginInfo[]> {
+    return invoke<PluginInfo[]>('get_bound_protocols', { device_id: deviceId });
+  },
+
+  async getBoundProtocols(deviceId: string): Promise<PluginInfo[]> {
+    return this.getBound(deviceId);
   },
 };

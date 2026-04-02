@@ -8,6 +8,13 @@ use crate::device::{
 };
 use crate::error::{ComBridgeError, Result};
 
+fn format_hex(data: &[u8]) -> String {
+    data.iter()
+        .map(|b| format!("{:02X}", b))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// 串口配置DTO，用于前端传递配置参数
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerialPortConfigDto {
@@ -216,25 +223,26 @@ pub async fn open_serial_port(
 #[tauri::command]
 pub async fn close_serial_port(
     manager: State<'_, SerialManagerRef>,
-    port_name: String,
+    #[allow(non_snake_case)]
+    portName: String,
 ) -> Result<()> {
-    info!("尝试关闭串口: {}", port_name);
-    
+    info!("尝试关闭串口: {}", portName);
+
     let manager = manager.inner();
-    match manager.close_port(&port_name) {
+    match manager.close_port(&portName) {
         Ok(()) => {
-            info!("串口 {} 关闭成功", port_name);
+            info!("串口 {} 关闭成功", portName);
             Ok(())
         }
         Err(e) => {
-            error!("串口 {} 关闭失败: {}", port_name, e);
+            error!("串口 {} 关闭失败: {}", portName, e);
             Err(e)
         }
     }
 }
 
 /// 发送串口数据
-/// 
+///
 /// 向指定串口发送数据
 #[tauri::command]
 pub async fn send_serial_data(
@@ -243,16 +251,17 @@ pub async fn send_serial_data(
     portName: String,
     data: Vec<u8>,
 ) -> Result<usize> {
-    debug!("向串口 {} 发送 {} 字节数据", portName, data.len());
+    let data_hex = format_hex(&data);
+    info!("[SEND] 串口 {} 发送 {} 字节: {}", portName, data.len(), data_hex);
 
     let manager = manager.inner();
     match manager.send_data(&portName, &data) {
         Ok(bytes_written) => {
-            debug!("串口 {} 成功发送 {} 字节", portName, bytes_written);
+            info!("[SEND] 串口 {} 发送成功，{} 字节", portName, bytes_written);
             Ok(bytes_written)
         }
         Err(e) => {
-            error!("串口 {} 发送数据失败: {}", portName, e);
+            error!("[SEND] 串口 {} 发送失败: {}", portName, e);
             Err(e)
         }
     }

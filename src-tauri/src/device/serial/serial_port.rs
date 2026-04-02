@@ -129,7 +129,12 @@ impl SerialPort {
 
                 match result {
                     Ok(size) if size > 0 => {
-                        debug!("串口 {} 收到 {} 字节", port_name, size);
+                        let data_hex: String = buffer[..size]
+                            .iter()
+                            .map(|b| format!("{:02X}", b))
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        info!("[RECV] 串口 {} 收到 {} 字节: {}", port_name, size, data_hex);
                         callback(&port_name, &buffer[..size]);
                     }
                     Ok(_) => {}

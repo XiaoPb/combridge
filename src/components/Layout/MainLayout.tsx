@@ -25,8 +25,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         />
         <Content
           style={{
-            margin: '16px',
-            padding: '24px',
+            margin: '8px',
+            padding: '8px',
             background: 'var(--bg-primary)',
             borderRadius: 'var(--border-radius)',
             overflow: 'hidden',

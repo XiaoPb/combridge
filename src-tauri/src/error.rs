@@ -27,7 +27,7 @@ impl fmt::Display for ErrorCode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub enum ComBridgeError {
     SerialError(String),
     BleError(String),

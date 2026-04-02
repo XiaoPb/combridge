@@ -1,0 +1,113 @@
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+
+export type SerialDataEvent = {
+  portName: string;
+  data: number[];
+  timestamp: number;
+};
+
+export type SerialErrorEvent = {
+  portName: string;
+  error: string;
+};
+
+export type BleDataEvent = {
+  deviceId: string;
+  characteristicUuid: string;
+  data: number[];
+  timestamp: number;
+};
+
+export type BleConnectionEvent = {
+  deviceId: string;
+  address: string;
+  connected: boolean;
+};
+
+export type BleErrorEvent = {
+  deviceId?: string;
+  error: string;
+};
+
+export const TauriEvents = {
+  SERIAL_DATA: 'serial-data',
+  SERIAL_ERROR: 'serial-error',
+  SERIAL_CONNECTED: 'serial-connected',
+  SERIAL_DISCONNECTED: 'serial-disconnected',
+  BLE_DATA: 'ble-data',
+  BLE_CONNECTED: 'ble-connected',
+  BLE_DISCONNECTED: 'ble-disconnected',
+  BLE_ERROR: 'ble-error',
+  BLE_SCAN_RESULT: 'ble-scan-result',
+} as const;
+
+export function onSerialData(callback: (event: SerialDataEvent) => void): Promise<UnlistenFn> {
+  return listen<SerialDataEvent>(TauriEvents.SERIAL_DATA, (event) => {
+    callback(event.payload);
+  });
+}
+
+export function onSerialError(callback: (event: SerialErrorEvent) => void): Promise<UnlistenFn> {
+  return listen<SerialErrorEvent>(TauriEvents.SERIAL_ERROR, (event) => {
+    callback(event.payload);
+  });
+}
+
+export function onSerialConnected(callback: (portName: string) => void): Promise<UnlistenFn> {
+  return listen<string>(TauriEvents.SERIAL_CONNECTED, (event) => {
+    callback(event.payload);
+  });
+}
+
+export function onSerialDisconnected(callback: (portName: string) => void): Promise<UnlistenFn> {
+  return listen<string>(TauriEvents.SERIAL_DISCONNECTED, (event) => {
+    callback(event.payload);
+  });
+}
+
+export function onBleData(callback: (event: BleDataEvent) => void): Promise<UnlistenFn> {
+  return listen<BleDataEvent>(TauriEvents.BLE_DATA, (event) => {
+    callback(event.payload);
+  });
+}
+
+export function onBleConnected(callback: (event: BleConnectionEvent) => void): Promise<UnlistenFn> {
+  return listen<BleConnectionEvent>(TauriEvents.BLE_CONNECTED, (event) => {
+    callback(event.payload);
+  });
+}
+
+export function onBleDisconnected(callback: (event: BleConnectionEvent) => void): Promise<UnlistenFn> {
+  return listen<BleConnectionEvent>(TauriEvents.BLE_DISCONNECTED, (event) => {
+    callback(event.payload);
+  });
+}
+
+export function onBleError(callback: (event: BleErrorEvent) => void): Promise<UnlistenFn> {
+  return listen<BleErrorEvent>(TauriEvents.BLE_ERROR, (event) => {
+    callback(event.payload);
+  });
+}
+
+export function onBleScanResult(callback: (device: unknown) => void): Promise<UnlistenFn> {
+  return listen<unknown>(TauriEvents.BLE_SCAN_RESULT, (event) => {
+    callback(event.payload);
+  });
+}
+
+export interface EventListeners {
+  serialData?: UnlistenFn;
+  serialError?: UnlistenFn;
+  serialConnected?: UnlistenFn;
+  serialDisconnected?: UnlistenFn;
+  bleData?: UnlistenFn;
+  bleConnected?: UnlistenFn;
+  bleDisconnected?: UnlistenFn;
+  bleError?: UnlistenFn;
+  bleScanResult?: UnlistenFn;
+}
+
+export async function cleanupListeners(listeners: EventListeners): Promise<void> {
+  const unlistenFns = Object.values(listeners).filter((fn): fn is UnlistenFn => fn !== undefined);
+  await Promise.all(unlistenFns.map((fn) => fn()));
+}

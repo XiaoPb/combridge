@@ -297,8 +297,8 @@ pub async fn export_serial_data(
 
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
     let log_dir = std::env::current_dir()
-        .map(|p| p.join("log"))
-        .unwrap_or_else(|_| std::path::PathBuf::from("log"));
+        .map(|p| p.join("logs"))
+        .unwrap_or_else(|_| std::path::PathBuf::from("logs"));
 
     if !log_dir.exists() {
         fs::create_dir_all(&log_dir).map_err(|e| {
@@ -319,11 +319,25 @@ pub async fn export_serial_data(
         .map(|entry| {
             let timestamp_str = format_timestamp(entry.timestamp);
             let direction = if entry.direction == "receive" { "RX" } else { "TX" };
-            let data_hex = entry.data.iter()
+            let data_ascii: String = entry.data.iter()
+                .map(|b| {
+                    if *b >= 32 && *b <= 126 {
+                        (*b as char).to_string()
+                    } else {
+                        format!("\\x{:02X}", b)
+                    }
+                })
+                .collect();
+            let data_hex: String = entry.data.iter()
                 .map(|b| format!("{:02X}", b))
                 .collect::<Vec<_>>()
                 .join(" ");
-            format!("[{}][{}][{} byte] {}", timestamp_str, direction, entry.data.len(), data_hex)
+            let data_str = if direction == "RX" {
+                data_ascii
+            } else {
+                data_hex
+            };
+            format!("[{}][{}][{} byte] {}", timestamp_str, direction, entry.data.len(), data_str)
         })
         .collect::<Vec<_>>()
         .join("\n");

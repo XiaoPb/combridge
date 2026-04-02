@@ -1,8 +1,6 @@
 import type { SerialConfig, SerialPortInfo } from '../types';
 import type { BleDeviceInfo, BleScanOptions, BleConnection, BleService, BleCharacteristic } from '../types';
 import type { 
-  SerialOpenParams, 
-  SerialWriteParams, 
   BleScanResult,
   BleWriteParams,
   BleConfigureParams,
@@ -42,12 +40,21 @@ export const serialApi = {
    * 打开串口
    * 对应后端命令: open_serial_port
    */
-  async open(params: SerialOpenParams): Promise<void> {
-    await invoke<void>('open_serial_port', { params });
+  async open(portName: string, config: SerialConfig): Promise<void> {
+    await invoke<void>('open_serial_port', {
+      config: {
+        port_name: portName,
+        baud_rate: String(config.baudRate),
+        data_bits: config.dataBits,
+        parity: config.parity,
+        stop_bits: config.stopBits,
+        flow_control: config.flowControl,
+      },
+    });
   },
 
   openPort(portName: string, config: SerialConfig): Promise<void> {
-    return this.open({ portName, config });
+    return this.open(portName, config);
   },
 
   /**
@@ -55,7 +62,7 @@ export const serialApi = {
    * 对应后端命令: close_serial_port
    */
   async close(portName: string): Promise<void> {
-    await invoke<void>('close_serial_port', { portName });
+    await invoke<void>('close_serial_port', { port_name: portName });
   },
 
   closePort(portName: string): Promise<void> {
@@ -66,12 +73,12 @@ export const serialApi = {
    * 发送数据
    * 对应后端命令: send_serial_data
    */
-  async write(params: SerialWriteParams): Promise<void> {
-    await invoke<void>('send_serial_data', { params });
+  async write(portName: string, data: number[]): Promise<void> {
+    await invoke<void>('send_serial_data', { port_name: portName, data });
   },
 
   sendData(portName: string, data: number[]): Promise<void> {
-    return this.write({ portName, data });
+    return this.write(portName, data);
   },
 
   /**
@@ -87,7 +94,7 @@ export const serialApi = {
    * 对应后端命令: is_port_open
    */
   async isConnected(portName: string): Promise<boolean> {
-    return invoke<boolean>('is_port_open', { portName });
+    return invoke<boolean>('is_port_open', { port_name: portName });
   },
 };
 

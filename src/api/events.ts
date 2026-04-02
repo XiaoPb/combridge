@@ -65,6 +65,13 @@ export function onSerialDisconnected(callback: (portName: string) => void): Prom
   });
 }
 
+export const serialEvents = {
+  onData: onSerialData,
+  onError: onSerialError,
+  onConnected: onSerialConnected,
+  onDisconnected: onSerialDisconnected,
+};
+
 export function onBleData(callback: (event: BleDataEvent) => void): Promise<UnlistenFn> {
   return listen<BleDataEvent>(TauriEvents.BLE_DATA, (event) => {
     callback(event.payload);

@@ -19,16 +19,32 @@ export const serialApi = {
     return result.ports;
   },
 
+  scanPorts(): Promise<SerialPortInfo[]> {
+    return this.listPorts();
+  },
+
   async open(params: SerialOpenParams): Promise<void> {
     await invoke<void>('serial_open', { params });
+  },
+
+  openPort(portName: string, config: SerialConfig): Promise<void> {
+    return this.open({ portName, config });
   },
 
   async close(portName: string): Promise<void> {
     await invoke<void>('serial_close', { portName });
   },
 
+  closePort(portName: string): Promise<void> {
+    return this.close(portName);
+  },
+
   async write(params: SerialWriteParams): Promise<void> {
     await invoke<void>('serial_write', { params });
+  },
+
+  sendData(portName: string, data: number[]): Promise<void> {
+    return this.write({ portName, data });
   },
 
   async getConfig(portName: string): Promise<SerialConfig> {
@@ -41,6 +57,10 @@ export const serialApi = {
 
   async isConnected(portName: string): Promise<boolean> {
     return invoke<boolean>('serial_is_connected', { portName });
+  },
+
+  async getOpenPorts(): Promise<string[]> {
+    return invoke<string[]>('serial_get_open_ports');
   },
 };
 

@@ -28,4 +28,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 async-trait = "0.1"
 serialport = "4"
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+futures-util = "0.3"
+uuid = { version = "1", features = ["v4"] }
+mlua = { version = "0.9", features = ["lua54", "vendored"] }
 

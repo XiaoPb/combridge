@@ -62,7 +62,7 @@ export const serialApi = {
    * 对应后端命令: close_serial_port
    */
   async close(portName: string): Promise<void> {
-    await invoke<void>('close_serial_port', { port_name: portName });
+    await invoke<void>('close_serial_port', { portName });
   },
 
   closePort(portName: string): Promise<void> {

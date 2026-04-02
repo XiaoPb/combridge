@@ -74,7 +74,7 @@ export const serialApi = {
    * 对应后端命令: send_serial_data
    */
   async write(portName: string, data: number[]): Promise<void> {
-    await invoke<void>('send_serial_data', { port_name: portName, data });
+    await invoke<void>('send_serial_data', { portName, data });
   },
 
   sendData(portName: string, data: number[]): Promise<void> {

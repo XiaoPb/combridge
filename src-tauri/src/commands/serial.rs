@@ -239,19 +239,20 @@ pub async fn close_serial_port(
 #[tauri::command]
 pub async fn send_serial_data(
     manager: State<'_, SerialManagerRef>,
-    port_name: String,
+    #[allow(non_snake_case)]
+    portName: String,
     data: Vec<u8>,
 ) -> Result<usize> {
-    debug!("向串口 {} 发送 {} 字节数据", port_name, data.len());
-    
+    debug!("向串口 {} 发送 {} 字节数据", portName, data.len());
+
     let manager = manager.inner();
-    match manager.send_data(&port_name, &data) {
+    match manager.send_data(&portName, &data) {
         Ok(bytes_written) => {
-            debug!("串口 {} 成功发送 {} 字节", port_name, bytes_written);
+            debug!("串口 {} 成功发送 {} 字节", portName, bytes_written);
             Ok(bytes_written)
         }
         Err(e) => {
-            error!("串口 {} 发送数据失败: {}", port_name, e);
+            error!("串口 {} 发送数据失败: {}", portName, e);
             Err(e)
         }
     }

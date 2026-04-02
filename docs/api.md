@@ -105,7 +105,7 @@ await serialApi.close('COM1');
 
 | 参数名 | 类型 | 必填 | 描述 |
 |--------|------|------|------|
-| port_name | string | 是 | 端口名称 |
+| portName | string | 是 | 端口名称 |
 | data | number[] | 是 | 要发送的字节数据 |
 
 **返回**: `number` (发送的字节数)

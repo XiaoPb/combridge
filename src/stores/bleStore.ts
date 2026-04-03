@@ -22,6 +22,7 @@ interface BleState {
   notifications: BleNotification[];
   isScanning: boolean;
   isConnecting: boolean;
+  isConfigured: boolean;
   error: string | null;
 
   setMode: (mode: BleMode) => void;
@@ -46,6 +47,7 @@ interface BleState {
   clearNotifications: () => void;
   setIsScanning: (isScanning: boolean) => void;
   setIsConnecting: (isConnecting: boolean) => void;
+  setIsConfigured: (isConfigured: boolean) => void;
   setError: (error: string | null) => void;
   reset: () => void;
 }
@@ -61,6 +63,7 @@ const initialState = {
   notifications: [],
   isScanning: false,
   isConnecting: false,
+  isConfigured: false,
   error: null,
 };
 
@@ -168,6 +171,8 @@ export const useBleStore = create<BleState>((set) => ({
   setIsScanning: (isScanning) => set({ isScanning }),
 
   setIsConnecting: (isConnecting) => set({ isConnecting }),
+
+  setIsConfigured: (isConfigured) => set({ isConfigured }),
 
   setError: (error) => set({ error }),
 

@@ -18,6 +18,7 @@ export const useBle = () => {
     notifications,
     isScanning,
     isConnecting,
+    isConfigured,
     error,
     setMode,
     setSerialPort,
@@ -36,6 +37,7 @@ export const useBle = () => {
     clearNotifications,
     setIsScanning,
     setIsConnecting,
+    setIsConfigured,
     setError,
   } = useBleStore();
 
@@ -151,6 +153,11 @@ export const useBle = () => {
     clearDevices();
 
     try {
+      if (!isConfigured) {
+        await bleApi.configureBle(mode, serialPort || undefined);
+        setIsConfigured(true);
+      }
+      
       const deviceList = await bleApi.scanBleDevices(options);
       setDevices(deviceList);
 
@@ -174,7 +181,7 @@ export const useBle = () => {
         setIsScanning(false);
       }
     }
-  }, [setIsScanning, setError, clearDevices, setDevices]);
+  }, [setIsScanning, setError, clearDevices, setDevices, setIsConfigured, isConfigured, mode, serialPort]);
 
   const stopScan = useCallback(async () => {
     setIsScanning(false);

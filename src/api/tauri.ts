@@ -111,17 +111,13 @@ export const serialApi = {
  * 所有命令名称与后端 commands/ble.rs 中注册的命令名称保持一致
  */
 export const bleApi = {
-  /**
-   * 配置BLE模式（原生/AT）
-   * 对应后端命令: configure_ble
-   */
   async configure(params: BleConfigureParams): Promise<void> {
     await invoke<void>('configure_ble', {
       config: {
         mode: params.mode,
-        port_name: params.serialPort,
-        baud_rate: undefined,
-        timeout_ms: undefined,
+        portName: params.serialPort,
+        baudRate: undefined,
+        timeoutMs: undefined,
       }
     });
   },
@@ -130,23 +126,15 @@ export const bleApi = {
     return this.configure({ mode, serialPort });
   },
 
-  /**
-   * 扫描BLE设备
-   * 对应后端命令: scan_ble_devices
-   */
   async scan(options?: BleScanOptions): Promise<BleDeviceInfo[]> {
-    const duration_ms = options?.timeout ?? 5000;
-    return invoke<BleDeviceInfo[]>('scan_ble_devices', { duration_ms });
+    const durationMs = options?.timeout ?? 5000;
+    return invoke<BleDeviceInfo[]>('scan_ble_devices', { durationMs });
   },
 
   scanBleDevices(options?: BleScanOptions): Promise<BleDeviceInfo[]> {
     return this.scan(options);
   },
 
-  /**
-   * 停止扫描BLE设备
-   * 对应后端命令: stop_ble_scan
-   */
   async stopScan(): Promise<BleDeviceInfo[]> {
     return invoke<BleDeviceInfo[]>('stop_ble_scan');
   },
@@ -155,58 +143,38 @@ export const bleApi = {
     return this.stopScan();
   },
 
-  /**
-   * 连接BLE设备
-   * 对应后端命令: connect_ble
-   */
   async connect(params: BleConnectParams): Promise<BleConnection> {
-    return invoke<BleConnection>('connect_ble', { device_id: params.address });
+    return invoke<BleConnection>('connect_ble', { deviceId: params.address });
   },
 
   connectBle(address: string, timeout?: number): Promise<BleConnection> {
     return this.connect({ address, timeout });
   },
 
-  /**
-   * 断开BLE连接
-   * 对应后端命令: disconnect_ble
-   */
   async disconnect(deviceId: string): Promise<void> {
-    await invoke<void>('disconnect_ble', { device_id: deviceId });
+    await invoke<void>('disconnect_ble', { deviceId });
   },
 
   disconnectBle(deviceId: string): Promise<void> {
     return this.disconnect(deviceId);
   },
 
-  /**
-   * 获取BLE连接列表
-   * 对应后端命令: get_ble_connections
-   */
   async getConnections(): Promise<BleConnection[]> {
     return invoke<BleConnection[]>('get_ble_connections');
   },
 
-  /**
-   * 发现GATT服务
-   * 对应后端命令: discover_ble_services
-   */
   async discoverServices(params: BleDiscoverServicesParams): Promise<BleService[]> {
-    return invoke<BleService[]>('discover_ble_services', { device_id: params.deviceId });
+    return invoke<BleService[]>('discover_ble_services', { deviceId: params.deviceId });
   },
 
   discoverBleServices(deviceId: string): Promise<BleService[]> {
     return this.discoverServices({ deviceId });
   },
 
-  /**
-   * 发现GATT特征
-   * 对应后端命令: discover_ble_characteristics
-   */
   async discoverCharacteristics(params: BleDiscoverCharacteristicsParams): Promise<BleCharacteristic[]> {
     return invoke<BleCharacteristic[]>('discover_ble_characteristics', {
-      device_id: params.deviceId,
-      service_uuid: params.serviceUuid,
+      deviceId: params.deviceId,
+      serviceUuid: params.serviceUuid,
     });
   },
 
@@ -214,14 +182,10 @@ export const bleApi = {
     return this.discoverCharacteristics({ deviceId, serviceUuid });
   },
 
-  /**
-   * 读取特征值
-   * 对应后端命令: read_ble_characteristic
-   */
   async read(params: BleReadParams): Promise<number[]> {
     return invoke<number[]>('read_ble_characteristic', {
-      device_id: params.deviceId,
-      characteristic_uuid: params.characteristicUuid,
+      deviceId: params.deviceId,
+      characteristicUuid: params.characteristicUuid,
     });
   },
 
@@ -229,14 +193,10 @@ export const bleApi = {
     return this.read({ deviceId, characteristicUuid });
   },
 
-  /**
-   * 写入特征值
-   * 对应后端命令: write_ble_characteristic
-   */
   async write(params: BleWriteParams): Promise<void> {
     await invoke<void>('write_ble_characteristic', {
-      device_id: params.deviceId,
-      characteristic_uuid: params.characteristicUuid,
+      deviceId: params.deviceId,
+      characteristicUuid: params.characteristicUuid,
       data: params.data,
     });
   },
@@ -245,14 +205,10 @@ export const bleApi = {
     return this.write({ deviceId, characteristicUuid, data, withoutResponse });
   },
 
-  /**
-   * 无响应写入特征值
-   * 对应后端命令: write_ble_without_response
-   */
   async writeWithoutResponse(deviceId: string, characteristicUuid: string, data: number[]): Promise<void> {
     await invoke<void>('write_ble_without_response', {
-      device_id: deviceId,
-      characteristic_uuid: characteristicUuid,
+      deviceId,
+      characteristicUuid,
       data,
     });
   },
@@ -261,14 +217,10 @@ export const bleApi = {
     return this.writeWithoutResponse(deviceId, characteristicUuid, data);
   },
 
-  /**
-   * 订阅通知
-   * 对应后端命令: subscribe_ble_notify
-   */
   async subscribe(params: BleSubscribeParams): Promise<void> {
     await invoke<void>('subscribe_ble_notify', {
-      device_id: params.deviceId,
-      characteristic_uuid: params.characteristicUuid,
+      deviceId: params.deviceId,
+      characteristicUuid: params.characteristicUuid,
     });
   },
 
@@ -276,14 +228,10 @@ export const bleApi = {
     return this.subscribe({ deviceId, characteristicUuid });
   },
 
-  /**
-   * 取消订阅通知
-   * 对应后端命令: unsubscribe_ble_notify
-   */
   async unsubscribe(deviceId: string, characteristicUuid: string): Promise<void> {
     await invoke<void>('unsubscribe_ble_notify', {
-      device_id: deviceId,
-      characteristic_uuid: characteristicUuid,
+      deviceId,
+      characteristicUuid,
     });
   },
 
@@ -291,20 +239,12 @@ export const bleApi = {
     return this.unsubscribe(deviceId, characteristicUuid);
   },
 
-  /**
-   * 获取信号强度
-   * 对应后端命令: get_ble_rssi
-   */
   async getRssi(deviceId: string): Promise<number> {
-    return invoke<number>('get_ble_rssi', { device_id: deviceId });
+    return invoke<number>('get_ble_rssi', { deviceId });
   },
 
-  /**
-   * 设置MTU
-   * 对应后端命令: set_ble_mtu
-   */
   async setMtu(deviceId: string, mtu: number): Promise<number> {
-    return invoke<number>('set_ble_mtu', { device_id: deviceId, mtu });
+    return invoke<number>('set_ble_mtu', { deviceId, mtu });
   },
 
   setBleMtu(deviceId: string, mtu: number): Promise<number> {

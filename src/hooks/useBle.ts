@@ -153,12 +153,18 @@ export const useBle = () => {
     clearDevices();
 
     try {
+      console.debug('[useBle] 开始扫描, isConfigured:', isConfigured, 'mode:', mode, 'serialPort:', serialPort);
+      
       if (!isConfigured) {
+        console.debug('[useBle] 需要配置BLE...');
         await bleApi.configureBle(mode, serialPort || undefined);
         setIsConfigured(true);
+        console.debug('[useBle] BLE配置完成');
       }
       
+      console.debug('[useBle] 调用scanBleDevices...', options);
       const deviceList = await bleApi.scanBleDevices(options);
+      console.debug('[useBle] 扫描结果:', deviceList);
       setDevices(deviceList);
 
       if (options?.timeout) {
@@ -173,6 +179,7 @@ export const useBle = () => {
         message.success(`扫描到 ${deviceList.length} 个设备`);
       }
     } catch (err) {
+      console.error('[useBle] 扫描失败:', err);
       const errorMsg = err instanceof Error ? err.message : '扫描设备失败';
       setError(errorMsg);
       message.error(errorMsg);

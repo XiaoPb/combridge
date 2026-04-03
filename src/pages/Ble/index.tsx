@@ -71,7 +71,25 @@ const BlePage: React.FC = () => {
   };
 
   const handleConnect = async (address: string) => {
-    await connectDevice(address);
+    const existingConnection = connections.find(c => c.address === address);
+    
+    if (existingConnection) {
+      await handleDisconnect(address);
+    } else {
+      await connectDevice(address);
+      
+      if (currentDevice || connections.find(c => c.address === address)) {
+        const targetAddress = address;
+        setDiscoveringServices(true);
+        try {
+          await discoverServices(targetAddress);
+        } catch (err) {
+          console.error('自动发现服务失败:', err);
+        } finally {
+          setDiscoveringServices(false);
+        }
+      }
+    }
   };
 
   const handleDisconnect = async (deviceId: string) => {

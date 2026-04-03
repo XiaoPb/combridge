@@ -34,8 +34,8 @@ interface BleState {
   clearDevices: () => void;
   setConnections: (connections: BleConnection[]) => void;
   addConnection: (connection: BleConnection) => void;
-  updateConnection: (deviceId: string, connection: Partial<BleConnection>) => void;
-  removeConnection: (deviceId: string) => void;
+  updateConnection: (address: string, connection: Partial<BleConnection>) => void;
+  removeConnection: (address: string) => void;
   setCurrentDevice: (deviceId: string | null) => void;
   setServices: (services: BleService[]) => void;
   addService: (service: BleService) => void;
@@ -107,28 +107,28 @@ export const useBleStore = create<BleState>((set) => ({
 
   addConnection: (connection) =>
     set((state) => {
-      const exists = state.connections.find((c) => c.deviceId === connection.deviceId);
+      const exists = state.connections.find((c) => c.address === connection.address);
       if (exists) {
         return {
           connections: state.connections.map((c) =>
-            c.deviceId === connection.deviceId ? connection : c
+            c.address === connection.address ? connection : c
           ),
         };
       }
       return { connections: [...state.connections, connection] };
     }),
 
-  updateConnection: (deviceId, connection) =>
+  updateConnection: (address, connection) =>
     set((state) => ({
       connections: state.connections.map((c) =>
-        c.deviceId === deviceId ? { ...c, ...connection } : c
+        c.address === address ? { ...c, ...connection } : c
       ),
     })),
 
-  removeConnection: (deviceId) =>
+  removeConnection: (address) =>
     set((state) => ({
-      connections: state.connections.filter((c) => c.deviceId !== deviceId),
-      currentDevice: state.currentDevice === deviceId ? null : state.currentDevice,
+      connections: state.connections.filter((c) => c.address !== address),
+      currentDevice: state.currentDevice === address ? null : state.currentDevice,
     })),
 
   setCurrentDevice: (currentDevice) => set({ currentDevice }),

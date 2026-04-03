@@ -11,7 +11,7 @@ use super::gatt_client::GattClient;
 
 pub struct BleAdapter {
     adapter: Arc<Adapter>,
-    scanned_devices: Arc<RwLock<HashMap<DeviceId, Arc<Device>>>>,
+    scanned_devices: Arc<RwLock<HashMap<DeviceId, (Arc<Device>, Option<i16>)>>>,
     clients: RwLock<HashMap<String, Arc<GattClient>>>,
 }
 
@@ -53,27 +53,35 @@ impl BleAdapter {
         let adapter = self.adapter.clone();
         let scanned_devices = self.scanned_devices.clone();
 
+        info!("启动BLE扫描任务...");
+        
         tokio::spawn(async move {
+            info!("BLE扫描任务已启动");
             match adapter.scan(&[]).await {
                 Ok(mut scan) => {
+                    info!("BLE扫描已开始，等待设备发现...");
                     while let Some(discovered) = scan.next().await {
                         let device = discovered.device;
                         let device_id = device.id();
                         let name = device.name().ok();
                         let rssi = discovered.rssi;
 
-                        debug!("发现设备: {:?} RSSI: {:?}", name, rssi);
+                        info!("发现BLE设备: {:?} RSSI: {:?}", name, rssi);
 
                         let mut devices_guard = scanned_devices.write().unwrap();
-                        devices_guard.insert(device_id, Arc::new(device));
+                        devices_guard.insert(device_id, (Arc::new(device), rssi));
                     }
+                    info!("BLE扫描任务结束");
                 }
                 Err(e) => {
-                    debug!("扫描失败: {}", e);
+                    info!("BLE扫描失败: {}", e);
                 }
             }
         });
 
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        
+        info!("BLE扫描任务已启动");
         Ok(())
     }
 
@@ -86,10 +94,10 @@ impl BleAdapter {
         let devices = self.scanned_devices.read().unwrap();
         let result: Vec<BleDevice> = devices
             .iter()
-            .map(|(id, device)| BleDevice {
+            .map(|(id, (device, rssi))| BleDevice {
                 address: id.to_string(),
                 name: device.name().ok(),
-                rssi: None,
+                rssi: *rssi,
                 is_connectable: true,
             })
             .collect();
@@ -103,7 +111,7 @@ impl BleAdapter {
         devices
             .iter()
             .find(|(id, _)| id.to_string() == device_id)
-            .map(|(_, device)| device.clone())
+            .map(|(_, (device, _))| device.clone())
     }
 
     pub fn get_or_create_client(&self, address: &str) -> Arc<GattClient> {

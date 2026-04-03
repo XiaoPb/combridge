@@ -1,7 +1,6 @@
 import type { SerialConfig, SerialPortInfo } from '../types';
 import type { BleDeviceInfo, BleScanOptions, BleConnection, BleService, BleCharacteristic } from '../types';
 import type { 
-  BleScanResult,
   BleWriteParams,
   BleConfigureParams,
   BleConnectParams,
@@ -137,12 +136,23 @@ export const bleApi = {
    */
   async scan(options?: BleScanOptions): Promise<BleDeviceInfo[]> {
     const duration_ms = options?.timeout ?? 5000;
-    const result = await invoke<BleScanResult>('scan_ble_devices', { duration_ms });
-    return result.devices;
+    return invoke<BleDeviceInfo[]>('scan_ble_devices', { duration_ms });
   },
 
   scanBleDevices(options?: BleScanOptions): Promise<BleDeviceInfo[]> {
     return this.scan(options);
+  },
+
+  /**
+   * 停止扫描BLE设备
+   * 对应后端命令: stop_ble_scan
+   */
+  async stopScan(): Promise<BleDeviceInfo[]> {
+    return invoke<BleDeviceInfo[]>('stop_ble_scan');
+  },
+
+  stopBleScan(): Promise<BleDeviceInfo[]> {
+    return this.stopScan();
   },
 
   /**
@@ -236,6 +246,22 @@ export const bleApi = {
   },
 
   /**
+   * 无响应写入特征值
+   * 对应后端命令: write_ble_without_response
+   */
+  async writeWithoutResponse(deviceId: string, characteristicUuid: string, data: number[]): Promise<void> {
+    await invoke<void>('write_ble_without_response', {
+      device_id: deviceId,
+      characteristic_uuid: characteristicUuid,
+      data,
+    });
+  },
+
+  writeBleWithoutResponse(deviceId: string, characteristicUuid: string, data: number[]): Promise<void> {
+    return this.writeWithoutResponse(deviceId, characteristicUuid, data);
+  },
+
+  /**
    * 订阅通知
    * 对应后端命令: subscribe_ble_notify
    */
@@ -271,6 +297,18 @@ export const bleApi = {
    */
   async getRssi(deviceId: string): Promise<number> {
     return invoke<number>('get_ble_rssi', { device_id: deviceId });
+  },
+
+  /**
+   * 设置MTU
+   * 对应后端命令: set_ble_mtu
+   */
+  async setMtu(deviceId: string, mtu: number): Promise<number> {
+    return invoke<number>('set_ble_mtu', { device_id: deviceId, mtu });
+  },
+
+  setBleMtu(deviceId: string, mtu: number): Promise<number> {
+    return this.setMtu(deviceId, mtu);
   },
 
   /**

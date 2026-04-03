@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Card, Button, Input, Table, Space, Tag, Progress, Empty, InputNumber, Typography, Flex } from 'antd';
 import { SearchOutlined, StopOutlined } from '@ant-design/icons';
 import type { BleDeviceInfo, BleConnection } from '../../types';
-import { formatBleTimestamp } from '../../stores/bleStore';
 
 const { Text } = Typography;
 const { Search } = Input;
@@ -16,6 +15,25 @@ interface BleScannerProps {
   onConnect: (address: string) => void;
 }
 
+const formatMacAddress = (address: string): string => {
+  if (!address) return '-';
+  
+  const match = address.match(/([0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2})/);
+  if (match) {
+    return match[1].toUpperCase();
+  }
+  
+  const parts = address.split('-');
+  if (parts.length >= 2) {
+    const macPart = parts[parts.length - 1];
+    if (/^[0-9a-fA-F:]+$/.test(macPart)) {
+      return macPart.toUpperCase();
+    }
+  }
+  
+  return address;
+};
+
 const BleScanner: React.FC<BleScannerProps> = ({
   devices,
   connections,
@@ -26,11 +44,6 @@ const BleScanner: React.FC<BleScannerProps> = ({
 }) => {
   const [filterName, setFilterName] = useState('');
   const [scanTimeout, setScanTimeout] = useState(10);
-
-  if (import.meta.env.DEV) {
-    console.debug('[BleScanner] props:', { devices, isScanning, onScan, onStopScan, onConnect });
-    console.debug('[BleScanner] devices:', devices);
-  }
 
   const filteredDevices = (devices || []).filter((device) => {
     if (filterName && device.name) {
@@ -67,9 +80,10 @@ const BleScanner: React.FC<BleScannerProps> = ({
       title: 'MAC 地址',
       dataIndex: 'address',
       key: 'address',
+      width: 180,
       render: (address: string) => (
         <Text code style={{ fontSize: '12px' }}>
-          {address}
+          {formatMacAddress(address)}
         </Text>
       ),
     },
@@ -107,13 +121,6 @@ const BleScanner: React.FC<BleScannerProps> = ({
       },
     },
     {
-      title: '发现时间',
-      dataIndex: 'discoveredAt',
-      key: 'discoveredAt',
-      width: 120,
-      render: (time: number) => formatBleTimestamp(time),
-    },
-    {
       title: '操作',
       key: 'action',
       width: 100,
@@ -124,7 +131,7 @@ const BleScanner: React.FC<BleScannerProps> = ({
             type={isConnected ? 'default' : 'primary'}
             size="small"
             danger={isConnected}
-            disabled={!record.isConnectable && !isConnected}
+            disabled={isConnected === false && record.isConnectable === false}
             onClick={() => onConnect(record.address)}
           >
             {isConnected ? '断开' : '连接'}

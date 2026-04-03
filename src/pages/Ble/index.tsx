@@ -69,9 +69,17 @@ const BlePage: React.FC = () => {
   }, [setPorts]);
 
   useEffect(() => {
-    if (!currentDevice) return;
+    console.debug('[BlePage] TAB创建useEffect触发, currentDevice:', currentDevice, 'connections:', connections);
+    if (!currentDevice) {
+      console.debug('[BlePage] currentDevice为空，跳过');
+      return;
+    }
     const conn = connections.find((c) => c.address === currentDevice && c.isConnected);
-    if (!conn) return;
+    console.debug('[BlePage] 匹配到连接:', conn?.address, 'isConnected:', conn?.isConnected);
+    if (!conn) {
+      console.debug('[BlePage] 未找到匹配的连接，跳过');
+      return;
+    }
 
     setDeviceTabs((prev) => {
       const existing = prev[currentDevice];
@@ -82,6 +90,7 @@ const BlePage: React.FC = () => {
         };
       }
       if (!existing) {
+        console.debug('[BlePage] >>> 创建新TAB, deviceId:', currentDevice, 'name:', conn.name || conn.address);
         return {
           ...prev,
           [currentDevice]: {
@@ -168,16 +177,23 @@ const BlePage: React.FC = () => {
   }, []);
 
   const handleConnect = async (address: string) => {
+    console.debug('[BlePage] handleConnect 被调用, address:', address);
+    console.debug('[BlePage] 当前connections:', connections);
+
     const existingConn = connections.find((c) => c.address === address);
     if (existingConn) {
+      console.debug('[BlePage] 设备已连接，执行断开:', address);
       await handleDisconnect(address);
       return;
     }
 
     try {
+      console.debug('[BlePage] 正在连接设备...');
       await connectDevice(address);
+      console.debug('[BlePage] 连接成功，设置activeTabKey为:', address);
       setActiveTabKey(address);
-    } catch {
+    } catch (err) {
+      console.error('[BlePage] 连接失败:', err);
       // error already handled by hook
     }
   };
@@ -512,9 +528,11 @@ const BlePage: React.FC = () => {
       closable: false,
       children: renderScanTab(),
     },
-    ...Object.entries(deviceTabs).map(([key, tab]) => ({
-      key,
-      label: (
+    ...Object.entries(deviceTabs).map(([key, tab]) => {
+      console.debug('[BlePage] 渲染设备TAB, key:', key, 'tab:', tab);
+      return {
+        key,
+        label: (
         <span style={{ fontSize: 12 }}>
           {tab.name || tab.address}
           <Tag color="success" style={{ marginLeft: 4, fontSize: 10 }}>●</Tag>
@@ -524,6 +542,8 @@ const BlePage: React.FC = () => {
       children: renderDeviceTabContent(tab),
     })),
   ];
+
+  console.debug('[BlePage] 渲染, activeTabKey:', activeTabKey, 'deviceTabs:', Object.keys(deviceTabs), 'tabItems count:', tabItems.length);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

@@ -200,16 +200,21 @@ export const useBle = () => {
   }, [setIsScanning]);
 
   const connectDevice = useCallback(async (address: string) => {
+    console.debug('[useBle] connectDevice 被调用, address:', address);
     setIsConnecting(true);
     setError(null);
 
     try {
+      console.debug('[useBle] 正在调用 bleApi.connectBle...');
       const connection = await bleApi.connectBle(address);
+      console.debug('[useBle] connectBle 返回:', connection);
       addConnection(connection);
+      console.debug('[useBle] 调用 setCurrentDevice:', address);
       setCurrentDevice(address);
       message.success(`已连接到 ${connection.name || address}`);
       return connection;
     } catch (err) {
+      console.error('[useBle] connectDevice 失败:', err);
       const errorMsg = err instanceof Error ? err.message : '连接设备失败';
       setError(errorMsg);
       message.error(errorMsg);

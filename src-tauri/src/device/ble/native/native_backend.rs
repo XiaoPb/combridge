@@ -94,7 +94,8 @@ impl BleBackend for NativeBleBackend {
             ComBridgeError::ble("蓝牙适配器未初始化")
         })?;
 
-        adapter.disconnect_device(address).await?;
+        let client = adapter.get_or_create_client(address);
+        client.disconnect().await?;
 
         info!("已断开设备: {}", address);
         Ok(())

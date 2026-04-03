@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Mutex, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use bluest::{Characteristic, Device, Service};
 use futures::StreamExt;
@@ -12,7 +12,8 @@ use super::super::ble_traits::{
 
 pub struct GattClient {
     address: String,
-    device: RwLock<Option<Device>>,
+    device: RwLock<Option<Arc<Device>>>,
+    adapter: RwLock<Option<Arc<bluest::Adapter>>>,
     services: RwLock<HashMap<String, Service>>,
     characteristics: RwLock<HashMap<String, Vec<Characteristic>>>,
     notify_callbacks: Mutex<HashMap<String, NotifyCallback>>,
@@ -24,6 +25,7 @@ impl GattClient {
         Self {
             address: address.to_string(),
             device: RwLock::new(None),
+            adapter: RwLock::new(None),
             services: RwLock::new(HashMap::new()),
             characteristics: RwLock::new(HashMap::new()),
             notify_callbacks: Mutex::new(HashMap::new()),
@@ -31,16 +33,61 @@ impl GattClient {
         }
     }
 
-    pub fn set_device(&self, device: Device) {
+    pub fn set_device(&self, device: Arc<Device>, adapter: Arc<bluest::Adapter>) {
         *self.device.write().unwrap() = Some(device);
+        *self.adapter.write().unwrap() = Some(adapter);
     }
 
-    pub fn get_device(&self) -> Option<Device> {
-        self.device.read().unwrap().clone()
+    pub fn is_connected(&self) -> bool {
+        let device = self.device.read().unwrap();
+        if let Some(device) = device.as_ref() {
+            futures::executor::block_on(async { device.is_connected().await })
+        } else {
+            false
+        }
     }
 
-    pub fn clear_device(&self) {
-        *self.device.write().unwrap() = None;
+    pub async fn connect(&self) -> Result<()> {
+        let (device, adapter) = {
+            let device = self.device.read().unwrap();
+            let adapter = self.adapter.read().unwrap();
+            (
+                device
+                    .as_ref()
+                    .ok_or_else(|| ComBridgeError::ble("设备未设置"))?
+                    .clone(),
+                adapter
+                    .as_ref()
+                    .ok_or_else(|| ComBridgeError::ble("适配器未设置"))?
+                    .clone(),
+            )
+        };
+
+        info!("连接到设备: {}", self.address);
+        adapter
+            .connect_device(&device)
+            .await
+            .map_err(|e| ComBridgeError::ble(format!("连接失败: {}", e)))?;
+
+        info!("设备连接成功: {}", self.address);
+        Ok(())
+    }
+
+    pub async fn disconnect(&self) -> Result<()> {
+        let (device, adapter) = {
+            let device = self.device.read().unwrap();
+            let adapter = self.adapter.read().unwrap();
+            match (device.as_ref(), adapter.as_ref()) {
+                (Some(d), Some(a)) => (d.clone(), a.clone()),
+                _ => return Ok(()),
+            }
+        };
+
+        adapter
+            .disconnect_device(&device)
+            .await
+            .map_err(|e| ComBridgeError::ble(format!("断开失败: {}", e)))?;
+
         self.services.write().unwrap().clear();
         self.characteristics.write().unwrap().clear();
 
@@ -48,21 +95,19 @@ impl GattClient {
         for (_, handle) in handles.drain() {
             handle.abort();
         }
-    }
 
-    pub async fn is_connected(&self) -> bool {
-        let device = self.device.read().unwrap().clone();
-        if let Some(d) = device {
-            d.is_connected().await
-        } else {
-            false
-        }
+        info!("设备已断开: {}", self.address);
+        Ok(())
     }
 
     pub async fn discover_services(&self) -> Result<Vec<BleService>> {
-        let device = self.device.read().unwrap().clone();
-        let device = device
-            .ok_or_else(|| ComBridgeError::ble("设备未连接"))?;
+        let device = {
+            let device = self.device.read().unwrap();
+            device
+                .as_ref()
+                .ok_or_else(|| ComBridgeError::ble("设备未连接"))?
+                .clone()
+        };
 
         if !device.is_connected().await {
             return Err(ComBridgeError::ble("设备未连接"));
@@ -70,23 +115,29 @@ impl GattClient {
 
         debug!("发现服务...");
         let services = device
-            .services()
+            .discover_services()
             .await
             .map_err(|e| ComBridgeError::ble(format!("发现服务失败: {}", e)))?;
 
         let mut result = Vec::new();
-        let mut svc_map = HashMap::new();
-        
+        let mut svc_data = Vec::new();
+
         for svc in &services {
             let uuid = svc.uuid().to_string();
+            let is_primary = svc.is_primary().await.unwrap_or(true);
+            svc_data.push((uuid.clone(), svc.clone(), is_primary));
             result.push(BleService {
-                uuid: uuid.clone(),
-                primary: true,
+                uuid,
+                primary: is_primary,
             });
-            svc_map.insert(uuid, svc.clone());
         }
 
-        *self.services.write().unwrap() = svc_map;
+        {
+            let mut svc_map = self.services.write().unwrap();
+            for (uuid, svc, _) in svc_data {
+                svc_map.insert(uuid, svc);
+            }
+        }
 
         info!("发现 {} 个服务", result.len());
         Ok(result)
@@ -96,6 +147,18 @@ impl GattClient {
         &self,
         service_uuid: &str,
     ) -> Result<Vec<BleCharacteristic>> {
+        let device = {
+            let device = self.device.read().unwrap();
+            device
+                .as_ref()
+                .ok_or_else(|| ComBridgeError::ble("设备未连接"))?
+                .clone()
+        };
+
+        if !device.is_connected().await {
+            return Err(ComBridgeError::ble("设备未连接"));
+        }
+
         let service = {
             let services = self.services.read().unwrap();
             services
@@ -110,15 +173,15 @@ impl GattClient {
             .await
             .map_err(|e| ComBridgeError::ble(format!("发现特征失败: {}", e)))?;
 
-        let mut result = Vec::new();
-        let mut char_list = Vec::new();
-        
+        let mut result: Vec<BleCharacteristic> = Vec::new();
+        let mut char_data: Vec<(String, Characteristic, BleCharacteristicProperties)> = Vec::new();
+
         for c in &chars {
             let uuid = c.uuid().to_string();
-            let props = c.properties()
+            let props = c
+                .properties()
                 .await
                 .map_err(|e| ComBridgeError::ble(format!("获取特征属性失败: {}", e)))?;
-            
             let ble_props = BleCharacteristicProperties {
                 read: props.read,
                 write: props.write,
@@ -126,17 +189,20 @@ impl GattClient {
                 notify: props.notify,
                 indicate: props.indicate,
             };
-            
+            char_data.push((uuid.clone(), c.clone(), ble_props));
             result.push(BleCharacteristic {
-                uuid: uuid.clone(),
+                uuid,
                 service_uuid: service_uuid.to_string(),
                 properties: ble_props,
             });
-            
-            char_list.push(c.clone());
         }
 
-        self.characteristics.write().unwrap().insert(service_uuid.to_string(), char_list);
+        {
+            let mut char_map = self.characteristics.write().unwrap();
+            let chars_vec: Vec<Characteristic> =
+                char_data.iter().map(|(_, c, _)| c.clone()).collect();
+            char_map.insert(service_uuid.to_string(), chars_vec);
+        }
 
         debug!("发现 {} 个特征", result.len());
         Ok(result)
@@ -232,23 +298,20 @@ impl GattClient {
     }
 
     pub async fn get_rssi(&self) -> Result<i16> {
-        let device = self.device.read().unwrap().clone();
-        let device = device
-            .ok_or_else(|| ComBridgeError::ble("设备未连接"))?;
-
-        #[cfg(target_os = "macos")]
-        {
+        let device = {
+            let device = self.device.read().unwrap();
             device
-                .rssi()
-                .await
-                .map_err(|e| ComBridgeError::ble(format!("获取RSSI失败: {}", e)))
-        }
+                .as_ref()
+                .ok_or_else(|| ComBridgeError::ble("设备未连接"))?
+                .clone()
+        };
 
-        #[cfg(not(target_os = "macos"))]
-        {
-            let _ = device;
-            warn!("当前平台不支持RSSI查询");
-            Ok(-50)
+        match device.rssi().await {
+            Ok(rssi) => Ok(rssi),
+            Err(_) => {
+                warn!("当前平台不支持RSSI查询");
+                Ok(-50)
+            }
         }
     }
 

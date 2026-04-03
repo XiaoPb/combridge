@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
 
 use async_trait::async_trait;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::error::{ComBridgeError, Result};
 use super::super::ble_traits::{
@@ -19,6 +21,8 @@ pub struct AtBleBackend {
     cache: Arc<AtCache>,
     notify_callbacks: Arc<Mutex<HashMap<String, NotifyCallback>>>,
     configured: Arc<Mutex<bool>>,
+    notify_thread_running: Arc<AtomicBool>,
+    notify_thread_handle: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
 }
 
 impl AtBleBackend {
@@ -28,6 +32,8 @@ impl AtBleBackend {
             cache: Arc::new(AtCache::new()),
             notify_callbacks: Arc::new(Mutex::new(HashMap::new())),
             configured: Arc::new(Mutex::new(false)),
+            notify_thread_running: Arc::new(AtomicBool::new(false)),
+            notify_thread_handle: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -37,6 +43,8 @@ impl AtBleBackend {
             cache: Arc::new(AtCache::new()),
             notify_callbacks: Arc::new(Mutex::new(HashMap::new())),
             configured: Arc::new(Mutex::new(true)),
+            notify_thread_running: Arc::new(AtomicBool::new(false)),
+            notify_thread_handle: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -68,11 +76,78 @@ impl AtBleBackend {
     fn make_callback_key(address: &str, char_uuid: &str) -> String {
         format!("{}:{}", address, char_uuid)
     }
+
+    fn start_notify_thread(&self) {
+        if self.notify_thread_running.load(Ordering::SeqCst) {
+            return;
+        }
+
+        self.notify_thread_running.store(true, Ordering::SeqCst);
+        let running = self.notify_thread_running.clone();
+        let transport = self.transport.clone();
+        let callbacks = self.notify_callbacks.clone();
+        let parser = AtParser::new();
+
+        let handle = thread::spawn(move || {
+            info!("BLE通知监听线程已启动");
+            let parser = parser;
+
+            while running.load(Ordering::SeqCst) {
+                let notify_result = {
+                    let mut transport_guard = transport.lock().unwrap();
+                    if let Some(ref mut t) = *transport_guard {
+                        t.read_notify()
+                    } else {
+                        break;
+                    }
+                };
+
+                match notify_result {
+                    Ok(Some(line)) => {
+                        debug!("收到通知数据: {}", line);
+                        if let Ok(response) = parser.parse_response(&line) {
+                            if let super::at_commands::AtResponse::Notify { address, char_uuid, data } = response {
+                                let key = format!("{}:{}", address, char_uuid);
+                                if let Some(callback) = callbacks.lock().unwrap().get(&key) {
+                                    callback(&address, &char_uuid, &data);
+                                }
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    Err(e) => {
+                        warn!("读取通知失败: {}", e);
+                        thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                }
+            }
+
+            info!("BLE通知监听线程已停止");
+        });
+
+        *self.notify_thread_handle.lock().unwrap() = Some(handle);
+    }
+
+    fn stop_notify_thread(&self) {
+        self.notify_thread_running.store(false, Ordering::SeqCst);
+
+        if let Some(handle) = self.notify_thread_handle.lock().unwrap().take() {
+            let _ = handle.join();
+        }
+    }
 }
 
 impl Default for AtBleBackend {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Drop for AtBleBackend {
+    fn drop(&mut self) {
+        self.stop_notify_thread();
     }
 }
 
@@ -89,6 +164,9 @@ impl BleBackend for AtBleBackend {
 
         Self::parse_ok_response(&responses)?;
         *self.configured.lock().unwrap() = true;
+        drop(transport_guard);
+        
+        self.start_notify_thread();
         info!("AT BLE后端配置成功");
         Ok(())
     }
@@ -126,6 +204,24 @@ impl BleBackend for AtBleBackend {
         drop(transport_guard);
         Self::parse_ok_response(&responses)?;
         info!("扫描完成，发现 {} 个设备", devices.len());
+        Ok(devices)
+    }
+
+    async fn stop_scan(&self) -> Result<Vec<BleDevice>> {
+        let responses = self.send_and_wait(&AtCommand::StopScan, 3000)?;
+        
+        let devices = self.cache.get_all_devices();
+        let devices: Vec<BleDevice> = devices.into_iter().map(|(addr, cache)| {
+            BleDevice {
+                address: addr,
+                name: cache.name,
+                rssi: Some(cache.rssi),
+                is_connectable: true,
+            }
+        }).collect();
+        
+        Self::parse_ok_response(&responses)?;
+        info!("停止扫描，返回 {} 个设备", devices.len());
         Ok(devices)
     }
 
@@ -289,7 +385,26 @@ impl BleBackend for AtBleBackend {
         Ok(())
     }
 
+    async fn write_without_response(&self, address: &str, char_uuid: &str, data: &[u8]) -> Result<()> {
+        let responses = self.send_and_wait(
+            &AtCommand::WriteWithoutResponse {
+                address: address.to_string(),
+                char_uuid: char_uuid.to_string(),
+                data: data.to_vec(),
+            },
+            3000
+        )?;
+
+        Self::parse_ok_response(&responses)?;
+        debug!("无响应写入成功");
+        Ok(())
+    }
+
     async fn subscribe_notify(&self, address: &str, char_uuid: &str, callback: NotifyCallback) -> Result<()> {
+        if !self.notify_thread_running.load(Ordering::SeqCst) {
+            self.start_notify_thread();
+        }
+
         let responses = self.send_and_wait(
             &AtCommand::Subscribe {
                 address: address.to_string(),
@@ -343,5 +458,31 @@ impl BleBackend for AtBleBackend {
         }
 
         Err(ComBridgeError::ble("获取RSSI失败"))
+    }
+
+    async fn set_mtu(&self, address: &str, mtu: u16) -> Result<u16> {
+        let responses = self.send_and_wait(
+            &AtCommand::SetMtu {
+                address: address.to_string(),
+                mtu,
+            },
+            5000
+        )?;
+
+        let parser = AtParser::new();
+        for line in &responses {
+            if line.starts_with("+MTU:") {
+                if let Ok(response) = parser.parse_response(line) {
+                    if let super::at_commands::AtResponse::Mtu { mtu: actual_mtu, .. } = response {
+                        info!("MTU协商成功，实际MTU: {}", actual_mtu);
+                        return Ok(actual_mtu);
+                    }
+                }
+            }
+        }
+
+        Self::parse_ok_response(&responses)?;
+        info!("MTU协商完成，使用请求值: {}", mtu);
+        Ok(mtu)
     }
 }

@@ -116,6 +116,18 @@ impl BleManager {
         }
     }
 
+    pub async fn stop_scan(&self) -> Result<Vec<BleDevice>> {
+        let backend_guard = self.backend.read().await;
+        let backend = backend_guard.as_ref().ok_or_else(|| {
+            ComBridgeError::ble("BLE后端未配置")
+        })?;
+        
+        match backend {
+            Backend::Native(b) => b.stop_scan().await,
+            Backend::At(b) => b.stop_scan().await,
+        }
+    }
+
     pub async fn connect(&self, address: &str) -> Result<BleConnection> {
         let backend_guard = self.backend.read().await;
         let backend = backend_guard.as_ref().ok_or_else(|| {
@@ -200,6 +212,18 @@ impl BleManager {
         }
     }
 
+    pub async fn write_without_response(&self, address: &str, char_uuid: &str, data: &[u8]) -> Result<()> {
+        let backend_guard = self.backend.read().await;
+        let backend = backend_guard.as_ref().ok_or_else(|| {
+            ComBridgeError::ble("BLE后端未配置")
+        })?;
+        
+        match backend {
+            Backend::Native(b) => b.write_without_response(address, char_uuid, data).await,
+            Backend::At(b) => b.write_without_response(address, char_uuid, data).await,
+        }
+    }
+
     pub async fn subscribe_notify(&self, address: &str, char_uuid: &str, callback: NotifyCallback) -> Result<()> {
         let backend_guard = self.backend.read().await;
         let backend = backend_guard.as_ref().ok_or_else(|| {
@@ -233,6 +257,18 @@ impl BleManager {
         match backend {
             Backend::Native(b) => b.get_rssi(address).await,
             Backend::At(b) => b.get_rssi(address).await,
+        }
+    }
+
+    pub async fn set_mtu(&self, address: &str, mtu: u16) -> Result<u16> {
+        let backend_guard = self.backend.read().await;
+        let backend = backend_guard.as_ref().ok_or_else(|| {
+            ComBridgeError::ble("BLE后端未配置")
+        })?;
+        
+        match backend {
+            Backend::Native(b) => b.set_mtu(address, mtu).await,
+            Backend::At(b) => b.set_mtu(address, mtu).await,
         }
     }
 

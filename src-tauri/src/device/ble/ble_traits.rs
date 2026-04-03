@@ -72,6 +72,7 @@ pub type NotifyCallback = Arc<dyn Fn(&str, &str, &[u8]) + Send + Sync>;
 pub trait BleBackend: Send + Sync {
     async fn configure(&mut self) -> Result<()>;
     async fn scan(&self, duration_ms: u64) -> Result<Vec<BleDevice>>;
+    async fn stop_scan(&self) -> Result<Vec<BleDevice>>;
     async fn connect(&self, address: &str) -> Result<BleConnection>;
     async fn disconnect(&self, address: &str) -> Result<()>;
     async fn get_connections(&self) -> Result<Vec<BleConnection>>;
@@ -79,7 +80,9 @@ pub trait BleBackend: Send + Sync {
     async fn discover_characteristics(&self, address: &str, service_uuid: &str) -> Result<Vec<BleCharacteristic>>;
     async fn read_characteristic(&self, address: &str, char_uuid: &str) -> Result<Vec<u8>>;
     async fn write_characteristic(&self, address: &str, char_uuid: &str, data: &[u8]) -> Result<()>;
+    async fn write_without_response(&self, address: &str, char_uuid: &str, data: &[u8]) -> Result<()>;
     async fn subscribe_notify(&self, address: &str, char_uuid: &str, callback: NotifyCallback) -> Result<()>;
     async fn unsubscribe_notify(&self, address: &str, char_uuid: &str) -> Result<()>;
     async fn get_rssi(&self, address: &str) -> Result<i16>;
+    async fn set_mtu(&self, address: &str, mtu: u16) -> Result<u16>;
 }

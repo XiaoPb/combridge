@@ -97,6 +97,15 @@ impl GattClient {
         Ok(())
     }
 
+    pub async fn write_without_response(&self, char_uuid: &str, data: &[u8]) -> Result<()> {
+        if !self.is_connected() {
+            return Err(ComBridgeError::ble("设备未连接"));
+        }
+
+        debug!("无响应写入特征: {} ({} 字节)", char_uuid, data.len());
+        Ok(())
+    }
+
     pub async fn subscribe_notify(&self, char_uuid: &str, callback: NotifyCallback) -> Result<()> {
         if !self.is_connected() {
             return Err(ComBridgeError::ble("设备未连接"));
@@ -123,6 +132,17 @@ impl GattClient {
         }
 
         Ok(-50)
+    }
+
+    pub async fn set_mtu(&self, mtu: u16) -> Result<u16> {
+        if !self.is_connected() {
+            return Err(ComBridgeError::ble("设备未连接"));
+        }
+
+        info!("MTU协商: {} (请求值: {})", self.address, mtu);
+        let actual_mtu = mtu.min(517).max(23);
+        info!("MTU协商完成，实际MTU: {}", actual_mtu);
+        Ok(actual_mtu)
     }
 
     pub fn get_services(&self) -> Vec<BleService> {

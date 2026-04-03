@@ -134,6 +134,28 @@ pub async fn scan_ble_devices(
     }
 }
 
+/// 停止BLE扫描
+/// 
+/// 停止正在进行的BLE扫描，返回已发现的设备列表
+#[tauri::command]
+pub async fn stop_ble_scan(
+    manager: State<'_, BleManagerRef>,
+) -> Result<Vec<BleDevice>> {
+    info!("停止BLE扫描");
+    
+    let manager = manager.inner();
+    match manager.stop_scan().await {
+        Ok(devices) => {
+            info!("BLE扫描已停止，返回 {} 个设备", devices.len());
+            Ok(devices)
+        }
+        Err(e) => {
+            error!("停止BLE扫描失败: {}", e);
+            Err(e)
+        }
+    }
+}
+
 /// 连接BLE设备
 /// 
 /// 连接到指定地址的BLE设备
@@ -310,6 +332,31 @@ pub async fn write_ble_characteristic(
     }
 }
 
+/// 无响应写入特征值
+/// 
+/// 向指定特征写入数据（无响应模式，适用于高频数据传输）
+#[tauri::command]
+pub async fn write_ble_without_response(
+    manager: State<'_, BleManagerRef>,
+    device_id: String,
+    characteristic_uuid: String,
+    data: Vec<u8>,
+) -> Result<()> {
+    debug!("无响应写入特征值，设备: {}, 特征: {}, 数据长度: {} 字节", device_id, characteristic_uuid, data.len());
+    
+    let manager = manager.inner();
+    match manager.write_without_response(&device_id, &characteristic_uuid, &data).await {
+        Ok(()) => {
+            debug!("无响应写入成功");
+            Ok(())
+        }
+        Err(e) => {
+            error!("无响应写入失败，设备: {}, 特征: {}: {}", device_id, characteristic_uuid, e);
+            Err(e)
+        }
+    }
+}
+
 /// 订阅特征通知
 /// 
 /// 订阅指定特征的通知，当特征值变化时会通过事件推送到前端
@@ -424,4 +471,28 @@ pub async fn is_ble_configured(
     let configured = manager.is_configured().await;
     debug!("BLE配置状态: {}", if configured { "已配置" } else { "未配置" });
     Ok(configured)
+}
+
+/// 设置BLE MTU
+/// 
+/// 与指定设备协商MTU（最大传输单元）大小
+#[tauri::command]
+pub async fn set_ble_mtu(
+    manager: State<'_, BleManagerRef>,
+    device_id: String,
+    mtu: u16,
+) -> Result<u16> {
+    info!("设置BLE MTU，设备: {}, 请求MTU: {}", device_id, mtu);
+    
+    let manager = manager.inner();
+    match manager.set_mtu(&device_id, mtu).await {
+        Ok(actual_mtu) => {
+            info!("MTU协商成功，实际MTU: {}", actual_mtu);
+            Ok(actual_mtu)
+        }
+        Err(e) => {
+            error!("MTU协商失败，设备: {}: {}", device_id, e);
+            Err(e)
+        }
+    }
 }

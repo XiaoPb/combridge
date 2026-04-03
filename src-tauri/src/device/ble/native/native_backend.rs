@@ -106,6 +106,17 @@ impl BleBackend for NativeBleBackend {
         Ok(devices)
     }
 
+    async fn stop_scan(&self) -> Result<Vec<BleDevice>> {
+        let adapter = self.adapter.as_ref().ok_or_else(|| {
+            ComBridgeError::ble("蓝牙适配器未初始化")
+        })?;
+        
+        adapter.stop_scan().await?;
+        let devices = adapter.get_scanned_devices().await?;
+        info!("停止扫描，返回 {} 个设备", devices.len());
+        Ok(devices)
+    }
+
     async fn connect(&self, address: &str) -> Result<BleConnection> {
         let client = self.get_or_create_client(address);
         client.connect().await?;
@@ -169,6 +180,11 @@ impl BleBackend for NativeBleBackend {
         client.write_characteristic(char_uuid, data).await
     }
 
+    async fn write_without_response(&self, address: &str, char_uuid: &str, data: &[u8]) -> Result<()> {
+        let client = self.get_or_create_client(address);
+        client.write_without_response(char_uuid, data).await
+    }
+
     async fn subscribe_notify(&self, address: &str, char_uuid: &str, callback: NotifyCallback) -> Result<()> {
         let client = self.get_or_create_client(address);
         client.subscribe_notify(char_uuid, callback).await
@@ -182,5 +198,10 @@ impl BleBackend for NativeBleBackend {
     async fn get_rssi(&self, address: &str) -> Result<i16> {
         let client = self.get_or_create_client(address);
         client.get_rssi().await
+    }
+
+    async fn set_mtu(&self, address: &str, mtu: u16) -> Result<u16> {
+        let client = self.get_or_create_client(address);
+        client.set_mtu(mtu).await
     }
 }

@@ -4,15 +4,18 @@ use std::fmt;
 pub enum AtCommand {
     Test,
     Scan { duration_ms: u64 },
+    StopScan,
     Connect { address: String },
     Disconnect { address: String },
     DiscoverServices { address: String },
     DiscoverCharacteristics { address: String, service_uuid: String },
     Read { address: String, char_uuid: String },
     Write { address: String, char_uuid: String, data: Vec<u8> },
+    WriteWithoutResponse { address: String, char_uuid: String, data: Vec<u8> },
     Subscribe { address: String, char_uuid: String },
     Unsubscribe { address: String, char_uuid: String },
     GetRssi { address: String },
+    SetMtu { address: String, mtu: u16 },
 }
 
 impl fmt::Display for AtCommand {
@@ -20,6 +23,7 @@ impl fmt::Display for AtCommand {
         match self {
             AtCommand::Test => write!(f, "AT"),
             AtCommand::Scan { duration_ms } => write!(f, "AT+SCAN={}", duration_ms),
+            AtCommand::StopScan => write!(f, "AT+STOPSCAN"),
             AtCommand::Connect { address } => write!(f, "AT+CONN={}", address),
             AtCommand::Disconnect { address } => write!(f, "AT+DISC={}", address),
             AtCommand::DiscoverServices { address } => write!(f, "AT+SRV={}", address),
@@ -33,6 +37,10 @@ impl fmt::Display for AtCommand {
                 let hex_data: String = data.iter().map(|b| format!("{:02X}", b)).collect();
                 write!(f, "AT+WRITE={},{},{}", address, char_uuid, hex_data)
             }
+            AtCommand::WriteWithoutResponse { address, char_uuid, data } => {
+                let hex_data: String = data.iter().map(|b| format!("{:02X}", b)).collect();
+                write!(f, "AT+WRITEWR={},{},{}", address, char_uuid, hex_data)
+            }
             AtCommand::Subscribe { address, char_uuid } => {
                 write!(f, "AT+NOTIFY={},{}", address, char_uuid)
             }
@@ -40,6 +48,7 @@ impl fmt::Display for AtCommand {
                 write!(f, "AT+UNNOTIFY={},{}", address, char_uuid)
             }
             AtCommand::GetRssi { address } => write!(f, "AT+RSSI={}", address),
+            AtCommand::SetMtu { address, mtu } => write!(f, "AT+MTU={},{}", address, mtu),
         }
     }
 }
@@ -63,6 +72,7 @@ pub enum AtResponse {
     Data { address: String, char_uuid: String, data: Vec<u8> },
     Rssi { address: String, rssi: i16 },
     Notify { address: String, char_uuid: String, data: Vec<u8> },
+    Mtu { address: String, mtu: u16 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

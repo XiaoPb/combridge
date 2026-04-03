@@ -98,6 +98,10 @@ impl AtParser {
             return self.parse_notify_response(line);
         }
 
+        if line.starts_with("+MTU:") {
+            return self.parse_mtu_response(line);
+        }
+
         Err(ComBridgeError::ble(format!("未知的AT响应: {}", line)))
     }
 
@@ -212,6 +216,19 @@ impl AtParser {
         }
 
         Err(ComBridgeError::ble(format!("无效的NOTIFY响应: {}", line)))
+    }
+
+    fn parse_mtu_response(&self, line: &str) -> Result<AtResponse> {
+        let content = line.strip_prefix("+MTU:").unwrap_or("");
+        let parts: Vec<&str> = content.split(',').collect();
+        
+        if parts.len() >= 2 {
+            let address = parts[0].trim().to_string();
+            let mtu = parts[1].trim().parse::<u16>().unwrap_or(23);
+            return Ok(AtResponse::Mtu { address, mtu });
+        }
+
+        Err(ComBridgeError::ble(format!("无效的MTU响应: {}", line)))
     }
 
     fn parse_hex_data(&self, hex: &str) -> Result<Vec<u8>> {

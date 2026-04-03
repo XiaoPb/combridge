@@ -7,8 +7,8 @@ pub mod websocket;
 pub use ble::{
     configure_ble, connect_ble, disconnect_ble, discover_ble_characteristics,
     discover_ble_services, get_ble_connections, get_ble_mode, get_ble_rssi, is_ble_configured,
-    read_ble_characteristic, scan_ble_devices, subscribe_ble_notify, unsubscribe_ble_notify,
-    write_ble_characteristic, BleConfigDto, BleNotifyEvent,
+    read_ble_characteristic, scan_ble_devices, set_ble_mtu, stop_ble_scan, subscribe_ble_notify, unsubscribe_ble_notify,
+    write_ble_characteristic, write_ble_without_response, BleConfigDto, BleNotifyEvent,
 };
 pub use protocol::{
     bind_protocol, disable_protocol, enable_protocol, get_bound_protocols, get_protocol,

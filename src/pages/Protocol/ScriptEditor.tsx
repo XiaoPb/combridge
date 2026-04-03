@@ -243,7 +243,7 @@ PROTOCOL_AUTHOR = "${protocol.author || ''}"
         type="info"
         showIcon
         style={{ marginBottom: 12, fontSize: 12 }}
-        message={
+        title={
           <Space separator={<Text type="secondary">|</Text>}>
             <Text type="secondary">Ctrl+S 保存</Text>
             <Text type="secondary">Ctrl+Z 撤销</Text>

@@ -112,7 +112,7 @@ const BlePage: React.FC = () => {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {error && (
         <Alert
-          message="错误"
+          title="错误"
           description={error}
           type="error"
           closable
@@ -122,7 +122,7 @@ const BlePage: React.FC = () => {
 
       {isConnecting && (
         <Alert
-          message="正在连接..."
+          title="正在连接..."
           type="info"
           showIcon
           style={{ marginBottom: 8, flexShrink: 0 }}
@@ -148,7 +148,7 @@ const BlePage: React.FC = () => {
           <div style={{ padding: 8, height: '100%', overflow: 'auto' }}>
             <Title level={5} style={{ marginBottom: 8 }}>BLE 配置</Title>
 
-            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            <Space vertical style={{ width: '100%' }} size="middle">
               <Card
                 size="small"
                 title={
@@ -158,7 +158,7 @@ const BlePage: React.FC = () => {
                   </span>
                 }
                 style={{ background: 'var(--bg-primary)' }}
-                bodyStyle={{ padding: 8 }}
+                styles={{ body: { padding: 8 } }}
               >
                 <BleModeSelector
                   mode={mode}
@@ -178,7 +178,7 @@ const BlePage: React.FC = () => {
                   </span>
                 }
                 style={{ background: 'var(--bg-primary)' }}
-                bodyStyle={{ padding: 8 }}
+                styles={{ body: { padding: 8 } }}
               >
                 <AtConfigPanel
                   ports={ports}
@@ -192,7 +192,7 @@ const BlePage: React.FC = () => {
                 size="small"
                 title="连接列表"
                 style={{ background: 'var(--bg-primary)' }}
-                bodyStyle={{ padding: 8 }}
+                styles={{ body: { padding: 8 } }}
               >
                 <BleConnection
                   connections={connections}
@@ -210,7 +210,7 @@ const BlePage: React.FC = () => {
             <Card
               size="small"
               style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', marginBottom: 8, minHeight: 0 }}
-              bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden', minHeight: 0 }}
+              styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden', minHeight: 0 } }}
               title={
                 <Space>
                   <Button
@@ -234,7 +234,7 @@ const BlePage: React.FC = () => {
             <Card
               size="small"
               style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', minHeight: 0 }}
-              bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden', minHeight: 0 }}
+              styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden', minHeight: 0 } }}
               title="GATT 浏览器"
             >
               <div style={{ display: 'flex', gap: 8, flex: '1 1 0', minHeight: 0, overflow: 'hidden' }}>

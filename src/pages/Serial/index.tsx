@@ -187,7 +187,7 @@ const SerialPage: React.FC = () => {
           <div style={{ padding: 8, height: '100%', overflow: 'auto' }}>
             <Title level={5} style={{ marginBottom: 8 }}>串口设置</Title>
             
-            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            <Space vertical style={{ width: '100%' }} size="middle">
               <div>
                 <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>串口选择</Text>
                 <Space.Compact style={{ width: '100%' }}>
@@ -364,7 +364,7 @@ const SerialPage: React.FC = () => {
           <Content style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
             {error && (
               <Alert
-                message={error}
+                title={error}
                 type="error"
                 closable
                 onClose={() => setError(null)}
@@ -375,7 +375,7 @@ const SerialPage: React.FC = () => {
             <Card
               size="small"
               style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', marginBottom: 8, minHeight: 0 }}
-              bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden', minHeight: 0 }}
+              styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden', minHeight: 0 } }}
               title={
                 <Space>
                   <Button
@@ -444,7 +444,7 @@ const SerialPage: React.FC = () => {
             <Card
               size="small"
               style={{ flex: '0 0 auto', flexShrink: 0 }}
-              bodyStyle={{ padding: 8 }}
+              styles={{ body: { padding: 8 } }}
               title={
                 <Space>
                   <span>发送面板</span>

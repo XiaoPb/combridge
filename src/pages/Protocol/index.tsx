@@ -89,7 +89,7 @@ const ProtocolPage: React.FC = () => {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {error && (
         <Alert
-          message="错误"
+          title="错误"
           description={error}
           type="error"
           closable
@@ -97,7 +97,7 @@ const ProtocolPage: React.FC = () => {
         />
       )}
 
-      <Card size="small" style={{ flex: '0 0 auto', marginBottom: 8, padding: 8 }} bodyStyle={{ padding: 8 }}>
+      <Card size="small" style={{ flex: '0 0 auto', marginBottom: 8, padding: 8 }} styles={{ body: { padding: 8 } }}>
         <Space wrap>
           <Button
             type="primary"

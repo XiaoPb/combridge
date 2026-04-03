@@ -1,9 +1,9 @@
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, atomic::{AtomicBool, Ordering}};
 
 use bluest::{Adapter, Device, DeviceId};
 use futures::StreamExt;
-use tracing::{debug, info};
+use tracing::info;
 
 use crate::error::{ComBridgeError, Result};
 use super::super::ble_traits::BleDevice;
@@ -13,6 +13,7 @@ pub struct BleAdapter {
     adapter: Arc<Adapter>,
     scanned_devices: Arc<RwLock<HashMap<DeviceId, (Arc<Device>, Option<i16>)>>>,
     clients: RwLock<HashMap<String, Arc<GattClient>>>,
+    scan_cancelled: Arc<AtomicBool>,
 }
 
 impl BleAdapter {
@@ -28,6 +29,7 @@ impl BleAdapter {
             adapter: Arc::new(adapter),
             scanned_devices: Arc::new(RwLock::new(HashMap::new())),
             clients: RwLock::new(HashMap::new()),
+            scan_cancelled: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -49,18 +51,23 @@ impl BleAdapter {
         info!("开始扫描BLE设备");
 
         self.scanned_devices.write().unwrap().clear();
+        self.scan_cancelled.store(false, Ordering::SeqCst);
 
         let adapter = self.adapter.clone();
         let scanned_devices = self.scanned_devices.clone();
+        let scan_cancelled = self.scan_cancelled.clone();
 
         info!("启动BLE扫描任务...");
-        
+
         tokio::spawn(async move {
-            info!("BLE扫描任务已启动");
             match adapter.scan(&[]).await {
                 Ok(mut scan) => {
                     info!("BLE扫描已开始，等待设备发现...");
                     while let Some(discovered) = scan.next().await {
+                        if scan_cancelled.load(Ordering::SeqCst) {
+                            info!("扫描被取消");
+                            break;
+                        }
                         let device = discovered.device;
                         let device_id = device.id();
                         let name = device.name().ok();
@@ -80,13 +87,15 @@ impl BleAdapter {
         });
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        
+
         info!("BLE扫描任务已启动");
         Ok(())
     }
 
     pub async fn stop_scan(&self) -> Result<()> {
         info!("停止扫描BLE设备");
+        self.scan_cancelled.store(true, Ordering::SeqCst);
+        info!("已发送扫描取消信号");
         Ok(())
     }
 

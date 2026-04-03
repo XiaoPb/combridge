@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Button, Input, Table, Space, Tag, Progress, Empty, InputNumber, Typography, Flex } from 'antd';
 import { SearchOutlined, StopOutlined } from '@ant-design/icons';
-import type { BleDeviceInfo } from '../../types';
+import type { BleDeviceInfo, BleConnection } from '../../types';
 import { formatBleTimestamp } from '../../stores/bleStore';
 
 const { Text } = Typography;
@@ -9,6 +9,7 @@ const { Search } = Input;
 
 interface BleScannerProps {
   devices: BleDeviceInfo[];
+  connections: BleConnection[];
   isScanning: boolean;
   onScan: (timeout?: number) => void;
   onStopScan: () => void;
@@ -17,6 +18,7 @@ interface BleScannerProps {
 
 const BleScanner: React.FC<BleScannerProps> = ({
   devices,
+  connections,
   isScanning,
   onScan,
   onStopScan,
@@ -92,15 +94,17 @@ const BleScanner: React.FC<BleScannerProps> = ({
         ),
     },
     {
-      title: '可连接',
-      dataIndex: 'isConnectable',
-      key: 'isConnectable',
+      title: '状态',
+      key: 'status',
       width: 80,
-      render: (connectable: boolean) => (
-        <Tag color={connectable ? 'green' : 'red'}>
-          {connectable ? '是' : '否'}
-        </Tag>
-      ),
+      render: (_: unknown, record: BleDeviceInfo) => {
+        const isConnected = connections?.some(c => c.address === record.address);
+        return (
+          <Tag color={isConnected ? 'green' : 'default'}>
+            {isConnected ? '已连接' : '未连接'}
+          </Tag>
+        );
+      },
     },
     {
       title: '发现时间',
@@ -113,16 +117,20 @@ const BleScanner: React.FC<BleScannerProps> = ({
       title: '操作',
       key: 'action',
       width: 100,
-      render: (_: unknown, record: BleDeviceInfo) => (
-        <Button
-          type="primary"
-          size="small"
-          disabled={!record.isConnectable}
-          onClick={() => onConnect(record.address)}
-        >
-          连接
-        </Button>
-      ),
+      render: (_: unknown, record: BleDeviceInfo) => {
+        const isConnected = connections?.some(c => c.address === record.address);
+        return (
+          <Button
+            type={isConnected ? 'default' : 'primary'}
+            size="small"
+            danger={isConnected}
+            disabled={!record.isConnectable && !isConnected}
+            onClick={() => onConnect(record.address)}
+          >
+            {isConnected ? '断开' : '连接'}
+          </Button>
+        );
+      },
     },
   ];
 
@@ -193,7 +201,8 @@ const BleScanner: React.FC<BleScannerProps> = ({
           columns={columns}
           rowKey="address"
           size="small"
-          pagination={{ pageSize: 10, showSizeChanger: false }}
+          scroll={{ y: 300 }}
+          pagination={false}
         />
       ) : (
         <Empty

@@ -224,6 +224,7 @@ const BlePage: React.FC = () => {
             >
               <BleScanner
                 devices={devices}
+                connections={connections}
                 isScanning={isScanning}
                 onScan={handleScan}
                 onStopScan={stopScan}

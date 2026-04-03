@@ -70,7 +70,7 @@ const BlePage: React.FC = () => {
 
   useEffect(() => {
     if (!currentDevice) return;
-    const conn = connections.find((c) => c.deviceId === currentDevice && c.isConnected);
+    const conn = connections.find((c) => c.address === currentDevice && c.isConnected);
     if (!conn) return;
 
     setDeviceTabs((prev) => {
@@ -170,13 +170,13 @@ const BlePage: React.FC = () => {
   const handleConnect = async (address: string) => {
     const existingConn = connections.find((c) => c.address === address);
     if (existingConn) {
-      await handleDisconnect(existingConn.deviceId);
+      await handleDisconnect(address);
       return;
     }
 
     try {
-      const connection = await connectDevice(address);
-      setActiveTabKey(connection.deviceId);
+      await connectDevice(address);
+      setActiveTabKey(address);
     } catch {
       // error already handled by hook
     }
@@ -343,7 +343,7 @@ const BlePage: React.FC = () => {
 
   const renderScanTab = () => (
     <div style={{ display: 'flex', height: '100%', gap: 8, overflow: 'hidden' }}>
-      <div style={{ flex: '1 1 50%', minWidth: 0, overflow: 'auto' }}>
+      <div style={{ flex: '1 1 50%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <BleScanner
           devices={devices}
           connections={connections}
@@ -529,7 +529,7 @@ const BlePage: React.FC = () => {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {error && (
         <Alert
-          message="错误"
+          title="错误"
           description={error}
           type="error"
           closable
@@ -540,7 +540,7 @@ const BlePage: React.FC = () => {
 
       {isConnecting && (
         <Alert
-          message="正在连接..."
+          title="正在连接..."
           type="info"
           showIcon
           style={{ marginBottom: 8, flexShrink: 0 }}

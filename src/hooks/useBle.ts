@@ -206,7 +206,7 @@ export const useBle = () => {
     try {
       const connection = await bleApi.connectBle(address);
       addConnection(connection);
-      setCurrentDevice(connection.deviceId);
+      setCurrentDevice(address);
       message.success(`已连接到 ${connection.name || address}`);
       return connection;
     } catch (err) {

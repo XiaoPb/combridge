@@ -145,6 +145,8 @@ const BleScanner: React.FC<BleScannerProps> = ({
     <Card
       title="设备扫描"
       size="small"
+      style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+      styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 8 }}}
       extra={
         <Space>
           <Flex align="center" gap={4}>

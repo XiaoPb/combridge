@@ -1,19 +1,39 @@
-import React, { useState, useEffect } from 'react';
-import { Layout, Card, Button, Alert, Typography, Space } from 'antd';
-import { ApiOutlined, SettingOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Tabs, Alert, Space, Button, Tree, Tag, Typography, Empty, Spin } from 'antd';
+import { MenuFoldOutlined, MenuUnfoldOutlined, ClearOutlined } from '@ant-design/icons';
 import { useBle } from '../../hooks/useBle';
 import { useSerialStore } from '../../stores/serialStore';
 import { serialApi } from '../../api/tauri';
+import { formatBleData, getShortUuid } from '../../stores/bleStore';
 import BleModeSelector from './BleModeSelector';
 import BleScanner from './BleScanner';
-import BleConnection from './BleConnection';
-import GattBrowser from './GattBrowser';
 import CharacteristicPanel from './CharacteristicPanel';
 import AtConfigPanel from './AtConfigPanel';
-import type { BleCharacteristic } from '../../types';
+import type { BleCharacteristic, BleService } from '../../types';
 
-const { Sider, Content } = Layout;
-const { Title } = Typography;
+const { Text } = Typography;
+
+interface DeviceLogEntry {
+  id: string;
+  timestamp: number;
+  direction: 'READ' | 'WRITE' | 'NOTIFY' | 'SUBSCRIBE' | 'UNSUBSCRIBE';
+  data?: number[];
+  text?: string;
+  characteristicUuid?: string;
+}
+
+interface DeviceTabData {
+  deviceId: string;
+  name: string;
+  address: string;
+  services: BleService[];
+  characteristics: BleCharacteristic[];
+  logs: DeviceLogEntry[];
+  selectedCharacteristic: BleCharacteristic | null;
+  discoveringServices: boolean;
+}
+
+const SCAN_TAB_KEY = 'scan';
 
 const BlePage: React.FC = () => {
   const {
@@ -37,26 +57,89 @@ const BlePage: React.FC = () => {
     writeCharacteristic,
     subscribeNotify,
     unsubscribeNotify,
-    setCurrentDevice,
   } = useBle();
 
   const { ports, setPorts } = useSerialStore();
-  const [selectedCharacteristic, setSelectedCharacteristic] = useState<BleCharacteristic | null>(null);
-  const [discoveringServices, setDiscoveringServices] = useState(false);
-  const [siderCollapsed, setSiderCollapsed] = useState(false);
+  const [activeTabKey, setActiveTabKey] = useState<string>(SCAN_TAB_KEY);
+  const [deviceTabs, setDeviceTabs] = useState<Record<string, DeviceTabData>>({});
+  const [configCollapsed, setConfigCollapsed] = useState(false);
 
   useEffect(() => {
     serialApi.listPorts().then(setPorts).catch(console.error);
   }, [setPorts]);
 
   useEffect(() => {
-    if (currentDevice && connections.find((c) => c.deviceId === currentDevice)?.isConnected) {
-      setDiscoveringServices(true);
-      discoverServices(currentDevice).finally(() => {
-        setDiscoveringServices(false);
+    if (!currentDevice) return;
+    const conn = connections.find((c) => c.deviceId === currentDevice && c.isConnected);
+    if (!conn) return;
+
+    setDeviceTabs((prev) => {
+      const existing = prev[currentDevice];
+      if (existing && !existing.discoveringServices && existing.services.length === 0) {
+        return {
+          ...prev,
+          [currentDevice]: { ...existing, discoveringServices: true },
+        };
+      }
+      if (!existing) {
+        return {
+          ...prev,
+          [currentDevice]: {
+            deviceId: currentDevice,
+            name: conn.name || conn.address,
+            address: conn.address,
+            services: [],
+            characteristics: [],
+            logs: [],
+            selectedCharacteristic: null,
+            discoveringServices: true,
+          },
+        };
+      }
+      return prev;
+    });
+
+    discoverServices(currentDevice)
+      .then((svcList) => {
+        setDeviceTabs((prev) => {
+          const tab = prev[currentDevice];
+          if (!tab) return prev;
+          return {
+            ...prev,
+            [currentDevice]: {
+              ...tab,
+              services: svcList || [],
+              discoveringServices: false,
+            },
+          };
+        });
+      })
+      .catch(() => {
+        setDeviceTabs((prev) => {
+          const tab = prev[currentDevice];
+          if (!tab) return prev;
+          return {
+            ...prev,
+            [currentDevice]: { ...tab, discoveringServices: false },
+          };
+        });
       });
-    }
   }, [currentDevice, connections, discoverServices]);
+
+  useEffect(() => {
+    if (!currentDevice || services.length === 0) return;
+    setDeviceTabs((prev) => {
+      const tab = prev[currentDevice];
+      if (!tab) return prev;
+      if (JSON.stringify(tab.services) !== JSON.stringify(services)) {
+        return {
+          ...prev,
+          [currentDevice]: { ...tab, services },
+        };
+      }
+      return prev;
+    });
+  }, [currentDevice, services]);
 
   const handleModeChange = async (newMode: 'native' | 'at') => {
     await configure(newMode, serialPort || undefined);
@@ -66,219 +149,416 @@ const BlePage: React.FC = () => {
     await configure(mode, port);
   };
 
-  const handleScan = (timeout?: number) => {
-    scanDevices(timeout ? { timeout } : undefined);
+  const handleSendAtCommand = (_command: string) => {
+    console.debug('Send AT command:', _command);
   };
 
+  const addLogToDevice = useCallback((deviceId: string, entry: Omit<DeviceLogEntry, 'id'>) => {
+    setDeviceTabs((prev) => {
+      const tab = prev[deviceId];
+      if (!tab) return prev;
+      return {
+        ...prev,
+        [deviceId]: {
+          ...tab,
+          logs: [...tab.logs, { ...entry, id: `${Date.now()}-${Math.random()}` }].slice(-500),
+        },
+      };
+    });
+  }, []);
+
   const handleConnect = async (address: string) => {
-    const existingConnection = connections.find(c => c.address === address);
-    
-    if (existingConnection) {
-      await handleDisconnect(address);
-    } else {
-      await connectDevice(address);
-      
-      if (currentDevice || connections.find(c => c.address === address)) {
-        const targetAddress = address;
-        setDiscoveringServices(true);
-        try {
-          await discoverServices(targetAddress);
-        } catch (err) {
-          console.error('自动发现服务失败:', err);
-        } finally {
-          setDiscoveringServices(false);
-        }
-      }
+    const existingConn = connections.find((c) => c.address === address);
+    if (existingConn) {
+      await handleDisconnect(existingConn.deviceId);
+      return;
+    }
+
+    try {
+      const connection = await connectDevice(address);
+      setActiveTabKey(connection.deviceId);
+    } catch {
+      // error already handled by hook
     }
   };
 
   const handleDisconnect = async (deviceId: string) => {
-    await disconnectDevice(deviceId);
-  };
-
-  const handleServiceSelect = async (serviceUuid: string) => {
-    if (currentDevice) {
-      await discoverCharacteristics(serviceUuid, currentDevice);
+    try {
+      await disconnectDevice(deviceId);
+    } catch {
+      // error already handled by hook
+    }
+    setDeviceTabs((prev) => {
+      const next = { ...prev };
+      delete next[deviceId];
+      return next;
+    });
+    if (activeTabKey === deviceId) {
+      setActiveTabKey(SCAN_TAB_KEY);
     }
   };
 
-  const handleCharacteristicSelect = (characteristic: BleCharacteristic) => {
-    setSelectedCharacteristic(characteristic);
+  const handleTabEdit = useCallback(
+    (targetKey: string | React.MouseEvent | React.KeyboardEvent, action: 'add' | 'remove') => {
+      if (action === 'remove') {
+        const key = targetKey as string;
+        if (key === SCAN_TAB_KEY) return;
+        handleDisconnect(key);
+      }
+    },
+    [handleDisconnect]
+  );
+
+  const handleServiceSelectForDevice = useCallback(
+    async (serviceUuid: string, deviceId: string) => {
+      try {
+        const charList = await discoverCharacteristics(serviceUuid, deviceId);
+        setDeviceTabs((prev) => {
+          const tab = prev[deviceId];
+          if (!tab) return prev;
+          return {
+            ...prev,
+            [deviceId]: { ...tab, characteristics: charList || [] },
+          };
+        });
+      } catch (err) {
+        console.error('发现特征失败:', err);
+      }
+    },
+    [discoverCharacteristics]
+  );
+
+  const handleCharacteristicSelectForDevice = useCallback(
+    (characteristic: BleCharacteristic, deviceId: string) => {
+      setDeviceTabs((prev) => {
+        const tab = prev[deviceId];
+        if (!tab) return prev;
+        return {
+          ...prev,
+          [deviceId]: { ...tab, selectedCharacteristic: characteristic },
+        };
+      });
+    },
+    []
+  );
+
+  const handleReadForDevice = useCallback(
+    async (uuid: string, deviceId: string) => {
+      try {
+        const data = await readCharacteristic(uuid, deviceId);
+        addLogToDevice(deviceId, {
+          timestamp: Date.now(),
+          direction: 'READ',
+          data,
+          characteristicUuid: uuid,
+        });
+      } catch {
+        // handled by hook
+      }
+    },
+    [readCharacteristic, addLogToDevice]
+  );
+
+  const handleWriteForDevice = useCallback(
+    async (uuid: string, dataStr: string, format: 'hex' | 'text', withoutResponse: boolean, deviceId: string) => {
+      try {
+        await writeCharacteristic(uuid, dataStr, format, withoutResponse);
+        addLogToDevice(deviceId, {
+          timestamp: Date.now(),
+          direction: 'WRITE',
+          text: dataStr,
+          characteristicUuid: uuid,
+        });
+      } catch {
+        // handled by hook
+      }
+    },
+    [writeCharacteristic, addLogToDevice]
+  );
+
+  const handleSubscribeForDevice = useCallback(
+    async (uuid: string, deviceId: string) => {
+      try {
+        await subscribeNotify(uuid);
+        addLogToDevice(deviceId, {
+          timestamp: Date.now(),
+          direction: 'SUBSCRIBE',
+          characteristicUuid: uuid,
+        });
+      } catch {
+        // handled by hook
+      }
+    },
+    [subscribeNotify, addLogToDevice]
+  );
+
+  const handleUnsubscribeForDevice = useCallback(
+    async (uuid: string, deviceId: string) => {
+      try {
+        await unsubscribeNotify(uuid);
+        addLogToDevice(deviceId, {
+          timestamp: Date.now(),
+          direction: 'UNSUBSCRIBE',
+          characteristicUuid: uuid,
+        });
+      } catch {
+        // handled by hook
+      }
+    },
+    [unsubscribeNotify, addLogToDevice]
+  );
+
+  const handleClearLogs = useCallback((deviceId: string) => {
+    setDeviceTabs((prev) => {
+      const tab = prev[deviceId];
+      if (!tab) return prev;
+      return { ...prev, [deviceId]: { ...tab, logs: [] } };
+    });
+  }, []);
+
+  const buildTreeData = (svcList: BleService[]) => {
+    return svcList.map((svc) => ({
+      key: svc.uuid,
+      title: (
+        <Space>
+          <Text strong style={{ fontSize: 13 }}>Service: {getShortUuid(svc.uuid)}</Text>
+          {svc.isPrimary && <Tag color="blue" style={{ fontSize: 10 }}>Primary</Tag>}
+        </Space>
+      ),
+      children: svc.characteristics.map((char) => ({
+        key: `${svc.uuid}-${char.uuid}`,
+        title: (
+          <Space>
+            <Text style={{ fontSize: 13 }}>Char: {getShortUuid(char.uuid)}</Text>
+            {char.properties.read && <Tag color="green" style={{ fontSize: 10 }}>R</Tag>}
+            {char.properties.write && <Tag color="blue" style={{ fontSize: 10 }}>W</Tag>}
+            {char.properties.notify && <Tag color="orange" style={{ fontSize: 10 }}>N</Tag>}
+            {char.properties.indicate && <Tag color="purple" style={{ fontSize: 10 }}>I</Tag>}
+          </Space>
+        ),
+        isLeaf: true,
+      })),
+    }));
   };
 
-  const handleRead = async (uuid: string) => {
-    await readCharacteristic(uuid);
+  const renderScanTab = () => (
+    <div style={{ display: 'flex', height: '100%', gap: 8, overflow: 'hidden' }}>
+      <div style={{ flex: '1 1 50%', minWidth: 0, overflow: 'auto' }}>
+        <BleScanner
+          devices={devices}
+          connections={connections}
+          isScanning={isScanning}
+          onScan={(timeout) => scanDevices(timeout ? { timeout } : undefined)}
+          onStopScan={stopScan}
+          onConnect={handleConnect}
+        />
+      </div>
+
+      {!configCollapsed && (
+        <div
+          style={{
+            flex: '0 0 320px',
+            overflow: 'auto',
+            background: 'var(--bg-secondary)',
+            borderRadius: 8,
+            padding: 8,
+            transition: 'all 0.2s',
+          }}
+        >
+          <Space style={{ width: '100%', justifyContent: 'space-between', marginBottom: 12 }}>
+            <Text strong>配置面板</Text>
+            <Button
+              type="text"
+              size="small"
+              icon={<MenuFoldOutlined />}
+              onClick={() => setConfigCollapsed(true)}
+            />
+          </Space>
+
+          <Space vertical style={{ width: '100%' }} size="middle">
+            <BleModeSelector
+              mode={mode}
+              serialPort={serialPort}
+              ports={ports}
+              onModeChange={handleModeChange}
+              onSerialPortChange={handleSerialPortChange}
+            />
+            <AtConfigPanel
+              ports={ports}
+              selectedPort={serialPort}
+              onPortChange={handleSerialPortChange}
+              onSendCommand={handleSendAtCommand}
+            />
+          </Space>
+        </div>
+      )}
+
+      {configCollapsed && (
+        <Button
+          type="text"
+          icon={<MenuUnfoldOutlined />}
+          onClick={() => setConfigCollapsed(false)}
+          style={{ flexShrink: 0, alignSelf: 'flex-start' }}
+        />
+      )}
+    </div>
+  );
+
+  const renderDeviceTabContent = (tabData: DeviceTabData) => {
+    const treeData = buildTreeData(tabData.services);
+    const logText = tabData.logs
+      .map((entry) => {
+        const ts = new Date(entry.timestamp).toLocaleTimeString();
+        const dir = entry.direction;
+        let content = '';
+        if (entry.data) {
+          content = `[${entry.data.length} byte] ${formatBleData(entry.data, 'hex')}`;
+        } else if (entry.text) {
+          content = entry.text;
+        } else {
+          content = '';
+        }
+        const charInfo = entry.characteristicUuid ? ` [${getShortUuid(entry.characteristicUuid)}]` : '';
+        return `[${ts}][${dir}]${charInfo} ${content}`;
+      })
+      .join('\n');
+
+    return (
+      <div style={{ display: 'flex', height: '100%', gap: 8, overflow: 'hidden' }}>
+        <div style={{ flex: '1 1 50%', minWidth: 0, overflow: 'auto', padding: '0 4px' }}>
+          {tabData.discoveringServices ? (
+            <div style={{ textAlign: 'center', padding: 40 }}>
+              <Spin tip="正在发现服务..." />
+            </div>
+          ) : tabData.services.length === 0 ? (
+            <Empty description="暂无服务数据" />
+          ) : (
+            <Tree
+              showLine
+              showIcon={false}
+              treeData={treeData}
+              onSelect={(keys) => {
+                if (keys.length === 0) return;
+                const key = keys[0] as string;
+                for (const svc of tabData.services) {
+                  const char = svc.characteristics.find((c) => `${svc.uuid}-${c.uuid}` === key);
+                  if (char) {
+                    handleCharacteristicSelectForDevice(char, tabData.deviceId);
+                    return;
+                  }
+                }
+                const svc = tabData.services.find((s) => s.uuid === key);
+                if (svc) {
+                  handleServiceSelectForDevice(svc.uuid, tabData.deviceId);
+                }
+              }}
+              style={{ fontSize: 13 }}
+            />
+          )}
+        </div>
+
+        <div style={{ flex: '1 1 50%', minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ marginBottom: 8, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              size="small"
+              icon={<ClearOutlined />}
+              onClick={() => handleClearLogs(tabData.deviceId)}
+              disabled={tabData.logs.length === 0}
+            >
+              清空日志
+            </Button>
+          </div>
+
+          <div
+            style={{
+              flex: '1 1 0',
+              overflow: 'auto',
+              background: 'var(--bg-primary)',
+              borderRadius: 4,
+              padding: 8,
+              fontFamily: 'Consolas, Monaco, monospace',
+              fontSize: 13,
+              lineHeight: 1.6,
+              minHeight: 0,
+              whiteSpace: 'pre',
+            }}
+          >
+            {logText || '暂无交互日志...'}
+          </div>
+
+          <div style={{ marginTop: 8, flexShrink: 0, minHeight: 0, overflow: 'auto' }}>
+            <CharacteristicPanel
+              characteristic={tabData.selectedCharacteristic}
+              onRead={(uuid) => handleReadForDevice(uuid, tabData.deviceId)}
+              onWrite={(uuid, data, fmt, wnr) => handleWriteForDevice(uuid, data, fmt, wnr, tabData.deviceId)}
+              onSubscribe={(uuid) => handleSubscribeForDevice(uuid, tabData.deviceId)}
+              onUnsubscribe={(uuid) => handleUnsubscribeForDevice(uuid, tabData.deviceId)}
+            />
+          </div>
+        </div>
+      </div>
+    );
   };
 
-  const handleWrite = async (uuid: string, data: string, format: 'hex' | 'text', withoutResponse: boolean) => {
-    await writeCharacteristic(uuid, data, format, withoutResponse);
-  };
-
-  const handleSubscribe = async (uuid: string) => {
-    await subscribeNotify(uuid);
-  };
-
-  const handleUnsubscribe = async (uuid: string) => {
-    await unsubscribeNotify(uuid);
-  };
-
-  const handleSendAtCommand = (command: string) => {
-    console.debug('Send AT command:', command);
-  };
+  const tabItems = [
+    {
+      key: SCAN_TAB_KEY,
+      label: (
+        <span style={{ fontSize: 12 }}>
+          扫描
+          {isScanning && <Tag color="processing" style={{ marginLeft: 4, fontSize: 10 }} />}
+        </span>
+      ),
+      closable: false,
+      children: renderScanTab(),
+    },
+    ...Object.entries(deviceTabs).map(([key, tab]) => ({
+      key,
+      label: (
+        <span style={{ fontSize: 12 }}>
+          {tab.name || tab.address}
+          <Tag color="success" style={{ marginLeft: 4, fontSize: 10 }}>●</Tag>
+        </span>
+      ),
+      closable: true,
+      children: renderDeviceTabContent(tab),
+    })),
+  ];
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {error && (
         <Alert
-          title="错误"
+          message="错误"
           description={error}
           type="error"
           closable
+          onClose={() => {}}
           style={{ marginBottom: 8, flexShrink: 0 }}
         />
       )}
 
       {isConnecting && (
         <Alert
-          title="正在连接..."
+          message="正在连接..."
           type="info"
           showIcon
           style={{ marginBottom: 8, flexShrink: 0 }}
         />
       )}
 
-      <Layout style={{ flex: '1 1 0', background: 'transparent', minHeight: 0 }}>
-        <Sider
-          collapsible
-          collapsed={siderCollapsed}
-          onCollapse={setSiderCollapsed}
-          width={280}
-          collapsedWidth={0}
-          trigger={null}
-          style={{
-            background: 'var(--bg-secondary)',
-            borderRadius: '8px',
-            marginRight: siderCollapsed ? 0 : 8,
-            overflow: 'hidden',
-            transition: 'all 0.2s',
-          }}
-        >
-          <div style={{ padding: 8, height: '100%', overflow: 'auto' }}>
-            <Title level={5} style={{ marginBottom: 8 }}>BLE 配置</Title>
-
-            <Space vertical style={{ width: '100%' }} size="middle">
-              <Card
-                size="small"
-                title={
-                  <span>
-                    <SettingOutlined style={{ marginRight: 8 }} />
-                    模式配置
-                  </span>
-                }
-                style={{ background: 'var(--bg-primary)' }}
-                styles={{ body: { padding: 8 } }}
-              >
-                <BleModeSelector
-                  mode={mode}
-                  serialPort={serialPort}
-                  ports={ports}
-                  onModeChange={handleModeChange}
-                  onSerialPortChange={handleSerialPortChange}
-                />
-              </Card>
-
-              <Card
-                size="small"
-                title={
-                  <span>
-                    <ApiOutlined style={{ marginRight: 8 }} />
-                    AT 配置
-                  </span>
-                }
-                style={{ background: 'var(--bg-primary)' }}
-                styles={{ body: { padding: 8 } }}
-              >
-                <AtConfigPanel
-                  ports={ports}
-                  selectedPort={serialPort}
-                  onPortChange={handleSerialPortChange}
-                  onSendCommand={handleSendAtCommand}
-                />
-              </Card>
-
-              <Card
-                size="small"
-                title="连接列表"
-                style={{ background: 'var(--bg-primary)' }}
-                styles={{ body: { padding: 8 } }}
-              >
-                <BleConnection
-                  connections={connections}
-                  currentDevice={currentDevice}
-                  onSelect={setCurrentDevice}
-                  onDisconnect={handleDisconnect}
-                />
-              </Card>
-            </Space>
-          </div>
-        </Sider>
-
-        <Layout style={{ background: 'transparent', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-          <Content style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-            <Card
-              size="small"
-              style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', marginBottom: 8, minHeight: 0 }}
-              styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden', minHeight: 0 } }}
-              title={
-                <Space>
-                  <Button
-                    type="text"
-                    icon={siderCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                    onClick={() => setSiderCollapsed(!siderCollapsed)}
-                  />
-                  <span>设备扫描</span>
-                </Space>
-              }
-            >
-              <BleScanner
-                devices={devices}
-                connections={connections}
-                isScanning={isScanning}
-                onScan={handleScan}
-                onStopScan={stopScan}
-                onConnect={handleConnect}
-              />
-            </Card>
-
-            <Card
-              size="small"
-              style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', minHeight: 0 }}
-              styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden', minHeight: 0 } }}
-              title="GATT 浏览器"
-            >
-              <div style={{ display: 'flex', gap: 8, flex: '1 1 0', minHeight: 0, overflow: 'hidden' }}>
-                <div style={{ flex: '1 1 0', minWidth: 0, overflow: 'auto' }}>
-                  <GattBrowser
-                    services={services}
-                    loading={discoveringServices}
-                    onServiceSelect={handleServiceSelect}
-                    onCharacteristicSelect={handleCharacteristicSelect}
-                  />
-                </div>
-                <div style={{ flex: '1 1 0', minWidth: 0, overflow: 'auto' }}>
-                  <CharacteristicPanel
-                    characteristic={selectedCharacteristic}
-                    onRead={handleRead}
-                    onWrite={handleWrite}
-                    onSubscribe={handleSubscribe}
-                    onUnsubscribe={handleUnsubscribe}
-                  />
-                </div>
-              </div>
-            </Card>
-          </Content>
-        </Layout>
-      </Layout>
+      <div style={{ flex: '1 1 0', minHeight: 0, overflow: 'hidden' }}>
+        <Tabs
+          type="editable-card"
+          activeKey={activeTabKey}
+          onChange={setActiveTabKey}
+          onEdit={handleTabEdit}
+          items={tabItems}
+          size="small"
+          style={{ height: '100%' }}
+          tabBarStyle={{ marginBottom: 0, paddingLeft: 8, paddingRight: 8 }}
+        />
+      </div>
     </div>
   );
 };

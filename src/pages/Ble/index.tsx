@@ -543,21 +543,25 @@ const BlePage: React.FC = () => {
     return svcList.map((svc) => ({
       key: svc.uuid,
       title: (
-        <Space>
-          <Text strong style={{ fontSize: 13 }}>{getServiceName(svc.uuid)} (0x{getShortUuid(svc.uuid)})</Text>
-          {svc.isPrimary && <Tag color="blue" style={{ fontSize: 10 }}>Primary</Tag>}
-        </Space>
+        <div style={{ lineHeight: 1.3 }}>
+          <div style={{ fontSize: 13, fontWeight: 500 }}>{getServiceName(svc.uuid)}</div>
+          <div style={{ fontSize: 9, color: '#666' }}>{svc.uuid}</div>
+        </div>
       ),
       children: (svc.characteristics || []).map((char) => ({
         key: `${svc.uuid}-${char.uuid}`,
         title: (
-          <Space>
-            <Text style={{ fontSize: 13 }}>{getCharacteristicName(char.uuid)} (0x{getShortUuid(char.uuid)})</Text>
-            {char.properties.read && <Tag color="green" style={{ fontSize: 10 }}>R</Tag>}
-            {char.properties.write && <Tag color="blue" style={{ fontSize: 10 }}>W</Tag>}
-            {char.properties.notify && <Tag color="orange" style={{ fontSize: 10 }}>N</Tag>}
-            {char.properties.indicate && <Tag color="purple" style={{ fontSize: 10 }}>I</Tag>}
-          </Space>
+          <div style={{ lineHeight: 1.3 }}>
+            <div style={{ fontSize: 13, fontWeight: 500 }}>{getCharacteristicName(char.uuid)}</div>
+            <div style={{ fontSize: 9, color: '#666' }}>{char.uuid}</div>
+            <div style={{ marginTop: 2 }}>
+              {char.properties.read && <Tag color="green" style={{ fontSize: 9, padding: '0 4px', margin: '0 2px 0 0' }}>R</Tag>}
+              {char.properties.write && <Tag color="blue" style={{ fontSize: 9, padding: '0 4px', margin: '0 2px 0 0' }}>W</Tag>}
+              {char.properties.writeWithoutResponse && <Tag color="cyan" style={{ fontSize: 9, padding: '0 4px', margin: '0 2px 0 0' }}>WNR</Tag>}
+              {char.properties.notify && <Tag color="orange" style={{ fontSize: 9, padding: '0 4px', margin: '0 2px 0 0' }}>N</Tag>}
+              {char.properties.indicate && <Tag color="purple" style={{ fontSize: 9, padding: '0 4px', margin: '0 2px 0 0' }}>I</Tag>}
+            </div>
+          </div>
         ),
         isLeaf: true,
       })),

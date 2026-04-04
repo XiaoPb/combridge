@@ -26,7 +26,7 @@ const GattBrowser: React.FC<GattBrowserProps> = ({
     const tags: { color: string; label: string }[] = [];
     if (properties.read) tags.push({ color: 'green', label: 'R' });
     if (properties.write) tags.push({ color: 'blue', label: 'W' });
-    if (properties.writeWithoutResponse) tags.push({ color: 'cyan', label: 'WNR' });
+    if (properties.writeWithoutResponse) tags.push({ color: 'cyan', label: 'W' });
     if (properties.notify) tags.push({ color: 'orange', label: 'N' });
     if (properties.indicate) tags.push({ color: 'purple', label: 'I' });
     return tags;

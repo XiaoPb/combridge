@@ -103,7 +103,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
         </div>
       }
       size="small"
-      styles={{ body: { display: collapsed ? 'none' : 'block', padding: '8px 12px', height: 240, overflow: 'hidden' } }}
+      styles={{ body: { display: collapsed ? 'none' : 'block', padding: '8px 12px', height: 180, overflow: 'hidden' } }}
     >
       <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexShrink: 0 }}>
         <div style={{ flex: '1 1 0', minWidth: 0 }}>
@@ -126,7 +126,6 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
           {canNotify && (
             <Tooltip title={isSubscribed ? '取消订阅通知' : '订阅通知'}>
               <Button
-                size="small"
                 type={isSubscribed ? 'primary' : 'default'}
                 icon={isSubscribed ? <BellFilled /> : <BellOutlined />}
                 onClick={handleSubscribeToggle}
@@ -138,7 +137,6 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
           {canRead && (
             <Tooltip title="读取特征值">
               <Button
-                size="small"
                 icon={<ReadOutlined />}
                 onClick={() => onRead(uuid)}
               >

@@ -17,6 +17,23 @@ import type { TextAreaRef } from 'antd/es/input/TextArea';
 const { Text } = Typography;
 const { TextArea } = Input;
 
+const bleTabsStyles = `
+  .ble-tabs-full-height.ant-tabs {
+    display: flex;
+    flex-direction: column;
+  }
+  .ble-tabs-full-height .ant-tabs-content-holder {
+    flex: 1;
+    overflow: hidden;
+  }
+  .ble-tabs-full-height .ant-tabs-content {
+    height: 100%;
+  }
+  .ble-tabs-full-height .ant-tabs-tabpane {
+    height: 100%;
+  }
+`;
+
 interface DeviceLogEntry {
   id: string;
   timestamp: number;
@@ -806,7 +823,9 @@ const BlePage: React.FC = () => {
   ];
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <>
+      <style>{bleTabsStyles}</style>
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {error && (
         <Alert
           title="错误"
@@ -835,11 +854,14 @@ const BlePage: React.FC = () => {
           onEdit={handleTabEdit}
           items={tabItems}
           size="small"
-          style={{ height: '100%' }}
-          tabBarStyle={{ marginBottom: 0, paddingLeft: 8, paddingRight: 8 }}
+          style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+          tabBarStyle={{ marginBottom: 0, paddingLeft: 8, paddingRight: 8, flexShrink: 0 }}
+          tabBarGutter={4}
+          className="ble-tabs-full-height"
         />
       </div>
     </div>
+    </>
   );
 };
 

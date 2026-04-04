@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Tabs, Alert, Space, Button, Tree, Tag, Typography, Empty, Spin } from 'antd';
 import { MenuFoldOutlined, MenuUnfoldOutlined, ClearOutlined } from '@ant-design/icons';
 import { useBle } from '../../hooks/useBle';
@@ -43,6 +43,7 @@ const BlePage: React.FC = () => {
     connections,
     currentDevice,
     services,
+    notifications,
     isScanning,
     isConnecting,
     error,
@@ -63,6 +64,7 @@ const BlePage: React.FC = () => {
   const [activeTabKey, setActiveTabKey] = useState<string>(SCAN_TAB_KEY);
   const [deviceTabs, setDeviceTabs] = useState<Record<string, DeviceTabData>>({});
   const [configCollapsed, setConfigCollapsed] = useState(false);
+  const processedNotificationIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     serialApi.listPorts().then(setPorts).catch(console.error);
@@ -165,6 +167,25 @@ const BlePage: React.FC = () => {
       };
     });
   }, []);
+
+  useEffect(() => {
+    if (!notifications.length || !currentDevice) return;
+    
+    for (const notif of notifications) {
+      if (processedNotificationIds.current.has(notif.id)) continue;
+      processedNotificationIds.current.add(notif.id);
+      
+      const targetAddress = connections.find(c => c.address === currentDevice)?.address;
+      if (notif.deviceId === currentDevice || notif.deviceId === targetAddress) {
+        addLogToDevice(currentDevice, {
+          timestamp: notif.timestamp,
+          direction: 'NOTIFY',
+          data: notif.data,
+          characteristicUuid: notif.characteristicUuid,
+        });
+      }
+    }
+  }, [notifications, currentDevice, connections, addLogToDevice]);
 
   const handleConnect = async (address: string) => {
     const existingConn = connections.find((c) => c.address === address);

@@ -71,32 +71,62 @@ ComBridge 设备管理框架采用分层架构设计，实现了串口通信和�
 #### 3.1.2 核心数据结构
 
 ```rust
-// 全局状态
-pub struct AppState {
-    pub channels: Vec<DeviceChannel>,      // 所有设备通道
-    pub active_channel_id: Option<String>, // 当前活动通道
-    pub settings: AppSettings,             // 应用设置
-    pub window_state: WindowState,         // 窗口状态（TAB 信息）
+// 通道方向
+pub enum ChannelDirection {
+    Read,      // 读取/通知
+    Write,     // 写入
+    Notify,    // 通知
 }
 
-// 设备通道
-pub struct DeviceChannel {
-    pub id: String,                        // 唯一标识
-    pub name: String,                      // 显示名称
-    pub channel_type: ChannelType,         // Serial / BluetoothCharacteristic
-    pub connected: bool,                   // 连接状态
-    pub tx_buffer: ChannelBuffer,          // 发送缓冲区
-    pub rx_buffer: ChannelBuffer,          // 接收缓冲区
-    pub config: Option<ChannelConfig>,     // 配置信息
-    pub bytes_sent: u64,                   // 已发送字节数
-    pub bytes_received: u64,               // 已接收字节数
+// 单个通道
+pub struct Channel {
+    pub id: String,                    // 通道ID
+    pub direction: ChannelDirection,   // 方向
+    pub buffer: ChannelBuffer,         // 环形缓冲区
+    pub subscribed: bool,              // 订阅状态
+}
+
+// 串口设备
+pub struct SerialDevice {
+    pub id: String,
+    pub name: String,                  // 串口名称，如 "COM3"
+    pub connected: bool,
+    pub baud_rate: u32,
+    pub data_bits: DataBits,
+    pub parity: Parity,
+    pub stop_bits: StopBits,
+    pub channels: HashMap<String, Channel>,  // 固定包含 "tx" 和 "rx"
+}
+
+// 蓝牙设备
+pub struct BleDevice {
+    pub id: String,
+    pub name: String,
+    pub mac: String,
+    pub connected: bool,
+    pub mtu: u16,
+    pub connection_params: ConnectionParams,
+    pub channels: HashMap<String, Channel>,  // 键为特征UUID
+}
+
+// 设备枚举
+pub enum Device {
+    Serial(SerialDevice),
+    Ble(BleDevice),
+}
+
+// 全局状态
+pub struct AppState {
+    pub devices: HashMap<String, Device>,  // 设备ID -> 设备
+    pub active_device_id: Option<String>,  // 当前活动设备
+    pub settings: AppSettings,
+    pub window_state: WindowState,
 }
 
 // 缓冲区条目
 pub struct BufferEntry {
     pub timestamp: u64,                    // 时间戳
     pub data: Vec<u8>,                     // 数据
-    pub direction: String,                 // "send" / "receive"
 }
 ```
 

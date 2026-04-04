@@ -69,6 +69,33 @@ pub async fn update_serial_preferences(
 }
 
 #[tauri::command]
+pub async fn update_ble_subscriptions(
+    persistence: State<'_, StatePersistenceRef>,
+    device_id: String,
+    subscribed_uuids: Vec<String>,
+) -> Result<()> {
+    debug!("更新BLE订阅状态: device={}, uuids={:?}", device_id, subscribed_uuids);
+    
+    let persistence = persistence.inner().read().await;
+    let mut prefs = persistence.load_preferences().await.unwrap_or_else(|_| {
+        Preferences::default()
+    });
+    
+    if subscribed_uuids.is_empty() {
+        prefs.ble.subscribed_characteristics.remove(&device_id);
+    } else {
+        prefs.ble.subscribed_characteristics.insert(device_id, subscribed_uuids);
+    }
+    
+    persistence.save_preferences(&prefs).await.map_err(|e| {
+        error!("保存偏好设置失败: {}", e);
+        crate::error::ComBridgeError::config(e)
+    })?;
+    
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn update_ble_preferences(
     persistence: State<'_, StatePersistenceRef>,
     display_format: String,
@@ -86,6 +113,8 @@ pub async fn update_ble_preferences(
         Preferences::default()
     });
     
+    let existing_subscriptions = prefs.ble.subscribed_characteristics.clone();
+    
     prefs.ble.display_format = display_format;
     prefs.ble.auto_scroll = auto_scroll;
     prefs.ble.input_format = input_format;
@@ -93,6 +122,7 @@ pub async fn update_ble_preferences(
     prefs.ble.config_collapsed = config_collapsed;
     prefs.ble.gatt_collapsed = gatt_collapsed;
     prefs.ble.panel_collapsed = panel_collapsed;
+    prefs.ble.subscribed_characteristics = existing_subscriptions;
     
     persistence.save_preferences(&prefs).await.map_err(|e| {
         error!("保存偏好设置失败: {}", e);

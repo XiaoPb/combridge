@@ -20,6 +20,7 @@ export interface BlePreferences {
   configCollapsed: boolean;
   gattCollapsed: boolean;
   panelCollapsed: boolean;
+  subscribedCharacteristics: Record<string, string[]>;
 }
 
 const DEFAULT_PREFERENCES: BlePreferences = {
@@ -30,6 +31,7 @@ const DEFAULT_PREFERENCES: BlePreferences = {
   configCollapsed: false,
   gattCollapsed: false,
   panelCollapsed: false,
+  subscribedCharacteristics: {},
 };
 
 interface BleState {
@@ -213,10 +215,12 @@ export const useBleStore = create<BleState>((set) => ({
       if (current.includes(charUuid)) {
         return state;
       }
+      const newUuids = [...current, charUuid];
+      preferencesApi.updateBleSubscriptions(deviceId, newUuids).catch(console.error);
       return {
         subscribedCharacteristics: {
           ...state.subscribedCharacteristics,
-          [deviceId]: [...current, charUuid],
+          [deviceId]: newUuids,
         },
       };
     }),
@@ -224,10 +228,12 @@ export const useBleStore = create<BleState>((set) => ({
   removeSubscribedCharacteristic: (deviceId, charUuid) =>
     set((state) => {
       const current = state.subscribedCharacteristics[deviceId] || [];
+      const newUuids = current.filter((uuid) => uuid !== charUuid);
+      preferencesApi.updateBleSubscriptions(deviceId, newUuids).catch(console.error);
       return {
         subscribedCharacteristics: {
           ...state.subscribedCharacteristics,
-          [deviceId]: current.filter((uuid) => uuid !== charUuid),
+          [deviceId]: newUuids,
         },
       };
     }),
@@ -236,6 +242,7 @@ export const useBleStore = create<BleState>((set) => ({
     set((state) => {
       const next = { ...state.subscribedCharacteristics };
       delete next[deviceId];
+      preferencesApi.updateBleSubscriptions(deviceId, []).catch(console.error);
       return { subscribedCharacteristics: next };
     }),
 
@@ -251,7 +258,10 @@ export const useBleStore = create<BleState>((set) => ({
     try {
       const prefs = await preferencesApi.get();
       if (prefs && prefs.ble) {
-        set({ preferences: prefs.ble });
+        set((state) => ({
+          preferences: prefs.ble,
+          subscribedCharacteristics: prefs.ble.subscribedCharacteristics || state.subscribedCharacteristics,
+        }));
       }
     } catch (err) {
       console.error('加载BLE偏好设置失败:', err);

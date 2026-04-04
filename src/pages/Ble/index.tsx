@@ -94,23 +94,36 @@ const BlePage: React.FC = () => {
   } = useBle();
 
   const { ports, setPorts } = useSerialStore();
-  const { preferences, updatePreferences, subscribedCharacteristics } = useBleStore();
+  const { preferences, updatePreferences, subscribedCharacteristics, loadPreferences } = useBleStore();
   const [activeTabKey, setActiveTabKey] = useState<string>(SCAN_TAB_KEY);
   const [deviceTabs, setDeviceTabs] = useState<Record<string, DeviceTabData>>({});
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const processedNotificationIds = useRef<Set<string>>(new Set());
   const logContainerRefs = useRef<Record<string, TextAreaRef>>({});
   const lastLogCountRef = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    loadPreferences()
+      .then(() => setPreferencesLoaded(true))
+      .catch((err) => {
+        console.error('[BlePage] 加载偏好设置失败:', err);
+        setPreferencesLoaded(true);
+      });
+  }, [loadPreferences]);
 
   useEffect(() => {
     serialApi.listPorts().then(setPorts).catch(console.error);
   }, [setPorts]);
 
   useEffect(() => {
+    if (!preferencesLoaded) return;
+
     const restoreConnectedDevices = async () => {
       try {
         const connectionList = await restoreConnections();
         if (!connectionList || connectionList.length === 0) return;
 
+        const currentSubscribed = useBleStore.getState().subscribedCharacteristics;
         const tabs: Record<string, DeviceTabData> = {};
         for (const conn of connectionList) {
           if (!conn.isConnected) continue;
@@ -131,7 +144,7 @@ const BlePage: React.FC = () => {
             logs: [],
             selectedCharacteristic: null,
             discoveringServices: false,
-            subscribedUuids: new Set(subscribedCharacteristics[conn.address] || []),
+            subscribedUuids: new Set(currentSubscribed[conn.address] || []),
           };
 
           restoreSubscriptions(conn.address).catch((err) => {
@@ -149,7 +162,7 @@ const BlePage: React.FC = () => {
     };
 
     restoreConnectedDevices();
-  }, [restoreConnections, restoreSubscriptions]);
+  }, [preferencesLoaded, restoreConnections, restoreSubscriptions]);
 
   useEffect(() => {
     if (!currentDevice) return;

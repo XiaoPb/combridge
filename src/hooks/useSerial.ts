@@ -265,6 +265,13 @@ export const useSerial = () => {
     }
   }, [tabs, updateTab]);
 
+  const toggleTabSettings = useCallback((tabKey: string) => {
+    const tab = tabs.find((t) => t.key === tabKey);
+    if (tab) {
+      updateTab(tabKey, { settingsCollapsed: !tab.settingsCollapsed });
+    }
+  }, [tabs, updateTab]);
+
   const activeTab = tabs.find((t) => t.key === activeTabKey);
 
   return {
@@ -280,6 +287,7 @@ export const useSerial = () => {
     sendData,
     clearTabData,
     updateTabConfig,
+    toggleTabSettings,
     setActiveTab,
     removeTab,
     setError,

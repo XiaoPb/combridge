@@ -26,6 +26,7 @@ const SerialPage: React.FC = () => {
     sendData,
     clearTabData,
     updateTabConfig,
+    toggleTabSettings,
     setActiveTab,
     removeTab,
     setError,
@@ -357,7 +358,7 @@ const SerialPage: React.FC = () => {
         <Sider
           collapsible
           collapsed={activeTab.settingsCollapsed}
-          onCollapse={(collapsed) => updateTabConfig(activeTabKey!, { settingsCollapsed: collapsed } as any)}
+          onCollapse={() => toggleTabSettings(activeTabKey!)}
           width={280}
           collapsedWidth={0}
           trigger={null}
@@ -508,7 +509,7 @@ const SerialPage: React.FC = () => {
                   <Button
                     type="text"
                     icon={activeTab.settingsCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                    onClick={() => updateTabConfig(activeTabKey!, { settingsCollapsed: !activeTab.settingsCollapsed } as any)}
+                    onClick={() => toggleTabSettings(activeTabKey!)}
                   />
                   <span>数据视图</span>
                 </Space>

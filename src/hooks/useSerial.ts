@@ -6,6 +6,7 @@ import { useSerialStore, generateId } from '../stores/serialStore';
 import { DEFAULT_SERIAL_CONFIG } from '../types';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import type { SerialConfig } from '../types';
+import type { CacheData } from '../api/types';
 
 let globalSerialListeners: {
   data?: UnlistenFn;
@@ -138,6 +139,34 @@ export const useSerial = () => {
       updateTab(key, { isConnected: true, openedAt: Date.now() });
       setActiveTab(key);
       message.success(`串口 ${portName} 已打开`);
+
+      try {
+        const cacheData: CacheData = await serialApi.getCache(portName);
+        const store = useSerialStore.getState();
+        
+        for (const entry of cacheData.tx || []) {
+          store.addSentData(portName, {
+            id: generateId(),
+            timestamp: entry.timestamp,
+            data: entry.data,
+            direction: 'send',
+            format: 'hex',
+          });
+        }
+        
+        for (const entry of cacheData.rx || []) {
+          store.addReceivedData(portName, {
+            id: generateId(),
+            timestamp: entry.timestamp,
+            data: entry.data,
+            direction: 'receive',
+            format: 'hex',
+          });
+        }
+      } catch (cacheErr) {
+        console.debug('[useSerial] 获取缓存数据失败或无缓存:', cacheErr);
+      }
+
       return key;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '打开串口失败';

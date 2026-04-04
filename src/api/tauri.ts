@@ -10,7 +10,8 @@ import type {
   BleSubscribeParams,
   PluginInfo,
   ProtocolLoadParams,
-  ProtocolBindParams
+  ProtocolBindParams,
+  CacheData
 } from './types';
 
 export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -103,6 +104,10 @@ export const serialApi = {
       allData,
       rxData,
     });
+  },
+
+  async getCache(portName: string): Promise<CacheData> {
+    return invoke<CacheData>('get_serial_cache', { portName });
   },
 };
 
@@ -265,6 +270,10 @@ export const bleApi = {
    */
   async isConfigured(): Promise<boolean> {
     return invoke<boolean>('is_ble_configured');
+  },
+
+  async getCache(characteristicUuid: string): Promise<CacheData> {
+    return invoke<CacheData>('get_ble_cache', { characteristicUuid });
   },
 };
 

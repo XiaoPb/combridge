@@ -117,3 +117,14 @@ export interface ProtocolBindParams {
   plugin_id: string;
   device_id: string;
 }
+
+export interface CacheEntry {
+  timestamp: number;
+  data: number[];
+  direction: 'tx' | 'rx';
+}
+
+export interface CacheData {
+  tx: CacheEntry[];
+  rx: CacheEntry[];
+}

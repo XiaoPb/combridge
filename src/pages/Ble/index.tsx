@@ -3,7 +3,8 @@ import { Tabs, Alert, Space, Button, Tree, Tag, Typography, Empty, Spin } from '
 import { MenuFoldOutlined, MenuUnfoldOutlined, ClearOutlined, SaveOutlined } from '@ant-design/icons';
 import { useBle } from '../../hooks/useBle';
 import { useSerialStore } from '../../stores/serialStore';
-import { serialApi } from '../../api/tauri';
+import { serialApi, bleApi } from '../../api/tauri';
+import type { CacheData } from '../../api/types';
 import { formatBleData, getShortUuid, formatMacAddress } from '../../stores/bleStore';
 import BleModeSelector from './BleModeSelector';
 import BleScanner from './BleScanner';
@@ -291,7 +292,7 @@ const BlePage: React.FC = () => {
   );
 
   const handleCharacteristicSelectForDevice = useCallback(
-    (characteristic: BleCharacteristic, deviceId: string) => {
+    async (characteristic: BleCharacteristic, deviceId: string) => {
       setDeviceTabs((prev) => {
         const tab = prev[deviceId];
         if (!tab) return prev;
@@ -300,6 +301,51 @@ const BlePage: React.FC = () => {
           [deviceId]: { ...tab, selectedCharacteristic: characteristic },
         };
       });
+
+      try {
+        const cacheData: CacheData = await bleApi.getCache(characteristic.uuid);
+        const cacheLogs: DeviceLogEntry[] = [];
+        
+        for (const entry of cacheData.tx || []) {
+          cacheLogs.push({
+            id: `cache-tx-${entry.timestamp}-${Math.random()}`,
+            timestamp: entry.timestamp,
+            direction: 'WRITE',
+            data: entry.data,
+            characteristicUuid: characteristic.uuid,
+          });
+        }
+        
+        for (const entry of cacheData.rx || []) {
+          cacheLogs.push({
+            id: `cache-rx-${entry.timestamp}-${Math.random()}`,
+            timestamp: entry.timestamp,
+            direction: 'NOTIFY',
+            data: entry.data,
+            characteristicUuid: characteristic.uuid,
+          });
+        }
+        
+        cacheLogs.sort((a, b) => a.timestamp - b.timestamp);
+        
+        if (cacheLogs.length > 0) {
+          setDeviceTabs((prev) => {
+            const tab = prev[deviceId];
+            if (!tab) return prev;
+            const existingIds = new Set(tab.logs.map(l => l.id));
+            const newLogs = cacheLogs.filter(l => !existingIds.has(l.id));
+            return {
+              ...prev,
+              [deviceId]: {
+                ...tab,
+                logs: [...tab.logs, ...newLogs].slice(-500),
+              },
+            };
+          });
+        }
+      } catch (err) {
+        console.debug('[BlePage] 获取缓存数据失败或无缓存:', err);
+      }
     },
     []
   );

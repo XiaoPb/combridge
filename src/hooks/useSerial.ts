@@ -16,48 +16,62 @@ let globalSerialListeners: {
 } = {};
 
 let listenerCount = 0;
+let listenerSetupPromise: Promise<void> | null = null;
 
 async function setupGlobalListeners(
   addReceivedData: (portName: string, entry: any) => void,
   setError: (error: string | null) => void
 ) {
+  if (listenerSetupPromise) {
+    await listenerSetupPromise;
+  }
+  
   if (listenerCount > 0) {
     listenerCount++;
     return;
   }
 
-  globalSerialListeners.data = await onSerialData((event) => {
-    addReceivedData(event.port_name, {
-      id: generateId(),
-      timestamp: event.timestamp ?? Date.now(),
-      data: event.data,
-      direction: 'receive',
-      format: 'hex',
+  listenerSetupPromise = (async () => {
+    globalSerialListeners.data = await onSerialData((event) => {
+      addReceivedData(event.port_name, {
+        id: generateId(),
+        timestamp: event.timestamp ?? Date.now(),
+        data: event.data,
+        direction: 'receive',
+        format: 'hex',
+      });
     });
-  });
 
-  globalSerialListeners.error = await onSerialError((event) => {
-    setError(event.error);
-    message.error(`串口错误: ${event.error}`);
-  });
+    globalSerialListeners.error = await onSerialError((event) => {
+      setError(event.error);
+      message.error(`串口错误: ${event.error}`);
+    });
 
-  globalSerialListeners.connected = await onSerialConnected((portName) => {
-    message.success(`串口 ${portName} 已连接`);
-  });
+    globalSerialListeners.connected = await onSerialConnected((portName) => {
+      message.success(`串口 ${portName} 已连接`);
+    });
 
-  globalSerialListeners.disconnected = await onSerialDisconnected((portName) => {
-    const store = useSerialStore.getState();
-    const tab = store.tabs.find((t) => t.portName === portName && t.tabType === 'port');
-    if (tab) {
-      store.updateTab(tab.key, { isConnected: false });
-    }
-    message.info(`串口 ${portName} 已断开`);
-  });
+    globalSerialListeners.disconnected = await onSerialDisconnected((portName) => {
+      const store = useSerialStore.getState();
+      const tab = store.tabs.find((t) => t.portName === portName && t.tabType === 'port');
+      if (tab) {
+        store.updateTab(tab.key, { isConnected: false });
+      }
+      message.info(`串口 ${portName} 已断开`);
+    });
 
-  listenerCount++;
+    listenerCount++;
+    listenerSetupPromise = null;
+  })();
+
+  await listenerSetupPromise;
 }
 
 async function cleanupGlobalListeners() {
+  if (listenerSetupPromise) {
+    await listenerSetupPromise;
+  }
+  
   listenerCount--;
   if (listenerCount <= 0) {
     listenerCount = 0;

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Layout, Card, Button, Select, Spin, Typography, Space, Alert, Input, Segmented, Switch, Empty, Tag, Tabs as AntTabs, Tooltip } from 'antd';
+import type { TextAreaRef } from 'antd/es/input/TextArea';
 import { ReloadOutlined, UsbOutlined, DisconnectOutlined, SendOutlined, ClearOutlined, DownloadOutlined, MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined, VerticalAlignBottomOutlined } from '@ant-design/icons';
 import { useSerial } from '../../hooks/useSerial';
 import { formatTimestamp, formatData } from '../../stores/serialStore';
@@ -39,7 +40,7 @@ const SerialPage: React.FC = () => {
   const [selectedPort, setSelectedPort] = useState<string | null>(null);
   const [tempConfig, setTempConfig] = useState<SerialConfig>(DEFAULT_SERIAL_CONFIG);
 
-  const containerRef = useRef<any>(null);
+  const containerRef = useRef<TextAreaRef>(null);
   const lastDataCountRef = useRef(0);
 
   const {
@@ -129,11 +130,12 @@ const SerialPage: React.FC = () => {
     : (activeTab?.sentData || []);
 
   useEffect(() => {
-    if (autoScroll && containerRef.current && filteredData && (filteredData?.length || 0) !== lastDataCountRef.current) {
+    if (autoScroll && filteredData && (filteredData?.length || 0) !== lastDataCountRef.current) {
       lastDataCountRef.current = filteredData.length;
       requestAnimationFrame(() => {
-        if (containerRef.current) {
-          containerRef.current.scrollTop = containerRef.current.scrollHeight;
+        const textArea = containerRef.current?.resizableTextArea?.textArea;
+        if (textArea) {
+          textArea.scrollTop = textArea.scrollHeight;
         }
       });
     }
@@ -142,8 +144,10 @@ const SerialPage: React.FC = () => {
   const handleScroll = useCallback((e: React.UIEvent<HTMLTextAreaElement>) => {
     const target = e.currentTarget;
     const isAtBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 10;
-    setAutoScroll(isAtBottom);
-  }, []);
+    if (autoScroll !== isAtBottom) {
+      setAutoScroll(isAtBottom);
+    }
+  }, [autoScroll]);
 
   const handleExport = async () => {
     if (!activeTab || !activeTab.portName) {

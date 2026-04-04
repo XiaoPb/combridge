@@ -389,6 +389,48 @@ impl GattClient {
         Ok(actual_mtu)
     }
 
+    pub fn get_discovered_services(&self) -> Vec<BleService> {
+        let services = self.services.read().unwrap();
+        let characteristics = self.characteristics.read().unwrap();
+
+        services
+            .iter()
+            .map(|(uuid, svc)| {
+                let is_primary = futures::executor::block_on(async { svc.is_primary().await.unwrap_or(true) });
+
+                let ble_chars: Vec<BleCharacteristic> = characteristics
+                    .get(uuid)
+                    .map(|chars| {
+                        chars
+                            .iter()
+                            .filter_map(|c| {
+                                let char_uuid = c.uuid().to_string();
+                                let props = futures::executor::block_on(async { c.properties().await.ok() })?;
+                                Some(BleCharacteristic {
+                                    uuid: char_uuid,
+                                    service_uuid: uuid.clone(),
+                                    properties: BleCharacteristicProperties {
+                                        read: props.read,
+                                        write: props.write,
+                                        write_without_response: props.write_without_response,
+                                        notify: props.notify,
+                                        indicate: props.indicate,
+                                    },
+                                })
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                BleService {
+                    uuid: uuid.clone(),
+                    primary: is_primary,
+                    characteristics: ble_chars,
+                }
+            })
+            .collect()
+    }
+
     async fn find_characteristic(&self, char_uuid: &str) -> Result<Characteristic> {
         let char_map = self.characteristics.read().unwrap().clone();
 

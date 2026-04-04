@@ -121,11 +121,12 @@ impl BleBackend for NativeBleBackend {
             let is_connected = client.is_connected();
             if is_connected {
                 let name = adapter.get_device_name(&address);
+                let services = client.get_discovered_services();
                 connections.push(BleConnection {
                     address,
                     name,
                     is_connected: true,
-                    services: vec![],
+                    services,
                 });
             }
         }

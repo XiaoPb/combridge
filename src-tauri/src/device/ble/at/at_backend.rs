@@ -257,14 +257,18 @@ impl BleBackend for AtBleBackend {
 
     async fn get_connections(&self) -> Result<Vec<BleConnection>> {
         let devices = self.cache.get_all_devices();
-        Ok(devices.into_iter().map(|(addr, cache)| {
-            BleConnection {
-                address: addr,
-                name: cache.name,
-                is_connected: true,
-                services: vec![],
-            }
-        }).collect())
+        Ok(devices
+            .into_iter()
+            .map(|(addr, cache)| {
+                let services = self.cache.get_ble_services(&addr);
+                BleConnection {
+                    address: addr,
+                    name: cache.name,
+                    is_connected: true,
+                    services,
+                }
+            })
+            .collect())
     }
 
     async fn discover_services(&self, address: &str) -> Result<Vec<BleService>> {

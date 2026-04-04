@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 
 use super::at_commands::{ServiceInfo, CharInfo};
+use super::super::ble_traits::{BleService, BleCharacteristic, BleCharacteristicProperties};
 
 #[derive(Debug, Clone)]
 pub struct DeviceCache {
@@ -127,6 +128,38 @@ impl AtCache {
     pub fn get_all_devices(&self) -> Vec<(String, DeviceCache)> {
         let devices = self.devices.read().unwrap();
         devices.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+    }
+
+    pub fn get_ble_services(&self, address: &str) -> Vec<BleService> {
+        let devices = self.devices.read().unwrap();
+        devices
+            .get(address)
+            .map(|device| {
+                device
+                    .services
+                    .iter()
+                    .map(|(uuid, svc)| BleService {
+                        uuid: uuid.clone(),
+                        primary: svc.primary,
+                        characteristics: svc
+                            .characteristics
+                            .iter()
+                            .map(|(char_uuid, ch)| BleCharacteristic {
+                                uuid: char_uuid.clone(),
+                                service_uuid: uuid.clone(),
+                                properties: BleCharacteristicProperties {
+                                    read: (ch.properties & 0x01) != 0,
+                                    write: (ch.properties & 0x02) != 0,
+                                    write_without_response: (ch.properties & 0x02) != 0,
+                                    notify: (ch.properties & 0x04) != 0,
+                                    indicate: (ch.properties & 0x08) != 0,
+                                },
+                            })
+                            .collect(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 }
 

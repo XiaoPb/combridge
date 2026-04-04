@@ -40,6 +40,7 @@ pub struct PluginInfo {
     pub error_message: Option<String>,
 }
 
+#[allow(dead_code)]
 struct PluginInternal {
     engine: LuaEngine,
     executor: HookExecutor,

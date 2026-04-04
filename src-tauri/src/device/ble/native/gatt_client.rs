@@ -78,15 +78,22 @@ impl GattClient {
             let device = self.device.read().unwrap();
             let adapter = self.adapter.read().unwrap();
             match (device.as_ref(), adapter.as_ref()) {
-                (Some(d), Some(a)) => (d.clone(), a.clone()),
-                _ => return Ok(()),
+                (Some(d), Some(a)) => (Some(d.clone()), Some(a.clone())),
+                _ => (None, None),
             }
         };
 
-        adapter
-            .disconnect_device(&device)
-            .await
-            .map_err(|e| ComBridgeError::ble(format!("断开失败: {}", e)))?;
+        if let (Some(device), Some(adapter)) = (device, adapter) {
+            adapter
+                .disconnect_device(&device)
+                .await
+                .map_err(|e| ComBridgeError::ble(format!("断开失败: {}", e)))?;
+        }
+
+        {
+            let mut device_guard = self.device.write().unwrap();
+            *device_guard = None;
+        }
 
         self.services.write().unwrap().clear();
         self.characteristics.write().unwrap().clear();
@@ -190,14 +197,6 @@ impl GattClient {
         &self,
         service_uuid: &str,
     ) -> Result<Vec<BleCharacteristic>> {
-        let device = {
-            let device = self.device.read().unwrap();
-            device
-                .as_ref()
-                .ok_or_else(|| ComBridgeError::ble("设备未设置"))?
-                .clone()
-        };
-
         let service = {
             let services = self.services.read().unwrap();
             services
@@ -294,6 +293,7 @@ impl GattClient {
             .insert(char_uuid.to_string(), callback.clone());
 
         let uuid = char_uuid.to_string();
+        let device_id = self.address.clone();
         let handle = tokio::spawn(async move {
             match char.notify().await {
                 Ok(mut notifications) => {
@@ -301,7 +301,7 @@ impl GattClient {
                         match result {
                             Ok(data) => {
                                 debug!("收到通知: {} ({} 字节)", uuid, data.len());
-                                callback("", &uuid, &data);
+                                callback(&device_id, &uuid, &data);
                             }
                             Err(e) => {
                                 warn!("通知错误: {} - {}", uuid, e);

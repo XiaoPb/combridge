@@ -12,7 +12,6 @@ use crate::error::{ComBridgeError, Result};
 use super::serial_config::{DataBits, FlowControl, Parity, PortInfo, SerialPortConfig, StopBits};
 
 const READ_TIMEOUT_MS: u64 = 10;
-const WRITE_TIMEOUT_MS: u64 = 100;
 
 pub struct SerialPort {
     port: Arc<Mutex<Box<dyn SerialPortTrait>>>,

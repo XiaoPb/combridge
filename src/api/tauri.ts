@@ -275,6 +275,10 @@ export const bleApi = {
   async getCache(characteristicUuid: string): Promise<CacheData> {
     return invoke<CacheData>('get_ble_cache', { characteristicUuid });
   },
+
+  async getSubscriptions(deviceId: string): Promise<string[]> {
+    return invoke<string[]>('get_ble_subscriptions', { deviceId });
+  },
 };
 
 /**

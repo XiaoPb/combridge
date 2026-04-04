@@ -3,6 +3,7 @@ import { message } from 'antd';
 import { serialApi } from '../api/tauri';
 import { onSerialData, onSerialError, onSerialConnected, onSerialDisconnected } from '../api/events';
 import { useSerialStore, generateId } from '../stores/serialStore';
+import { useLogStore } from '../stores/logStore';
 import { DEFAULT_SERIAL_CONFIG } from '../types';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import type { SerialConfig } from '../types';
@@ -44,10 +45,12 @@ async function setupGlobalListeners(
 
     globalSerialListeners.error = await onSerialError((event) => {
       setError(event.error);
+      useLogStore.getState().addLog('error', 'SerialManager', `串口错误: ${event.error}`);
       message.error(`串口错误: ${event.error}`);
     });
 
     globalSerialListeners.connected = await onSerialConnected((portName) => {
+      useLogStore.getState().addLog('info', 'SerialManager', `串口 ${portName} 已连接`);
       message.success(`串口 ${portName} 已连接`);
     });
 
@@ -57,6 +60,7 @@ async function setupGlobalListeners(
       if (tab) {
         store.updateTab(tab.key, { isConnected: false });
       }
+      useLogStore.getState().addLog('info', 'SerialManager', `串口 ${portName} 已断开`);
       message.info(`串口 ${portName} 已断开`);
     });
 
@@ -116,6 +120,7 @@ export const useSerial = () => {
     updatePreferences,
   } = useSerialStore();
 
+  const addLog = useLogStore((state) => state.addLog);
   const isMountedRef = useRef(false);
 
   useEffect(() => {
@@ -142,11 +147,12 @@ export const useSerial = () => {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '扫描串口失败';
       setError(errorMsg);
+      addLog('error', 'SerialManager', `扫描串口失败: ${errorMsg}`);
       message.error(errorMsg);
     } finally {
       setIsScanning(false);
     }
-  }, [setIsScanning, setError, setPorts]);
+  }, [setIsScanning, setError, setPorts, addLog]);
 
   const openPort = useCallback(async (portName: string, portConfig?: SerialConfig) => {
     const config = portConfig || DEFAULT_SERIAL_CONFIG;
@@ -163,11 +169,13 @@ export const useSerial = () => {
         await serialApi.openPort(portName, config);
         updateTab(existingTab.key, { isConnected: true, openedAt: Date.now(), config });
         setActiveTab(existingTab.key);
+        addLog('info', 'SerialManager', `串口 ${portName} 已打开`);
         message.success(`串口 ${portName} 已打开`);
         return existingTab.key;
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : '打开串口失败';
         setError(errorMsg);
+        addLog('error', 'SerialManager', `打开串口 ${portName} 失败: ${errorMsg}`);
         message.error(errorMsg);
         throw err;
       }
@@ -177,6 +185,7 @@ export const useSerial = () => {
       await serialApi.openPort(portName, config);
       const key = addPortTab(portName, config);
       updateTab(key, { isConnected: true, openedAt: Date.now() });
+      addLog('info', 'SerialManager', `串口 ${portName} 已打开`);
       message.success(`串口 ${portName} 已打开`);
 
       try {
@@ -210,10 +219,11 @@ export const useSerial = () => {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '打开串口失败';
       setError(errorMsg);
+      addLog('error', 'SerialManager', `打开串口 ${portName} 失败: ${errorMsg}`);
       message.error(errorMsg);
       throw err;
     }
-  }, [setError, addPortTab, updateTab, setActiveTab, getPortTab]);
+  }, [setError, addPortTab, updateTab, setActiveTab, getPortTab, addLog]);
 
   const closePort = useCallback(async (tabKey: string) => {
     const tab = tabs.find((t) => t.key === tabKey);
@@ -222,14 +232,16 @@ export const useSerial = () => {
     try {
       await serialApi.closePort(tab.portName);
       updateTab(tabKey, { isConnected: false });
+      addLog('info', 'SerialManager', `串口 ${tab.portName} 已关闭`);
       message.success(`串口 ${tab.portName} 已关闭`);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '关闭串口失败';
       setError(errorMsg);
+      addLog('error', 'SerialManager', `关闭串口 ${tab.portName} 失败: ${errorMsg}`);
       message.error(errorMsg);
       throw err;
     }
-  }, [tabs, setError, updateTab]);
+  }, [tabs, setError, updateTab, addLog]);
 
   const sendData = useCallback(async (tabKey: string, data: string, format: 'hex' | 'text' = 'text') => {
     const tab = tabs.find((t) => t.key === tabKey);
@@ -265,10 +277,11 @@ export const useSerial = () => {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '发送数据失败';
       setError(errorMsg);
+      addLog('error', 'SerialManager', `发送数据失败: ${errorMsg}`);
       message.error(errorMsg);
       throw err;
     }
-  }, [tabs, setError, addSentData]);
+  }, [tabs, setError, addSentData, addLog]);
 
   const clearTabData = useCallback((tabKey: string) => {
     updateTab(tabKey, { receivedData: [], sentData: [] });

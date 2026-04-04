@@ -5,44 +5,21 @@ import {
   DownloadOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
+import {
+  useLogStore,
+  formatLogTimestamp,
+  levelColors,
+  levelTexts,
+  type LogLevel,
+  type LogEntry,
+} from '../../stores/logStore';
 
 const { Text } = Typography;
 const { Search } = Input;
 
-interface LogEntry {
-  id: string;
-  timestamp: number;
-  level: 'info' | 'warn' | 'error' | 'debug';
-  source: string;
-  message: string;
-}
-
-const levelColors = {
-  debug: 'default',
-  info: 'blue',
-  warn: 'orange',
-  error: 'red',
-};
-
-const levelTexts = {
-  debug: '调试',
-  info: '信息',
-  warn: '警告',
-  error: '错误',
-};
-
-const formatTimestamp = (timestamp: number): string => {
-  const date = new Date(timestamp);
-  const ms = String(date.getMilliseconds()).padStart(3, '0');
-  return date.toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }) + '.' + ms;
-};
-
 const LogViewer: React.FC = () => {
-  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const logs = useLogStore((state) => state.logs);
+  const clearLogs = useLogStore((state) => state.clearLogs);
   const [filteredLogs, setFilteredLogs] = useState<LogEntry[]>([]);
   const [levelFilter, setLevelFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('');
@@ -51,54 +28,20 @@ const LogViewer: React.FC = () => {
   const tableRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const mockLogs: LogEntry[] = [
-      {
-        id: '1',
-        timestamp: Date.now(),
-        level: 'info',
-        source: 'SerialManager',
-        message: '串口 COM3 已打开',
-      },
-      {
-        id: '2',
-        timestamp: Date.now() - 1000,
-        level: 'debug',
-        source: 'SerialPort',
-        message: '接收到数据: 48 65 6C 6C 6F',
-      },
-      {
-        id: '3',
-        timestamp: Date.now() - 2000,
-        level: 'warn',
-        source: 'BleManager',
-        message: 'BLE设备连接超时，正在重试...',
-      },
-      {
-        id: '4',
-        timestamp: Date.now() - 3000,
-        level: 'error',
-        source: 'WebSocket',
-        message: 'WebSocket连接失败: Connection refused',
-      },
-    ];
-    setLogs(mockLogs);
-  }, []);
-
-  useEffect(() => {
-    let filtered = logs;
+    let filtered: LogEntry[] = logs;
 
     if (levelFilter !== 'all') {
-      filtered = filtered.filter((log) => log.level === levelFilter);
+      filtered = filtered.filter((log: LogEntry) => log.level === levelFilter);
     }
 
     if (sourceFilter) {
-      filtered = filtered.filter((log) =>
+      filtered = filtered.filter((log: LogEntry) =>
         log.source.toLowerCase().includes(sourceFilter.toLowerCase())
       );
     }
 
     if (searchText) {
-      filtered = filtered.filter((log) =>
+      filtered = filtered.filter((log: LogEntry) =>
         log.message.toLowerCase().includes(searchText.toLowerCase())
       );
     }
@@ -113,12 +56,12 @@ const LogViewer: React.FC = () => {
   }, [filteredLogs, autoScroll]);
 
   const handleClear = () => {
-    setLogs([]);
+    clearLogs();
   };
 
   const handleExport = () => {
     const content = logs
-      .map((log) => `[${formatTimestamp(log.timestamp)}] [${log.level.toUpperCase()}] [${log.source}] ${log.message}`)
+      .map((log: LogEntry) => `[${formatLogTimestamp(log.timestamp)}] [${log.level.toUpperCase()}] [${log.source}] ${log.message}`)
       .join('\n');
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -136,7 +79,7 @@ const LogViewer: React.FC = () => {
       key: 'timestamp',
       width: 120,
       render: (timestamp: number) => (
-        <Text style={{ fontSize: 12 }}>{formatTimestamp(timestamp)}</Text>
+        <Text style={{ fontSize: 12 }}>{formatLogTimestamp(timestamp)}</Text>
       ),
     },
     {
@@ -144,7 +87,7 @@ const LogViewer: React.FC = () => {
       dataIndex: 'level',
       key: 'level',
       width: 80,
-      render: (level: keyof typeof levelColors) => (
+      render: (level: LogLevel) => (
         <Tag color={levelColors[level]}>{levelTexts[level]}</Tag>
       ),
     },
@@ -163,7 +106,7 @@ const LogViewer: React.FC = () => {
     },
   ];
 
-  const sources = [...new Set(logs.map((log) => log.source))];
+  const sources = [...new Set(logs.map((log: LogEntry) => log.source))];
 
   return (
     <Card

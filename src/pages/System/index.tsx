@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { Tabs, Card } from 'antd';
-import { SettingOutlined, InfoCircleOutlined, FileTextOutlined, LinkOutlined } from '@ant-design/icons';
+import { SettingOutlined, InfoCircleOutlined, FileTextOutlined } from '@ant-design/icons';
 import SystemInfo from './SystemInfo';
 import LogViewer from './LogViewer';
-import WebSocketConfig from './WebSocketConfig';
 
 const SystemPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('info');
@@ -28,15 +27,6 @@ const SystemPage: React.FC = () => {
       ),
     },
     {
-      key: 'websocket',
-      label: (
-        <span>
-          <LinkOutlined />
-          WebSocket
-        </span>
-      ),
-    },
-    {
       key: 'settings',
       label: (
         <span>
@@ -53,8 +43,6 @@ const SystemPage: React.FC = () => {
         return <SystemInfo />;
       case 'logs':
         return <LogViewer />;
-      case 'websocket':
-        return <WebSocketConfig />;
       case 'settings':
         return (
           <Card>

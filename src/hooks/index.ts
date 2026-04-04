@@ -5,3 +5,4 @@ export * from './useDataParser';
 export * from './useDebounce';
 export * from './useAppState';
 export * from './useAppDispatch';
+export * from './useLog';

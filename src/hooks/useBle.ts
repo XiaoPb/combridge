@@ -3,6 +3,7 @@ import { message } from 'antd';
 import { bleApi } from '../api/tauri';
 import { onBleData, onBleConnected, onBleDisconnected, onBleError, onBleScanResult, onBleModeChanged } from '../api/events';
 import { useBleStore, generateBleId, parseBleData, type BleMode } from '../stores/bleStore';
+import { useLogStore } from '../stores/logStore';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import type { BleScanOptions, BleConnection } from '../types';
 
@@ -55,6 +56,7 @@ async function setupGlobalBleListeners() {
         connectedAt: Date.now(),
       });
       store.setIsConnecting(false);
+      useLogStore.getState().addLog('info', 'BleManager', `设备 ${event.name || event.address} 已连接`);
       message.success(`设备 ${event.name || event.address} 已连接`);
     });
 
@@ -66,6 +68,7 @@ async function setupGlobalBleListeners() {
         store.clearServices();
         store.clearCharacteristics();
       }
+      useLogStore.getState().addLog('info', 'BleManager', `设备 ${event.address} 已断开`);
       message.info(`设备 ${event.address} 已断开`);
     });
 
@@ -75,6 +78,7 @@ async function setupGlobalBleListeners() {
       store.setError(errorMsg);
       store.setIsConnecting(false);
       store.setIsScanning(false);
+      useLogStore.getState().addLog('error', 'BleManager', `BLE错误: ${errorMsg}`);
       message.error(`BLE错误: ${errorMsg}`);
     });
 
@@ -101,6 +105,7 @@ async function setupGlobalBleListeners() {
       const store = useBleStore.getState();
       store.setMode(event.mode);
       store.setSerialPort(event.serialPort || null);
+      useLogStore.getState().addLog('info', 'BleManager', `BLE模式已切换为 ${event.mode}`);
       message.info(`BLE模式已切换为 ${event.mode}`);
     });
 
@@ -166,6 +171,7 @@ export const useBle = () => {
     setError,
   } = useBleStore();
 
+  const addLog = useLogStore((state) => state.addLog);
   const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -185,19 +191,23 @@ export const useBle = () => {
       await bleApi.configureBle(newMode, port);
       setMode(newMode);
       setSerialPort(port || null);
+      addLog('info', 'BleManager', `BLE模式已配置为 ${newMode}`);
       message.success(`BLE模式已配置为 ${newMode}`);
     } catch (err) {
       const errorMsg = handleBleError('configure', { newMode, port }, err);
       setError(errorMsg);
+      addLog('error', 'BleManager', `配置BLE模式失败: ${errorMsg}`);
       message.error(errorMsg);
       throw err;
     }
-  }, [setError, setMode, setSerialPort]);
+  }, [setError, setMode, setSerialPort, addLog]);
 
   const scanDevices = useCallback(async (options?: BleScanOptions) => {
     setIsScanning(true);
     setError(null);
     clearDevices();
+
+    addLog('info', 'BleManager', '开始扫描BLE设备');
 
     try {
       if (!isConfigured) {
@@ -217,18 +227,20 @@ export const useBle = () => {
       if (deviceList.length === 0) {
         message.info('未扫描到BLE设备');
       } else {
+        addLog('info', 'BleManager', `扫描完成，发现 ${deviceList.length} 个设备`);
         message.success(`扫描到 ${deviceList.length} 个设备`);
       }
     } catch (err) {
       const errorMsg = handleBleError('scanDevices', { options }, err);
       setError(errorMsg);
+      addLog('error', 'BleManager', `扫描BLE设备失败: ${errorMsg}`);
       message.error(errorMsg);
     } finally {
       if (!options?.timeout) {
         setIsScanning(false);
       }
     }
-  }, [setIsScanning, setError, clearDevices, setDevices, setIsConfigured, isConfigured, mode, serialPort]);
+  }, [setIsScanning, setError, clearDevices, setDevices, setIsConfigured, isConfigured, mode, serialPort, addLog]);
 
   const stopScan = useCallback(async () => {
     setIsScanning(false);
@@ -236,8 +248,9 @@ export const useBle = () => {
       clearTimeout(scanTimeoutRef.current);
       scanTimeoutRef.current = null;
     }
+    addLog('info', 'BleManager', '扫描已停止');
     message.info('扫描已停止');
-  }, [setIsScanning]);
+  }, [setIsScanning, addLog]);
 
   const connectDevice = useCallback(async (address: string) => {
     setIsConnecting(true);
@@ -247,17 +260,19 @@ export const useBle = () => {
       const connection = await bleApi.connectBle(address);
       addConnection(connection);
       setCurrentDevice(address);
+      addLog('info', 'BleManager', `已连接到 ${connection.name || address}`);
       message.success(`已连接到 ${connection.name || address}`);
       return connection;
     } catch (err) {
       const errorMsg = handleBleError('connectDevice', { address }, err);
       setError(errorMsg);
+      addLog('error', 'BleManager', `连接设备 ${address} 失败: ${errorMsg}`);
       message.error(errorMsg);
       throw err;
     } finally {
       setIsConnecting(false);
     }
-  }, [setIsConnecting, setError, addConnection, setCurrentDevice]);
+  }, [setIsConnecting, setError, addConnection, setCurrentDevice, addLog]);
 
   const disconnectDevice = useCallback(async (deviceId: string) => {
     setError(null);
@@ -270,14 +285,16 @@ export const useBle = () => {
         clearServices();
         clearCharacteristics();
       }
+      addLog('info', 'BleManager', `设备 ${deviceId} 已断开`);
       message.success('设备已断开');
     } catch (err) {
       const errorMsg = handleBleError('disconnectDevice', { deviceId }, err);
       setError(errorMsg);
+      addLog('error', 'BleManager', `断开设备 ${deviceId} 失败: ${errorMsg}`);
       message.error(errorMsg);
       throw err;
     }
-  }, [setError, removeConnection, currentDevice, setCurrentDevice, clearServices, clearCharacteristics]);
+  }, [setError, removeConnection, currentDevice, setCurrentDevice, clearServices, clearCharacteristics, addLog]);
 
   const discoverServices = useCallback(async (deviceId?: string) => {
     const targetDevice = deviceId || currentDevice;
@@ -290,15 +307,17 @@ export const useBle = () => {
     try {
       const serviceList = await bleApi.discoverBleServices(targetDevice);
       setServices(serviceList);
+      addLog('info', 'BleManager', `发现 ${serviceList.length} 个服务`);
       message.success(`发现 ${serviceList.length} 个服务`);
       return serviceList;
     } catch (err) {
       const errorMsg = handleBleError('discoverServices', { deviceId: targetDevice }, err);
       setError(errorMsg);
+      addLog('error', 'BleManager', `发现服务失败: ${errorMsg}`);
       message.error(errorMsg);
       throw err;
     }
-  }, [currentDevice, setError, setServices]);
+  }, [currentDevice, setError, setServices, addLog]);
 
   const discoverCharacteristics = useCallback(async (serviceUuid: string, deviceId?: string) => {
     const targetDevice = deviceId || currentDevice;
@@ -311,15 +330,17 @@ export const useBle = () => {
     try {
       const charList = await bleApi.discoverBleCharacteristics(targetDevice, serviceUuid);
       setCharacteristics(charList);
+      addLog('info', 'BleManager', `发现 ${charList.length} 个特征`);
       message.success(`发现 ${charList.length} 个特征`);
       return charList;
     } catch (err) {
       const errorMsg = handleBleError('discoverCharacteristics', { deviceId: targetDevice, serviceUuid }, err);
       setError(errorMsg);
+      addLog('error', 'BleManager', `发现特征失败: ${errorMsg}`);
       message.error(errorMsg);
       throw err;
     }
-  }, [currentDevice, setError, setCharacteristics]);
+  }, [currentDevice, setError, setCharacteristics, addLog]);
 
   const readCharacteristic = useCallback(async (characteristicUuid: string, deviceId?: string) => {
     const targetDevice = deviceId || currentDevice;
@@ -337,10 +358,11 @@ export const useBle = () => {
     } catch (err) {
       const errorMsg = handleBleError('readCharacteristic', { deviceId: targetDevice, characteristicUuid }, err);
       setError(errorMsg);
+      addLog('error', 'BleManager', `读取特征失败: ${errorMsg}`);
       message.error(errorMsg);
       throw err;
     }
-  }, [currentDevice, setError, updateCharacteristic]);
+  }, [currentDevice, setError, updateCharacteristic, addLog]);
 
   const writeCharacteristic = useCallback(async (
     characteristicUuid: string,
@@ -368,10 +390,11 @@ export const useBle = () => {
     } catch (err) {
       const errorMsg = handleBleError('writeCharacteristic', { deviceId: targetDevice, characteristicUuid, data, format, withoutResponse }, err);
       setError(errorMsg);
+      addLog('error', 'BleManager', `写入特征失败: ${errorMsg}`);
       message.error(errorMsg);
       throw err;
     }
-  }, [currentDevice, setError]);
+  }, [currentDevice, setError, addLog]);
 
   const subscribeNotify = useCallback(async (characteristicUuid: string, deviceId?: string) => {
     const targetDevice = deviceId || currentDevice;
@@ -383,14 +406,16 @@ export const useBle = () => {
     setError(null);
     try {
       await bleApi.subscribeBleNotify(targetDevice, characteristicUuid);
+      addLog('info', 'BleManager', `已订阅特征 ${characteristicUuid} 的通知`);
       message.success('已订阅通知');
     } catch (err) {
       const errorMsg = handleBleError('subscribeNotify', { deviceId: targetDevice, characteristicUuid }, err);
       setError(errorMsg);
+      addLog('error', 'BleManager', `订阅通知失败: ${errorMsg}`);
       message.error(errorMsg);
       throw err;
     }
-  }, [currentDevice, setError]);
+  }, [currentDevice, setError, addLog]);
 
   const unsubscribeNotify = useCallback(async (characteristicUuid: string, deviceId?: string) => {
     const targetDevice = deviceId || currentDevice;
@@ -402,14 +427,16 @@ export const useBle = () => {
     setError(null);
     try {
       await bleApi.unsubscribeBleNotify(targetDevice, characteristicUuid);
+      addLog('info', 'BleManager', `已取消订阅特征 ${characteristicUuid} 的通知`);
       message.success('已取消订阅');
     } catch (err) {
       const errorMsg = handleBleError('unsubscribeNotify', { deviceId: targetDevice, characteristicUuid }, err);
       setError(errorMsg);
+      addLog('error', 'BleManager', `取消订阅失败: ${errorMsg}`);
       message.error(errorMsg);
       throw err;
     }
-  }, [currentDevice, setError]);
+  }, [currentDevice, setError, addLog]);
 
   const isConnected = useCallback((deviceId: string) => {
     return connections.some((c) => (c.deviceId === deviceId || c.address === deviceId) && c.isConnected);

@@ -377,7 +377,7 @@ const BlePage: React.FC = () => {
   const handleWriteForDevice = useCallback(
     async (uuid: string, dataStr: string, format: 'hex' | 'text', withoutResponse: boolean, deviceId: string) => {
       try {
-        await writeCharacteristic(uuid, dataStr, format, withoutResponse);
+        await writeCharacteristic(uuid, dataStr, format, withoutResponse, deviceId);
         addLogToDevice(deviceId, {
           timestamp: Date.now(),
           direction: 'WRITE',
@@ -394,7 +394,7 @@ const BlePage: React.FC = () => {
   const handleSubscribeForDevice = useCallback(
     async (uuid: string, deviceId: string) => {
       try {
-        await subscribeNotify(uuid);
+        await subscribeNotify(uuid, deviceId);
         addLogToDevice(deviceId, {
           timestamp: Date.now(),
           direction: 'SUBSCRIBE',
@@ -410,7 +410,7 @@ const BlePage: React.FC = () => {
   const handleUnsubscribeForDevice = useCallback(
     async (uuid: string, deviceId: string) => {
       try {
-        await unsubscribeNotify(uuid);
+        await unsubscribeNotify(uuid, deviceId);
         addLogToDevice(deviceId, {
           timestamp: Date.now(),
           direction: 'UNSUBSCRIBE',

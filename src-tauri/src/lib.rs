@@ -49,6 +49,8 @@ pub fn run() {
 
     info!("服务初始化完成");
 
+    let ble_manager_clone = ble_manager.clone();
+    
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
@@ -60,6 +62,15 @@ pub fn run() {
         .manage(app_state)
         .manage(state_persistence)
         .manage(action_dispatcher)
+        .setup(move |_app| {
+            let ble_manager = ble_manager_clone.clone();
+            tokio::spawn(async move {
+                if let Err(e) = ble_manager.initialize().await {
+                    tracing::error!("BLE 初始化失败: {}", e);
+                }
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::serial::scan_serial_ports,
             commands::serial::open_serial_port,

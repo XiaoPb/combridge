@@ -71,6 +71,20 @@ impl BleManager {
         }
     }
 
+    pub async fn initialize(&self) -> Result<()> {
+        info!("初始化 BLE 后端（默认原生模式）");
+        match self.configure_native().await {
+            Ok(()) => {
+                info!("BLE 原生后端初始化成功");
+                Ok(())
+            }
+            Err(e) => {
+                info!("BLE 原生后端初始化失败（可能系统不支持）: {}", e);
+                Ok(())
+            }
+        }
+    }
+
     pub async fn mode(&self) -> BleMode {
         *self.mode.read().await
     }

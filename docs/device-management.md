@@ -134,19 +134,26 @@ pub struct BufferEntry {
 
 ```rust
 pub enum Action {
-    // 通道管理
-    ChannelAdd { name, channel_type, config },
-    ChannelRemove { id },
-    ChannelConnect { id, config },
-    ChannelDisconnect { id },
-    ChannelSwitch { channel_id },
+    // 设备管理
+    DeviceAddSerial { id, name, baud_rate },
+    DeviceAddBle { id, name, mac },
+    DeviceRemove { device_id },
+    DeviceConnect { device_id },
+    DeviceDisconnect { device_id },
+    DeviceUpdateConfig { device_id, config },
+    DeviceSwitch { device_id },
+    
+    // 通道管理（蓝牙扫描特征后添加）
+    ChannelAdd { device_id, channel_id, direction },
+    ChannelSubscribe { device_id, channel_id, subscribe },
     
     // 数据操作
-    DataSend { channel_id, data },
-    BufferClear { channel_id, direction },
+    DataSend { device_id, channel_id, data },
+    DataReceive { device_id, channel_id, data },
+    BufferClear { device_id, channel_id },
     
     // TAB 管理
-    TabAdd { channel_id, label },
+    TabAdd { device_id, channel_id, label },
     TabRemove { tab_key },
     TabSwitch { tab_key },
     
@@ -155,6 +162,13 @@ pub enum Action {
     StateRestore { window_state },
 }
 ```
+
+#### 3.1.4 通道ID生成规则
+
+| 设备类型 | 通道ID格式 | 示例 |
+|----------|------------|------|
+| 串口 | 固定 "tx" 和 "rx" | `tx`, `rx` |
+| 蓝牙 | "{UUID}_{direction}" | `00002a00-0000-1000-8000-00805f9b34fb_read` |
 
 ---
 

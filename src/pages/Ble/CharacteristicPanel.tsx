@@ -103,7 +103,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
         </div>
       }
       size="small"
-      styles={{ body: { display: collapsed ? 'none' : 'block', padding: '8px 12px', height: 200, overflow: 'hidden' } }}
+      styles={{ body: { display: collapsed ? 'none' : 'block', padding: '8px 12px', height: 240, overflow: 'hidden' } }}
     >
       <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexShrink: 0 }}>
         <div style={{ flex: '1 1 0', minWidth: 0 }}>

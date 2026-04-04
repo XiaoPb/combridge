@@ -324,7 +324,7 @@ const BlePage: React.FC = () => {
           {svc.isPrimary && <Tag color="blue" style={{ fontSize: 10 }}>Primary</Tag>}
         </Space>
       ),
-      children: svc.characteristics.map((char) => ({
+      children: (svc.characteristics || []).map((char) => ({
         key: `${svc.uuid}-${char.uuid}`,
         title: (
           <Space>

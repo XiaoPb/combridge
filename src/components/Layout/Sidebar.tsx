@@ -6,15 +6,18 @@ import {
   ApiOutlined,
   CodeOutlined,
   SettingOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons';
 
 const { Sider } = Layout;
 
 interface SidebarProps {
   collapsed: boolean;
+  onCollapse?: (collapsed: boolean) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
+const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -45,6 +48,10 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
     navigate(key);
   };
 
+  const toggleCollapsed = () => {
+    onCollapse?.(!collapsed);
+  };
+
   return (
     <Sider
       collapsible
@@ -61,7 +68,8 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
           height: 'var(--header-height)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: 'space-between',
+          padding: collapsed ? '0 16px' : '0 16px 0 24px',
           borderBottom: '1px solid var(--border-color)',
         }}
       >
@@ -77,6 +85,18 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
         >
           {collapsed ? 'CB' : 'ComBridge'}
         </h1>
+        <div
+          onClick={toggleCollapsed}
+          style={{
+            cursor: 'pointer',
+            fontSize: '16px',
+            color: 'var(--text-secondary)',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+        </div>
       </div>
       <Menu
         mode="inline"

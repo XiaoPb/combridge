@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { Layout } from 'antd';
 import Sidebar from './Sidebar';
-import Header from './Header';
-import SettingsModal from '../SettingsModal';
 
 const { Content } = Layout;
 
@@ -12,17 +10,11 @@ interface MainLayoutProps {
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [collapsed, setCollapsed] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <Layout style={{ height: '100vh' }}>
-      <Sidebar collapsed={collapsed} />
-      <Layout>
-        <Header 
-          collapsed={collapsed} 
-          onCollapse={setCollapsed}
-          onSettingsClick={() => setSettingsOpen(true)}
-        />
+      <Sidebar collapsed={collapsed} onCollapse={setCollapsed} />
+      <Layout style={{ flex: 1 }}>
         <Content
           style={{
             margin: '8px',
@@ -37,10 +29,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           {children}
         </Content>
       </Layout>
-      <SettingsModal 
-        open={settingsOpen} 
-        onClose={() => setSettingsOpen(false)} 
-      />
     </Layout>
   );
 };

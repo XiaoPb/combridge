@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Layout, Card, Button, Select, Spin, Typography, Space, Alert, Input, Segmented, Switch, Empty, Tag, Tabs as AntTabs } from 'antd';
-import { ReloadOutlined, UsbOutlined, DisconnectOutlined, SendOutlined, ClearOutlined, DownloadOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import { ReloadOutlined, UsbOutlined, DisconnectOutlined, SendOutlined, ClearOutlined, DownloadOutlined, MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined } from '@ant-design/icons';
 import { useSerial } from '../../hooks/useSerial';
 import { formatTimestamp, formatData } from '../../stores/serialStore';
 import { serialApi } from '../../api/tauri';
@@ -27,12 +27,11 @@ const SerialPage: React.FC = () => {
     clearTabData,
     updateTabConfig,
     setActiveTab,
-    addTab,
     removeTab,
     setError,
+    hasPortTab,
   } = useSerial();
 
-  const [siderCollapsed, setSiderCollapsed] = useState(true);
   const [displayFormat, setDisplayFormat] = useState<'hex' | 'text'>('hex');
   const [displayMode, setDisplayMode] = useState<'all' | 'receive' | 'send'>('all');
   const [autoScroll, setAutoScroll] = useState(true);
@@ -50,25 +49,38 @@ const SerialPage: React.FC = () => {
     scanPorts();
   }, []);
 
-  const connectedPorts = tabs.filter((t) => t.isConnected).map((t) => t.portName);
+  const connectedPorts = tabs.filter((t) => t.isConnected && t.tabType === 'port').map((t) => t.portName);
   const availablePorts = (ports || []).filter(
     (p) => !connectedPorts.includes(p.name) || p.name === activeTab?.portName
   );
+
+  const isLauncherTab = activeTab?.tabType === 'launcher';
+  const isPortTab = activeTab?.tabType === 'port';
 
   const handleOpenPort = async () => {
     if (!selectedPort) {
       setError('请选择串口');
       return;
     }
+    
+    if (hasPortTab(selectedPort)) {
+      message.warning(`串口 ${selectedPort} 已有打开的标签页`);
+      return;
+    }
+    
     await openPort(selectedPort, tempConfig);
     setSelectedPort(null);
-    setSiderCollapsed(true);
   };
 
   const handleClosePort = async () => {
-    if (activeTabKey) {
+    if (activeTabKey && activeTab?.isConnected) {
       await closePort(activeTabKey);
     }
+  };
+
+  const handleReconnectPort = async () => {
+    if (!activeTab?.portName) return;
+    await openPort(activeTab.portName, activeTab.config);
   };
 
   const handleSendData = async () => {
@@ -80,11 +92,6 @@ const SerialPage: React.FC = () => {
     if (activeTabKey) {
       await sendData(activeTabKey, dataToSend, sendFormat);
     }
-  };
-
-  const handleAddTab = () => {
-    const key = addTab('新串口');
-    setActiveTab(key);
   };
 
   const handleRemoveTab = async (targetKey: string) => {
@@ -99,7 +106,7 @@ const SerialPage: React.FC = () => {
     removeTab(targetKey);
   };
 
-  const allData = activeTab
+  const allData = activeTab && isPortTab
     ? [...(activeTab.receivedData || []), ...(activeTab.sentData || [])].sort((a, b) => a.timestamp - b.timestamp)
     : [];
   const filteredData = displayMode === 'all'
@@ -158,45 +165,36 @@ const SerialPage: React.FC = () => {
     }
   };
 
-  const renderTabContent = () => {
-    if (!activeTab) {
-      return (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-          <Empty description="请选择或添加串口标签页" />
-        </div>
-      );
-    }
-
+  const renderLauncherContent = () => {
     return (
       <Layout style={{ height: '100%', background: 'transparent' }}>
         <Sider
           collapsible
-          collapsed={siderCollapsed}
-          onCollapse={setSiderCollapsed}
-          width={280}
-          collapsedWidth={0}
+          collapsed={false}
+          width={320}
           trigger={null}
           style={{
             background: 'var(--bg-secondary)',
             borderRadius: '8px',
-            marginRight: siderCollapsed ? 0 : 8,
+            marginRight: 8,
             overflow: 'hidden',
-            transition: 'all 0.2s',
           }}
         >
-          <div style={{ padding: 8, height: '100%', overflow: 'auto' }}>
-            <Title level={5} style={{ marginBottom: 8 }}>串口设置</Title>
+          <div style={{ padding: 16, height: '100%', overflow: 'auto' }}>
+            <Title level={5} style={{ marginBottom: 16 }}>
+              <UsbOutlined style={{ marginRight: 8 }} />
+              串口启动台
+            </Title>
             
-            <Space vertical style={{ width: '100%' }} size="middle">
+            <Space direction="vertical" style={{ width: '100%' }} size="middle">
               <div>
                 <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>串口选择</Text>
                 <Space.Compact style={{ width: '100%' }}>
                   <Select
                     style={{ width: 'calc(100% - 80px)' }}
                     placeholder="选择串口"
-                    value={selectedPort || activeTab.portName}
+                    value={selectedPort}
                     onChange={setSelectedPort}
-                    disabled={activeTab.isConnected}
                     options={availablePorts.map((port) => ({
                       value: port.name,
                       label: (
@@ -226,14 +224,166 @@ const SerialPage: React.FC = () => {
                 <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>波特率</Text>
                 <Select
                   style={{ width: '100%' }}
-                  value={activeTab.config?.baudRate || tempConfig.baudRate}
-                  onChange={(value) => {
-                    if (activeTab.isConnected) {
-                      updateTabConfig(activeTabKey!, { baudRate: value });
-                    } else {
-                      setTempConfig({ ...tempConfig, baudRate: value });
-                    }
-                  }}
+                  value={tempConfig.baudRate}
+                  onChange={(value) => setTempConfig({ ...tempConfig, baudRate: value })}
+                  options={DEFAULT_BAUD_RATES.map((rate) => ({
+                    value: rate,
+                    label: `${rate} bps`,
+                  }))}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>数据位</Text>
+                  <Select
+                    style={{ width: '100%' }}
+                    value={tempConfig.dataBits}
+                    onChange={(value) => setTempConfig({ ...tempConfig, dataBits: value })}
+                    options={[
+                      { value: 5, label: '5' },
+                      { value: 6, label: '6' },
+                      { value: 7, label: '7' },
+                      { value: 8, label: '8' },
+                    ]}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>停止位</Text>
+                  <Select
+                    style={{ width: '100%' }}
+                    value={tempConfig.stopBits}
+                    onChange={(value) => setTempConfig({ ...tempConfig, stopBits: value })}
+                    options={[
+                      { value: 1, label: '1' },
+                      { value: 2, label: '2' },
+                    ]}
+                  />
+                </div>
+              </div>
+              
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>校验位</Text>
+                  <Select
+                    style={{ width: '100%' }}
+                    value={tempConfig.parity}
+                    onChange={(value) => setTempConfig({ ...tempConfig, parity: value })}
+                    options={[
+                      { value: 'none', label: '无' },
+                      { value: 'odd', label: '奇' },
+                      { value: 'even', label: '偶' },
+                    ]}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>流控制</Text>
+                  <Select
+                    style={{ width: '100%' }}
+                    value={tempConfig.flowControl}
+                    onChange={(value) => setTempConfig({ ...tempConfig, flowControl: value })}
+                    options={[
+                      { value: 'none', label: '无' },
+                      { value: 'hardware', label: '硬件' },
+                      { value: 'software', label: '软件' },
+                    ]}
+                  />
+                </div>
+              </div>
+              
+              <div style={{ marginTop: 8 }}>
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={handleOpenPort}
+                  disabled={!selectedPort}
+                  block
+                  size="large"
+                >
+                  打开串口
+                </Button>
+              </div>
+
+              <div style={{ marginTop: 8, padding: 8, background: 'var(--bg-primary)', borderRadius: 4 }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>当前配置:</Text>
+                <Text code style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
+                  {tempConfig.baudRate}, {tempConfig.dataBits}{tempConfig.stopBits}, {tempConfig.parity}, {tempConfig.flowControl}
+                </Text>
+              </div>
+              
+              {connectedPorts.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>已连接的串口:</Text>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {connectedPorts.map((port) => (
+                      <Tag key={port} color="success">{port}</Tag>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Space>
+          </div>
+        </Sider>
+
+        <Layout style={{ background: 'transparent', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <Content style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
+            <Empty
+              description={
+                <Space direction="vertical" size="small">
+                  <Text>选择串口并点击"打开串口"开始通信</Text>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    每个串口将创建独立的标签页
+                  </Text>
+                </Space>
+              }
+            />
+          </Content>
+        </Layout>
+      </Layout>
+    );
+  };
+
+  const renderPortContent = () => {
+    if (!activeTab) {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+          <Empty description="请选择串口标签页" />
+        </div>
+      );
+    }
+
+    return (
+      <Layout style={{ height: '100%', background: 'transparent' }}>
+        <Sider
+          collapsible
+          collapsed={activeTab.settingsCollapsed}
+          onCollapse={(collapsed) => updateTabConfig(activeTabKey!, { settingsCollapsed: collapsed } as any)}
+          width={280}
+          collapsedWidth={0}
+          trigger={null}
+          style={{
+            background: 'var(--bg-secondary)',
+            borderRadius: '8px',
+            marginRight: activeTab.settingsCollapsed ? 0 : 8,
+            overflow: 'hidden',
+            transition: 'all 0.2s',
+          }}
+        >
+          <div style={{ padding: 8, height: '100%', overflow: 'auto' }}>
+            <Title level={5} style={{ marginBottom: 8 }}>串口设置</Title>
+            
+            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+              <div>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>串口</Text>
+                <Input value={activeTab.portName} disabled style={{ width: '100%' }} />
+              </div>
+
+              <div>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>波特率</Text>
+                <Select
+                  style={{ width: '100%' }}
+                  value={activeTab.config?.baudRate || DEFAULT_SERIAL_CONFIG.baudRate}
+                  onChange={(value) => updateTabConfig(activeTabKey!, { baudRate: value })}
                   disabled={activeTab.isConnected}
                   options={DEFAULT_BAUD_RATES.map((rate) => ({
                     value: rate,
@@ -247,14 +397,8 @@ const SerialPage: React.FC = () => {
                   <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>数据位</Text>
                   <Select
                     style={{ width: '100%' }}
-                    value={activeTab.config?.dataBits || tempConfig.dataBits}
-                    onChange={(value) => {
-                      if (activeTab.isConnected) {
-                        updateTabConfig(activeTabKey!, { dataBits: value });
-                      } else {
-                        setTempConfig({ ...tempConfig, dataBits: value });
-                      }
-                    }}
+                    value={activeTab.config?.dataBits || DEFAULT_SERIAL_CONFIG.dataBits}
+                    onChange={(value) => updateTabConfig(activeTabKey!, { dataBits: value })}
                     disabled={activeTab.isConnected}
                     options={[
                       { value: 5, label: '5' },
@@ -268,14 +412,8 @@ const SerialPage: React.FC = () => {
                   <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>停止位</Text>
                   <Select
                     style={{ width: '100%' }}
-                    value={activeTab.config?.stopBits || tempConfig.stopBits}
-                    onChange={(value) => {
-                      if (activeTab.isConnected) {
-                        updateTabConfig(activeTabKey!, { stopBits: value });
-                      } else {
-                        setTempConfig({ ...tempConfig, stopBits: value });
-                      }
-                    }}
+                    value={activeTab.config?.stopBits || DEFAULT_SERIAL_CONFIG.stopBits}
+                    onChange={(value) => updateTabConfig(activeTabKey!, { stopBits: value })}
                     disabled={activeTab.isConnected}
                     options={[
                       { value: 1, label: '1' },
@@ -284,19 +422,14 @@ const SerialPage: React.FC = () => {
                   />
                 </div>
               </div>
+              
               <div style={{ display: 'flex', gap: 8 }}>
                 <div style={{ flex: 1 }}>
                   <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>校验位</Text>
                   <Select
                     style={{ width: '100%' }}
-                    value={activeTab.config?.parity || tempConfig.parity}
-                    onChange={(value) => {
-                      if (activeTab.isConnected) {
-                        updateTabConfig(activeTabKey!, { parity: value });
-                      } else {
-                        setTempConfig({ ...tempConfig, parity: value });
-                      }
-                    }}
+                    value={activeTab.config?.parity || DEFAULT_SERIAL_CONFIG.parity}
+                    onChange={(value) => updateTabConfig(activeTabKey!, { parity: value })}
                     disabled={activeTab.isConnected}
                     options={[
                       { value: 'none', label: '无' },
@@ -309,14 +442,8 @@ const SerialPage: React.FC = () => {
                   <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>流控制</Text>
                   <Select
                     style={{ width: '100%' }}
-                    value={activeTab.config?.flowControl || tempConfig.flowControl}
-                    onChange={(value) => {
-                      if (activeTab.isConnected) {
-                        updateTabConfig(activeTabKey!, { flowControl: value });
-                      } else {
-                        setTempConfig({ ...tempConfig, flowControl: value });
-                      }
-                    }}
+                    value={activeTab.config?.flowControl || DEFAULT_SERIAL_CONFIG.flowControl}
+                    onChange={(value) => updateTabConfig(activeTabKey!, { flowControl: value })}
                     disabled={activeTab.isConnected}
                     options={[
                       { value: 'none', label: '无' },
@@ -326,6 +453,7 @@ const SerialPage: React.FC = () => {
                   />
                 </div>
               </div>
+              
               <div style={{ marginTop: 8 }}>
                 {activeTab.isConnected ? (
                   <Button
@@ -341,11 +469,10 @@ const SerialPage: React.FC = () => {
                   <Button
                     type="primary"
                     icon={<UsbOutlined />}
-                    onClick={handleOpenPort}
-                    disabled={!selectedPort && !activeTab.portName}
+                    onClick={handleReconnectPort}
                     block
                   >
-                    打开串口
+                    重新连接
                   </Button>
                 )}
               </div>
@@ -353,7 +480,7 @@ const SerialPage: React.FC = () => {
               <div style={{ marginTop: 8, padding: 8, background: 'var(--bg-primary)', borderRadius: 4 }}>
                 <Text type="secondary" style={{ fontSize: 12 }}>当前配置:</Text>
                 <Text code style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
-                  {activeTab.config?.baudRate || tempConfig.baudRate}, {activeTab.config?.dataBits || tempConfig.dataBits}{activeTab.config?.stopBits || tempConfig.stopBits}, {activeTab.config?.parity || tempConfig.parity}, {activeTab.config?.flowControl || tempConfig.flowControl}
+                  {activeTab.config?.baudRate || DEFAULT_SERIAL_CONFIG.baudRate}, {activeTab.config?.dataBits || DEFAULT_SERIAL_CONFIG.dataBits}{activeTab.config?.stopBits || DEFAULT_SERIAL_CONFIG.stopBits}, {activeTab.config?.parity || DEFAULT_SERIAL_CONFIG.parity}, {activeTab.config?.flowControl || DEFAULT_SERIAL_CONFIG.flowControl}
                 </Text>
               </div>
             </Space>
@@ -364,7 +491,7 @@ const SerialPage: React.FC = () => {
           <Content style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
             {error && (
               <Alert
-                title={error}
+                message={error}
                 type="error"
                 closable
                 onClose={() => setError(null)}
@@ -380,8 +507,8 @@ const SerialPage: React.FC = () => {
                 <Space>
                   <Button
                     type="text"
-                    icon={siderCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                    onClick={() => setSiderCollapsed(!siderCollapsed)}
+                    icon={activeTab.settingsCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                    onClick={() => updateTabConfig(activeTabKey!, { settingsCollapsed: !activeTab.settingsCollapsed } as any)}
                   />
                   <span>数据视图</span>
                 </Space>
@@ -415,6 +542,7 @@ const SerialPage: React.FC = () => {
               }
             >
               <TextArea
+                ref={containerRef}
                 onScroll={handleScroll}
                 value={(filteredData || [])
                   .map((entry) => {
@@ -513,31 +641,30 @@ const SerialPage: React.FC = () => {
           activeKey={activeTabKey || undefined}
           onChange={(key) => setActiveTab(key)}
           onEdit={(targetKey, action) => {
-            if (action === 'add') {
-              handleAddTab();
-            } else if (action === 'remove') {
+            if (action === 'remove') {
               handleRemoveTab(targetKey as string);
             }
           }}
+          hideAdd={true}
           items={tabs.map((tab) => ({
             key: tab.key,
             label: (
               <span style={{ fontSize: 12 }}>
-                {tab.portName}
-                {tab.isConnected && (
+                {tab.tabType === 'launcher' ? '启动台' : tab.portName}
+                {tab.isConnected && tab.tabType === 'port' && (
                   <Tag color="success" style={{ marginLeft: 4, fontSize: 10 }}>
                     ●
                   </Tag>
                 )}
               </span>
             ),
-            closable: tabs.length > 1,
+            closable: tab.tabType === 'port',
           }))}
           style={{ marginBottom: 0 }}
         />
       </div>
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        {renderTabContent()}
+        {isLauncherTab ? renderLauncherContent() : renderPortContent()}
       </div>
     </div>
   );

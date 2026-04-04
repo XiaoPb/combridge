@@ -47,7 +47,7 @@ async function setupGlobalListeners(
 
   globalSerialListeners.disconnected = await onSerialDisconnected((portName) => {
     const store = useSerialStore.getState();
-    const tab = store.tabs.find((t) => t.portName === portName);
+    const tab = store.tabs.find((t) => t.portName === portName && t.tabType === 'port');
     if (tab) {
       store.updateTab(tab.key, { isConnected: false });
     }
@@ -88,7 +88,7 @@ export const useSerial = () => {
     isScanning,
     error,
     setPorts,
-    addTab,
+    addPortTab,
     removeTab,
     setActiveTab,
     updateTab,
@@ -96,6 +96,8 @@ export const useSerial = () => {
     addSentData,
     setIsScanning,
     setError,
+    hasPortTab,
+    getPortTab,
   } = useSerialStore();
 
   const isMountedRef = useRef(false);
@@ -110,7 +112,7 @@ export const useSerial = () => {
       isMountedRef.current = false;
       cleanupGlobalListeners();
     };
-  }, [addReceivedData, setError, removeTab]);
+  }, [addReceivedData, setError]);
 
   const scanPorts = useCallback(async () => {
     setIsScanning(true);
@@ -131,13 +133,34 @@ export const useSerial = () => {
   }, [setIsScanning, setError, setPorts]);
 
   const openPort = useCallback(async (portName: string, portConfig?: SerialConfig) => {
-    const config = portConfig || useSerialStore.getState().tabs.find((t) => t.key === activeTabKey)?.config || DEFAULT_SERIAL_CONFIG;
+    const config = portConfig || DEFAULT_SERIAL_CONFIG;
     setError(null);
+    
+    const existingTab = getPortTab(portName);
+    if (existingTab) {
+      if (existingTab.isConnected) {
+        message.warning(`串口 ${portName} 已在连接中`);
+        setActiveTab(existingTab.key);
+        return existingTab.key;
+      }
+      try {
+        await serialApi.openPort(portName, config);
+        updateTab(existingTab.key, { isConnected: true, openedAt: Date.now(), config });
+        setActiveTab(existingTab.key);
+        message.success(`串口 ${portName} 已打开`);
+        return existingTab.key;
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : '打开串口失败';
+        setError(errorMsg);
+        message.error(errorMsg);
+        throw err;
+      }
+    }
+    
     try {
       await serialApi.openPort(portName, config);
-      const key = addTab(portName, config);
+      const key = addPortTab(portName, config);
       updateTab(key, { isConnected: true, openedAt: Date.now() });
-      setActiveTab(key);
       message.success(`串口 ${portName} 已打开`);
 
       try {
@@ -174,7 +197,7 @@ export const useSerial = () => {
       message.error(errorMsg);
       throw err;
     }
-  }, [activeTabKey, setError, addTab, updateTab, setActiveTab]);
+  }, [setError, addPortTab, updateTab, setActiveTab, getPortTab]);
 
   const closePort = useCallback(async (tabKey: string) => {
     const tab = tabs.find((t) => t.key === tabKey);
@@ -258,8 +281,8 @@ export const useSerial = () => {
     clearTabData,
     updateTabConfig,
     setActiveTab,
-    addTab,
     removeTab,
     setError,
+    hasPortTab,
   };
 };

@@ -10,14 +10,18 @@ export interface DataEntry {
   format: 'hex' | 'text';
 }
 
+export type SerialTabType = 'launcher' | 'port';
+
 export interface SerialTab {
   key: string;
+  tabType: SerialTabType;
   portName: string;
   config: SerialConfig;
   isConnected: boolean;
   openedAt?: number;
   receivedData: DataEntry[];
   sentData: DataEntry[];
+  settingsCollapsed: boolean;
 }
 
 interface SerialState {
@@ -29,7 +33,8 @@ interface SerialState {
 
   setPorts: (ports: SerialPortInfo[]) => void;
   
-  addTab: (portName: string, config?: SerialConfig) => string;
+  addLauncherTab: () => string;
+  addPortTab: (portName: string, config?: SerialConfig) => string;
   removeTab: (key: string) => void;
   setActiveTab: (key: string | null) => void;
   updateTab: (key: string, updates: Partial<SerialTab>) => void;
@@ -41,30 +46,79 @@ interface SerialState {
   setIsScanning: (isScanning: boolean) => void;
   setError: (error: string | null) => void;
   reset: () => void;
+  
+  getPortTab: (portName: string) => SerialTab | undefined;
+  hasPortTab: (portName: string) => boolean;
 }
+
+const LAUNCHER_TAB_KEY = 'serial-launcher';
 
 const initialState = {
   ports: [],
-  tabs: [],
-  activeTabKey: null,
+  tabs: [{
+    key: LAUNCHER_TAB_KEY,
+    tabType: 'launcher' as SerialTabType,
+    portName: '',
+    config: DEFAULT_SERIAL_CONFIG,
+    isConnected: false,
+    receivedData: [],
+    sentData: [],
+    settingsCollapsed: false,
+  }],
+  activeTabKey: LAUNCHER_TAB_KEY,
   isScanning: false,
   error: null,
 };
 
-export const useSerialStore = create<SerialState>((set) => ({
+export const useSerialStore = create<SerialState>((set, get) => ({
   ...initialState,
 
   setPorts: (ports) => set({ ports }),
 
-  addTab: (portName, config = DEFAULT_SERIAL_CONFIG) => {
-    const key = `${portName}-${Date.now()}`;
+  addLauncherTab: () => {
+    const state = get();
+    const existingLauncher = state.tabs.find(t => t.tabType === 'launcher');
+    if (existingLauncher) {
+      set({ activeTabKey: existingLauncher.key });
+      return existingLauncher.key;
+    }
+    
+    const key = LAUNCHER_TAB_KEY;
     const newTab: SerialTab = {
       key,
+      tabType: 'launcher',
+      portName: '',
+      config: DEFAULT_SERIAL_CONFIG,
+      isConnected: false,
+      receivedData: [],
+      sentData: [],
+      settingsCollapsed: false,
+    };
+    set((state) => ({
+      tabs: [...state.tabs, newTab],
+      activeTabKey: key,
+    }));
+    return key;
+  },
+
+  addPortTab: (portName, config = DEFAULT_SERIAL_CONFIG) => {
+    const state = get();
+    const existingTab = state.tabs.find(t => t.portName === portName && t.tabType === 'port');
+    if (existingTab) {
+      set({ activeTabKey: existingTab.key });
+      return existingTab.key;
+    }
+    
+    const key = `port-${portName}-${Date.now()}`;
+    const newTab: SerialTab = {
+      key,
+      tabType: 'port',
       portName,
       config,
       isConnected: false,
       receivedData: [],
       sentData: [],
+      settingsCollapsed: true,
     };
     set((state) => ({
       tabs: [...state.tabs, newTab],
@@ -75,6 +129,7 @@ export const useSerialStore = create<SerialState>((set) => ({
 
   removeTab: (key) =>
     set((state) => {
+      if (key === LAUNCHER_TAB_KEY) return state;
       const newTabs = state.tabs.filter((t) => t.key !== key);
       let newActiveKey = state.activeTabKey;
       if (state.activeTabKey === key) {
@@ -93,7 +148,7 @@ export const useSerialStore = create<SerialState>((set) => ({
   addReceivedData: (portName, entry) =>
     set((state) => ({
       tabs: state.tabs.map((t) =>
-        t.portName === portName
+        t.portName === portName && t.tabType === 'port'
           ? { ...t, receivedData: [...t.receivedData, entry].slice(-1000) }
           : t
       ),
@@ -102,7 +157,7 @@ export const useSerialStore = create<SerialState>((set) => ({
   addSentData: (portName, entry) =>
     set((state) => ({
       tabs: state.tabs.map((t) =>
-        t.portName === portName
+        t.portName === portName && t.tabType === 'port'
           ? { ...t, sentData: [...t.sentData, entry].slice(-1000) }
           : t
       ),
@@ -120,6 +175,16 @@ export const useSerialStore = create<SerialState>((set) => ({
   setError: (error) => set({ error }),
 
   reset: () => set(initialState),
+
+  getPortTab: (portName: string) => {
+    const state = get();
+    return state.tabs.find(t => t.portName === portName && t.tabType === 'port');
+  },
+
+  hasPortTab: (portName: string) => {
+    const state = get();
+    return state.tabs.some(t => t.portName === portName && t.tabType === 'port');
+  },
 }));
 
 export const generateId = (): string => {
@@ -156,5 +221,5 @@ export const parseData = (input: string, format: 'hex' | 'text'): number[] => {
 };
 
 export const getConnectedPorts = (tabs: SerialTab[]): string[] => {
-  return tabs.filter((t) => t.isConnected).map((t) => t.portName);
+  return tabs.filter((t) => t.isConnected && t.tabType === 'port').map((t) => t.portName);
 };

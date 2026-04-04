@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Card, Space, Button, Input, Radio, Typography, Tag, Descriptions, Divider, message } from 'antd';
-import { ReadOutlined, SendOutlined, BellOutlined, StopOutlined, CopyOutlined } from '@ant-design/icons';
+import { Card, Space, Button, Input, Segmented, Typography, Tag, message, Tooltip } from 'antd';
+import { ReadOutlined, SendOutlined, BellOutlined, StopOutlined } from '@ant-design/icons';
 import type { BleCharacteristic } from '../../types';
-import { formatBleData } from '../../stores/bleStore';
+import { getShortUuid } from '../../stores/bleStore';
+import { getCharacteristicName } from '../../types/ble';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -28,15 +29,22 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
 
   if (!characteristic) {
     return (
-      <Card title="特征操作面板" size="small">
-        <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>
-          请从 GATT 浏览器中选择一个特征
+      <Card 
+        title={<Text style={{ fontSize: 13 }}>特征操作面板</Text>} 
+        size="small"
+        style={{ height: 320 }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100% - 40px)', color: '#999' }}>
+          请从 GATT 服务树中选择一个特征
         </div>
       </Card>
     );
   }
 
-  const { uuid, properties, value } = characteristic;
+  const { uuid, properties } = characteristic;
+  const canWrite = properties.write || properties.writeWithoutResponse;
+  const canRead = properties.read;
+  const canNotify = properties.notify || properties.indicate;
 
   const handleWrite = () => {
     if (!inputData.trim()) {
@@ -46,128 +54,136 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
     onWrite(uuid, inputData, inputFormat, withoutResponse);
   };
 
-  const handleCopyValue = () => {
-    if (value) {
-      const text = formatBleData(value, inputFormat);
-      navigator.clipboard.writeText(text);
-      message.success('已复制到剪贴板');
+  const getWriteModeText = () => {
+    if (properties.write && properties.writeWithoutResponse) {
+      return '写入: 支持';
+    } else if (properties.writeWithoutResponse) {
+      return '写入: 无响应写入';
+    } else if (properties.write) {
+      return '写入: 响应写入';
     }
+    return '';
   };
 
   return (
-    <Card title="特征操作面板" size="small">
-      <Space vertical style={{ width: '100%' }}>
-        <Descriptions size="small" column={1} bordered>
-          <Descriptions.Item label="UUID">
-            <Text code style={{ fontSize: '11px' }}>
-              {uuid}
-            </Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="属性">
-            <Space wrap>
-              {properties.read && <Tag color="green">读取</Tag>}
-              {properties.write && <Tag color="blue">写入</Tag>}
-              {properties.writeWithoutResponse && <Tag color="cyan">无响应写入</Tag>}
-              {properties.notify && <Tag color="orange">通知</Tag>}
-              {properties.indicate && <Tag color="purple">指示</Tag>}
-            </Space>
-          </Descriptions.Item>
-          {value && (
-            <Descriptions.Item label="当前值">
-              <Space vertical style={{ width: '100%' }}>
-                <Space>
-                  <Text code>{formatBleData(value, 'hex')}</Text>
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<CopyOutlined />}
-                    onClick={handleCopyValue}
-                  />
-                </Space>
-                <Text type="secondary" style={{ fontSize: '12px' }}>
-                  {formatBleData(value, 'text')}
-                </Text>
-              </Space>
-            </Descriptions.Item>
-          )}
-        </Descriptions>
-
-        <Divider style={{ margin: '12px 0' }} />
-
-        <Space wrap>
-          {properties.read && (
-            <Button
-              type="primary"
-              icon={<ReadOutlined />}
-              onClick={() => onRead(uuid)}
-            >
-              读取
-            </Button>
-          )}
-          {properties.notify && (
-            <>
-              <Button
-                icon={<BellOutlined />}
-                onClick={() => onSubscribe(uuid)}
-              >
-                订阅通知
-              </Button>
-              <Button
-                icon={<StopOutlined />}
-                onClick={() => onUnsubscribe(uuid)}
-              >
-                取消订阅
-              </Button>
-            </>
-          )}
-        </Space>
-
-        {(properties.write || properties.writeWithoutResponse) && (
-          <>
-            <Divider style={{ margin: '12px 0' }} />
-
-            <div>
-              <Space style={{ marginBottom: 8 }}>
-                <Text>数据格式：</Text>
-                <Radio.Group
-                  value={inputFormat}
-                  onChange={(e) => setInputFormat(e.target.value)}
+    <Card 
+      title={<Text style={{ fontSize: 13 }}>特征操作面板</Text>}
+      size="small"
+      style={{ height: 320 }}
+      styles={{ body: { padding: '8px 12px', height: 'calc(100% - 40px)', display: 'flex', flexDirection: 'column' } }}
+    >
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexShrink: 0 }}>
+        <div style={{ flex: '1 1 0', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <Text type="secondary" style={{ fontSize: 12, flexShrink: 0 }}>UUID:</Text>
+            <Text code style={{ fontSize: 11, wordBreak: 'break-all' }}>{uuid}</Text>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Text type="secondary" style={{ fontSize: 12, flexShrink: 0 }}>名称:</Text>
+            <Text style={{ fontSize: 12 }}>{getCharacteristicName(uuid)} (0x{getShortUuid(uuid)})</Text>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>{getWriteModeText()}</Text>
+            {properties.notify && <Tag color="orange" style={{ fontSize: 10, padding: '0 4px', margin: 0 }}>通知</Tag>}
+            {properties.indicate && <Tag color="purple" style={{ fontSize: 10, padding: '0 4px', margin: 0 }}>指示</Tag>}
+          </div>
+        </div>
+        
+        <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+          {canNotify && (
+            <Space size={4}>
+              <Tooltip title="订阅通知">
+                <Button
                   size="small"
+                  icon={<BellOutlined />}
+                  onClick={() => onSubscribe(uuid)}
                 >
-                  <Radio.Button value="text">文本</Radio.Button>
-                  <Radio.Button value="hex">HEX</Radio.Button>
-                </Radio.Group>
-                {properties.writeWithoutResponse && (
-                  <Radio.Group
-                    value={withoutResponse}
-                    onChange={(e) => setWithoutResponse(e.target.value)}
-                    size="small"
-                  >
-                    <Radio.Button value={false}>等待响应</Radio.Button>
-                    <Radio.Button value={true}>无响应</Radio.Button>
-                  </Radio.Group>
-                )}
-              </Space>
+                  订阅
+                </Button>
+              </Tooltip>
+              <Tooltip title="取消订阅">
+                <Button
+                  size="small"
+                  icon={<StopOutlined />}
+                  onClick={() => onUnsubscribe(uuid)}
+                >
+                  取消订阅
+                </Button>
+              </Tooltip>
+            </Space>
+          )}
+          {canRead && (
+            <Tooltip title="读取特征值">
+              <Button
+                size="small"
+                type="primary"
+                icon={<ReadOutlined />}
+                onClick={() => onRead(uuid)}
+              >
+                读取
+              </Button>
+            </Tooltip>
+          )}
+        </div>
+      </div>
 
-              <TextArea
-                value={inputData}
-                onChange={(e) => setInputData(e.target.value)}
-                placeholder={inputFormat === 'hex' ? '输入十六进制数据，如：01 02 03' : '输入文本数据'}
-                rows={3}
-                style={{ marginBottom: 8 }}
+      {canWrite && (
+        <>
+          <div style={{ flex: '1 1 0', display: 'flex', gap: 8, minHeight: 0 }}>
+            <TextArea
+              value={inputData}
+              onChange={(e) => setInputData(e.target.value)}
+              placeholder={inputFormat === 'hex' ? '输入十六进制数据，如：01 02 03 FF' : '输入要发送的文本数据'}
+              style={{ 
+                flex: '1 1 0', 
+                resize: 'none',
+                fontFamily: inputFormat === 'hex' ? 'Consolas, Monaco, monospace' : 'inherit',
+                fontSize: 12,
+              }}
+            />
+            
+            <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'space-between' }}>
+              <Segmented
+                value={inputFormat}
+                onChange={(value) => setInputFormat(value as 'hex' | 'text')}
+                size="small"
+                options={[
+                  { value: 'text', label: 'TEXT' },
+                  { value: 'hex', label: 'HEX' },
+                ]}
               />
-
+              
+              {properties.writeWithoutResponse && (
+                <Segmented
+                  value={withoutResponse ? 'noResponse' : 'withResponse'}
+                  onChange={(value) => setWithoutResponse(value === 'noResponse')}
+                  size="small"
+                  options={[
+                    { value: 'withResponse', label: '等待响应' },
+                    { value: 'noResponse', label: '无响应' },
+                  ]}
+                />
+              )}
+              
               <Button
                 type="primary"
                 icon={<SendOutlined />}
                 onClick={handleWrite}
+                disabled={!inputData.trim()}
+                block
               >
-                写入
+                发送
               </Button>
             </div>
-          </>
-        )}
-      </Space>
+          </div>
+        </>
+      )}
+      
+      {!canWrite && (
+        <div style={{ flex: '1 1 0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999', fontSize: 12 }}>
+          该特征不支持写入操作
+        </div>
+      )}
     </Card>
   );
 };

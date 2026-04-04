@@ -617,7 +617,7 @@ const BlePage: React.FC = () => {
         )}
 
         <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ maxHeight: 320, overflow: 'auto', marginBottom: 8, flexShrink: 0 }}>
+          <div style={{ flexShrink: 0, marginBottom: 8 }}>
             <CharacteristicPanel
               characteristic={tabData.selectedCharacteristic}
               onRead={(uuid) => handleReadForDevice(uuid, tabData.deviceId)}

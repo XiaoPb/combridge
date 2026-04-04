@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -58,6 +59,7 @@ enum Backend {
 pub struct BleManager {
     mode: RwLock<BleMode>,
     backend: RwLock<Option<Backend>>,
+    subscriptions: RwLock<HashMap<String, HashSet<String>>>,
 }
 
 impl BleManager {
@@ -65,6 +67,7 @@ impl BleManager {
         Self {
             mode: RwLock::new(BleMode::Native),
             backend: RwLock::new(None),
+            subscriptions: RwLock::new(HashMap::new()),
         }
     }
 
@@ -147,9 +150,16 @@ impl BleManager {
         })?;
         
         match backend {
-            Backend::Native(b) => b.disconnect(address).await,
-            Backend::At(b) => b.disconnect(address).await,
+            Backend::Native(b) => b.disconnect(address).await?,
+            Backend::At(b) => b.disconnect(address).await?,
         }
+
+        let mut subscriptions = self.subscriptions.write().await;
+        if subscriptions.remove(address).is_some() {
+            info!("清理设备 {} 的订阅记录", address);
+        }
+        
+        Ok(())
     }
 
     pub async fn get_connections(&self) -> Result<Vec<BleConnection>> {
@@ -231,9 +241,18 @@ impl BleManager {
         })?;
         
         match backend {
-            Backend::Native(b) => b.subscribe_notify(address, char_uuid, callback).await,
-            Backend::At(b) => b.subscribe_notify(address, char_uuid, callback).await,
+            Backend::Native(b) => b.subscribe_notify(address, char_uuid, callback).await?,
+            Backend::At(b) => b.subscribe_notify(address, char_uuid, callback).await?,
         }
+
+        let mut subscriptions = self.subscriptions.write().await;
+        subscriptions
+            .entry(address.to_string())
+            .or_insert_with(HashSet::new)
+            .insert(char_uuid.to_string());
+        info!("记录订阅状态: 设备 {}, 特征 {}", address, char_uuid);
+        
+        Ok(())
     }
 
     pub async fn unsubscribe_notify(&self, address: &str, char_uuid: &str) -> Result<()> {
@@ -243,9 +262,20 @@ impl BleManager {
         })?;
         
         match backend {
-            Backend::Native(b) => b.unsubscribe_notify(address, char_uuid).await,
-            Backend::At(b) => b.unsubscribe_notify(address, char_uuid).await,
+            Backend::Native(b) => b.unsubscribe_notify(address, char_uuid).await?,
+            Backend::At(b) => b.unsubscribe_notify(address, char_uuid).await?,
         }
+
+        let mut subscriptions = self.subscriptions.write().await;
+        if let Some(chars) = subscriptions.get_mut(address) {
+            chars.remove(char_uuid);
+            if chars.is_empty() {
+                subscriptions.remove(address);
+            }
+        }
+        info!("移除订阅状态: 设备 {}, 特征 {}", address, char_uuid);
+        
+        Ok(())
     }
 
     pub async fn get_rssi(&self, address: &str) -> Result<i16> {
@@ -270,6 +300,14 @@ impl BleManager {
             Backend::Native(b) => b.set_mtu(address, mtu).await,
             Backend::At(b) => b.set_mtu(address, mtu).await,
         }
+    }
+
+    pub async fn get_subscriptions(&self, address: &str) -> Vec<String> {
+        let subscriptions = self.subscriptions.read().await;
+        subscriptions
+            .get(address)
+            .map(|chars| chars.iter().cloned().collect())
+            .unwrap_or_default()
     }
 
     pub async fn is_configured(&self) -> bool {

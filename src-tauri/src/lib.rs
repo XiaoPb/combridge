@@ -63,6 +63,7 @@ pub fn run() {
             commands::ble::get_ble_mode,
             commands::ble::is_ble_configured,
             commands::ble::set_ble_mtu,
+            commands::ble::get_ble_subscriptions,
             commands::websocket::connect_websocket,
             commands::websocket::send_websocket_message,
             commands::websocket::disconnect_websocket,

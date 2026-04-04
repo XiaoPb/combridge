@@ -503,3 +503,19 @@ pub async fn set_ble_mtu(
         }
     }
 }
+
+/// 获取已订阅的特征列表
+/// 
+/// 获取指定设备当前已订阅通知的特征UUID列表
+#[tauri::command]
+pub async fn get_ble_subscriptions(
+    manager: State<'_, BleManagerRef>,
+    device_id: String,
+) -> Result<Vec<String>> {
+    debug!("获取已订阅特征列表，设备: {}", device_id);
+    
+    let manager = manager.inner();
+    let subscriptions = manager.get_subscriptions(&device_id).await;
+    debug!("设备 {} 已订阅 {} 个特征", device_id, subscriptions.len());
+    Ok(subscriptions)
+}

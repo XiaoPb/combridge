@@ -79,9 +79,11 @@ impl BleBackend for NativeBleBackend {
 
         adapter.connect_device(address).await?;
 
+        let name = adapter.get_device_name(address);
+
         let connection = BleConnection {
             address: address.to_string(),
-            name: None,
+            name,
             is_connected: true,
             services: vec![],
         };

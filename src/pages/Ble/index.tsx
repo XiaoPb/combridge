@@ -4,7 +4,7 @@ import { MenuFoldOutlined, MenuUnfoldOutlined, ClearOutlined } from '@ant-design
 import { useBle } from '../../hooks/useBle';
 import { useSerialStore } from '../../stores/serialStore';
 import { serialApi } from '../../api/tauri';
-import { formatBleData, getShortUuid } from '../../stores/bleStore';
+import { formatBleData, getShortUuid, formatMacAddress } from '../../stores/bleStore';
 import BleModeSelector from './BleModeSelector';
 import BleScanner from './BleScanner';
 import CharacteristicPanel from './CharacteristicPanel';
@@ -69,17 +69,9 @@ const BlePage: React.FC = () => {
   }, [setPorts]);
 
   useEffect(() => {
-    console.debug('[BlePage] TAB创建useEffect触发, currentDevice:', currentDevice, 'connections:', JSON.stringify(connections, null, 2));
-    if (!currentDevice) {
-      console.debug('[BlePage] currentDevice为空，跳过');
-      return;
-    }
+    if (!currentDevice) return;
     const conn = connections.find((c) => c.address === currentDevice && c.isConnected);
-    console.debug('[BlePage] 匹配到连接:', conn?.address, 'isConnected:', conn?.isConnected);
-    if (!conn) {
-      console.debug('[BlePage] 未找到匹配的连接，跳过');
-      return;
-    }
+    if (!conn) return;
 
     setDeviceTabs((prev) => {
       const existing = prev[currentDevice];
@@ -90,12 +82,11 @@ const BlePage: React.FC = () => {
         };
       }
       if (!existing) {
-        console.debug('[BlePage] >>> 创建新TAB, deviceId:', currentDevice, 'name:', conn.name || conn.address);
         return {
           ...prev,
           [currentDevice]: {
             deviceId: currentDevice,
-            name: conn.name || conn.address,
+            name: conn.name || formatMacAddress(conn.address),
             address: conn.address,
             services: [],
             characteristics: [],
@@ -159,7 +150,6 @@ const BlePage: React.FC = () => {
   };
 
   const handleSendAtCommand = (_command: string) => {
-    console.debug('Send AT command:', _command);
   };
 
   const addLogToDevice = useCallback((deviceId: string, entry: Omit<DeviceLogEntry, 'id'>) => {
@@ -177,24 +167,17 @@ const BlePage: React.FC = () => {
   }, []);
 
   const handleConnect = async (address: string) => {
-    console.debug('[BlePage] handleConnect 被调用, address:', address);
-    console.debug('[BlePage] 当前connections:', connections);
-
     const existingConn = connections.find((c) => c.address === address);
     if (existingConn) {
-      console.debug('[BlePage] 设备已连接，执行断开:', address);
       await handleDisconnect(address);
       return;
     }
 
     try {
-      console.debug('[BlePage] 正在连接设备...');
       await connectDevice(address);
-      console.debug('[BlePage] 连接成功，设置activeTabKey为:', address);
       setActiveTabKey(address);
     } catch (err) {
       console.error('[BlePage] 连接失败:', err);
-      // error already handled by hook
     }
   };
 
@@ -444,7 +427,7 @@ const BlePage: React.FC = () => {
         <div style={{ flex: '1 1 50%', minWidth: 0, overflow: 'auto', padding: '0 4px' }}>
           {tabData.discoveringServices ? (
             <div style={{ textAlign: 'center', padding: 40 }}>
-              <Spin tip="正在发现服务..." />
+              <Spin description="正在发现服务..." />
             </div>
           ) : tabData.services.length === 0 ? (
             <Empty description="暂无服务数据" />
@@ -529,12 +512,11 @@ const BlePage: React.FC = () => {
       children: renderScanTab(),
     },
     ...Object.entries(deviceTabs).map(([key, tab]) => {
-      console.debug('[BlePage] 渲染设备TAB, key:', key, 'tab:', tab);
       return {
         key,
         label: (
           <span style={{ fontSize: 12 }}>
-            {tab.name || tab.address}
+            {tab.name || formatMacAddress(key)}
             <Tag color="success" style={{ marginLeft: 4, fontSize: 10 }}>●</Tag>
           </span>
         ),
@@ -543,8 +525,6 @@ const BlePage: React.FC = () => {
       };
     }),
   ];
-
-  console.debug('[BlePage] 渲染, activeTabKey:', activeTabKey, 'deviceTabs:', Object.keys(deviceTabs), 'tabItems count:', tabItems.length);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

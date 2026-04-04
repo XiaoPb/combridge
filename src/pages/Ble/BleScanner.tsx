@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card, Button, Input, Table, Space, Tag, Progress, Empty, InputNumber, Typography, Flex } from 'antd';
 import { SearchOutlined, StopOutlined } from '@ant-design/icons';
 import type { BleDeviceInfo, BleConnection } from '../../types';
+import { formatMacAddress } from '../../stores/bleStore';
 
 const { Text } = Typography;
 const { Search } = Input;
@@ -14,25 +15,6 @@ interface BleScannerProps {
   onStopScan: () => void;
   onConnect: (address: string) => void;
 }
-
-const formatMacAddress = (address: string): string => {
-  if (!address) return '-';
-  
-  const match = address.match(/([0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2})/);
-  if (match) {
-    return match[1].toUpperCase();
-  }
-  
-  const parts = address.split('-');
-  if (parts.length >= 2) {
-    const macPart = parts[parts.length - 1];
-    if (/^[0-9a-fA-F:]+$/.test(macPart)) {
-      return macPart.toUpperCase();
-    }
-  }
-  
-  return address;
-};
 
 const BleScanner: React.FC<BleScannerProps> = ({
   devices,

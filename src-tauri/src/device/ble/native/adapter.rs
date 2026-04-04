@@ -123,6 +123,10 @@ impl BleAdapter {
             .map(|(_, (device, _))| device.clone())
     }
 
+    pub fn get_device_name(&self, address: &str) -> Option<String> {
+        self.get_device(address).and_then(|d| d.name().ok())
+    }
+
     pub fn get_or_create_client(&self, address: &str) -> Arc<GattClient> {
         let mut clients = self.clients.write().unwrap();
         clients

@@ -153,18 +153,12 @@ export const useBle = () => {
     clearDevices();
 
     try {
-      console.debug('[useBle] 开始扫描, isConfigured:', isConfigured, 'mode:', mode, 'serialPort:', serialPort);
-      
       if (!isConfigured) {
-        console.debug('[useBle] 需要配置BLE...');
         await bleApi.configureBle(mode, serialPort || undefined);
         setIsConfigured(true);
-        console.debug('[useBle] BLE配置完成');
       }
-      
-      console.debug('[useBle] 调用scanBleDevices...', options);
+
       const deviceList = await bleApi.scanBleDevices(options);
-      console.debug('[useBle] 扫描结果:', deviceList);
       setDevices(deviceList);
 
       if (options?.timeout) {
@@ -200,16 +194,12 @@ export const useBle = () => {
   }, [setIsScanning]);
 
   const connectDevice = useCallback(async (address: string) => {
-    console.debug('[useBle] connectDevice 被调用, address:', address);
     setIsConnecting(true);
     setError(null);
 
     try {
-      console.debug('[useBle] 正在调用 bleApi.connectBle...');
       const connection = await bleApi.connectBle(address);
-      console.debug('[useBle] connectBle 返回:', JSON.stringify(connection, null, 2));
       addConnection(connection);
-      console.debug('[useBle] 调用 setCurrentDevice:', address);
       setCurrentDevice(address);
       message.success(`已连接到 ${connection.name || address}`);
       return connection;

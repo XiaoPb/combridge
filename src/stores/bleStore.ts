@@ -228,3 +228,19 @@ export const getShortUuid = (uuid: string): string => {
   }
   return formatted;
 };
+
+export const formatMacAddress = (address: string): string => {
+  if (!address) return '-';
+  const match = address.match(/([0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2})/);
+  if (match) {
+    return match[1].toUpperCase();
+  }
+  const parts = address.split('-');
+  if (parts.length >= 2) {
+    const macPart = parts[parts.length - 1];
+    if (/^[0-9a-fA-F:]+$/.test(macPart)) {
+      return macPart.toUpperCase();
+    }
+  }
+  return address;
+};

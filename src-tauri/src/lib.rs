@@ -64,7 +64,7 @@ pub fn run() {
         .manage(action_dispatcher)
         .setup(move |_app| {
             let ble_manager = ble_manager_clone.clone();
-            tokio::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 if let Err(e) = ble_manager.initialize().await {
                     tracing::error!("BLE 初始化失败: {}", e);
                 }

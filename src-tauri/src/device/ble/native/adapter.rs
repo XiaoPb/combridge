@@ -153,6 +153,12 @@ impl BleAdapter {
             .collect()
     }
 
+    pub fn clear_scanned_device(&self, address: &str) {
+        let mut devices = self.scanned_devices.write().unwrap();
+        devices.retain(|id, _| id.to_string() != address);
+        info!("已清理扫描缓存: {}", address);
+    }
+
     pub async fn connect_device(&self, address: &str) -> Result<Arc<GattClient>> {
         let device = self
             .get_device(address)

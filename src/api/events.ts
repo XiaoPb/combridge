@@ -52,7 +52,7 @@ export const TauriEvents = {
   SERIAL_ERROR: 'serial-error',
   SERIAL_CONNECTED: 'serial-connected',
   SERIAL_DISCONNECTED: 'serial-disconnected',
-  BLE_DATA: 'ble-data',
+  BLE_DATA: 'ble-notify',
   BLE_CONNECTED: 'ble-connected',
   BLE_DISCONNECTED: 'ble-disconnected',
   BLE_ERROR: 'ble-error',

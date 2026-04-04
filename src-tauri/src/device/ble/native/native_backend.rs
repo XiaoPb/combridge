@@ -100,6 +100,7 @@ impl BleBackend for NativeBleBackend {
         if let Some(client) = adapter.get_client(address) {
             client.disconnect().await?;
             adapter.remove_client(address);
+            adapter.clear_scanned_device(address);
             info!("已断开设备: {}", address);
         } else {
             info!("设备未连接或已断开: {}", address);

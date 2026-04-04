@@ -440,7 +440,7 @@ const BlePage: React.FC = () => {
                 if (keys.length === 0) return;
                 const key = keys[0] as string;
                 for (const svc of tabData.services) {
-                  const char = svc.characteristics.find((c) => `${svc.uuid}-${c.uuid}` === key);
+                  const char = (svc.characteristics || []).find((c) => `${svc.uuid}-${c.uuid}` === key);
                   if (char) {
                     handleCharacteristicSelectForDevice(char, tabData.deviceId);
                     return;

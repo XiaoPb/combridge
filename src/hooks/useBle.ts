@@ -12,6 +12,135 @@ const handleBleError = (operation: string, params: Record<string, unknown>, erro
   return errorMsg;
 };
 
+let globalBleListeners: UnlistenFn[] = [];
+let bleListenerCount = 0;
+let bleListenerSetupPromise: Promise<void> | null = null;
+
+async function setupGlobalBleListeners(
+  addNotification: (n: { id: string; deviceId: string; characteristicUuid: string; data: number[]; timestamp: number }) => void,
+  addConnection: (c: BleConnection) => void,
+  removeConnection: (id: string) => void,
+  currentDevice: string | null,
+  setError: (e: string | null) => void,
+  setIsConnecting: (v: boolean) => void,
+  setIsScanning: (v: boolean) => void,
+  addDevice: (d: any) => void,
+  setMode: (m: BleMode) => void,
+  setSerialPort: (p: string | null) => void,
+  setCurrentDevice: (id: string | null) => void,
+  clearServices: () => void,
+  clearCharacteristics: () => void
+) {
+  if (bleListenerSetupPromise) {
+    await bleListenerSetupPromise;
+  }
+
+  if (bleListenerCount > 0) {
+    bleListenerCount++;
+    return;
+  }
+
+  bleListenerSetupPromise = (async () => {
+    const unlistenData = await onBleData((event) => {
+      console.debug('[useBle] 收到BLE数据:', {
+        deviceId: event.deviceId,
+        characteristicUuid: event.characteristicUuid,
+        dataLen: event.data?.length,
+        timestamp: event.timestamp,
+      });
+      addNotification({
+        id: generateBleId(),
+        deviceId: event.deviceId,
+        characteristicUuid: event.characteristicUuid,
+        data: event.data,
+        timestamp: event.timestamp,
+      });
+    });
+
+    const unlistenConnected = await onBleConnected((event) => {
+      addConnection({
+        deviceId: event.deviceId,
+        address: event.address,
+        name: event.name,
+        isConnected: true,
+        services: [],
+        connectedAt: Date.now(),
+      });
+      setIsConnecting(false);
+      message.success(`设备 ${event.name || event.address} 已连接`);
+    });
+
+    const unlistenDisconnected = await onBleDisconnected((event) => {
+      removeConnection(event.deviceId);
+      if (currentDevice === event.deviceId) {
+        setCurrentDevice(null);
+        clearServices();
+        clearCharacteristics();
+      }
+      message.info(`设备 ${event.address} 已断开`);
+    });
+
+    const unlistenError = await onBleError((event) => {
+      const errorMsg = event.error;
+      setError(errorMsg);
+      setIsConnecting(false);
+      setIsScanning(false);
+      message.error(`BLE错误: ${errorMsg}`);
+    });
+
+    const unlistenScanResult = await onBleScanResult((device: unknown) => {
+      const deviceInfo = device as {
+        address: string;
+        name?: string;
+        rssi?: number;
+        isConnectable: boolean;
+        services?: string[];
+      };
+      addDevice({
+        address: deviceInfo.address,
+        name: deviceInfo.name,
+        rssi: deviceInfo.rssi,
+        isConnectable: deviceInfo.isConnectable,
+        services: deviceInfo.services,
+        discoveredAt: Date.now(),
+      });
+    });
+
+    const unlistenModeChanged = await onBleModeChanged((event) => {
+      setMode(event.mode);
+      setSerialPort(event.serialPort || null);
+      message.info(`BLE模式已切换为 ${event.mode}`);
+    });
+
+    globalBleListeners = [
+      unlistenData,
+      unlistenConnected,
+      unlistenDisconnected,
+      unlistenError,
+      unlistenScanResult,
+      unlistenModeChanged,
+    ];
+
+    bleListenerCount++;
+    bleListenerSetupPromise = null;
+  })();
+
+  await bleListenerSetupPromise;
+}
+
+async function cleanupGlobalBleListeners() {
+  if (bleListenerSetupPromise) {
+    await bleListenerSetupPromise;
+  }
+
+  bleListenerCount--;
+  if (bleListenerCount <= 0) {
+    bleListenerCount = 0;
+    globalBleListeners.forEach((unlisten) => unlisten());
+    globalBleListeners = [];
+  }
+}
+
 export const useBle = () => {
   const {
     mode,
@@ -52,97 +181,27 @@ export const useBle = () => {
     setError,
   } = useBleStore();
 
-  const listenersRef = useRef<UnlistenFn[]>([]);
   const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const setupListeners = async () => {
-      const unlistenData = await onBleData((event) => {
-        console.debug('[useBle] 收到BLE数据:', {
-          deviceId: event.deviceId,
-          characteristicUuid: event.characteristicUuid,
-          dataLen: event.data?.length,
-          timestamp: event.timestamp,
-        });
-        addNotification({
-          id: generateBleId(),
-          deviceId: event.deviceId,
-          characteristicUuid: event.characteristicUuid,
-          data: event.data,
-          timestamp: event.timestamp,
-        });
-      });
-
-      const unlistenConnected = await onBleConnected((event) => {
-        addConnection({
-          deviceId: event.deviceId,
-          address: event.address,
-          name: event.name,
-          isConnected: true,
-          services: [],
-          connectedAt: Date.now(),
-        });
-        setIsConnecting(false);
-        message.success(`设备 ${event.name || event.address} 已连接`);
-      });
-
-      const unlistenDisconnected = await onBleDisconnected((event) => {
-        removeConnection(event.deviceId);
-        if (currentDevice === event.deviceId) {
-          setCurrentDevice(null);
-          clearServices();
-          clearCharacteristics();
-        }
-        message.info(`设备 ${event.address} 已断开`);
-      });
-
-      const unlistenError = await onBleError((event) => {
-        const errorMsg = event.error;
-        setError(errorMsg);
-        setIsConnecting(false);
-        setIsScanning(false);
-        message.error(`BLE错误: ${errorMsg}`);
-      });
-
-      const unlistenScanResult = await onBleScanResult((device: unknown) => {
-        const deviceInfo = device as {
-          address: string;
-          name?: string;
-          rssi?: number;
-          isConnectable: boolean;
-          services?: string[];
-        };
-        addDevice({
-          address: deviceInfo.address,
-          name: deviceInfo.name,
-          rssi: deviceInfo.rssi,
-          isConnectable: deviceInfo.isConnectable,
-          services: deviceInfo.services,
-          discoveredAt: Date.now(),
-        });
-      });
-
-      const unlistenModeChanged = await onBleModeChanged((event) => {
-        setMode(event.mode);
-        setSerialPort(event.serialPort || null);
-        message.info(`BLE模式已切换为 ${event.mode}`);
-      });
-
-      listenersRef.current = [
-        unlistenData,
-        unlistenConnected,
-        unlistenDisconnected,
-        unlistenError,
-        unlistenScanResult,
-        unlistenModeChanged,
-      ];
-    };
-
-    setupListeners();
+    setupGlobalBleListeners(
+      addNotification,
+      addConnection,
+      removeConnection,
+      currentDevice,
+      setError,
+      setIsConnecting,
+      setIsScanning,
+      addDevice,
+      setMode,
+      setSerialPort,
+      setCurrentDevice,
+      clearServices,
+      clearCharacteristics
+    );
 
     return () => {
-      listenersRef.current.forEach((unlisten) => unlisten());
-      listenersRef.current = [];
+      cleanupGlobalBleListeners();
       if (scanTimeoutRef.current) {
         clearTimeout(scanTimeoutRef.current);
       }

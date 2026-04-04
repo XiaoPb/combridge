@@ -533,14 +533,15 @@ const BlePage: React.FC = () => {
       return {
         key,
         label: (
-        <span style={{ fontSize: 12 }}>
-          {tab.name || tab.address}
-          <Tag color="success" style={{ marginLeft: 4, fontSize: 10 }}>●</Tag>
-        </span>
-      ),
-      closable: true,
-      children: renderDeviceTabContent(tab),
-    })),
+          <span style={{ fontSize: 12 }}>
+            {tab.name || tab.address}
+            <Tag color="success" style={{ marginLeft: 4, fontSize: 10 }}>●</Tag>
+          </span>
+        ),
+        closable: true,
+        children: renderDeviceTabContent(tab),
+      };
+    }),
   ];
 
   console.debug('[BlePage] 渲染, activeTabKey:', activeTabKey, 'deviceTabs:', Object.keys(deviceTabs), 'tabItems count:', tabItems.length);

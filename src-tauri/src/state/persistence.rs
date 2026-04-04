@@ -8,6 +8,7 @@ use super::types::Preferences;
 
 const STATE_FILE_NAME: &str = "app_state.json";
 const PREFERENCES_FILE_NAME: &str = "preferences.yaml";
+const CONFIG_DIR_NAME: &str = "config";
 
 pub struct StatePersistence {
     state_path: PathBuf,
@@ -18,7 +19,12 @@ pub struct StatePersistence {
 impl StatePersistence {
     pub fn new(app_data_dir: PathBuf) -> Self {
         let state_path = app_data_dir.join(STATE_FILE_NAME);
-        let preferences_path = app_data_dir.join(PREFERENCES_FILE_NAME);
+        
+        let preferences_path = std::env::current_dir()
+            .unwrap_or_else(|_| app_data_dir.clone())
+            .join(CONFIG_DIR_NAME)
+            .join(PREFERENCES_FILE_NAME);
+        
         debug!("状态持久化路径: {:?}", state_path);
         debug!("偏好设置持久化路径: {:?}", preferences_path);
         Self {

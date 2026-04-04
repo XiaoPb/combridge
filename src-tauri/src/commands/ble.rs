@@ -374,6 +374,12 @@ pub async fn subscribe_ble_notify(
     
     let manager = manager.inner();
 
+    let existing = manager.get_subscriptions(&device_id).await;
+    if existing.contains(&characteristic_uuid) {
+        info!("特征已订阅，跳过重复订阅: 设备: {}, 特征: {}", device_id, characteristic_uuid);
+        return Ok(());
+    }
+
     let app_clone = app.clone();
     let device_id_clone = device_id.clone();
     let char_clone = characteristic_uuid.clone();

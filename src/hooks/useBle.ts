@@ -53,6 +53,12 @@ export const useBle = () => {
   useEffect(() => {
     const setupListeners = async () => {
       const unlistenData = await onBleData((event) => {
+        console.debug('[useBle] 收到BLE数据:', {
+          deviceId: event.deviceId,
+          characteristicUuid: event.characteristicUuid,
+          dataLen: event.data?.length,
+          timestamp: event.timestamp,
+        });
         addNotification({
           id: generateBleId(),
           deviceId: event.deviceId,

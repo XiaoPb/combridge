@@ -93,6 +93,7 @@ export const serialEvents = {
 
 export function onBleData(callback: (event: BleDataEvent) => void): Promise<UnlistenFn> {
   return listen<BleDataEvent>(TauriEvents.BLE_DATA, (event) => {
+    console.debug('[BLE Event] 收到 ble-notify:', JSON.stringify(event.payload));
     callback(event.payload);
   });
 }

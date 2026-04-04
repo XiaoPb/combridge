@@ -22,13 +22,16 @@ pub struct BleConfigDto {
 
 /// BLE通知事件，用于向前端推送接收到的通知数据
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BleNotifyEvent {
     /// 设备地址
-    pub address: String,
+    pub device_id: String,
     /// 特征UUID
-    pub char_uuid: String,
+    pub characteristic_uuid: String,
     /// 接收到的数据
     pub data: Vec<u8>,
+    /// 时间戳
+    pub timestamp: u64,
 }
 
 /// 配置BLE模式
@@ -377,9 +380,13 @@ pub async fn subscribe_ble_notify(
     let callback = std::sync::Arc::new(move |_addr: &str, _char: &str, data: &[u8]| {
         debug!("收到BLE通知，设备: {}, 特征: {}, 数据长度: {}", _addr, _char, data.len());
         let event = BleNotifyEvent {
-            address: device_id_clone.clone(),
-            char_uuid: char_clone.clone(),
+            device_id: device_id_clone.clone(),
+            characteristic_uuid: char_clone.clone(),
             data: data.to_vec(),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
         };
         let _ = app_clone.emit("ble-notify", &event);
     });

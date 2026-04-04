@@ -83,6 +83,7 @@ const BlePage: React.FC = () => {
   const [deviceTabs, setDeviceTabs] = useState<Record<string, DeviceTabData>>({});
   const [configCollapsed, setConfigCollapsed] = useState(false);
   const [gattCollapsed, setGattCollapsed] = useState(false);
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
   const processedNotificationIds = useRef<Set<string>>(new Set());
   const logContainerRefs = useRef<Record<string, TextAreaRef>>({});
   const lastLogCountRef = useRef<Record<string, number>>({});
@@ -678,6 +679,8 @@ const BlePage: React.FC = () => {
             <CharacteristicPanel
               characteristic={tabData.selectedCharacteristic}
               isSubscribed={isSubscribed}
+              collapsed={panelCollapsed}
+              onToggleCollapse={() => setPanelCollapsed(!panelCollapsed)}
               onRead={(uuid) => handleReadForDevice(uuid, tabData.deviceId)}
               onWrite={(uuid, data, fmt, wnr) => handleWriteForDevice(uuid, data, fmt, wnr, tabData.deviceId)}
               onSubscribe={(uuid) => handleSubscribeForDevice(uuid, tabData.deviceId)}
@@ -687,7 +690,7 @@ const BlePage: React.FC = () => {
 
           <Card
             size="small"
-            style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', minHeight: 0 }}
+            style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', minHeight: 100 }}
             styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden', minHeight: 0 } }}
             title={<span>数据视图</span>}
             extra={

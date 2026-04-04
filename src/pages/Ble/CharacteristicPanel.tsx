@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Card, Button, Input, Segmented, Typography, Tag, message, Tooltip } from 'antd';
-import { ReadOutlined, SendOutlined, BellOutlined, BellFilled } from '@ant-design/icons';
+import { ReadOutlined, SendOutlined, BellOutlined, BellFilled, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import type { BleCharacteristic } from '../../types';
 import { getShortUuid } from '../../stores/bleStore';
 import { getCharacteristicName } from '../../types/ble';
@@ -11,6 +11,8 @@ const { TextArea } = Input;
 interface CharacteristicPanelProps {
   characteristic: BleCharacteristic | null;
   isSubscribed: boolean;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onRead: (uuid: string) => void;
   onWrite: (uuid: string, data: string, format: 'hex' | 'text', withoutResponse: boolean) => void;
   onSubscribe: (uuid: string) => void;
@@ -20,6 +22,8 @@ interface CharacteristicPanelProps {
 const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
   characteristic,
   isSubscribed,
+  collapsed,
+  onToggleCollapse,
   onRead,
   onWrite,
   onSubscribe,
@@ -32,11 +36,21 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
   if (!characteristic) {
     return (
       <Card 
-        title={<Text style={{ fontSize: 13 }}>特征操作面板</Text>} 
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 13 }}>特征操作面板</Text>
+            <Button
+              type="text"
+              size="small"
+              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={onToggleCollapse}
+            />
+          </div>
+        }
         size="small"
-        style={{ height: 240 }}
+        styles={{ body: { display: collapsed ? 'none' : 'block', padding: 8 } }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100% - 40px)', color: '#999' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 180, color: '#999' }}>
           请从 GATT 服务树中选择一个特征
         </div>
       </Card>
@@ -77,10 +91,19 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
 
   return (
     <Card 
-      title={<Text style={{ fontSize: 13 }}>特征操作面板</Text>}
+      title={
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={{ fontSize: 13 }}>特征操作面板</Text>
+          <Button
+            type="text"
+            size="small"
+            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            onClick={onToggleCollapse}
+          />
+        </div>
+      }
       size="small"
-      style={{ height: 240 }}
-      styles={{ body: { padding: '8px 12px', height: 'calc(100% - 40px)', display: 'flex', flexDirection: 'column' } }}
+      styles={{ body: { display: collapsed ? 'none' : 'block', padding: '8px 12px', height: 200, overflow: 'hidden' } }}
     >
       <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexShrink: 0 }}>
         <div style={{ flex: '1 1 0', minWidth: 0 }}>
@@ -127,59 +150,57 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
       </div>
 
       {canWrite && (
-        <>
-          <div style={{ flex: '1 1 0', display: 'flex', gap: 8, minHeight: 0 }}>
-            <TextArea
-              value={inputData}
-              onChange={(e) => setInputData(e.target.value)}
-              placeholder={inputFormat === 'hex' ? '输入十六进制数据，如：01 02 03 FF' : '输入要发送的文本数据'}
-              style={{ 
-                flex: '1 1 0', 
-                resize: 'none',
-                fontFamily: inputFormat === 'hex' ? 'Consolas, Monaco, monospace' : 'inherit',
-                fontSize: 12,
-              }}
+        <div style={{ height: 'calc(100% - 80px)', display: 'flex', gap: 8, minHeight: 0 }}>
+          <TextArea
+            value={inputData}
+            onChange={(e) => setInputData(e.target.value)}
+            placeholder={inputFormat === 'hex' ? '输入十六进制数据，如：01 02 03 FF' : '输入要发送的文本数据'}
+            style={{ 
+              flex: '1 1 0', 
+              resize: 'none',
+              fontFamily: inputFormat === 'hex' ? 'Consolas, Monaco, monospace' : 'inherit',
+              fontSize: 12,
+            }}
+          />
+          
+          <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'space-between' }}>
+            <Segmented
+              value={inputFormat}
+              onChange={(value) => setInputFormat(value as 'hex' | 'text')}
+              size="small"
+              options={[
+                { value: 'text', label: 'TEXT' },
+                { value: 'hex', label: 'HEX' },
+              ]}
             />
             
-            <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'space-between' }}>
+            {properties.writeWithoutResponse && (
               <Segmented
-                value={inputFormat}
-                onChange={(value) => setInputFormat(value as 'hex' | 'text')}
+                value={withoutResponse ? 'noResponse' : 'withResponse'}
+                onChange={(value) => setWithoutResponse(value === 'noResponse')}
                 size="small"
                 options={[
-                  { value: 'text', label: 'TEXT' },
-                  { value: 'hex', label: 'HEX' },
+                  { value: 'withResponse', label: '等待响应' },
+                  { value: 'noResponse', label: '无响应' },
                 ]}
               />
-              
-              {properties.writeWithoutResponse && (
-                <Segmented
-                  value={withoutResponse ? 'noResponse' : 'withResponse'}
-                  onChange={(value) => setWithoutResponse(value === 'noResponse')}
-                  size="small"
-                  options={[
-                    { value: 'withResponse', label: '等待响应' },
-                    { value: 'noResponse', label: '无响应' },
-                  ]}
-                />
-              )}
-              
-              <Button
-                type="primary"
-                icon={<SendOutlined />}
-                onClick={handleWrite}
-                disabled={!inputData.trim()}
-                block
-              >
-                发送
-              </Button>
-            </div>
+            )}
+            
+            <Button
+              type="primary"
+              icon={<SendOutlined />}
+              onClick={handleWrite}
+              disabled={!inputData.trim()}
+              block
+            >
+              发送
+            </Button>
           </div>
-        </>
+        </div>
       )}
       
       {!canWrite && (
-        <div style={{ flex: '1 1 0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999', fontSize: 12 }}>
+        <div style={{ height: 'calc(100% - 80px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999', fontSize: 12 }}>
           该特征不支持写入操作
         </div>
       )}

@@ -187,21 +187,25 @@ const BleScanner: React.FC<BleScannerProps> = ({
       )}
 
       {(filteredDevices || []).length > 0 ? (
-        <Table
-          dataSource={filteredDevices}
-          columns={columns}
-          rowKey="address"
-          size="small"
-          scroll={{ y: 300 }}
-          pagination={false}
-        />
+        <div style={{ flex: '1 1 0', minHeight: 0, overflow: 'auto' }}>
+          <Table
+            dataSource={filteredDevices}
+            columns={columns}
+            rowKey="address"
+            size="small"
+            pagination={false}
+            style={{ height: '100%' }}
+          />
+        </div>
       ) : (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={
-            isScanning ? '正在扫描设备...' : '暂无设备，点击扫描按钮开始'
-          }
-        />
+        <div style={{ flex: '1 1 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={
+              isScanning ? '正在扫描设备...' : '暂无设备，点击扫描按钮开始'
+            }
+          />
+        </div>
       )}
     </Card>
   );

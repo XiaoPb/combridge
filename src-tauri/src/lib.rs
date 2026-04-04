@@ -3,6 +3,7 @@ pub mod device;
 pub mod error;
 pub mod protocol;
 pub mod service;
+pub mod state;
 pub mod websocket;
 
 use std::sync::Arc;
@@ -10,6 +11,7 @@ use std::sync::Arc;
 use device::{BleManager, SerialManager};
 use protocol::PluginManager;
 use service::LoggerService;
+use state::{create_action_dispatcher, create_app_state, create_state_persistence};
 use tracing::info;
 use websocket::ConnectionPool;
 
@@ -17,6 +19,13 @@ fn init_logger() {
     let _guard = LoggerService::init_default();
     std::mem::forget(_guard);
     info!("ComBridge Rust 应用启动");
+}
+
+fn get_app_data_dir() -> std::path::PathBuf {
+    dirs::data_local_dir()
+        .or_else(|| dirs::data_dir())
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("combridge")
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -28,6 +37,16 @@ pub fn run() {
     let connection_pool = Arc::new(ConnectionPool::new());
     let plugin_manager = Arc::new(PluginManager::new());
 
+    let app_state = create_app_state();
+    let app_data_dir = get_app_data_dir();
+    let state_persistence = create_state_persistence(app_data_dir);
+    let action_dispatcher = create_action_dispatcher(
+        app_state.clone(),
+        state_persistence.clone(),
+        serial_manager.clone(),
+        ble_manager.clone(),
+    );
+
     info!("服务初始化完成");
 
     tauri::Builder::default()
@@ -38,6 +57,9 @@ pub fn run() {
         .manage(ble_manager)
         .manage(connection_pool)
         .manage(plugin_manager)
+        .manage(app_state)
+        .manage(state_persistence)
+        .manage(action_dispatcher)
         .invoke_handler(tauri::generate_handler![
             commands::serial::scan_serial_ports,
             commands::serial::open_serial_port,
@@ -88,6 +110,13 @@ pub fn run() {
             commands::system::get_platform,
             commands::system::open_url,
             commands::system::show_in_folder,
+            commands::state::dispatch_action,
+            commands::state::get_state,
+            commands::state::get_channel_data,
+            commands::state::restore_state,
+            commands::state::save_state,
+            commands::state::get_connected_channels,
+            commands::state::get_window_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Card, Space, Button, Input, Segmented, Typography, Tag, message, Tooltip } from 'antd';
-import { ReadOutlined, SendOutlined, BellOutlined, StopOutlined } from '@ant-design/icons';
+import { Card, Button, Input, Segmented, Typography, Tag, message, Tooltip } from 'antd';
+import { ReadOutlined, SendOutlined, BellOutlined, BellFilled } from '@ant-design/icons';
 import type { BleCharacteristic } from '../../types';
 import { getShortUuid } from '../../stores/bleStore';
 import { getCharacteristicName } from '../../types/ble';
@@ -10,6 +10,7 @@ const { TextArea } = Input;
 
 interface CharacteristicPanelProps {
   characteristic: BleCharacteristic | null;
+  isSubscribed: boolean;
   onRead: (uuid: string) => void;
   onWrite: (uuid: string, data: string, format: 'hex' | 'text', withoutResponse: boolean) => void;
   onSubscribe: (uuid: string) => void;
@@ -18,6 +19,7 @@ interface CharacteristicPanelProps {
 
 const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
   characteristic,
+  isSubscribed,
   onRead,
   onWrite,
   onSubscribe,
@@ -32,7 +34,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
       <Card 
         title={<Text style={{ fontSize: 13 }}>特征操作面板</Text>} 
         size="small"
-        style={{ height: 320 }}
+        style={{ height: 240 }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100% - 40px)', color: '#999' }}>
           请从 GATT 服务树中选择一个特征
@@ -54,6 +56,14 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
     onWrite(uuid, inputData, inputFormat, withoutResponse);
   };
 
+  const handleSubscribeToggle = () => {
+    if (isSubscribed) {
+      onUnsubscribe(uuid);
+    } else {
+      onSubscribe(uuid);
+    }
+  };
+
   const getWriteModeText = () => {
     if (properties.write && properties.writeWithoutResponse) {
       return '写入: 支持';
@@ -69,7 +79,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
     <Card 
       title={<Text style={{ fontSize: 13 }}>特征操作面板</Text>}
       size="small"
-      style={{ height: 320 }}
+      style={{ height: 240 }}
       styles={{ body: { padding: '8px 12px', height: 'calc(100% - 40px)', display: 'flex', flexDirection: 'column' } }}
     >
       <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexShrink: 0 }}>
@@ -91,32 +101,21 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
         
         <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
           {canNotify && (
-            <Space size={4}>
-              <Tooltip title="订阅通知">
-                <Button
-                  size="small"
-                  icon={<BellOutlined />}
-                  onClick={() => onSubscribe(uuid)}
-                >
-                  订阅
-                </Button>
-              </Tooltip>
-              <Tooltip title="取消订阅">
-                <Button
-                  size="small"
-                  icon={<StopOutlined />}
-                  onClick={() => onUnsubscribe(uuid)}
-                >
-                  取消订阅
-                </Button>
-              </Tooltip>
-            </Space>
+            <Tooltip title={isSubscribed ? '取消订阅通知' : '订阅通知'}>
+              <Button
+                size="small"
+                type={isSubscribed ? 'primary' : 'default'}
+                icon={isSubscribed ? <BellFilled /> : <BellOutlined />}
+                onClick={handleSubscribeToggle}
+              >
+                {isSubscribed ? '已订阅' : '订阅'}
+              </Button>
+            </Tooltip>
           )}
           {canRead && (
             <Tooltip title="读取特征值">
               <Button
                 size="small"
-                type="primary"
                 icon={<ReadOutlined />}
                 onClick={() => onRead(uuid)}
               >

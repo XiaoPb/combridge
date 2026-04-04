@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Tabs, Alert, Space, Button, Tree, Tag, Typography, Empty, Spin } from 'antd';
-import { MenuFoldOutlined, MenuUnfoldOutlined, ClearOutlined, SaveOutlined } from '@ant-design/icons';
+import { Tabs, Alert, Space, Button, Tree, Tag, Typography, Empty, Spin, Card, Input, Segmented, Tooltip } from 'antd';
+import { MenuFoldOutlined, MenuUnfoldOutlined, ClearOutlined, DownloadOutlined, VerticalAlignBottomOutlined } from '@ant-design/icons';
 import { useBle } from '../../hooks/useBle';
 import { useSerialStore } from '../../stores/serialStore';
 import { serialApi, bleApi } from '../../api/tauri';
@@ -12,8 +12,10 @@ import BleScanner from './BleScanner';
 import CharacteristicPanel from './CharacteristicPanel';
 import AtConfigPanel from './AtConfigPanel';
 import type { BleCharacteristic, BleService } from '../../types';
+import type { TextAreaRef } from 'antd/es/input/TextArea';
 
 const { Text } = Typography;
+const { TextArea } = Input;
 
 interface DeviceLogEntry {
   id: string;
@@ -33,9 +35,21 @@ interface DeviceTabData {
   logs: DeviceLogEntry[];
   selectedCharacteristic: BleCharacteristic | null;
   discoveringServices: boolean;
+  subscribedUuids: Set<string>;
+  displayFormat: 'hex' | 'text';
+  autoScroll: boolean;
 }
 
 const SCAN_TAB_KEY = 'scan';
+
+const formatTimestamp = (timestamp: number): string => {
+  const date = new Date(timestamp);
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  const seconds = date.getSeconds().toString().padStart(2, '0');
+  const ms = date.getMilliseconds().toString().padStart(3, '0');
+  return `${hours}:${minutes}:${seconds}.${ms}`;
+};
 
 const BlePage: React.FC = () => {
   const {
@@ -70,6 +84,8 @@ const BlePage: React.FC = () => {
   const [configCollapsed, setConfigCollapsed] = useState(false);
   const [gattCollapsed, setGattCollapsed] = useState(false);
   const processedNotificationIds = useRef<Set<string>>(new Set());
+  const logContainerRefs = useRef<Record<string, TextAreaRef>>({});
+  const lastLogCountRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     serialApi.listPorts().then(setPorts).catch(console.error);
@@ -101,6 +117,9 @@ const BlePage: React.FC = () => {
             logs: [],
             selectedCharacteristic: null,
             discoveringServices: false,
+            subscribedUuids: new Set(),
+            displayFormat: 'text',
+            autoScroll: true,
           };
 
           restoreSubscriptions(conn.address).catch((err) => {
@@ -145,6 +164,9 @@ const BlePage: React.FC = () => {
             logs: [],
             selectedCharacteristic: null,
             discoveringServices: true,
+            subscribedUuids: new Set(),
+            displayFormat: 'text',
+            autoScroll: true,
           },
         };
       }
@@ -236,6 +258,24 @@ const BlePage: React.FC = () => {
       }
     }
   }, [notifications, currentDevice, connections, addLogToDevice]);
+
+  useEffect(() => {
+    const tab = deviceTabs[activeTabKey];
+    if (!tab || !tab.autoScroll) return;
+    
+    const currentCount = tab.logs.length;
+    const lastCount = lastLogCountRef.current[activeTabKey] || 0;
+    
+    if (currentCount !== lastCount) {
+      lastLogCountRef.current[activeTabKey] = currentCount;
+      requestAnimationFrame(() => {
+        const textArea = logContainerRefs.current[activeTabKey]?.resizableTextArea?.textArea;
+        if (textArea) {
+          textArea.scrollTop = textArea.scrollHeight;
+        }
+      });
+    }
+  }, [deviceTabs, activeTabKey]);
 
   const handleConnect = async (address: string) => {
     const existingConn = connections.find((c) => c.address === address);
@@ -395,6 +435,13 @@ const BlePage: React.FC = () => {
     async (uuid: string, deviceId: string) => {
       try {
         await subscribeNotify(uuid, deviceId);
+        setDeviceTabs((prev) => {
+          const tab = prev[deviceId];
+          if (!tab) return prev;
+          const newSet = new Set(tab.subscribedUuids);
+          newSet.add(uuid);
+          return { ...prev, [deviceId]: { ...tab, subscribedUuids: newSet } };
+        });
         addLogToDevice(deviceId, {
           timestamp: Date.now(),
           direction: 'SUBSCRIBE',
@@ -411,6 +458,13 @@ const BlePage: React.FC = () => {
     async (uuid: string, deviceId: string) => {
       try {
         await unsubscribeNotify(uuid, deviceId);
+        setDeviceTabs((prev) => {
+          const tab = prev[deviceId];
+          if (!tab) return prev;
+          const newSet = new Set(tab.subscribedUuids);
+          newSet.delete(uuid);
+          return { ...prev, [deviceId]: { ...tab, subscribedUuids: newSet } };
+        });
         addLogToDevice(deviceId, {
           timestamp: Date.now(),
           direction: 'UNSUBSCRIBE',
@@ -429,6 +483,42 @@ const BlePage: React.FC = () => {
       if (!tab) return prev;
       return { ...prev, [deviceId]: { ...tab, logs: [] } };
     });
+  }, []);
+
+  const handleExportLog = useCallback(async (tabData: DeviceTabData) => {
+    if (tabData.logs.length === 0) return;
+    
+    const logText = tabData.logs
+      .map((entry) => {
+        const ts = formatTimestamp(entry.timestamp);
+        const dir = entry.direction;
+        let content = '';
+        if (entry.data) {
+          content = `[${entry.data.length} byte] ${formatBleData(entry.data, 'hex')}`;
+        } else if (entry.text) {
+          content = entry.text;
+        }
+        const charInfo = entry.characteristicUuid ? ` [${getShortUuid(entry.characteristicUuid)}]` : '';
+        return `[${ts}][${dir}]${charInfo} ${content}`;
+      })
+      .join('\n');
+
+    try {
+      const { save } = await import('@tauri-apps/plugin-dialog');
+      const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+      const filePath = await save({
+        defaultPath: `ble-log-${new Date().toISOString().slice(0, 10)}.txt`,
+        filters: [
+          { name: 'Text', extensions: ['txt'] },
+          { name: 'Log', extensions: ['log'] },
+        ],
+      });
+      if (filePath) {
+        await writeTextFile(filePath, logText);
+      }
+    } catch (err) {
+      console.error('[BlePage] 保存日志失败:', err);
+    }
   }, []);
 
   const buildTreeData = (svcList: BleService[]) => {
@@ -521,42 +611,9 @@ const BlePage: React.FC = () => {
 
   const renderDeviceTabContent = (tabData: DeviceTabData) => {
     const treeData = buildTreeData(tabData.services);
-    const logText = tabData.logs
-      .map((entry) => {
-        const ts = new Date(entry.timestamp).toLocaleTimeString();
-        const dir = entry.direction;
-        let content = '';
-        if (entry.data) {
-          content = `[${entry.data.length} byte] ${formatBleData(entry.data, 'hex')}`;
-        } else if (entry.text) {
-          content = entry.text;
-        } else {
-          content = '';
-        }
-        const charInfo = entry.characteristicUuid ? ` [${getShortUuid(entry.characteristicUuid)}]` : '';
-        return `[${ts}][${dir}]${charInfo} ${content}`;
-      })
-      .join('\n');
-
-    const handleSaveLog = async () => {
-      if (!logText) return;
-      try {
-        const { save } = await import('@tauri-apps/plugin-dialog');
-        const { writeTextFile } = await import('@tauri-apps/plugin-fs');
-        const filePath = await save({
-          defaultPath: `ble-log-${new Date().toISOString().slice(0, 10)}.txt`,
-          filters: [
-            { name: 'Text', extensions: ['txt'] },
-            { name: 'Log', extensions: ['log'] },
-          ],
-        });
-        if (filePath) {
-          await writeTextFile(filePath, logText);
-        }
-      } catch (err) {
-        console.error('[BlePage] 保存日志失败:', err);
-      }
-    };
+    const isSubscribed = tabData.selectedCharacteristic 
+      ? tabData.subscribedUuids.has(tabData.selectedCharacteristic.uuid)
+      : false;
 
     return (
       <div style={{ display: 'flex', height: '100%', gap: 8, overflow: 'hidden' }}>
@@ -620,6 +677,7 @@ const BlePage: React.FC = () => {
           <div style={{ flexShrink: 0, marginBottom: 8 }}>
             <CharacteristicPanel
               characteristic={tabData.selectedCharacteristic}
+              isSubscribed={isSubscribed}
               onRead={(uuid) => handleReadForDevice(uuid, tabData.deviceId)}
               onWrite={(uuid, data, fmt, wnr) => handleWriteForDevice(uuid, data, fmt, wnr, tabData.deviceId)}
               onSubscribe={(uuid) => handleSubscribeForDevice(uuid, tabData.deviceId)}
@@ -627,43 +685,91 @@ const BlePage: React.FC = () => {
             />
           </div>
 
-          <div style={{ flex: '1 1 0', minHeight: 400, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ marginBottom: 8, flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <Button
-                size="small"
-                icon={<SaveOutlined />}
-                onClick={handleSaveLog}
-                disabled={tabData.logs.length === 0}
-              >
-                保存日志
-              </Button>
-              <Button
-                size="small"
-                icon={<ClearOutlined />}
-                onClick={() => handleClearLogs(tabData.deviceId)}
-                disabled={tabData.logs.length === 0}
-              >
-                清空日志
-              </Button>
-            </div>
-
-            <div
+          <Card
+            size="small"
+            style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', minHeight: 0 }}
+            styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden', minHeight: 0 } }}
+            title={<span>数据视图</span>}
+            extra={
+              <Space>
+                <Tooltip title={tabData.autoScroll ? '自动滚动: 开启' : '自动滚动: 关闭'}>
+                  <Button
+                    type={tabData.autoScroll ? 'primary' : 'default'}
+                    icon={<VerticalAlignBottomOutlined />}
+                    onClick={() => {
+                      setDeviceTabs((prev) => ({
+                        ...prev,
+                        [tabData.deviceId]: { ...prev[tabData.deviceId], autoScroll: !prev[tabData.deviceId].autoScroll },
+                      }));
+                    }}
+                    size="small"
+                  />
+                </Tooltip>
+                <Segmented
+                  value={tabData.displayFormat}
+                  onChange={(value) => {
+                    setDeviceTabs((prev) => ({
+                      ...prev,
+                      [tabData.deviceId]: { ...prev[tabData.deviceId], displayFormat: value as 'hex' | 'text' },
+                    }));
+                  }}
+                  size="small"
+                  options={[
+                    { value: 'text', label: 'TEXT' },
+                    { value: 'hex', label: 'HEX' },
+                  ]}
+                />
+                <Button
+                  size="small"
+                  icon={<DownloadOutlined />}
+                  onClick={() => handleExportLog(tabData)}
+                  disabled={tabData.logs.length === 0}
+                >
+                  导出
+                </Button>
+                <Button
+                  size="small"
+                  icon={<ClearOutlined />}
+                  onClick={() => handleClearLogs(tabData.deviceId)}
+                  disabled={tabData.logs.length === 0}
+                >
+                  清空
+                </Button>
+              </Space>
+            }
+          >
+            <TextArea
+              ref={(el) => { if (el) logContainerRefs.current[tabData.deviceId] = el; }}
+              value={tabData.logs
+                .map((entry) => {
+                  const timestamp = formatTimestamp(entry.timestamp);
+                  const dir = entry.direction;
+                  let content = '';
+                  if (entry.data) {
+                    content = `[${entry.data.length} byte] ${formatBleData(entry.data, tabData.displayFormat)}`;
+                  } else if (entry.text) {
+                    content = entry.text;
+                  }
+                  const charInfo = entry.characteristicUuid ? ` [${getShortUuid(entry.characteristicUuid)}]` : '';
+                  return `[${timestamp}][${dir}]${charInfo} ${content}`;
+                })
+                .join('\n')}
               style={{
                 flex: '1 1 0',
                 overflow: 'auto',
                 background: 'var(--bg-primary)',
-                borderRadius: 4,
                 padding: 8,
+                borderRadius: 4,
                 fontFamily: 'Consolas, Monaco, monospace',
                 fontSize: 13,
-                lineHeight: 1.6,
+                lineHeight: 1.4,
                 minHeight: 0,
-                whiteSpace: 'pre',
+                resize: 'none',
               }}
-            >
-              {logText || '暂无交互日志...'}
-            </div>
-          </div>
+              readOnly
+              placeholder={tabData.logs.length === 0 ? '暂无交互日志...' : ''}
+            />
+          </Card>
         </div>
       </div>
     );

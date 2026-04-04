@@ -3,9 +3,9 @@ import { Tabs, Alert, Space, Button, Tree, Tag, Typography, Empty, Spin, Card, I
 import { MenuFoldOutlined, MenuUnfoldOutlined, ClearOutlined, DownloadOutlined, VerticalAlignBottomOutlined } from '@ant-design/icons';
 import { useBle } from '../../hooks/useBle';
 import { useSerialStore } from '../../stores/serialStore';
+import { useBleStore, formatBleData, getShortUuid, formatMacAddress } from '../../stores/bleStore';
 import { serialApi, bleApi } from '../../api/tauri';
 import type { CacheData } from '../../api/types';
-import { formatBleData, getShortUuid, formatMacAddress } from '../../stores/bleStore';
 import { getServiceName, getCharacteristicName } from '../../types/ble';
 import BleModeSelector from './BleModeSelector';
 import BleScanner from './BleScanner';
@@ -53,8 +53,6 @@ interface DeviceTabData {
   selectedCharacteristic: BleCharacteristic | null;
   discoveringServices: boolean;
   subscribedUuids: Set<string>;
-  displayFormat: 'hex' | 'text';
-  autoScroll: boolean;
 }
 
 const SCAN_TAB_KEY = 'scan';
@@ -96,11 +94,9 @@ const BlePage: React.FC = () => {
   } = useBle();
 
   const { ports, setPorts } = useSerialStore();
+  const { preferences, updatePreferences } = useBleStore();
   const [activeTabKey, setActiveTabKey] = useState<string>(SCAN_TAB_KEY);
   const [deviceTabs, setDeviceTabs] = useState<Record<string, DeviceTabData>>({});
-  const [configCollapsed, setConfigCollapsed] = useState(false);
-  const [gattCollapsed, setGattCollapsed] = useState(false);
-  const [panelCollapsed, setPanelCollapsed] = useState(false);
   const processedNotificationIds = useRef<Set<string>>(new Set());
   const logContainerRefs = useRef<Record<string, TextAreaRef>>({});
   const lastLogCountRef = useRef<Record<string, number>>({});
@@ -136,8 +132,6 @@ const BlePage: React.FC = () => {
             selectedCharacteristic: null,
             discoveringServices: false,
             subscribedUuids: new Set(),
-            displayFormat: 'text',
-            autoScroll: true,
           };
 
           restoreSubscriptions(conn.address).catch((err) => {
@@ -183,8 +177,6 @@ const BlePage: React.FC = () => {
             selectedCharacteristic: null,
             discoveringServices: true,
             subscribedUuids: new Set(),
-            displayFormat: 'text',
-            autoScroll: true,
           },
         };
       }
@@ -279,7 +271,7 @@ const BlePage: React.FC = () => {
 
   useEffect(() => {
     const tab = deviceTabs[activeTabKey];
-    if (!tab || !tab.autoScroll) return;
+    if (!tab || !preferences.autoScroll) return;
     
     const currentCount = tab.logs.length;
     const lastCount = lastLogCountRef.current[activeTabKey] || 0;
@@ -293,7 +285,7 @@ const BlePage: React.FC = () => {
         }
       });
     }
-  }, [deviceTabs, activeTabKey]);
+  }, [deviceTabs, activeTabKey, preferences.autoScroll]);
 
   const handleConnect = async (address: string) => {
     const existingConn = connections.find((c) => c.address === address);
@@ -581,7 +573,7 @@ const BlePage: React.FC = () => {
         />
       </div>
 
-      {!configCollapsed && (
+      {!preferences.configCollapsed && (
         <div
           style={{
             flex: '0 0 320px',
@@ -598,7 +590,7 @@ const BlePage: React.FC = () => {
               type="text"
               size="small"
               icon={<MenuFoldOutlined />}
-              onClick={() => setConfigCollapsed(true)}
+              onClick={() => updatePreferences({ configCollapsed: true })}
             />
           </Space>
 
@@ -620,11 +612,11 @@ const BlePage: React.FC = () => {
         </div>
       )}
 
-      {configCollapsed && (
+      {preferences.configCollapsed && (
         <Button
           type="text"
           icon={<MenuUnfoldOutlined />}
-          onClick={() => setConfigCollapsed(false)}
+          onClick={() => updatePreferences({ configCollapsed: false })}
           style={{ flexShrink: 0, alignSelf: 'flex-start' }}
         />
       )}
@@ -639,7 +631,7 @@ const BlePage: React.FC = () => {
 
     return (
       <div style={{ display: 'flex', height: '100%', gap: 8, overflow: 'hidden' }}>
-        {!gattCollapsed && (
+        {!preferences.gattCollapsed && (
           <div style={{ flex: '0 0 280px', minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-secondary)', borderRadius: 8, padding: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexShrink: 0 }}>
               <Text strong style={{ fontSize: 13 }}>GATT 服务树</Text>
@@ -647,7 +639,7 @@ const BlePage: React.FC = () => {
                 type="text"
                 size="small"
                 icon={<MenuFoldOutlined />}
-                onClick={() => setGattCollapsed(true)}
+                onClick={() => updatePreferences({ gattCollapsed: true })}
                 title="折叠服务树"
               />
             </div>
@@ -685,11 +677,11 @@ const BlePage: React.FC = () => {
           </div>
         )}
 
-        {gattCollapsed && (
+        {preferences.gattCollapsed && (
           <Button
             type="text"
             icon={<MenuUnfoldOutlined />}
-            onClick={() => setGattCollapsed(false)}
+            onClick={() => updatePreferences({ gattCollapsed: false })}
             style={{ flexShrink: 0, alignSelf: 'flex-start' }}
             title="展开服务树"
           />
@@ -700,8 +692,12 @@ const BlePage: React.FC = () => {
             <CharacteristicPanel
               characteristic={tabData.selectedCharacteristic}
               isSubscribed={isSubscribed}
-              collapsed={panelCollapsed}
-              onToggleCollapse={() => setPanelCollapsed(!panelCollapsed)}
+              collapsed={preferences.panelCollapsed}
+              onToggleCollapse={() => updatePreferences({ panelCollapsed: !preferences.panelCollapsed })}
+              inputFormat={preferences.inputFormat}
+              withoutResponse={preferences.withoutResponse}
+              onInputFormatChange={(value) => updatePreferences({ inputFormat: value })}
+              onWithoutResponseChange={(value) => updatePreferences({ withoutResponse: value })}
               onRead={(uuid) => handleReadForDevice(uuid, tabData.deviceId)}
               onWrite={(uuid, data, fmt, wnr) => handleWriteForDevice(uuid, data, fmt, wnr, tabData.deviceId)}
               onSubscribe={(uuid) => handleSubscribeForDevice(uuid, tabData.deviceId)}
@@ -716,27 +712,17 @@ const BlePage: React.FC = () => {
             title={<span>数据视图</span>}
             extra={
               <Space>
-                <Tooltip title={tabData.autoScroll ? '自动滚动: 开启' : '自动滚动: 关闭'}>
+                <Tooltip title={preferences.autoScroll ? '自动滚动: 开启' : '自动滚动: 关闭'}>
                   <Button
-                    type={tabData.autoScroll ? 'primary' : 'default'}
+                    type={preferences.autoScroll ? 'primary' : 'default'}
                     icon={<VerticalAlignBottomOutlined />}
-                    onClick={() => {
-                      setDeviceTabs((prev) => ({
-                        ...prev,
-                        [tabData.deviceId]: { ...prev[tabData.deviceId], autoScroll: !prev[tabData.deviceId].autoScroll },
-                      }));
-                    }}
+                    onClick={() => updatePreferences({ autoScroll: !preferences.autoScroll })}
                     size="small"
                   />
                 </Tooltip>
                 <Segmented
-                  value={tabData.displayFormat}
-                  onChange={(value) => {
-                    setDeviceTabs((prev) => ({
-                      ...prev,
-                      [tabData.deviceId]: { ...prev[tabData.deviceId], displayFormat: value as 'hex' | 'text' },
-                    }));
-                  }}
+                  value={preferences.displayFormat}
+                  onChange={(value) => updatePreferences({ displayFormat: value as 'hex' | 'text' })}
                   size="small"
                   options={[
                     { value: 'text', label: 'TEXT' },
@@ -770,7 +756,7 @@ const BlePage: React.FC = () => {
                   const dir = entry.direction;
                   let content = '';
                   if (entry.data) {
-                    content = `[${entry.data.length} byte] ${formatBleData(entry.data, tabData.displayFormat)}`;
+                    content = `[${entry.data.length} byte] ${formatBleData(entry.data, preferences.displayFormat)}`;
                   } else if (entry.text) {
                     content = entry.text;
                   }

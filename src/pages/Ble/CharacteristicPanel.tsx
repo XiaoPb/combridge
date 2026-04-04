@@ -13,6 +13,10 @@ interface CharacteristicPanelProps {
   isSubscribed: boolean;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  inputFormat: 'hex' | 'text';
+  withoutResponse: boolean;
+  onInputFormatChange: (value: 'hex' | 'text') => void;
+  onWithoutResponseChange: (value: boolean) => void;
   onRead: (uuid: string) => void;
   onWrite: (uuid: string, data: string, format: 'hex' | 'text', withoutResponse: boolean) => void;
   onSubscribe: (uuid: string) => void;
@@ -24,14 +28,16 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
   isSubscribed,
   collapsed,
   onToggleCollapse,
+  inputFormat,
+  withoutResponse,
+  onInputFormatChange,
+  onWithoutResponseChange,
   onRead,
   onWrite,
   onSubscribe,
   onUnsubscribe,
 }) => {
   const [inputData, setInputData] = useState('');
-  const [inputFormat, setInputFormat] = useState<'hex' | 'text'>('text');
-  const [withoutResponse, setWithoutResponse] = useState(false);
 
   if (!characteristic) {
     return (
@@ -126,6 +132,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
           {canNotify && (
             <Tooltip title={isSubscribed ? '取消订阅通知' : '订阅通知'}>
               <Button
+                size="small"
                 type={isSubscribed ? 'primary' : 'default'}
                 icon={isSubscribed ? <BellFilled /> : <BellOutlined />}
                 onClick={handleSubscribeToggle}
@@ -137,6 +144,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
           {canRead && (
             <Tooltip title="读取特征值">
               <Button
+                size="small"
                 icon={<ReadOutlined />}
                 onClick={() => onRead(uuid)}
               >
@@ -164,7 +172,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
           <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'space-between' }}>
             <Segmented
               value={inputFormat}
-              onChange={(value) => setInputFormat(value as 'hex' | 'text')}
+              onChange={(value) => onInputFormatChange(value as 'hex' | 'text')}
               size="small"
               options={[
                 { value: 'text', label: 'TEXT' },
@@ -175,7 +183,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
             {properties.writeWithoutResponse && (
               <Segmented
                 value={withoutResponse ? 'noResponse' : 'withResponse'}
-                onChange={(value) => setWithoutResponse(value === 'noResponse')}
+                onChange={(value) => onWithoutResponseChange(value === 'noResponse')}
                 size="small"
                 options={[
                   { value: 'withResponse', label: '等待响应' },

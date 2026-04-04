@@ -11,6 +11,26 @@ export interface BleNotification {
   timestamp: number;
 }
 
+export interface BlePreferences {
+  displayFormat: 'hex' | 'text';
+  autoScroll: boolean;
+  inputFormat: 'hex' | 'text';
+  withoutResponse: boolean;
+  configCollapsed: boolean;
+  gattCollapsed: boolean;
+  panelCollapsed: boolean;
+}
+
+const DEFAULT_PREFERENCES: BlePreferences = {
+  displayFormat: 'text',
+  autoScroll: true,
+  inputFormat: 'text',
+  withoutResponse: false,
+  configCollapsed: false,
+  gattCollapsed: false,
+  panelCollapsed: false,
+};
+
 interface BleState {
   mode: BleMode;
   serialPort: string | null;
@@ -25,6 +45,7 @@ interface BleState {
   isConnecting: boolean;
   isConfigured: boolean;
   error: string | null;
+  preferences: BlePreferences;
 
   setMode: (mode: BleMode) => void;
   setSerialPort: (port: string | null) => void;
@@ -54,6 +75,7 @@ interface BleState {
   setIsConnecting: (isConnecting: boolean) => void;
   setIsConfigured: (isConfigured: boolean) => void;
   setError: (error: string | null) => void;
+  updatePreferences: (updates: Partial<BlePreferences>) => void;
   reset: () => void;
 }
 
@@ -71,6 +93,7 @@ const initialState = {
   isConnecting: false,
   isConfigured: false,
   error: null,
+  preferences: DEFAULT_PREFERENCES,
 };
 
 export const useBleStore = create<BleState>((set) => ({
@@ -221,6 +244,11 @@ export const useBleStore = create<BleState>((set) => ({
   setIsConfigured: (isConfigured) => set({ isConfigured }),
 
   setError: (error) => set({ error }),
+
+  updatePreferences: (updates) =>
+    set((state) => ({
+      preferences: { ...state.preferences, ...updates },
+    })),
 
   reset: () => set(initialState),
 }));

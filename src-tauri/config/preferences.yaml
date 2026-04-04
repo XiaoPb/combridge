@@ -1,0 +1,18 @@
+serial:
+  displayFormat: text
+  displayMode: all
+  sendFormat: text
+  appendNewline: true
+  newlineType: lf
+  autoScroll: true
+ble:
+  displayFormat: hex
+  autoScroll: true
+  inputFormat: text
+  withoutResponse: false
+  configCollapsed: false
+  gattCollapsed: false
+  panelCollapsed: false
+  subscribedCharacteristics:
+    BluetoothLE#BluetoothLE28:d0:43:5d:73:9b-e4:0d:17:33:34:e4:
+    - 00000003-0000-1000-8000-00805f9b34fb

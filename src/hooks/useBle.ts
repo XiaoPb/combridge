@@ -447,33 +447,28 @@ export const useBle = () => {
     }
   }, [addConnection]);
 
-  const restoreSubscriptions = useCallback(async (deviceId: string) => {
-    try {
-      const charUuids = await bleApi.getSubscriptions(deviceId);
-      if (!charUuids || charUuids.length === 0) {
-        return [];
-      }
-
-      const restoredUuids: string[] = [];
-      for (const charUuid of charUuids) {
-        try {
-          await bleApi.subscribeBleNotify(deviceId, charUuid);
-          addSubscribedCharacteristic(deviceId, charUuid);
-          restoredUuids.push(charUuid);
-          console.debug('[useBle] 恢复订阅成功:', { deviceId, charUuid });
-        } catch (err) {
-          console.error('[useBle] 恢复订阅失败:', { deviceId, charUuid, error: err });
-        }
-      }
-
-      if (restoredUuids.length > 0) {
-        console.info('[useBle] 恢复订阅完成:', { deviceId, count: restoredUuids.length });
-      }
-      return restoredUuids;
-    } catch (err) {
-      console.error('[useBle] 获取订阅列表失败:', { deviceId, error: err });
+  const restoreSubscriptions = useCallback(async (deviceId: string, charUuids?: string[]) => {
+    const uuidsToRestore = charUuids || (await bleApi.getSubscriptions(deviceId).catch(() => []));
+    if (!uuidsToRestore || uuidsToRestore.length === 0) {
       return [];
     }
+
+    const restoredUuids: string[] = [];
+    for (const charUuid of uuidsToRestore) {
+      try {
+        await bleApi.subscribeBleNotify(deviceId, charUuid);
+        addSubscribedCharacteristic(deviceId, charUuid);
+        restoredUuids.push(charUuid);
+        console.debug('[useBle] 恢复订阅成功:', { deviceId, charUuid });
+      } catch (err) {
+        console.error('[useBle] 恢复订阅失败:', { deviceId, charUuid, error: err });
+      }
+    }
+
+    if (restoredUuids.length > 0) {
+      console.info('[useBle] 恢复订阅完成:', { deviceId, count: restoredUuids.length });
+    }
+    return restoredUuids;
   }, [addSubscribedCharacteristic]);
 
   return {

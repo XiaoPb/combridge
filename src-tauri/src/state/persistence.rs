@@ -126,8 +126,10 @@ impl StatePersistence {
 
     pub async fn load_preferences(&self) -> Result<Preferences, String> {
         if !self.preferences_path.exists() {
-            info!("偏好设置文件不存在，使用默认值");
-            return Ok(Preferences::default());
+            info!("偏好设置文件不存在，创建默认配置文件");
+            let default_prefs = Preferences::default();
+            self.save_preferences(&default_prefs).await?;
+            return Ok(default_prefs);
         }
         
         let content = tokio::fs::read_to_string(&self.preferences_path)

@@ -147,14 +147,16 @@ const BlePage: React.FC = () => {
             subscribedUuids: new Set(currentSubscribed[conn.address] || []),
           };
 
-          restoreSubscriptions(conn.address).catch((err) => {
+          restoreSubscriptions(conn.address, currentSubscribed[conn.address]).catch((err) => {
             console.error('[BlePage] 恢复订阅失败:', { deviceId: conn.address, error: err });
           });
         }
 
         if (Object.keys(tabs).length > 0) {
           setDeviceTabs(tabs);
-          setActiveTabKey(Object.keys(tabs)[0]);
+          const firstDeviceId = Object.keys(tabs)[0];
+          setActiveTabKey(firstDeviceId);
+          setCurrentDevice(firstDeviceId);
         }
       } catch (err) {
         console.error('[BlePage] 恢复连接设备失败:', err);
@@ -162,7 +164,7 @@ const BlePage: React.FC = () => {
     };
 
     restoreConnectedDevices();
-  }, [preferencesLoaded, restoreConnections, restoreSubscriptions]);
+  }, [preferencesLoaded, restoreConnections, restoreSubscriptions, setCurrentDevice]);
 
   useEffect(() => {
     if (!currentDevice) return;

@@ -22,6 +22,7 @@ export const useBle = () => {
     services,
     characteristics,
     notifications,
+    subscribedCharacteristics,
     isScanning,
     isConnecting,
     isConfigured,
@@ -41,6 +42,10 @@ export const useBle = () => {
     clearCharacteristics,
     addNotification,
     clearNotifications,
+    setSubscribedCharacteristics,
+    addSubscribedCharacteristic,
+    removeSubscribedCharacteristic,
+    clearSubscribedCharacteristics,
     setIsScanning,
     setIsConnecting,
     setIsConfigured,
@@ -348,6 +353,7 @@ export const useBle = () => {
     setError(null);
     try {
       await bleApi.subscribeBleNotify(targetDevice, characteristicUuid);
+      addSubscribedCharacteristic(targetDevice, characteristicUuid);
       message.success('已订阅通知');
     } catch (err) {
       const errorMsg = handleBleError('subscribeNotify', { deviceId: targetDevice, characteristicUuid }, err);
@@ -355,7 +361,7 @@ export const useBle = () => {
       message.error(errorMsg);
       throw err;
     }
-  }, [currentDevice, setError]);
+  }, [currentDevice, setError, addSubscribedCharacteristic]);
 
   const unsubscribeNotify = useCallback(async (characteristicUuid: string, deviceId?: string) => {
     const targetDevice = deviceId || currentDevice;
@@ -367,6 +373,7 @@ export const useBle = () => {
     setError(null);
     try {
       await bleApi.unsubscribeBleNotify(targetDevice, characteristicUuid);
+      removeSubscribedCharacteristic(targetDevice, characteristicUuid);
       message.success('已取消订阅');
     } catch (err) {
       const errorMsg = handleBleError('unsubscribeNotify', { deviceId: targetDevice, characteristicUuid }, err);
@@ -374,7 +381,7 @@ export const useBle = () => {
       message.error(errorMsg);
       throw err;
     }
-  }, [currentDevice, setError]);
+  }, [currentDevice, setError, removeSubscribedCharacteristic]);
 
   const isConnected = useCallback((deviceId: string) => {
     return connections.some((c) => (c.deviceId === deviceId || c.address === deviceId) && c.isConnected);
@@ -405,6 +412,35 @@ export const useBle = () => {
     }
   }, [addConnection]);
 
+  const restoreSubscriptions = useCallback(async (deviceId: string) => {
+    try {
+      const charUuids = await bleApi.getSubscriptions(deviceId);
+      if (!charUuids || charUuids.length === 0) {
+        return [];
+      }
+
+      const restoredUuids: string[] = [];
+      for (const charUuid of charUuids) {
+        try {
+          await bleApi.subscribeBleNotify(deviceId, charUuid);
+          addSubscribedCharacteristic(deviceId, charUuid);
+          restoredUuids.push(charUuid);
+          console.debug('[useBle] 恢复订阅成功:', { deviceId, charUuid });
+        } catch (err) {
+          console.error('[useBle] 恢复订阅失败:', { deviceId, charUuid, error: err });
+        }
+      }
+
+      if (restoredUuids.length > 0) {
+        console.info('[useBle] 恢复订阅完成:', { deviceId, count: restoredUuids.length });
+      }
+      return restoredUuids;
+    } catch (err) {
+      console.error('[useBle] 获取订阅列表失败:', { deviceId, error: err });
+      return [];
+    }
+  }, [addSubscribedCharacteristic]);
+
   return {
     mode,
     serialPort,
@@ -414,6 +450,7 @@ export const useBle = () => {
     services,
     characteristics,
     notifications,
+    subscribedCharacteristics,
     isScanning,
     isConnecting,
     error,
@@ -434,5 +471,8 @@ export const useBle = () => {
     getCurrentConnection,
     getDeviceByAddress,
     restoreConnections,
+    restoreSubscriptions,
+    setSubscribedCharacteristics,
+    clearSubscribedCharacteristics,
   };
 };

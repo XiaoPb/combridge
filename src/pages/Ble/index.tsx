@@ -61,6 +61,7 @@ const BlePage: React.FC = () => {
     subscribeNotify,
     unsubscribeNotify,
     restoreConnections,
+    restoreSubscriptions,
   } = useBle();
 
   const { ports, setPorts } = useSerialStore();
@@ -101,6 +102,10 @@ const BlePage: React.FC = () => {
             selectedCharacteristic: null,
             discoveringServices: false,
           };
+
+          restoreSubscriptions(conn.address).catch((err) => {
+            console.error('[BlePage] 恢复订阅失败:', { deviceId: conn.address, error: err });
+          });
         }
 
         if (Object.keys(tabs).length > 0) {
@@ -113,7 +118,7 @@ const BlePage: React.FC = () => {
     };
 
     restoreConnectedDevices();
-  }, [restoreConnections]);
+  }, [restoreConnections, restoreSubscriptions]);
 
   useEffect(() => {
     if (!currentDevice) return;

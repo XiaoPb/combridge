@@ -94,7 +94,7 @@ const BlePage: React.FC = () => {
   } = useBle();
 
   const { ports, setPorts } = useSerialStore();
-  const { preferences, updatePreferences } = useBleStore();
+  const { preferences, updatePreferences, subscribedCharacteristics } = useBleStore();
   const [activeTabKey, setActiveTabKey] = useState<string>(SCAN_TAB_KEY);
   const [deviceTabs, setDeviceTabs] = useState<Record<string, DeviceTabData>>({});
   const processedNotificationIds = useRef<Set<string>>(new Set());
@@ -131,7 +131,7 @@ const BlePage: React.FC = () => {
             logs: [],
             selectedCharacteristic: null,
             discoveringServices: false,
-            subscribedUuids: new Set(),
+            subscribedUuids: new Set(subscribedCharacteristics[conn.address] || []),
           };
 
           restoreSubscriptions(conn.address).catch((err) => {
@@ -176,9 +176,10 @@ const BlePage: React.FC = () => {
             logs: [],
             selectedCharacteristic: null,
             discoveringServices: true,
-            subscribedUuids: new Set(),
+            subscribedUuids: new Set(subscribedCharacteristics[currentDevice] || []),
           },
         };
+
       }
       return prev;
     });

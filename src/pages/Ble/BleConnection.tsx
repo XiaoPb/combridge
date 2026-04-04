@@ -49,70 +49,73 @@ const BleConnection: React.FC<BleConnectionProps> = ({
     <Card title="连接管理" size="small">
       <List
         dataSource={connections}
-        renderItem={(connection) => (
-          <List.Item
-            key={connection.deviceId}
-            actions={[
-              <Button
-                key="select"
-                type="link"
-                size="small"
-                icon={<LinkOutlined />}
-                onClick={() => onSelect(connection.deviceId)}
-                disabled={currentDevice === connection.deviceId}
-              >
-                选择
-              </Button>,
-              <Button
-                key="disconnect"
-                type="link"
-                size="small"
-                danger
-                icon={<DisconnectOutlined />}
-                onClick={() => onDisconnect(connection.deviceId)}
-              >
-                断开
-              </Button>,
-            ]}
-            style={{
-              backgroundColor: currentDevice === connection.deviceId ? '#f0f5ff' : undefined,
-              padding: '8px 12px',
-              borderRadius: 4,
-            }}
-          >
-            <List.Item.Meta
-              title={
-                <Space>
-                  <Text strong>{connection.name || '未命名设备'}</Text>
-                  <Tag color={connection.isConnected ? 'green' : 'red'}>
-                    {connection.isConnected ? '已连接' : '已断开'}
-                  </Tag>
-                  {currentDevice === connection.deviceId && (
-                    <Tag color="blue">当前</Tag>
-                  )}
-                </Space>
-              }
-              description={
-                <Descriptions size="small" column={2}>
-                  <Descriptions.Item label="地址">
-                    <Text code style={{ fontSize: '11px' }}>
-                      {connection.address}
-                    </Text>
-                  </Descriptions.Item>
-                  <Descriptions.Item label="MTU">
-                    {connection.mtu || '默认'}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="连接时间">
-                    {formatBleTimestamp(connection.connectedAt || 0)}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="持续时间">
-                    {formatDuration(connection.connectedAt)}
-                  </Descriptions.Item>
-                </Descriptions>
-              }
-            />
-          </List.Item>
-        )}
+        renderItem={(connection) => {
+          const deviceId = connection.deviceId || connection.address;
+          return (
+            <List.Item
+              key={deviceId}
+              actions={[
+                <Button
+                  key="select"
+                  type="link"
+                  size="small"
+                  icon={<LinkOutlined />}
+                  onClick={() => onSelect(deviceId)}
+                  disabled={currentDevice === deviceId}
+                >
+                  选择
+                </Button>,
+                <Button
+                  key="disconnect"
+                  type="link"
+                  size="small"
+                  danger
+                  icon={<DisconnectOutlined />}
+                  onClick={() => onDisconnect(deviceId)}
+                >
+                  断开
+                </Button>,
+              ]}
+              style={{
+                backgroundColor: currentDevice === deviceId ? '#f0f5ff' : undefined,
+                padding: '8px 12px',
+                borderRadius: 4,
+              }}
+            >
+              <List.Item.Meta
+                title={
+                  <Space>
+                    <Text strong>{connection.name || '未命名设备'}</Text>
+                    <Tag color={connection.isConnected ? 'green' : 'red'}>
+                      {connection.isConnected ? '已连接' : '已断开'}
+                    </Tag>
+                    {currentDevice === deviceId && (
+                      <Tag color="blue">当前</Tag>
+                    )}
+                  </Space>
+                }
+                description={
+                  <Descriptions size="small" column={2}>
+                    <Descriptions.Item label="地址">
+                      <Text code style={{ fontSize: '11px' }}>
+                        {connection.address}
+                      </Text>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="MTU">
+                      {connection.mtu || '默认'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="连接时间">
+                      {formatBleTimestamp(connection.connectedAt || 0)}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="持续时间">
+                      {formatDuration(connection.connectedAt)}
+                    </Descriptions.Item>
+                  </Descriptions>
+                }
+              />
+            </List.Item>
+          );
+        }}
       />
     </Card>
   );

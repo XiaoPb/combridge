@@ -283,6 +283,7 @@ impl BleBackend for AtBleBackend {
                         services = svcs.into_iter().map(|s| BleService {
                             uuid: s.uuid,
                             primary: s.primary,
+                            characteristics: vec![],
                         }).collect();
                     }
                 }

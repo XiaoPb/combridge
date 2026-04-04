@@ -28,9 +28,20 @@ pub struct BleConnection {
 pub struct BleService {
     pub uuid: String,
     pub primary: bool,
+    pub characteristics: Vec<BleCharacteristic>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+impl Default for BleService {
+    fn default() -> Self {
+        Self {
+            uuid: String::new(),
+            primary: true,
+            characteristics: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub struct BleCharacteristic {
     pub uuid: String,
@@ -38,7 +49,7 @@ pub struct BleCharacteristic {
     pub properties: BleCharacteristicProperties,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub struct BleCharacteristicProperties {
     pub read: bool,

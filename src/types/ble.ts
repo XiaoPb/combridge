@@ -10,6 +10,7 @@ export interface BleDeviceInfo {
 
 export interface BleCharacteristic {
   uuid: string;
+  serviceUuid: string;
   properties: BleCharacteristicProperties;
   value?: number[];
 }
@@ -21,18 +22,15 @@ export interface BleService {
 }
 
 export interface BleCharacteristicProperties {
-  broadcast: boolean;
   read: boolean;
-  writeWithoutResponse: boolean;
   write: boolean;
+  writeWithoutResponse: boolean;
   notify: boolean;
   indicate: boolean;
-  authenticatedSignedWrites: boolean;
-  extendedProperties: boolean;
 }
 
 export interface BleConnection {
-  deviceId: string;
+  deviceId?: string;
   address: string;
   name?: string;
   isConnected: boolean;

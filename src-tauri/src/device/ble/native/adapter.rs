@@ -135,6 +135,24 @@ impl BleAdapter {
             .clone()
     }
 
+    pub fn get_client(&self, address: &str) -> Option<Arc<GattClient>> {
+        let clients = self.clients.read().unwrap();
+        clients.get(address).cloned()
+    }
+
+    pub fn remove_client(&self, address: &str) {
+        let mut clients = self.clients.write().unwrap();
+        clients.remove(address);
+    }
+
+    pub fn list_clients(&self) -> Vec<(String, Arc<GattClient>)> {
+        let clients = self.clients.read().unwrap();
+        clients
+            .iter()
+            .map(|(addr, client)| (addr.clone(), client.clone()))
+            .collect()
+    }
+
     pub async fn connect_device(&self, address: &str) -> Result<Arc<GattClient>> {
         let device = self
             .get_device(address)

@@ -97,15 +97,40 @@ impl BleBackend for NativeBleBackend {
             ComBridgeError::ble("蓝牙适配器未初始化")
         })?;
 
-        let client = adapter.get_or_create_client(address);
-        client.disconnect().await?;
+        if let Some(client) = adapter.get_client(address) {
+            client.disconnect().await?;
+            adapter.remove_client(address);
+            info!("已断开设备: {}", address);
+        } else {
+            info!("设备未连接或已断开: {}", address);
+        }
 
-        info!("已断开设备: {}", address);
         Ok(())
     }
 
     async fn get_connections(&self) -> Result<Vec<BleConnection>> {
-        Ok(Vec::new())
+        let adapter = self.adapter.as_ref().ok_or_else(|| {
+            ComBridgeError::ble("蓝牙适配器未初始化")
+        })?;
+
+        let clients = adapter.list_clients();
+        let mut connections = Vec::new();
+
+        for (address, client) in clients {
+            let is_connected = client.is_connected();
+            if is_connected {
+                let name = adapter.get_device_name(&address);
+                connections.push(BleConnection {
+                    address,
+                    name,
+                    is_connected: true,
+                    services: vec![],
+                });
+            }
+        }
+
+        info!("当前 {} 个活跃连接", connections.len());
+        Ok(connections)
     }
 
     async fn discover_services(&self, address: &str) -> Result<Vec<BleService>> {

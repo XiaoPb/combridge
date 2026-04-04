@@ -117,14 +117,61 @@ impl GattClient {
 
         let mut result = Vec::new();
         let mut svc_data = Vec::new();
+        let mut total_chars = 0;
 
         for svc in &services {
             let uuid = svc.uuid().to_string();
             let is_primary = svc.is_primary().await.unwrap_or(true);
             svc_data.push((uuid.clone(), svc.clone(), is_primary));
+
+            let chars = match svc.characteristics().await {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!("发现服务 {} 的特征失败: {}", uuid, e);
+                    vec![]
+                }
+            };
+
+            let mut ble_chars: Vec<BleCharacteristic> = Vec::new();
+            let mut char_data: Vec<(String, Characteristic, BleCharacteristicProperties)> = Vec::new();
+
+            for c in &chars {
+                let char_uuid = c.uuid().to_string();
+                let props = match c.properties().await {
+                    Ok(p) => p,
+                    Err(e) => {
+                        warn!("获取特征 {} 属性失败: {}", char_uuid, e);
+                        continue;
+                    }
+                };
+                let ble_props = BleCharacteristicProperties {
+                    read: props.read,
+                    write: props.write,
+                    write_without_response: props.write_without_response,
+                    notify: props.notify,
+                    indicate: props.indicate,
+                };
+                char_data.push((char_uuid.clone(), c.clone(), ble_props));
+                ble_chars.push(BleCharacteristic {
+                    uuid: char_uuid,
+                    service_uuid: uuid.clone(),
+                    properties: ble_props,
+                });
+            }
+
+            total_chars += ble_chars.len();
+
+            {
+                let mut char_map = self.characteristics.write().unwrap();
+                let chars_vec: Vec<Characteristic> =
+                    char_data.iter().map(|(_, c, _)| c.clone()).collect();
+                char_map.insert(uuid.clone(), chars_vec);
+            }
+
             result.push(BleService {
                 uuid,
                 primary: is_primary,
+                characteristics: ble_chars,
             });
         }
 
@@ -135,7 +182,7 @@ impl GattClient {
             }
         }
 
-        info!("发现 {} 个服务", result.len());
+        info!("发现 {} 个服务, {} 个特征", result.len(), total_chars);
         Ok(result)
     }
 

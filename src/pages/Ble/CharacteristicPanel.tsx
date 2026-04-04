@@ -70,7 +70,6 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
               {properties.writeWithoutResponse && <Tag color="cyan">无响应写入</Tag>}
               {properties.notify && <Tag color="orange">通知</Tag>}
               {properties.indicate && <Tag color="purple">指示</Tag>}
-              {properties.broadcast && <Tag>广播</Tag>}
             </Space>
           </Descriptions.Item>
           {value && (

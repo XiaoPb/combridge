@@ -6,6 +6,12 @@ import { useBleStore, generateBleId, parseBleData, type BleMode } from '../store
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import type { BleScanOptions, BleConnection } from '../types';
 
+const handleBleError = (operation: string, params: Record<string, unknown>, error: unknown): string => {
+  const errorMsg = error instanceof Error ? error.message : String(error);
+  console.error(`[useBle] ${operation} 失败:`, { params, error: errorMsg });
+  return errorMsg;
+};
+
 export const useBle = () => {
   const {
     mode,
@@ -140,7 +146,7 @@ export const useBle = () => {
       setSerialPort(port || null);
       message.success(`BLE模式已配置为 ${newMode}`);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '配置BLE失败';
+      const errorMsg = handleBleError('configure', { newMode, port }, err);
       setError(errorMsg);
       message.error(errorMsg);
       throw err;
@@ -173,8 +179,7 @@ export const useBle = () => {
         message.success(`扫描到 ${deviceList.length} 个设备`);
       }
     } catch (err) {
-      console.error('[useBle] 扫描失败:', err);
-      const errorMsg = err instanceof Error ? err.message : '扫描设备失败';
+      const errorMsg = handleBleError('scanDevices', { options }, err);
       setError(errorMsg);
       message.error(errorMsg);
     } finally {
@@ -204,8 +209,7 @@ export const useBle = () => {
       message.success(`已连接到 ${connection.name || address}`);
       return connection;
     } catch (err) {
-      console.error('[useBle] connectDevice 失败:', err);
-      const errorMsg = err instanceof Error ? err.message : '连接设备失败';
+      const errorMsg = handleBleError('connectDevice', { address }, err);
       setError(errorMsg);
       message.error(errorMsg);
       throw err;
@@ -227,7 +231,7 @@ export const useBle = () => {
       }
       message.success('设备已断开');
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '断开连接失败';
+      const errorMsg = handleBleError('disconnectDevice', { deviceId }, err);
       setError(errorMsg);
       message.error(errorMsg);
       throw err;
@@ -248,7 +252,7 @@ export const useBle = () => {
       message.success(`发现 ${serviceList.length} 个服务`);
       return serviceList;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '发现服务失败';
+      const errorMsg = handleBleError('discoverServices', { deviceId: targetDevice }, err);
       setError(errorMsg);
       message.error(errorMsg);
       throw err;
@@ -269,7 +273,7 @@ export const useBle = () => {
       message.success(`发现 ${charList.length} 个特征`);
       return charList;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '发现特征失败';
+      const errorMsg = handleBleError('discoverCharacteristics', { deviceId: targetDevice, serviceUuid }, err);
       setError(errorMsg);
       message.error(errorMsg);
       throw err;
@@ -290,7 +294,7 @@ export const useBle = () => {
       message.success('读取成功');
       return data;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '读取特征失败';
+      const errorMsg = handleBleError('readCharacteristic', { deviceId: targetDevice, characteristicUuid }, err);
       setError(errorMsg);
       message.error(errorMsg);
       throw err;
@@ -321,7 +325,7 @@ export const useBle = () => {
       await bleApi.writeBleCharacteristic(targetDevice, characteristicUuid, bytes, withoutResponse);
       message.success('写入成功');
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '写入特征失败';
+      const errorMsg = handleBleError('writeCharacteristic', { deviceId: targetDevice, characteristicUuid, data, format, withoutResponse }, err);
       setError(errorMsg);
       message.error(errorMsg);
       throw err;
@@ -340,7 +344,7 @@ export const useBle = () => {
       await bleApi.subscribeBleNotify(targetDevice, characteristicUuid);
       message.success('已订阅通知');
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '订阅通知失败';
+      const errorMsg = handleBleError('subscribeNotify', { deviceId: targetDevice, characteristicUuid }, err);
       setError(errorMsg);
       message.error(errorMsg);
       throw err;
@@ -359,7 +363,7 @@ export const useBle = () => {
       await bleApi.unsubscribeBleNotify(targetDevice, characteristicUuid);
       message.success('已取消订阅');
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '取消订阅失败';
+      const errorMsg = handleBleError('unsubscribeNotify', { deviceId: targetDevice, characteristicUuid }, err);
       setError(errorMsg);
       message.error(errorMsg);
       throw err;
@@ -367,12 +371,12 @@ export const useBle = () => {
   }, [currentDevice, setError]);
 
   const isConnected = useCallback((deviceId: string) => {
-    return connections.some((c) => c.deviceId === deviceId && c.isConnected);
+    return connections.some((c) => (c.deviceId === deviceId || c.address === deviceId) && c.isConnected);
   }, [connections]);
 
   const getCurrentConnection = useCallback((): BleConnection | null => {
     if (!currentDevice) return null;
-    return connections.find((c) => c.deviceId === currentDevice) || null;
+    return connections.find((c) => c.deviceId === currentDevice || c.address === currentDevice) || null;
   }, [currentDevice, connections]);
 
   const getDeviceByAddress = useCallback((address: string) => {

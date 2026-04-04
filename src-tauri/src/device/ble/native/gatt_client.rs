@@ -10,6 +10,32 @@ use super::super::ble_traits::{
     BleCharacteristic, BleCharacteristicProperties, BleService, NotifyCallback,
 };
 
+fn extract_short_mac(address: &str) -> String {
+    if let Some(pos) = address.rfind('-') {
+        let mac = &address[pos + 1..];
+        return mac.to_uppercase();
+    }
+    address.to_string()
+}
+
+fn extract_short_uuid(uuid: &str) -> String {
+    if uuid.len() >= 8 {
+        uuid[..8].to_uppercase()
+    } else {
+        uuid.to_uppercase()
+    }
+}
+
+fn format_ble_log(mac: &str, uuid: &str, direction: &str, data: &[u8]) -> String {
+    format!(
+        "[{}][{}][{}] {} bytes",
+        extract_short_mac(mac),
+        extract_short_uuid(uuid),
+        direction,
+        data.len()
+    )
+}
+
 pub struct GattClient {
     address: String,
     device: RwLock<Option<Arc<Device>>>,
@@ -249,32 +275,33 @@ impl GattClient {
     pub async fn read_characteristic(&self, char_uuid: &str) -> Result<Vec<u8>> {
         let char = self.find_characteristic(char_uuid).await?;
 
-        debug!("读取特征: {}", char_uuid);
         let value = char
             .read()
             .await
             .map_err(|e| ComBridgeError::ble(format!("读取失败: {}", e)))?;
 
-        debug!("读取到 {} 字节", value.len());
+        info!("{}", format_ble_log(&self.address, char_uuid, "R", &value));
+
         Ok(value)
     }
 
     pub async fn write_characteristic(&self, char_uuid: &str, data: &[u8]) -> Result<()> {
         let char = self.find_characteristic(char_uuid).await?;
 
-        debug!("写入特征: {} ({} 字节)", char_uuid, data.len());
+        info!("{}", format_ble_log(&self.address, char_uuid, "W", data));
+
         char.write(data)
             .await
             .map_err(|e| ComBridgeError::ble(format!("写入失败: {}", e)))?;
 
-        debug!("写入成功");
         Ok(())
     }
 
     pub async fn write_without_response(&self, char_uuid: &str, data: &[u8]) -> Result<()> {
         let char = self.find_characteristic(char_uuid).await?;
 
-        debug!("无响应写入: {} ({} 字节)", char_uuid, data.len());
+        info!("{}", format_ble_log(&self.address, char_uuid, "W", data));
+
         char.write_without_response(data)
             .await
             .map_err(|e| ComBridgeError::ble(format!("写入失败: {}", e)))?;
@@ -285,7 +312,7 @@ impl GattClient {
     pub async fn subscribe_notify(&self, char_uuid: &str, callback: NotifyCallback) -> Result<()> {
         let char = self.find_characteristic(char_uuid).await?;
 
-        debug!("订阅通知: {}", char_uuid);
+        info!("[{}][{}][SUB] 订阅通知", extract_short_mac(&self.address), extract_short_uuid(char_uuid));
 
         self.notify_callbacks
             .lock()
@@ -300,18 +327,18 @@ impl GattClient {
                     while let Some(result) = notifications.next().await {
                         match result {
                             Ok(data) => {
-                                debug!("收到通知: {} ({} 字节)", uuid, data.len());
+                                info!("{}", format_ble_log(&device_id, &uuid, "N", &data));
                                 callback(&device_id, &uuid, &data);
                             }
                             Err(e) => {
-                                warn!("通知错误: {} - {}", uuid, e);
+                                warn!("[{}][{}][N] 通知错误: {}", extract_short_mac(&device_id), extract_short_uuid(&uuid), e);
                                 break;
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    warn!("订阅通知失败: {} - {}", uuid, e);
+                    warn!("[{}][{}][SUB] 订阅失败: {}", extract_short_mac(&device_id), extract_short_uuid(&uuid), e);
                 }
             }
         });
@@ -325,7 +352,7 @@ impl GattClient {
     }
 
     pub async fn unsubscribe_notify(&self, char_uuid: &str) -> Result<()> {
-        debug!("取消订阅: {}", char_uuid);
+        info!("[{}][{}][UNSUB] 取消订阅", extract_short_mac(&self.address), extract_short_uuid(char_uuid));
 
         self.notify_callbacks.lock().unwrap().remove(char_uuid);
 

@@ -154,6 +154,7 @@ impl AtCache {
                                     notify: (ch.properties & 0x04) != 0,
                                     indicate: (ch.properties & 0x08) != 0,
                                 },
+                                subscribed: false,
                             })
                             .collect(),
                     })

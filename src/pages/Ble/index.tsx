@@ -90,11 +90,11 @@ const BlePage: React.FC = () => {
     subscribeNotify,
     unsubscribeNotify,
     restoreConnections,
-    restoreSubscriptions,
+    setCurrentDevice,
   } = useBle();
 
   const { ports, setPorts } = useSerialStore();
-  const { preferences, updatePreferences, subscribedCharacteristics, loadPreferences } = useBleStore();
+  const { preferences, updatePreferences, loadPreferences } = useBleStore();
   const [activeTabKey, setActiveTabKey] = useState<string>(SCAN_TAB_KEY);
   const [deviceTabs, setDeviceTabs] = useState<Record<string, DeviceTabData>>({});
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
@@ -123,7 +123,6 @@ const BlePage: React.FC = () => {
         const connectionList = await restoreConnections();
         if (!connectionList || connectionList.length === 0) return;
 
-        const currentSubscribed = useBleStore.getState().subscribedCharacteristics;
         const tabs: Record<string, DeviceTabData> = {};
         for (const conn of connectionList) {
           if (!conn.isConnected) continue;
@@ -135,6 +134,10 @@ const BlePage: React.FC = () => {
             }
           }
 
+          const subscribedUuids = new Set(
+            allCharacteristics.filter(c => c.subscribed).map(c => c.uuid)
+          );
+
           tabs[conn.address] = {
             deviceId: conn.address,
             name: conn.name || formatMacAddress(conn.address),
@@ -144,12 +147,8 @@ const BlePage: React.FC = () => {
             logs: [],
             selectedCharacteristic: null,
             discoveringServices: false,
-            subscribedUuids: new Set(currentSubscribed[conn.address] || []),
+            subscribedUuids,
           };
-
-          restoreSubscriptions(conn.address, currentSubscribed[conn.address]).catch((err) => {
-            console.error('[BlePage] 恢复订阅失败:', { deviceId: conn.address, error: err });
-          });
         }
 
         if (Object.keys(tabs).length > 0) {
@@ -164,7 +163,7 @@ const BlePage: React.FC = () => {
     };
 
     restoreConnectedDevices();
-  }, [preferencesLoaded, restoreConnections, restoreSubscriptions, setCurrentDevice]);
+  }, [preferencesLoaded, restoreConnections, setCurrentDevice]);
 
   useEffect(() => {
     if (!currentDevice) return;
@@ -191,7 +190,7 @@ const BlePage: React.FC = () => {
             logs: [],
             selectedCharacteristic: null,
             discoveringServices: true,
-            subscribedUuids: new Set(subscribedCharacteristics[currentDevice] || []),
+            subscribedUuids: new Set(),
           },
         };
 
@@ -201,6 +200,19 @@ const BlePage: React.FC = () => {
 
     discoverServices(currentDevice)
       .then((svcList) => {
+        if (!svcList) return;
+        
+        const allCharacteristics: BleCharacteristic[] = [];
+        for (const svc of svcList) {
+          if (svc.characteristics) {
+            allCharacteristics.push(...svc.characteristics);
+          }
+        }
+        
+        const subscribedUuids = new Set(
+          allCharacteristics.filter(c => c.subscribed).map(c => c.uuid)
+        );
+        
         setDeviceTabs((prev) => {
           const tab = prev[currentDevice];
           if (!tab) return prev;
@@ -208,8 +220,10 @@ const BlePage: React.FC = () => {
             ...prev,
             [currentDevice]: {
               ...tab,
-              services: svcList || [],
+              services: svcList,
+              characteristics: allCharacteristics,
               discoveringServices: false,
+              subscribedUuids,
             },
           };
         });

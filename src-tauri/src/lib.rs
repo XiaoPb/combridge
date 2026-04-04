@@ -132,7 +132,6 @@ pub fn run() {
             commands::preferences::save_preferences,
             commands::preferences::update_serial_preferences,
             commands::preferences::update_ble_preferences,
-            commands::preferences::update_ble_subscriptions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

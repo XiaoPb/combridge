@@ -47,6 +47,8 @@ pub struct BleCharacteristic {
     pub uuid: String,
     pub service_uuid: String,
     pub properties: BleCharacteristicProperties,
+    #[serde(default)]
+    pub subscribed: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]

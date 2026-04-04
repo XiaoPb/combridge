@@ -401,8 +401,6 @@ pub struct BlePreferences {
     pub config_collapsed: bool,
     pub gatt_collapsed: bool,
     pub panel_collapsed: bool,
-    #[serde(default)]
-    pub subscribed_characteristics: HashMap<String, Vec<String>>,
 }
 
 impl Default for BlePreferences {
@@ -421,7 +419,6 @@ impl BlePreferences {
             config_collapsed: false,
             gatt_collapsed: false,
             panel_collapsed: false,
-            subscribed_characteristics: HashMap::new(),
         }
     }
 }

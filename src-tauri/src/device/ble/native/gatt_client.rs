@@ -207,6 +207,7 @@ impl GattClient {
                     uuid: char_uuid,
                     service_uuid: uuid.clone(),
                     properties: ble_props,
+                    subscribed: false,
                 });
             }
 
@@ -276,6 +277,7 @@ impl GattClient {
                 uuid,
                 service_uuid: service_uuid.to_string(),
                 properties: ble_props,
+                subscribed: false,
             });
         }
 
@@ -488,6 +490,7 @@ impl GattClient {
                                         notify: props.notify,
                                         indicate: props.indicate,
                                     },
+                                    subscribed: false,
                                 })
                             })
                             .collect()

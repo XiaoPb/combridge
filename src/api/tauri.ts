@@ -570,11 +570,4 @@ export const preferencesApi = {
       panelCollapsed: prefs.panelCollapsed,
     });
   },
-
-  async updateBleSubscriptions(deviceId: string, subscribedUuids: string[]): Promise<void> {
-    await invoke<void>('update_ble_subscriptions', {
-      deviceId,
-      subscribedUuids,
-    });
-  },
 };

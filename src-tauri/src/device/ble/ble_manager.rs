@@ -194,10 +194,23 @@ impl BleManager {
             ComBridgeError::ble("BLE后端未配置")
         })?;
         
-        match backend {
-            Backend::Native(b) => b.discover_services(address).await,
-            Backend::At(b) => b.discover_services(address).await,
+        let mut services = match backend {
+            Backend::Native(b) => b.discover_services(address).await?,
+            Backend::At(b) => b.discover_services(address).await?,
+        };
+
+        let subscriptions = self.subscriptions.read().await;
+        if let Some(subscribed_chars) = subscriptions.get(address) {
+            for service in &mut services {
+                for char in &mut service.characteristics {
+                    if subscribed_chars.contains(&char.uuid) {
+                        char.subscribed = true;
+                    }
+                }
+            }
         }
+        
+        Ok(services)
     }
 
     pub async fn discover_characteristics(&self, address: &str, service_uuid: &str) -> Result<Vec<BleCharacteristic>> {
@@ -206,10 +219,21 @@ impl BleManager {
             ComBridgeError::ble("BLE后端未配置")
         })?;
         
-        match backend {
-            Backend::Native(b) => b.discover_characteristics(address, service_uuid).await,
-            Backend::At(b) => b.discover_characteristics(address, service_uuid).await,
+        let mut characteristics = match backend {
+            Backend::Native(b) => b.discover_characteristics(address, service_uuid).await?,
+            Backend::At(b) => b.discover_characteristics(address, service_uuid).await?,
+        };
+
+        let subscriptions = self.subscriptions.read().await;
+        if let Some(subscribed_chars) = subscriptions.get(address) {
+            for char in &mut characteristics {
+                if subscribed_chars.contains(&char.uuid) {
+                    char.subscribed = true;
+                }
+            }
         }
+        
+        Ok(characteristics)
     }
 
     pub async fn read_characteristic(&self, address: &str, char_uuid: &str) -> Result<Vec<u8>> {

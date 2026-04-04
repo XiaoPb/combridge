@@ -13,6 +13,7 @@ export interface BleCharacteristic {
   serviceUuid: string;
   properties: BleCharacteristicProperties;
   value?: number[];
+  subscribed?: boolean;
 }
 
 export interface BleService {

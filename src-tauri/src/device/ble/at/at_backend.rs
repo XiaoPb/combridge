@@ -332,6 +332,7 @@ impl BleBackend for AtBleBackend {
                                 uuid: c.uuid,
                                 service_uuid: c.service_uuid,
                                 properties: props,
+                                subscribed: false,
                             }
                         }).collect();
                     }

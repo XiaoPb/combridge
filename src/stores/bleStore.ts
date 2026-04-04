@@ -20,7 +20,6 @@ export interface BlePreferences {
   configCollapsed: boolean;
   gattCollapsed: boolean;
   panelCollapsed: boolean;
-  subscribedCharacteristics: Record<string, string[]>;
 }
 
 const DEFAULT_PREFERENCES: BlePreferences = {
@@ -31,7 +30,6 @@ const DEFAULT_PREFERENCES: BlePreferences = {
   configCollapsed: false,
   gattCollapsed: false,
   panelCollapsed: false,
-  subscribedCharacteristics: {},
 };
 
 interface BleState {
@@ -43,7 +41,6 @@ interface BleState {
   services: BleService[];
   characteristics: BleCharacteristic[];
   notifications: BleNotification[];
-  subscribedCharacteristics: Record<string, string[]>;
   isScanning: boolean;
   isConnecting: boolean;
   isConfigured: boolean;
@@ -70,10 +67,6 @@ interface BleState {
   clearCharacteristics: () => void;
   addNotification: (notification: BleNotification) => void;
   clearNotifications: () => void;
-  setSubscribedCharacteristics: (deviceId: string, characteristics: string[]) => void;
-  addSubscribedCharacteristic: (deviceId: string, charUuid: string) => void;
-  removeSubscribedCharacteristic: (deviceId: string, charUuid: string) => void;
-  clearSubscribedCharacteristics: (deviceId: string) => void;
   setIsScanning: (isScanning: boolean) => void;
   setIsConnecting: (isConnecting: boolean) => void;
   setIsConfigured: (isConfigured: boolean) => void;
@@ -92,7 +85,6 @@ const initialState = {
   services: [],
   characteristics: [],
   notifications: [],
-  subscribedCharacteristics: {} as Record<string, string[]>,
   isScanning: false,
   isConnecting: false,
   isConfigured: false,
@@ -201,51 +193,6 @@ export const useBleStore = create<BleState>((set) => ({
 
   clearNotifications: () => set({ notifications: [] }),
 
-  setSubscribedCharacteristics: (deviceId, characteristics) =>
-    set((state) => ({
-      subscribedCharacteristics: {
-        ...state.subscribedCharacteristics,
-        [deviceId]: characteristics,
-      },
-    })),
-
-  addSubscribedCharacteristic: (deviceId, charUuid) =>
-    set((state) => {
-      const current = state.subscribedCharacteristics[deviceId] || [];
-      if (current.includes(charUuid)) {
-        return state;
-      }
-      const newUuids = [...current, charUuid];
-      preferencesApi.updateBleSubscriptions(deviceId, newUuids).catch(console.error);
-      return {
-        subscribedCharacteristics: {
-          ...state.subscribedCharacteristics,
-          [deviceId]: newUuids,
-        },
-      };
-    }),
-
-  removeSubscribedCharacteristic: (deviceId, charUuid) =>
-    set((state) => {
-      const current = state.subscribedCharacteristics[deviceId] || [];
-      const newUuids = current.filter((uuid) => uuid !== charUuid);
-      preferencesApi.updateBleSubscriptions(deviceId, newUuids).catch(console.error);
-      return {
-        subscribedCharacteristics: {
-          ...state.subscribedCharacteristics,
-          [deviceId]: newUuids,
-        },
-      };
-    }),
-
-  clearSubscribedCharacteristics: (deviceId) =>
-    set((state) => {
-      const next = { ...state.subscribedCharacteristics };
-      delete next[deviceId];
-      preferencesApi.updateBleSubscriptions(deviceId, []).catch(console.error);
-      return { subscribedCharacteristics: next };
-    }),
-
   setIsScanning: (isScanning) => set({ isScanning }),
 
   setIsConnecting: (isConnecting) => set({ isConnecting }),
@@ -258,10 +205,7 @@ export const useBleStore = create<BleState>((set) => ({
     try {
       const prefs = await preferencesApi.get();
       if (prefs && prefs.ble) {
-        set((state) => ({
-          preferences: prefs.ble,
-          subscribedCharacteristics: prefs.ble.subscribedCharacteristics || state.subscribedCharacteristics,
-        }));
+        set({ preferences: prefs.ble });
       }
     } catch (err) {
       console.error('加载BLE偏好设置失败:', err);

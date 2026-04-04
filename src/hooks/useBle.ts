@@ -207,7 +207,7 @@ export const useBle = () => {
     try {
       console.debug('[useBle] 正在调用 bleApi.connectBle...');
       const connection = await bleApi.connectBle(address);
-      console.debug('[useBle] connectBle 返回:', connection);
+      console.debug('[useBle] connectBle 返回:', JSON.stringify(connection, null, 2));
       addConnection(connection);
       console.debug('[useBle] 调用 setCurrentDevice:', address);
       setCurrentDevice(address);

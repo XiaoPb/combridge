@@ -69,7 +69,7 @@ const BlePage: React.FC = () => {
   }, [setPorts]);
 
   useEffect(() => {
-    console.debug('[BlePage] TAB创建useEffect触发, currentDevice:', currentDevice, 'connections:', connections);
+    console.debug('[BlePage] TAB创建useEffect触发, currentDevice:', currentDevice, 'connections:', JSON.stringify(connections, null, 2));
     if (!currentDevice) {
       console.debug('[BlePage] currentDevice为空，跳过');
       return;

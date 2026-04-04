@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct BleDevice {
     pub address: String,
     pub name: Option<String>,
@@ -14,6 +15,7 @@ pub struct BleDevice {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
 pub struct BleConnection {
     pub address: String,
     pub name: Option<String>,
@@ -22,12 +24,14 @@ pub struct BleConnection {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
 pub struct BleService {
     pub uuid: String,
     pub primary: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct BleCharacteristic {
     pub uuid: String,
     pub service_uuid: String,
@@ -35,6 +39,7 @@ pub struct BleCharacteristic {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct BleCharacteristicProperties {
     pub read: bool,
     pub write: bool,

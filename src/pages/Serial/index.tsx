@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Layout, Card, Button, Select, Spin, Typography, Space, Alert, Input, Segmented, Switch, Empty, Tag, Tabs as AntTabs } from 'antd';
-import { ReloadOutlined, UsbOutlined, DisconnectOutlined, SendOutlined, ClearOutlined, DownloadOutlined, MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined } from '@ant-design/icons';
+import { Layout, Card, Button, Select, Spin, Typography, Space, Alert, Input, Segmented, Switch, Empty, Tag, Tabs as AntTabs, Tooltip } from 'antd';
+import { ReloadOutlined, UsbOutlined, DisconnectOutlined, SendOutlined, ClearOutlined, DownloadOutlined, MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined, VerticalAlignBottomOutlined } from '@ant-design/icons';
 import { useSerial } from '../../hooks/useSerial';
 import { formatTimestamp, formatData } from '../../stores/serialStore';
 import { serialApi } from '../../api/tauri';
@@ -528,6 +528,14 @@ const SerialPage: React.FC = () => {
               }
               extra={
                 <Space>
+                  <Tooltip title={autoScroll ? '自动滚动: 开启' : '自动滚动: 关闭'}>
+                    <Button
+                      type={autoScroll ? 'primary' : 'default'}
+                      icon={<VerticalAlignBottomOutlined />}
+                      onClick={() => setAutoScroll(!autoScroll)}
+                      size="small"
+                    />
+                  </Tooltip>
                   <Segmented
                     value={displayMode}
                     onChange={(value) => setDisplayMode(value as 'all' | 'receive' | 'send')}

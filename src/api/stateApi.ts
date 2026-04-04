@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { Action, ActionResult, AppState } from '../types/state';
+import type { Action, ActionResult, AppState, Device } from '../types/state';
 
 const STATE_CHANGE_EVENT = 'state-change';
 
@@ -14,11 +14,11 @@ export async function getState(): Promise<AppState> {
 }
 
 export async function getChannelData(
+  deviceId: string,
   channelId: string,
-  direction?: string,
   limit?: number
 ): Promise<Record<string, unknown>> {
-  return invoke('get_channel_data', { channelId, direction, limit });
+  return invoke('get_channel_data', { deviceId, channelId, limit });
 }
 
 export async function restoreState(): Promise<void> {
@@ -29,8 +29,8 @@ export async function saveState(): Promise<void> {
   return invoke('save_state');
 }
 
-export async function getConnectedChannels(): Promise<AppState['channels']> {
-  return invoke('get_connected_channels');
+export async function getConnectedDevices(): Promise<Device[]> {
+  return invoke('get_connected_devices');
 }
 
 export async function getWindowState(): Promise<AppState['windowState']> {
@@ -56,74 +56,113 @@ export function subscribeToStateChanges(
 }
 
 function transformAction(action: Action): Record<string, unknown> {
-  switch (action.type) {
+  const { type, ...payload } = action as { type: string; [key: string]: unknown };
+  
+  const actionType = type;
+  
+  switch (actionType) {
+    case 'DEVICE_ADD_SERIAL':
+      return {
+        type: 'DEVICE_ADD_SERIAL',
+        id: payload.id,
+        name: payload.name,
+        baudRate: payload.baudRate,
+      };
+    case 'DEVICE_ADD_BLE':
+      return {
+        type: 'DEVICE_ADD_BLE',
+        id: payload.id,
+        name: payload.name,
+        mac: payload.mac,
+      };
+    case 'DEVICE_REMOVE':
+      return {
+        type: 'DEVICE_REMOVE',
+        deviceId: payload.deviceId,
+      };
+    case 'DEVICE_CONNECT':
+      return {
+        type: 'DEVICE_CONNECT',
+        deviceId: payload.deviceId,
+      };
+    case 'DEVICE_DISCONNECT':
+      return {
+        type: 'DEVICE_DISCONNECT',
+        deviceId: payload.deviceId,
+      };
+    case 'DEVICE_UPDATE_CONFIG':
+      return {
+        type: 'DEVICE_UPDATE_CONFIG',
+        deviceId: payload.deviceId,
+        config: payload.config,
+      };
     case 'CHANNEL_ADD':
       return {
         type: 'CHANNEL_ADD',
-        name: action.name,
-        channelType: action.channelType,
-        config: action.config,
+        deviceId: payload.deviceId,
+        channelId: payload.channelId,
+        direction: payload.direction,
       };
-    case 'CHANNEL_REMOVE':
+    case 'CHANNEL_SUBSCRIBE':
       return {
-        type: 'CHANNEL_REMOVE',
-        id: action.id,
-      };
-    case 'CHANNEL_CONNECT':
-      return {
-        type: 'CHANNEL_CONNECT',
-        id: action.id,
-        config: action.config,
-      };
-    case 'CHANNEL_DISCONNECT':
-      return {
-        type: 'CHANNEL_DISCONNECT',
-        id: action.id,
+        type: 'CHANNEL_SUBSCRIBE',
+        deviceId: payload.deviceId,
+        channelId: payload.channelId,
+        subscribe: payload.subscribe,
       };
     case 'DATA_SEND':
       return {
         type: 'DATA_SEND',
-        channelId: action.channelId,
-        data: action.data,
+        deviceId: payload.deviceId,
+        channelId: payload.channelId,
+        data: payload.data,
       };
-    case 'CHANNEL_SWITCH':
+    case 'DATA_RECEIVE':
       return {
-        type: 'CHANNEL_SWITCH',
-        channelId: action.channelId,
+        type: 'DATA_RECEIVE',
+        deviceId: payload.deviceId,
+        channelId: payload.channelId,
+        data: payload.data,
       };
     case 'BUFFER_CLEAR':
       return {
         type: 'BUFFER_CLEAR',
-        channelId: action.channelId,
-        direction: action.direction,
+        deviceId: payload.deviceId,
+        channelId: payload.channelId,
+      };
+    case 'DEVICE_SWITCH':
+      return {
+        type: 'DEVICE_SWITCH',
+        deviceId: payload.deviceId,
       };
     case 'TAB_ADD':
       return {
         type: 'TAB_ADD',
-        channelId: action.channelId,
-        label: action.label,
+        deviceId: payload.deviceId,
+        channelId: payload.channelId,
+        label: payload.label,
       };
     case 'TAB_REMOVE':
       return {
         type: 'TAB_REMOVE',
-        tabKey: action.tabKey,
+        tabKey: payload.tabKey,
       };
     case 'TAB_SWITCH':
       return {
         type: 'TAB_SWITCH',
-        tabKey: action.tabKey,
+        tabKey: payload.tabKey,
       };
     case 'SETTINGS_UPDATE':
       return {
         type: 'SETTINGS_UPDATE',
-        settings: action.settings,
+        settings: payload.settings,
       };
     case 'STATE_RESTORE':
       return {
         type: 'STATE_RESTORE',
-        windowState: action.windowState,
+        windowState: payload.windowState,
       };
     default:
-      return action as Record<string, unknown>;
+      return { type: actionType, ...payload };
   }
 }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tracing::{error, info};
 
-use crate::device::{BaudRate, BleManagerRef, DataBits, FlowControl, Parity, SerialManagerRef, StopBits};
+use crate::device::{BaudRate, BleManagerRef, FlowControl, SerialManagerRef};
 
 use super::action::{Action, ActionResult};
 use super::app_state::AppStateRef;
@@ -37,29 +37,44 @@ impl ActionDispatcher {
         info!("处理 Action: {}", action);
         
         let result = match action {
-            Action::ChannelAdd { name, channel_type, config } => {
-                self.handle_channel_add(&name, &channel_type, config).await
+            Action::DeviceAddSerial { id, name, baud_rate } => {
+                self.handle_device_add_serial(&id, &name, baud_rate).await
             }
-            Action::ChannelRemove { id } => {
-                self.handle_channel_remove(&id).await
+            Action::DeviceAddBle { id, name, mac } => {
+                self.handle_device_add_ble(&id, &name, &mac).await
             }
-            Action::ChannelConnect { id, config } => {
-                self.handle_channel_connect(&id, config, app).await
+            Action::DeviceRemove { device_id } => {
+                self.handle_device_remove(&device_id).await
             }
-            Action::ChannelDisconnect { id } => {
-                self.handle_channel_disconnect(&id).await
+            Action::DeviceConnect { device_id } => {
+                self.handle_device_connect(&device_id, app).await
             }
-            Action::DataSend { channel_id, data } => {
-                self.handle_data_send(&channel_id, &data, app).await
+            Action::DeviceDisconnect { device_id } => {
+                self.handle_device_disconnect(&device_id).await
             }
-            Action::ChannelSwitch { channel_id } => {
-                self.handle_channel_switch(&channel_id).await
+            Action::DeviceUpdateConfig { device_id, config } => {
+                self.handle_device_update_config(&device_id, config).await
             }
-            Action::BufferClear { channel_id, direction } => {
-                self.handle_buffer_clear(&channel_id, &direction).await
+            Action::ChannelAdd { device_id, channel_id, direction } => {
+                self.handle_channel_add(&device_id, &channel_id, &direction).await
             }
-            Action::TabAdd { channel_id, label } => {
-                self.handle_tab_add(&channel_id, &label).await
+            Action::ChannelSubscribe { device_id, channel_id, subscribe } => {
+                self.handle_channel_subscribe(&device_id, &channel_id, subscribe).await
+            }
+            Action::DataSend { device_id, channel_id, data } => {
+                self.handle_data_send(&device_id, &channel_id, &data, app).await
+            }
+            Action::DataReceive { device_id, channel_id, data } => {
+                self.handle_data_receive(&device_id, &channel_id, &data).await
+            }
+            Action::BufferClear { device_id, channel_id } => {
+                self.handle_buffer_clear(&device_id, &channel_id).await
+            }
+            Action::DeviceSwitch { device_id } => {
+                self.handle_device_switch(&device_id).await
+            }
+            Action::TabAdd { device_id, channel_id, label } => {
+                self.handle_tab_add(&device_id, channel_id, &label).await
             }
             Action::TabRemove { tab_key } => {
                 self.handle_tab_remove(&tab_key).await
@@ -83,102 +98,73 @@ impl ActionDispatcher {
         result
     }
 
-    async fn handle_channel_add(
-        &self,
-        name: &str,
-        channel_type: &str,
-        config: Option<serde_json::Value>,
-    ) -> ActionResult {
-        let channel_type = match channel_type.to_lowercase().as_str() {
-            "serial" => ChannelType::Serial,
-            "ble" => ChannelType::BluetoothCharacteristic,
-            _ => return ActionResult::failure(format!("未知的通道类型: {}", channel_type)),
-        };
-        
-        let id = match channel_type {
-            ChannelType::Serial => format!("serial-{}", name),
-            ChannelType::BluetoothCharacteristic => format!("ble-{}-{}", name, current_timestamp()),
-        };
-        
-        let mut channel = match channel_type {
-            ChannelType::Serial => DeviceChannel::new_serial(id.clone(), name.to_string()),
-            ChannelType::BluetoothCharacteristic => {
-                DeviceChannel::new_ble_characteristic(
-                    id.clone(),
-                    name.to_string(),
-                    None,
-                    "".to_string(),
-                    "".to_string(),
-                )
-            }
-        };
-        
-        if let Some(cfg) = config {
-            if let Ok(serial_config) = serde_json::from_value::<SerialConfig>(cfg.clone()) {
-                channel.config = Some(ChannelConfig::Serial(serial_config));
-            }
-        }
-        
+    async fn handle_device_add_serial(&self, id: &str, name: &str, baud_rate: u32) -> ActionResult {
         let mut state = self.state.write().await;
-        state.add_channel(channel);
-        
-        ActionResult::success_with_data(serde_json::json!({ "channelId": id }))
+        state.add_serial_device(id.to_string(), name.to_string());
+        if let Some(sd) = state.get_serial_device_mut(id) {
+            sd.baud_rate = baud_rate;
+        }
+        ActionResult::success_with_data(serde_json::json!({ "deviceId": id }))
     }
 
-    async fn handle_channel_remove(&self, id: &str) -> ActionResult {
+    async fn handle_device_add_ble(&self, id: &str, name: &str, mac: &str) -> ActionResult {
         let mut state = self.state.write().await;
-        match state.remove_channel(id) {
-            Some(channel) => {
-                ActionResult::success_with_message(format!("通道 {} 已移除", channel.name))
+        state.add_ble_device(id.to_string(), name.to_string(), mac.to_string());
+        ActionResult::success_with_data(serde_json::json!({ "deviceId": id }))
+    }
+
+    async fn handle_device_remove(&self, device_id: &str) -> ActionResult {
+        let mut state = self.state.write().await;
+        match state.remove_device(device_id) {
+            Some(device) => {
+                ActionResult::success_with_message(format!("设备 {} 已移除", device.name()))
             }
-            None => ActionResult::failure(format!("通道不存在: {}", id)),
+            None => ActionResult::failure(format!("设备不存在: {}", device_id)),
         }
     }
 
-    async fn handle_channel_connect(
-        &self,
-        id: &str,
-        config: Option<serde_json::Value>,
-        app: &AppHandle,
-    ) -> ActionResult {
-        let channel_type = {
+    async fn handle_device_connect(&self, device_id: &str, app: &AppHandle) -> ActionResult {
+        let device_type = {
             let state = self.state.read().await;
-            match state.get_channel(id) {
-                Some(channel) => channel.channel_type,
-                None => return ActionResult::failure(format!("通道不存在: {}", id)),
+            match state.get_device(device_id) {
+                Some(device) => match device {
+                    Device::Serial(_) => "serial",
+                    Device::Ble(_) => "ble",
+                },
+                None => return ActionResult::failure(format!("设备不存在: {}", device_id)),
             }
         };
-        
-        let result = match channel_type {
-            ChannelType::Serial => {
-                self.connect_serial(id, config, app).await
-            }
-            ChannelType::BluetoothCharacteristic => {
-                self.connect_ble(id, config, app).await
-            }
+
+        let result = match device_type {
+            "serial" => self.connect_serial(device_id, app).await,
+            "ble" => self.connect_ble(device_id, app).await,
+            _ => ActionResult::failure(format!("未知的设备类型: {}", device_type)),
         };
-        
+
         if result.success {
             let mut state = self.state.write().await;
-            state.set_channel_connected(id, true);
+            state.set_device_connected(device_id, true);
         }
-        
+
         result
     }
 
-    async fn connect_serial(
-        &self,
-        id: &str,
-        config: Option<serde_json::Value>,
-        app: &AppHandle,
-    ) -> ActionResult {
-        let port_name = id.strip_prefix("serial-").unwrap_or(id).to_string();
-        
-        let serial_config = config
-            .and_then(|c| serde_json::from_value::<SerialConfig>(c).ok())
-            .unwrap_or_default();
-        
-        let baud_rate = match serial_config.baud_rate {
+    async fn connect_serial(&self, device_id: &str, app: &AppHandle) -> ActionResult {
+        let (port_name, baud_rate, data_bits, parity, stop_bits) = {
+            let state = self.state.read().await;
+            match state.get_serial_device(device_id) {
+                Some(sd) => (
+                    sd.name.clone(),
+                    sd.baud_rate,
+                    sd.data_bits,
+                    sd.parity,
+                    sd.stop_bits,
+                ),
+                None => return ActionResult::failure(format!("串口设备不存在: {}", device_id)),
+            }
+        };
+
+        let baud_rate_enum = match baud_rate {
             1200 => BaudRate::B1200,
             2400 => BaudRate::B2400,
             4800 => BaudRate::B4800,
@@ -192,62 +178,52 @@ impl ActionDispatcher {
             921600 => BaudRate::B921600,
             _ => BaudRate::B115200,
         };
-        
-        let data_bits = match serial_config.data_bits {
-            5 => DataBits::Five,
-            6 => DataBits::Six,
-            7 => DataBits::Seven,
-            8 => DataBits::Eight,
-            _ => DataBits::Eight,
+
+        let data_bits_enum = match data_bits {
+            DataBits::Five => crate::device::DataBits::Five,
+            DataBits::Six => crate::device::DataBits::Six,
+            DataBits::Seven => crate::device::DataBits::Seven,
+            DataBits::Eight => crate::device::DataBits::Eight,
         };
-        
-        let parity = match serial_config.parity.to_lowercase().as_str() {
-            "none" => Parity::None,
-            "odd" => Parity::Odd,
-            "even" => Parity::Even,
-            _ => Parity::None,
+
+        let parity_enum = match parity {
+            Parity::None => crate::device::Parity::None,
+            Parity::Odd => crate::device::Parity::Odd,
+            Parity::Even => crate::device::Parity::Even,
         };
-        
-        let stop_bits = match serial_config.stop_bits {
-            1 => StopBits::One,
-            2 => StopBits::Two,
-            _ => StopBits::One,
+
+        let stop_bits_enum = match stop_bits {
+            StopBits::One => crate::device::StopBits::One,
+            StopBits::Two => crate::device::StopBits::Two,
         };
-        
-        let flow_control = match serial_config.flow_control.to_lowercase().as_str() {
-            "none" => FlowControl::None,
-            "software" => FlowControl::Software,
-            "hardware" => FlowControl::Hardware,
-            _ => FlowControl::None,
-        };
-        
+
         let port_config = crate::device::SerialPortConfig {
             port_name: port_name.clone(),
-            baud_rate,
-            data_bits,
-            parity,
-            stop_bits,
-            flow_control,
+            baud_rate: baud_rate_enum,
+            data_bits: data_bits_enum,
+            parity: parity_enum,
+            stop_bits: stop_bits_enum,
+            flow_control: FlowControl::None,
             timeout_ms: 1000,
             pack_timeout_ms: 50,
         };
-        
+
         let state = self.state.clone();
-        let channel_id = id.to_string();
+        let device_id_owned = device_id.to_string();
         let app_clone = app.clone();
-        
+
         match self.serial_manager.open_port(port_config, move |_name, data| {
             let state = state.clone();
-            let channel_id = channel_id.clone();
+            let device_id = device_id_owned.clone();
             let app = app_clone.clone();
             let data = data.to_vec();
-            
+
             if let Ok(handle) = tokio::runtime::Handle::try_current() {
                 handle.spawn(async move {
                     let mut state = state.write().await;
-                    state.add_rx_data(&channel_id, &data);
+                    state.add_serial_rx_data(&device_id, &data);
                     drop(state);
-                    
+
                     let _ = app.emit(STATE_CHANGE_EVENT, ());
                 });
             }
@@ -257,104 +233,201 @@ impl ActionDispatcher {
         }
     }
 
-    async fn connect_ble(
-        &self,
-        _id: &str,
-        _config: Option<serde_json::Value>,
-        _app: &AppHandle,
-    ) -> ActionResult {
+    async fn connect_ble(&self, _device_id: &str, _app: &AppHandle) -> ActionResult {
         ActionResult::failure("BLE 连接暂未实现")
     }
 
-    async fn handle_channel_disconnect(&self, id: &str) -> ActionResult {
-        let channel_type = {
+    async fn handle_device_disconnect(&self, device_id: &str) -> ActionResult {
+        let device_type = {
             let state = self.state.read().await;
-            match state.get_channel(id) {
-                Some(channel) => channel.channel_type,
-                None => return ActionResult::failure(format!("通道不存在: {}", id)),
+            match state.get_device(device_id) {
+                Some(device) => match device {
+                    Device::Serial(_) => "serial",
+                    Device::Ble(_) => "ble",
+                },
+                None => return ActionResult::failure(format!("设备不存在: {}", device_id)),
             }
         };
-        
-        let result = match channel_type {
-            ChannelType::Serial => {
-                let port_name = id.strip_prefix("serial-").unwrap_or(id);
-                match self.serial_manager.close_port(port_name) {
-                    Ok(()) => ActionResult::success_with_message(format!("串口 {} 已断开", port_name)),
-                    Err(e) => ActionResult::failure(format!("断开串口失败: {}", e)),
+
+        let result = match device_type {
+            "serial" => {
+                let port_name = {
+                    let state = self.state.read().await;
+                    state.get_serial_device(device_id).map(|sd| sd.name.clone())
+                };
+                match port_name {
+                    Some(name) => match self.serial_manager.close_port(&name) {
+                        Ok(()) => ActionResult::success_with_message(format!("串口 {} 已断开", name)),
+                        Err(e) => ActionResult::failure(format!("断开串口失败: {}", e)),
+                    },
+                    None => ActionResult::failure(format!("串口设备不存在: {}", device_id)),
                 }
             }
-            ChannelType::BluetoothCharacteristic => {
-                ActionResult::failure("BLE 断开暂未实现")
-            }
+            "ble" => ActionResult::failure("BLE 断开暂未实现"),
+            _ => ActionResult::failure(format!("未知的设备类型: {}", device_type)),
         };
-        
+
         if result.success {
             let mut state = self.state.write().await;
-            state.set_channel_connected(id, false);
+            state.set_device_connected(device_id, false);
         }
-        
+
         result
     }
 
-    async fn handle_data_send(
-        &self,
-        channel_id: &str,
-        data: &[u8],
-        app: &AppHandle,
-    ) -> ActionResult {
-        let (channel_type, name) = {
+    async fn handle_device_update_config(&self, device_id: &str, config: serde_json::Value) -> ActionResult {
+        let device_type = {
             let state = self.state.read().await;
-            match state.get_channel(channel_id) {
-                Some(channel) => (channel.channel_type, channel.name.clone()),
-                None => return ActionResult::failure(format!("通道不存在: {}", channel_id)),
+            match state.get_device(device_id) {
+                Some(device) => match device {
+                    Device::Serial(_) => "serial",
+                    Device::Ble(_) => "ble",
+                },
+                None => return ActionResult::failure(format!("设备不存在: {}", device_id)),
             }
         };
-        
-        let result = match channel_type {
-            ChannelType::Serial => {
-                let port_name = channel_id.strip_prefix("serial-").unwrap_or(&name);
-                match self.serial_manager.send_data(port_name, data) {
-                    Ok(bytes) => ActionResult::success_with_data(serde_json::json!({ "bytesSent": bytes })),
-                    Err(e) => ActionResult::failure(format!("发送数据失败: {}", e)),
+
+        match device_type {
+            "serial" => {
+                let baud_rate = config.get("baudRate").and_then(|v| v.as_u64()).unwrap_or(115200) as u32;
+                let data_bits = match config.get("dataBits").and_then(|v| v.as_u64()).unwrap_or(8) {
+                    5 => DataBits::Five,
+                    6 => DataBits::Six,
+                    7 => DataBits::Seven,
+                    _ => DataBits::Eight,
+                };
+                let parity = match config.get("parity").and_then(|v| v.as_str()).unwrap_or("none") {
+                    "odd" => Parity::Odd,
+                    "even" => Parity::Even,
+                    _ => Parity::None,
+                };
+                let stop_bits = match config.get("stopBits").and_then(|v| v.as_u64()).unwrap_or(1) {
+                    2 => StopBits::Two,
+                    _ => StopBits::One,
+                };
+
+                let mut state = self.state.write().await;
+                if state.update_serial_config(device_id, baud_rate, data_bits, parity, stop_bits) {
+                    ActionResult::success()
+                } else {
+                    ActionResult::failure("更新串口配置失败")
                 }
             }
-            ChannelType::BluetoothCharacteristic => {
-                ActionResult::failure("BLE 发送暂未实现")
+            "ble" => {
+                if let Some(mtu) = config.get("mtu").and_then(|v| v.as_u64()) {
+                    let mut state = self.state.write().await;
+                    if state.update_ble_mtu(device_id, mtu as u16) {
+                        ActionResult::success()
+                    } else {
+                        ActionResult::failure("更新 BLE MTU 失败")
+                    }
+                } else {
+                    ActionResult::failure("无效的 BLE 配置")
+                }
+            }
+            _ => ActionResult::failure(format!("未知的设备类型: {}", device_type)),
+        }
+    }
+
+    async fn handle_channel_add(&self, device_id: &str, channel_id: &str, direction: &str) -> ActionResult {
+        let direction = match direction {
+            "read" => ChannelDirection::Read,
+            "write" => ChannelDirection::Write,
+            "notify" => ChannelDirection::Notify,
+            _ => return ActionResult::failure(format!("未知的通道方向: {}", direction)),
+        };
+
+        let mut state = self.state.write().await;
+        if state.add_channel(device_id, channel_id.to_string(), direction) {
+            ActionResult::success()
+        } else {
+            ActionResult::failure("添加通道失败")
+        }
+    }
+
+    async fn handle_channel_subscribe(&self, device_id: &str, channel_id: &str, subscribe: bool) -> ActionResult {
+        let mut state = self.state.write().await;
+        if state.set_channel_subscribed(device_id, channel_id, subscribe) {
+            ActionResult::success()
+        } else {
+            ActionResult::failure("设置订阅状态失败")
+        }
+    }
+
+    async fn handle_data_send(&self, device_id: &str, channel_id: &str, data: &[u8], app: &AppHandle) -> ActionResult {
+        let device_type = {
+            let state = self.state.read().await;
+            match state.get_device(device_id) {
+                Some(device) => match device {
+                    Device::Serial(_) => "serial",
+                    Device::Ble(_) => "ble",
+                },
+                None => return ActionResult::failure(format!("设备不存在: {}", device_id)),
             }
         };
-        
+
+        let result = match device_type {
+            "serial" => {
+                let port_name = {
+                    let state = self.state.read().await;
+                    state.get_serial_device(device_id).map(|sd| sd.name.clone())
+                };
+                match port_name {
+                    Some(name) => match self.serial_manager.send_data(&name, data) {
+                        Ok(bytes) => ActionResult::success_with_data(serde_json::json!({ "bytesSent": bytes })),
+                        Err(e) => ActionResult::failure(format!("发送数据失败: {}", e)),
+                    },
+                    None => ActionResult::failure(format!("串口设备不存在: {}", device_id)),
+                }
+            }
+            "ble" => ActionResult::failure("BLE 发送暂未实现"),
+            _ => ActionResult::failure(format!("未知的设备类型: {}", device_type)),
+        };
+
         if result.success {
             let mut state = self.state.write().await;
-            state.add_tx_data(channel_id, data);
+            if device_type == "serial" {
+                state.add_serial_tx_data(device_id, data);
+            } else {
+                state.add_data_to_channel(device_id, channel_id, data);
+            }
             drop(state);
             self.broadcast_state_change(app).await;
         }
-        
+
         result
     }
 
-    async fn handle_channel_switch(&self, channel_id: &str) -> ActionResult {
+    async fn handle_data_receive(&self, device_id: &str, channel_id: &str, data: &[u8]) -> ActionResult {
         let mut state = self.state.write().await;
-        if state.get_channel(channel_id).is_some() {
-            state.active_channel_id = Some(channel_id.to_string());
+        if state.add_data_to_channel(device_id, channel_id, data) {
             ActionResult::success()
         } else {
-            ActionResult::failure(format!("通道不存在: {}", channel_id))
+            ActionResult::failure("添加接收数据失败")
         }
     }
 
-    async fn handle_buffer_clear(&self, channel_id: &str, direction: &str) -> ActionResult {
+    async fn handle_buffer_clear(&self, device_id: &str, channel_id: &str) -> ActionResult {
         let mut state = self.state.write().await;
-        if state.clear_buffer(channel_id, direction) {
-            ActionResult::success_with_message(format!("缓冲区已清空: {}", direction))
+        if state.clear_channel_buffer(device_id, channel_id) {
+            ActionResult::success_with_message("缓冲区已清空")
         } else {
-            ActionResult::failure(format!("通道不存在: {}", channel_id))
+            ActionResult::failure("清空缓冲区失败")
         }
     }
 
-    async fn handle_tab_add(&self, channel_id: &str, label: &str) -> ActionResult {
+    async fn handle_device_switch(&self, device_id: &str) -> ActionResult {
         let mut state = self.state.write().await;
-        let tab_key = state.add_tab(channel_id.to_string(), label.to_string());
+        if state.switch_device(device_id) {
+            ActionResult::success()
+        } else {
+            ActionResult::failure(format!("设备不存在: {}", device_id))
+        }
+    }
+
+    async fn handle_tab_add(&self, device_id: &str, channel_id: Option<String>, label: &str) -> ActionResult {
+        let mut state = self.state.write().await;
+        let tab_key = state.add_tab(device_id.to_string(), channel_id, label.to_string());
         ActionResult::success_with_data(serde_json::json!({ "tabKey": tab_key }))
     }
 
@@ -407,7 +480,7 @@ impl ActionDispatcher {
                 return;
             }
         };
-        
+
         if let Err(e) = app.emit(STATE_CHANGE_EVENT, state_json) {
             error!("广播状态变更失败: {}", e);
         }

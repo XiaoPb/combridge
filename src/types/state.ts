@@ -1,28 +1,8 @@
-export type ChannelType = 'serial' | 'ble';
-
-export interface ChannelSerialConfig {
-  baudRate: number;
-  dataBits: number;
-  parity: string;
-  stopBits: number;
-  flowControl: string;
-}
-
-export interface BleCharacteristicConfig {
-  deviceAddress: string;
-  serviceUuid: string;
-  characteristicUuid: string;
-  properties: string[];
-}
-
-export type ChannelConfig = 
-  | { type: 'serial'; baudRate: number; dataBits: number; parity: string; stopBits: number; flowControl: string }
-  | { type: 'bleCharacteristic'; deviceAddress: string; serviceUuid: string; characteristicUuid: string; properties: string[] };
+export type ChannelDirection = 'read' | 'write' | 'notify';
 
 export interface BufferEntry {
   timestamp: number;
   data: number[];
-  direction: string;
 }
 
 export interface ChannelBuffer {
@@ -30,27 +10,59 @@ export interface ChannelBuffer {
   totalBytes: number;
 }
 
-export interface DeviceChannel {
+export interface Channel {
+  id: string;
+  direction: ChannelDirection;
+  buffer: ChannelBuffer;
+  subscribed: boolean;
+}
+
+export type DataBits = 'five' | 'six' | 'seven' | 'eight';
+export type ParityType = 'none' | 'odd' | 'even';
+export type StopBitsType = 'one' | 'two';
+
+export interface ConnectionParams {
+  interval: number;
+  latency: number;
+  timeout: number;
+}
+
+export interface SerialDevice {
   id: string;
   name: string;
-  type: ChannelType;
   connected: boolean;
-  txBuffer: ChannelBuffer;
-  rxBuffer: ChannelBuffer;
-  config?: ChannelConfig;
-  createdAt: number;
-  bytesSent: number;
-  bytesReceived: number;
+  connectable: boolean;
+  baudRate: number;
+  dataBits: DataBits;
+  parity: ParityType;
+  stopBits: StopBitsType;
+  channels: Record<string, Channel>;
 }
+
+export interface BleDevice {
+  id: string;
+  name: string;
+  mac: string;
+  connected: boolean;
+  connectable: boolean;
+  mtu: number;
+  connectionParams: ConnectionParams;
+  channels: Record<string, Channel>;
+}
+
+export type Device = 
+  | { type: 'serial' } & SerialDevice 
+  | { type: 'ble' } & BleDevice;
 
 export interface TabState {
   key: string;
-  channelId: string;
+  deviceId: string;
+  channelId?: string;
   label: string;
   isActive: boolean;
 }
 
-export interface AppWindowState {
+export interface ChannelWindowState {
   tabs: TabState[];
   activeTabKey: string | null;
   sidebarWidth?: number;
@@ -66,21 +78,26 @@ export interface ChannelAppSettings {
 }
 
 export interface AppState {
-  channels: DeviceChannel[];
-  activeChannelId: string | null;
+  devices: Record<string, Device>;
+  activeDeviceId: string | null;
   settings: ChannelAppSettings;
-  windowState: AppWindowState;
+  windowState: ChannelWindowState;
 }
 
 export type Action =
-  | { type: 'CHANNEL_ADD'; name: string; channelType: string; config?: Record<string, unknown> }
-  | { type: 'CHANNEL_REMOVE'; id: string }
-  | { type: 'CHANNEL_CONNECT'; id: string; config?: Record<string, unknown> }
-  | { type: 'CHANNEL_DISCONNECT'; id: string }
-  | { type: 'DATA_SEND'; channelId: string; data: number[] }
-  | { type: 'CHANNEL_SWITCH'; channelId: string }
-  | { type: 'BUFFER_CLEAR'; channelId: string; direction: string }
-  | { type: 'TAB_ADD'; channelId: string; label: string }
+  | { type: 'DEVICE_ADD_SERIAL'; id: string; name: string; baudRate: number }
+  | { type: 'DEVICE_ADD_BLE'; id: string; name: string; mac: string }
+  | { type: 'DEVICE_REMOVE'; deviceId: string }
+  | { type: 'DEVICE_CONNECT'; deviceId: string }
+  | { type: 'DEVICE_DISCONNECT'; deviceId: string }
+  | { type: 'DEVICE_UPDATE_CONFIG'; deviceId: string; config: Record<string, unknown> }
+  | { type: 'CHANNEL_ADD'; deviceId: string; channelId: string; direction: string }
+  | { type: 'CHANNEL_SUBSCRIBE'; deviceId: string; channelId: string; subscribe: boolean }
+  | { type: 'DATA_SEND'; deviceId: string; channelId: string; data: number[] }
+  | { type: 'DATA_RECEIVE'; deviceId: string; channelId: string; data: number[] }
+  | { type: 'BUFFER_CLEAR'; deviceId: string; channelId: string }
+  | { type: 'DEVICE_SWITCH'; deviceId: string }
+  | { type: 'TAB_ADD'; deviceId: string; channelId?: string; label: string }
   | { type: 'TAB_REMOVE'; tabKey: string }
   | { type: 'TAB_SWITCH'; tabKey: string }
   | { type: 'SETTINGS_UPDATE'; settings: Record<string, unknown> }

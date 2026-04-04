@@ -1,66 +1,22 @@
 use serde::{Deserialize, Serialize};
-
-use crate::device::cache::CacheData;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum ChannelType {
-    Serial,
-    BluetoothCharacteristic,
+pub enum ChannelDirection {
+    Read,
+    Write,
+    Notify,
 }
 
-impl std::fmt::Display for ChannelType {
+impl std::fmt::Display for ChannelDirection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ChannelType::Serial => write!(f, "serial"),
-            ChannelType::BluetoothCharacteristic => write!(f, "ble"),
+            ChannelDirection::Read => write!(f, "read"),
+            ChannelDirection::Write => write!(f, "write"),
+            ChannelDirection::Notify => write!(f, "notify"),
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SerialConfig {
-    pub baud_rate: u32,
-    pub data_bits: u8,
-    pub parity: String,
-    pub stop_bits: u8,
-    pub flow_control: String,
-}
-
-impl Default for SerialConfig {
-    fn default() -> Self {
-        Self {
-            baud_rate: 115200,
-            data_bits: 8,
-            parity: "none".to_string(),
-            stop_bits: 1,
-            flow_control: "none".to_string(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BleCharacteristicConfig {
-    pub device_address: String,
-    pub service_uuid: String,
-    pub characteristic_uuid: String,
-    pub properties: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BleDeviceConfig {
-    pub address: String,
-    pub name: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub enum ChannelConfig {
-    Serial(SerialConfig),
-    BleCharacteristic(BleCharacteristicConfig),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,7 +24,6 @@ pub enum ChannelConfig {
 pub struct BufferEntry {
     pub timestamp: u64,
     pub data: Vec<u8>,
-    pub direction: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,66 +42,273 @@ impl Default for ChannelBuffer {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DeviceChannel {
-    pub id: String,
-    pub name: String,
-    #[serde(rename = "type")]
-    pub channel_type: ChannelType,
-    pub connected: bool,
-    pub tx_buffer: ChannelBuffer,
-    pub rx_buffer: ChannelBuffer,
-    pub config: Option<ChannelConfig>,
-    pub created_at: u64,
-    pub bytes_sent: u64,
-    pub bytes_received: u64,
-}
-
-impl DeviceChannel {
-    pub fn new_serial(id: String, port_name: String) -> Self {
-        Self {
-            id,
-            name: port_name,
-            channel_type: ChannelType::Serial,
-            connected: false,
-            tx_buffer: ChannelBuffer::default(),
-            rx_buffer: ChannelBuffer::default(),
-            config: Some(ChannelConfig::Serial(SerialConfig::default())),
-            created_at: current_timestamp(),
-            bytes_sent: 0,
-            bytes_received: 0,
+impl ChannelBuffer {
+    pub fn add_entry(&mut self, data: &[u8], max_size: usize) {
+        let timestamp = current_timestamp();
+        self.entries.push(BufferEntry {
+            timestamp,
+            data: data.to_vec(),
+        });
+        self.total_bytes += data.len();
+        
+        while self.total_bytes > max_size {
+            if let Some(removed) = self.entries.first() {
+                self.total_bytes -= removed.data.len();
+                self.entries.remove(0);
+            } else {
+                break;
+            }
         }
     }
+    
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.total_bytes = 0;
+    }
+}
 
-    pub fn new_ble_characteristic(
-        id: String,
-        device_address: String,
-        device_name: Option<String>,
-        service_uuid: String,
-        characteristic_uuid: String,
-    ) -> Self {
-        let name = format!(
-            "{} - {}",
-            device_name.as_deref().unwrap_or(&device_address),
-            characteristic_uuid
-        );
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Channel {
+    pub id: String,
+    pub direction: ChannelDirection,
+    pub buffer: ChannelBuffer,
+    pub subscribed: bool,
+}
+
+impl Channel {
+    pub fn new(id: String, direction: ChannelDirection) -> Self {
+        Self {
+            id,
+            direction,
+            buffer: ChannelBuffer::default(),
+            subscribed: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DataBits {
+    Five = 5,
+    Six = 6,
+    Seven = 7,
+    Eight = 8,
+}
+
+impl Default for DataBits {
+    fn default() -> Self {
+        DataBits::Eight
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Parity {
+    None,
+    Odd,
+    Even,
+}
+
+impl Default for Parity {
+    fn default() -> Self {
+        Parity::None
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum StopBits {
+    One = 1,
+    Two = 2,
+}
+
+impl Default for StopBits {
+    fn default() -> Self {
+        StopBits::One
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionParams {
+    pub interval: u16,
+    pub latency: u16,
+    pub timeout: u16,
+}
+
+impl Default for ConnectionParams {
+    fn default() -> Self {
+        Self {
+            interval: 30,
+            latency: 0,
+            timeout: 500,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SerialDevice {
+    pub id: String,
+    pub name: String,
+    pub connected: bool,
+    pub connectable: bool,
+    pub baud_rate: u32,
+    pub data_bits: DataBits,
+    pub parity: Parity,
+    pub stop_bits: StopBits,
+    pub channels: HashMap<String, Channel>,
+}
+
+impl SerialDevice {
+    pub fn new(id: String, name: String) -> Self {
+        let mut channels = HashMap::new();
+        channels.insert("tx".to_string(), Channel::new("tx".to_string(), ChannelDirection::Write));
+        channels.insert("rx".to_string(), Channel::new("rx".to_string(), ChannelDirection::Read));
+        
         Self {
             id,
             name,
-            channel_type: ChannelType::BluetoothCharacteristic,
             connected: false,
-            tx_buffer: ChannelBuffer::default(),
-            rx_buffer: ChannelBuffer::default(),
-            config: Some(ChannelConfig::BleCharacteristic(BleCharacteristicConfig {
-                device_address,
-                service_uuid,
-                characteristic_uuid,
-                properties: Vec::new(),
-            })),
-            created_at: current_timestamp(),
-            bytes_sent: 0,
-            bytes_received: 0,
+            connectable: true,
+            baud_rate: 115200,
+            data_bits: DataBits::Eight,
+            parity: Parity::None,
+            stop_bits: StopBits::One,
+            channels,
+        }
+    }
+    
+    pub fn tx_channel(&self) -> Option<&Channel> {
+        self.channels.get("tx")
+    }
+    
+    pub fn rx_channel(&self) -> Option<&Channel> {
+        self.channels.get("rx")
+    }
+    
+    pub fn tx_channel_mut(&mut self) -> Option<&mut Channel> {
+        self.channels.get_mut("tx")
+    }
+    
+    pub fn rx_channel_mut(&mut self) -> Option<&mut Channel> {
+        self.channels.get_mut("rx")
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BleDevice {
+    pub id: String,
+    pub name: String,
+    pub mac: String,
+    pub connected: bool,
+    pub connectable: bool,
+    pub mtu: u16,
+    pub connection_params: ConnectionParams,
+    pub channels: HashMap<String, Channel>,
+}
+
+impl BleDevice {
+    pub fn new(id: String, name: String, mac: String) -> Self {
+        Self {
+            id,
+            name,
+            mac,
+            connected: false,
+            connectable: true,
+            mtu: 23,
+            connection_params: ConnectionParams::default(),
+            channels: HashMap::new(),
+        }
+    }
+    
+    pub fn add_channel(&mut self, characteristic_uuid: &str, direction: ChannelDirection) -> String {
+        let channel_id = format!("{}_{}", characteristic_uuid, direction);
+        if !self.channels.contains_key(&channel_id) {
+            self.channels.insert(
+                channel_id.clone(),
+                Channel::new(channel_id.clone(), direction),
+            );
+        }
+        channel_id
+    }
+    
+    pub fn get_channel(&self, channel_id: &str) -> Option<&Channel> {
+        self.channels.get(channel_id)
+    }
+    
+    pub fn get_channel_mut(&mut self, channel_id: &str) -> Option<&mut Channel> {
+        self.channels.get_mut(channel_id)
+    }
+    
+    pub fn remove_channel(&mut self, channel_id: &str) -> Option<Channel> {
+        self.channels.remove(channel_id)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum Device {
+    Serial(SerialDevice),
+    Ble(BleDevice),
+}
+
+impl Device {
+    pub fn id(&self) -> &str {
+        match self {
+            Device::Serial(d) => &d.id,
+            Device::Ble(d) => &d.id,
+        }
+    }
+    
+    pub fn name(&self) -> &str {
+        match self {
+            Device::Serial(d) => &d.name,
+            Device::Ble(d) => &d.name,
+        }
+    }
+    
+    pub fn connected(&self) -> bool {
+        match self {
+            Device::Serial(d) => d.connected,
+            Device::Ble(d) => d.connected,
+        }
+    }
+    
+    pub fn connectable(&self) -> bool {
+        match self {
+            Device::Serial(d) => d.connectable,
+            Device::Ble(d) => d.connectable,
+        }
+    }
+    
+    pub fn set_connected(&mut self, connected: bool) {
+        match self {
+            Device::Serial(d) => d.connected = connected,
+            Device::Ble(d) => d.connected = connected,
+        }
+    }
+    
+    pub fn get_channel(&self, channel_id: &str) -> Option<&Channel> {
+        match self {
+            Device::Serial(d) => d.channels.get(channel_id),
+            Device::Ble(d) => d.channels.get(channel_id),
+        }
+    }
+    
+    pub fn get_channel_mut(&mut self, channel_id: &str) -> Option<&mut Channel> {
+        match self {
+            Device::Serial(d) => d.channels.get_mut(channel_id),
+            Device::Ble(d) => d.channels.get_mut(channel_id),
+        }
+    }
+    
+    pub fn channel_count(&self) -> usize {
+        match self {
+            Device::Serial(d) => d.channels.len(),
+            Device::Ble(d) => d.channels.len(),
         }
     }
 }
@@ -155,7 +317,8 @@ impl DeviceChannel {
 #[serde(rename_all = "camelCase")]
 pub struct TabState {
     pub key: String,
-    pub channel_id: String,
+    pub device_id: String,
+    pub channel_id: Option<String>,
     pub label: String,
     pub is_active: bool,
 }
@@ -196,21 +359,4 @@ pub fn current_timestamp() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
-}
-
-impl From<CacheData> for ChannelBuffer {
-    fn from(cache: CacheData) -> Self {
-        Self {
-            entries: cache
-                .entries
-                .into_iter()
-                .map(|e| BufferEntry {
-                    timestamp: e.timestamp,
-                    data: e.data,
-                    direction: "receive".to_string(),
-                })
-                .collect(),
-            total_bytes: cache.total_bytes,
-        }
-    }
 }

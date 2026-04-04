@@ -19,66 +19,127 @@ export function useAppDispatch() {
   return dispatch;
 }
 
+export function useDeviceActions() {
+  const dispatch = useAppDispatch();
+
+  const addSerialDevice = useCallback(
+    async (id: string, name: string, baudRate: number = 115200) => {
+      return dispatch({
+        type: 'DEVICE_ADD_SERIAL',
+        id,
+        name,
+        baudRate,
+      });
+    },
+    [dispatch]
+  );
+
+  const addBleDevice = useCallback(
+    async (id: string, name: string, mac: string) => {
+      return dispatch({
+        type: 'DEVICE_ADD_BLE',
+        id,
+        name,
+        mac,
+      });
+    },
+    [dispatch]
+  );
+
+  const removeDevice = useCallback(
+    async (deviceId: string) => {
+      return dispatch({
+        type: 'DEVICE_REMOVE',
+        deviceId,
+      });
+    },
+    [dispatch]
+  );
+
+  const connectDevice = useCallback(
+    async (deviceId: string) => {
+      return dispatch({
+        type: 'DEVICE_CONNECT',
+        deviceId,
+      });
+    },
+    [dispatch]
+  );
+
+  const disconnectDevice = useCallback(
+    async (deviceId: string) => {
+      return dispatch({
+        type: 'DEVICE_DISCONNECT',
+        deviceId,
+      });
+    },
+    [dispatch]
+  );
+
+  const updateDeviceConfig = useCallback(
+    async (deviceId: string, config: Record<string, unknown>) => {
+      return dispatch({
+        type: 'DEVICE_UPDATE_CONFIG',
+        deviceId,
+        config,
+      });
+    },
+    [dispatch]
+  );
+
+  const switchDevice = useCallback(
+    async (deviceId: string) => {
+      return dispatch({
+        type: 'DEVICE_SWITCH',
+        deviceId,
+      });
+    },
+    [dispatch]
+  );
+
+  return {
+    addSerialDevice,
+    addBleDevice,
+    removeDevice,
+    connectDevice,
+    disconnectDevice,
+    updateDeviceConfig,
+    switchDevice,
+  };
+}
+
 export function useChannelActions() {
   const dispatch = useAppDispatch();
 
   const addChannel = useCallback(
-    async (name: string, channelType: 'serial' | 'ble', config?: Record<string, unknown>) => {
+    async (deviceId: string, channelId: string, direction: 'read' | 'write' | 'notify') => {
       return dispatch({
         type: 'CHANNEL_ADD',
-        name,
-        channelType,
-        config,
-      });
-    },
-    [dispatch]
-  );
-
-  const removeChannel = useCallback(
-    async (id: string) => {
-      return dispatch({
-        type: 'CHANNEL_REMOVE',
-        id,
-      });
-    },
-    [dispatch]
-  );
-
-  const connectChannel = useCallback(
-    async (id: string, config?: Record<string, unknown>) => {
-      return dispatch({
-        type: 'CHANNEL_CONNECT',
-        id,
-        config,
-      });
-    },
-    [dispatch]
-  );
-
-  const disconnectChannel = useCallback(
-    async (id: string) => {
-      return dispatch({
-        type: 'CHANNEL_DISCONNECT',
-        id,
-      });
-    },
-    [dispatch]
-  );
-
-  const switchChannel = useCallback(
-    async (channelId: string) => {
-      return dispatch({
-        type: 'CHANNEL_SWITCH',
+        deviceId,
         channelId,
+        direction,
+      });
+    },
+    [dispatch]
+  );
+
+  const subscribeChannel = useCallback(
+    async (deviceId: string, channelId: string, subscribe: boolean) => {
+      return dispatch({
+        type: 'CHANNEL_SUBSCRIBE',
+        deviceId,
+        channelId,
+        subscribe,
       });
     },
     [dispatch]
   );
 
   const sendData = useCallback(
-    async (channelId: string, data: number[]) => {
+    async (deviceId: string, channelId: string, data: number[]) => {
       return dispatch({
         type: 'DATA_SEND',
+        deviceId,
         channelId,
         data,
       });
@@ -87,11 +148,11 @@ export function useChannelActions() {
   );
 
   const clearBuffer = useCallback(
-    async (channelId: string, direction: 'tx' | 'rx' | 'all') => {
+    async (deviceId: string, channelId: string) => {
       return dispatch({
         type: 'BUFFER_CLEAR',
+        deviceId,
         channelId,
-        direction,
       });
     },
     [dispatch]
@@ -99,10 +160,7 @@ export function useChannelActions() {
 
   return {
     addChannel,
-    removeChannel,
-    connectChannel,
-    disconnectChannel,
-    switchChannel,
+    subscribeChannel,
     sendData,
     clearBuffer,
   };
@@ -112,9 +170,10 @@ export function useTabActions() {
   const dispatch = useAppDispatch();
 
   const addTab = useCallback(
-    async (channelId: string, label: string) => {
+    async (deviceId: string, channelId: string | undefined, label: string) => {
       return dispatch({
         type: 'TAB_ADD',
+        deviceId,
         channelId,
         label,
       });

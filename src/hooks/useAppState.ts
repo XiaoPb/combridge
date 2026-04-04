@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getState, subscribeToStateChanges } from '../api/stateApi';
-import type { AppState, DeviceChannel } from '../types/state';
+import type { AppState, Device } from '../types/state';
 
 export function useAppState(): AppState | null {
   const [state, setState] = useState<AppState | null>(null);
@@ -41,48 +41,54 @@ export function useAppState(): AppState | null {
   return loading ? null : state;
 }
 
-export function useActiveChannel(): DeviceChannel | null {
+export function useActiveDevice(): Device | null {
   const state = useAppState();
   
-  if (!state || !state.activeChannelId) {
+  if (!state || !state.activeDeviceId) {
     return null;
   }
   
-  return state.channels.find(c => c.id === state.activeChannelId) || null;
+  return state.devices[state.activeDeviceId] || null;
 }
 
-export function useChannel(channelId: string | null): DeviceChannel | null {
+export function useDevice(deviceId: string | null): Device | null {
   const state = useAppState();
   
-  if (!state || !channelId) {
+  if (!state || !deviceId) {
     return null;
   }
   
-  return state.channels.find(c => c.id === channelId) || null;
+  return state.devices[deviceId] || null;
 }
 
-export function useConnectedChannels(): DeviceChannel[] {
+export function useConnectedDevices(): Device[] {
   const state = useAppState();
   
   if (!state) {
     return [];
   }
   
-  return state.channels.filter(c => c.connected);
+  return Object.values(state.devices).filter(d => d.connected);
 }
 
-export function useChannelsByType(type: 'serial' | 'ble'): DeviceChannel[] {
+export function useDevicesByType(type: 'serial' | 'ble'): Device[] {
   const state = useAppState();
   
   if (!state) {
     return [];
   }
   
-  return state.channels.filter(c => c.type === type);
+  return Object.values(state.devices).filter(d => d.type === type);
 }
 
 export function useWindowState() {
   const state = useAppState();
   
   return state?.windowState || null;
+}
+
+export function useAppSettings() {
+  const state = useAppState();
+  
+  return state?.settings || null;
 }

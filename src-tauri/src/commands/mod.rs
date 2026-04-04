@@ -20,7 +20,7 @@ pub use serial::{
     send_serial_data, SerialDataEvent, SerialPortConfigDto,
 };
 pub use state::{
-    dispatch_action, get_channel_data, get_connected_channels, get_state, get_window_state,
+    dispatch_action, get_channel_data, get_connected_devices, get_state, get_window_state,
     restore_state, save_state,
 };
 pub use system::{

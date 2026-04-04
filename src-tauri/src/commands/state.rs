@@ -3,7 +3,7 @@ use tracing::{debug, error, info};
 
 use crate::error::Result;
 use crate::state::{
-    Action, ActionDispatcherRef, ActionResult, AppStateRef, StatePersistenceRef,
+    Action, ActionDispatcherRef, ActionResult, AppStateRef, Device, StatePersistenceRef,
 };
 
 #[tauri::command]
@@ -30,39 +30,34 @@ pub async fn get_state(
 #[tauri::command]
 pub async fn get_channel_data(
     state: State<'_, AppStateRef>,
+    device_id: String,
     channel_id: String,
-    direction: Option<String>,
     limit: Option<usize>,
 ) -> Result<serde_json::Value> {
     debug!("获取通道 {} 数据", channel_id);
     
     let state = state.inner().read().await;
     
-    match state.get_channel(&channel_id) {
+    match state.get_channel(&device_id, &channel_id) {
         Some(channel) => {
-            let buffer = match direction.as_deref() {
-                Some("tx") => &channel.tx_buffer,
-                Some("rx") => &channel.rx_buffer,
-                _ => &channel.rx_buffer,
-            };
-            
             let entries = if let Some(limit) = limit {
-                buffer.entries.iter().rev().take(limit).rev().cloned().collect::<Vec<_>>()
+                channel.buffer.entries.iter().rev().take(limit).rev().cloned().collect::<Vec<_>>()
             } else {
-                buffer.entries.clone()
+                channel.buffer.entries.clone()
             };
             
             Ok(serde_json::json!({
+                "deviceId": device_id,
                 "channelId": channel_id,
-                "direction": direction,
                 "entries": entries,
-                "totalBytes": buffer.total_bytes,
+                "totalBytes": channel.buffer.total_bytes,
+                "subscribed": channel.subscribed,
             }))
         }
         None => {
-            error!("通道不存在: {}", channel_id);
+            error!("通道不存在: {}/{}", device_id, channel_id);
             Ok(serde_json::json!({
-                "error": format!("通道不存在: {}", channel_id)
+                "error": format!("通道不存在: {}/{}", device_id, channel_id)
             }))
         }
     }
@@ -108,12 +103,12 @@ pub async fn save_state(
 }
 
 #[tauri::command]
-pub async fn get_connected_channels(
+pub async fn get_connected_devices(
     state: State<'_, AppStateRef>,
-) -> Result<Vec<crate::state::DeviceChannel>> {
-    debug!("获取已连接的通道");
+) -> Result<Vec<Device>> {
+    debug!("获取已连接的设备");
     let state = state.inner().read().await;
-    Ok(state.get_connected_channels().into_iter().cloned().collect())
+    Ok(state.get_connected_devices().into_iter().cloned().collect())
 }
 
 #[tauri::command]

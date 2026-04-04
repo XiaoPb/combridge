@@ -115,7 +115,7 @@ pub fn run() {
             commands::state::get_channel_data,
             commands::state::restore_state,
             commands::state::save_state,
-            commands::state::get_connected_channels,
+            commands::state::get_connected_devices,
             commands::state::get_window_state,
         ])
         .run(tauri::generate_context!())

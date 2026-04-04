@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Tabs, Alert, Space, Button, Tree, Tag, Typography, Empty, Spin } from 'antd';
-import { MenuFoldOutlined, MenuUnfoldOutlined, ClearOutlined } from '@ant-design/icons';
+import { MenuFoldOutlined, MenuUnfoldOutlined, ClearOutlined, SaveOutlined } from '@ant-design/icons';
 import { useBle } from '../../hooks/useBle';
 import { useSerialStore } from '../../stores/serialStore';
 import { serialApi } from '../../api/tauri';
@@ -443,6 +443,26 @@ const BlePage: React.FC = () => {
       })
       .join('\n');
 
+    const handleSaveLog = async () => {
+      if (!logText) return;
+      try {
+        const { save } = await import('@tauri-apps/plugin-dialog');
+        const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+        const filePath = await save({
+          defaultPath: `ble-log-${new Date().toISOString().slice(0, 10)}.txt`,
+          filters: [
+            { name: 'Text', extensions: ['txt'] },
+            { name: 'Log', extensions: ['log'] },
+          ],
+        });
+        if (filePath) {
+          await writeTextFile(filePath, logText);
+        }
+      } catch (err) {
+        console.error('[BlePage] 保存日志失败:', err);
+      }
+    };
+
     return (
       <div style={{ display: 'flex', height: '100%', gap: 8, overflow: 'hidden' }}>
         <div style={{ flex: '1 1 50%', minWidth: 0, overflow: 'auto', padding: '0 4px' }}>
@@ -478,35 +498,7 @@ const BlePage: React.FC = () => {
         </div>
 
         <div style={{ flex: '1 1 50%', minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ marginBottom: 8, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              size="small"
-              icon={<ClearOutlined />}
-              onClick={() => handleClearLogs(tabData.deviceId)}
-              disabled={tabData.logs.length === 0}
-            >
-              清空日志
-            </Button>
-          </div>
-
-          <div
-            style={{
-              flex: '1 1 0',
-              overflow: 'auto',
-              background: 'var(--bg-primary)',
-              borderRadius: 4,
-              padding: 8,
-              fontFamily: 'Consolas, Monaco, monospace',
-              fontSize: 13,
-              lineHeight: 1.6,
-              minHeight: 0,
-              whiteSpace: 'pre',
-            }}
-          >
-            {logText || '暂无交互日志...'}
-          </div>
-
-          <div style={{ marginTop: 8, flexShrink: 0, minHeight: 0, overflow: 'auto' }}>
+          <div style={{ height: '20%', minHeight: 120, flexShrink: 0, overflow: 'auto', marginBottom: 8 }}>
             <CharacteristicPanel
               characteristic={tabData.selectedCharacteristic}
               onRead={(uuid) => handleReadForDevice(uuid, tabData.deviceId)}
@@ -514,6 +506,44 @@ const BlePage: React.FC = () => {
               onSubscribe={(uuid) => handleSubscribeForDevice(uuid, tabData.deviceId)}
               onUnsubscribe={(uuid) => handleUnsubscribeForDevice(uuid, tabData.deviceId)}
             />
+          </div>
+
+          <div style={{ flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ marginBottom: 8, flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <Button
+                size="small"
+                icon={<SaveOutlined />}
+                onClick={handleSaveLog}
+                disabled={tabData.logs.length === 0}
+              >
+                保存日志
+              </Button>
+              <Button
+                size="small"
+                icon={<ClearOutlined />}
+                onClick={() => handleClearLogs(tabData.deviceId)}
+                disabled={tabData.logs.length === 0}
+              >
+                清空日志
+              </Button>
+            </div>
+
+            <div
+              style={{
+                flex: '1 1 0',
+                overflow: 'auto',
+                background: 'var(--bg-primary)',
+                borderRadius: 4,
+                padding: 8,
+                fontFamily: 'Consolas, Monaco, monospace',
+                fontSize: 13,
+                lineHeight: 1.6,
+                minHeight: 0,
+                whiteSpace: 'pre',
+              }}
+            >
+              {logText || '暂无交互日志...'}
+            </div>
           </div>
         </div>
       </div>

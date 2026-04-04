@@ -128,6 +128,10 @@ pub fn run() {
             commands::state::save_state,
             commands::state::get_connected_devices,
             commands::state::get_window_state,
+            commands::preferences::get_preferences,
+            commands::preferences::save_preferences,
+            commands::preferences::update_serial_preferences,
+            commands::preferences::update_ble_preferences,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

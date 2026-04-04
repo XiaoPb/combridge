@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { BleDeviceInfo, BleConnection, BleService, BleCharacteristic } from '../types';
+import { preferencesApi } from '../api/tauri';
 
 export type BleMode = 'native' | 'at';
 
@@ -75,6 +76,7 @@ interface BleState {
   setIsConnecting: (isConnecting: boolean) => void;
   setIsConfigured: (isConfigured: boolean) => void;
   setError: (error: string | null) => void;
+  loadPreferences: () => Promise<void>;
   updatePreferences: (updates: Partial<BlePreferences>) => void;
   reset: () => void;
 }
@@ -245,10 +247,27 @@ export const useBleStore = create<BleState>((set) => ({
 
   setError: (error) => set({ error }),
 
-  updatePreferences: (updates) =>
+  loadPreferences: async () => {
+    try {
+      const prefs = await preferencesApi.get();
+      if (prefs && prefs.ble) {
+        set({ preferences: prefs.ble });
+      }
+    } catch (err) {
+      console.error('加载BLE偏好设置失败:', err);
+    }
+  },
+
+  updatePreferences: async (updates) => {
     set((state) => ({
       preferences: { ...state.preferences, ...updates },
-    })),
+    }));
+    try {
+      await preferencesApi.updateBle(useBleStore.getState().preferences);
+    } catch (err) {
+      console.error('保存BLE偏好设置失败:', err);
+    }
+  },
 
   reset: () => set(initialState),
 }));

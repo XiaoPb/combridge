@@ -13,6 +13,8 @@ import type {
   ProtocolBindParams,
   CacheData
 } from './types';
+import type { SerialPreferences } from '../stores/serialStore';
+import type { BlePreferences } from '../stores/bleStore';
 
 export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
@@ -529,5 +531,43 @@ export const websocketApi = {
    */
   async getAllStatus(): Promise<Record<string, string>> {
     return invoke<Record<string, string>>('get_all_websocket_status');
+  },
+};
+
+export interface Preferences {
+  serial: SerialPreferences;
+  ble: BlePreferences;
+}
+
+export const preferencesApi = {
+  async get(): Promise<Preferences> {
+    return invoke<Preferences>('get_preferences');
+  },
+
+  async save(prefs: Preferences): Promise<void> {
+    await invoke<void>('save_preferences', { prefs });
+  },
+
+  async updateSerial(prefs: SerialPreferences): Promise<void> {
+    await invoke<void>('update_serial_preferences', {
+      displayFormat: prefs.displayFormat,
+      displayMode: prefs.displayMode,
+      sendFormat: prefs.sendFormat,
+      appendNewline: prefs.appendNewline,
+      newlineType: prefs.newlineType,
+      autoScroll: prefs.autoScroll,
+    });
+  },
+
+  async updateBle(prefs: BlePreferences): Promise<void> {
+    await invoke<void>('update_ble_preferences', {
+      displayFormat: prefs.displayFormat,
+      autoScroll: prefs.autoScroll,
+      inputFormat: prefs.inputFormat,
+      withoutResponse: prefs.withoutResponse,
+      configCollapsed: prefs.configCollapsed,
+      gattCollapsed: prefs.gattCollapsed,
+      panelCollapsed: prefs.panelCollapsed,
+    });
   },
 };

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { SerialPortInfo, SerialConfig } from '../types';
 import { DEFAULT_SERIAL_CONFIG } from '../types';
+import { preferencesApi } from '../api/tauri';
 
 export interface DataEntry {
   id: string;
@@ -208,10 +209,16 @@ export const useSerialStore = create<SerialState>((set, get) => ({
     return state.tabs.some(t => t.portName === portName && t.tabType === 'port');
   },
 
-  updatePreferences: (updates: Partial<SerialPreferences>) => {
+  updatePreferences: async (updates: Partial<SerialPreferences>) => {
     set((state) => ({
       preferences: { ...state.preferences, ...updates },
     }));
+    const state = get();
+    try {
+      await preferencesApi.updateSerial(state.preferences);
+    } catch (err) {
+      console.error('保存串口偏好设置失败:', err);
+    }
   },
 }));
 

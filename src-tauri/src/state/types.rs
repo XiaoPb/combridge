@@ -360,3 +360,71 @@ pub fn current_timestamp() -> u64 {
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SerialPreferences {
+    pub display_format: String,
+    pub display_mode: String,
+    pub send_format: String,
+    pub append_newline: bool,
+    pub newline_type: String,
+    pub auto_scroll: bool,
+}
+
+impl SerialPreferences {
+    pub fn default_values() -> Self {
+        Self {
+            display_format: "text".to_string(),
+            display_mode: "all".to_string(),
+            send_format: "text".to_string(),
+            append_newline: true,
+            newline_type: "lf".to_string(),
+            auto_scroll: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct BlePreferences {
+    pub display_format: String,
+    pub auto_scroll: bool,
+    pub input_format: String,
+    pub without_response: bool,
+    pub config_collapsed: bool,
+    pub gatt_collapsed: bool,
+    pub panel_collapsed: bool,
+}
+
+impl BlePreferences {
+    pub fn default_values() -> Self {
+        Self {
+            display_format: "text".to_string(),
+            auto_scroll: true,
+            input_format: "text".to_string(),
+            without_response: false,
+            config_collapsed: false,
+            gatt_collapsed: false,
+            panel_collapsed: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Preferences {
+    #[serde(default = "SerialPreferences::default_values")]
+    pub serial: SerialPreferences,
+    #[serde(default = "BlePreferences::default_values")]
+    pub ble: BlePreferences,
+}
+
+impl Preferences {
+    pub fn default_values() -> Self {
+        Self {
+            serial: SerialPreferences::default_values(),
+            ble: BlePreferences::default_values(),
+        }
+    }
+}

@@ -1,12 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Descriptions, Progress, Tag, Spin, Typography } from 'antd';
+import { Card, Descriptions, Progress, Tag, Spin, Typography, Button, Space, Divider } from 'antd';
 import {
   DesktopOutlined,
   DatabaseOutlined,
   CloudServerOutlined,
   ClockCircleOutlined,
+  InfoCircleOutlined,
+  QuestionCircleOutlined,
+  GithubOutlined,
+  BugOutlined,
 } from '@ant-design/icons';
 import { invoke } from '@tauri-apps/api/core';
+import { systemApi } from '../../api/tauri';
 
 const { Text } = Typography;
 
@@ -61,6 +66,7 @@ const SystemInfo: React.FC = () => {
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [appVersion, setAppVersion] = useState<string>('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -83,6 +89,12 @@ const SystemInfo: React.FC = () => {
     fetchData();
     const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    systemApi.getAppVersion().then(setAppVersion).catch(() => {
+      console.error('获取应用版本失败');
+    });
   }, []);
 
   if (loading && !systemInfo) {
@@ -110,6 +122,54 @@ const SystemInfo: React.FC = () => {
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
+      <Card
+        title={
+          <span>
+            <InfoCircleOutlined style={{ marginRight: 8 }} />
+            关于 ComBridge
+          </span>
+        }
+      >
+        <Descriptions column={2} size="small">
+          <Descriptions.Item label="应用名称">
+            <Text strong>ComBridge</Text>
+          </Descriptions.Item>
+          <Descriptions.Item label="版本">
+            <Tag color="blue">v{appVersion || systemInfo?.app_version || '未知'}</Tag>
+          </Descriptions.Item>
+          <Descriptions.Item label="描述" span={2}>
+            串口与蓝牙调试工具
+          </Descriptions.Item>
+          <Descriptions.Item label="作者" span={2}>
+            ComBridge Team
+          </Descriptions.Item>
+        </Descriptions>
+        <Divider style={{ margin: '16px 0' }} />
+        <Space wrap>
+          <Button
+            type="link"
+            icon={<QuestionCircleOutlined />}
+            onClick={() => systemApi.openUrl('https://github.com/combridge/combridge/wiki')}
+          >
+            文档
+          </Button>
+          <Button
+            type="link"
+            icon={<GithubOutlined />}
+            onClick={() => systemApi.openUrl('https://github.com/combridge/combridge')}
+          >
+            GitHub
+          </Button>
+          <Button
+            type="link"
+            icon={<BugOutlined />}
+            onClick={() => systemApi.openUrl('https://github.com/combridge/combridge/issues')}
+          >
+            问题反馈
+          </Button>
+        </Space>
+      </Card>
+
       <Card
         title={
           <span>

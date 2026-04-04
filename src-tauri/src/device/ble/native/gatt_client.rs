@@ -105,13 +105,9 @@ impl GattClient {
             let device = self.device.read().unwrap();
             device
                 .as_ref()
-                .ok_or_else(|| ComBridgeError::ble("设备未连接"))?
+                .ok_or_else(|| ComBridgeError::ble("设备未设置"))?
                 .clone()
         };
-
-        if !device.is_connected().await {
-            return Err(ComBridgeError::ble("设备未连接"));
-        }
 
         debug!("发现服务...");
         let services = device
@@ -151,13 +147,9 @@ impl GattClient {
             let device = self.device.read().unwrap();
             device
                 .as_ref()
-                .ok_or_else(|| ComBridgeError::ble("设备未连接"))?
+                .ok_or_else(|| ComBridgeError::ble("设备未设置"))?
                 .clone()
         };
-
-        if !device.is_connected().await {
-            return Err(ComBridgeError::ble("设备未连接"));
-        }
 
         let service = {
             let services = self.services.read().unwrap();

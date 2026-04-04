@@ -49,9 +49,9 @@ pub async fn update_serial_preferences(
     debug!("更新串口偏好设置");
     
     let persistence = persistence.inner().read().await;
-    let prefs = persistence.load_preferences().await.unwrap_or_else {
+    let mut prefs = persistence.load_preferences().await.unwrap_or_else(|_| {
         Preferences::default()
-    };
+    });
     
     prefs.serial.display_format = display_format;
     prefs.serial.display_mode = display_mode;
@@ -68,8 +68,6 @@ pub async fn update_serial_preferences(
     Ok(())
 }
 
-}
-
 #[tauri::command]
 pub async fn update_ble_preferences(
     persistence: State<'_, StatePersistenceRef>,
@@ -84,9 +82,9 @@ pub async fn update_ble_preferences(
     debug!("更新BLE偏好设置");
     
     let persistence = persistence.inner().read().await;
-    let prefs = persistence.load_preferences().await.unwrap_or_else {
+    let mut prefs = persistence.load_preferences().await.unwrap_or_else(|_| {
         Preferences::default()
-    };
+    });
     
     prefs.ble.display_format = display_format;
     prefs.ble.auto_scroll = auto_scroll;
@@ -102,5 +100,4 @@ pub async fn update_ble_preferences(
     })?;
     
     Ok(())
-}
 }

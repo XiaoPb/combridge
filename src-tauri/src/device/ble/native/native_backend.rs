@@ -82,7 +82,8 @@ impl BleBackend for NativeBleBackend {
         let connection = BleConnection {
             address: address.to_string(),
             name: None,
-            connected: true,
+            is_connected: true,
+            services: vec![],
         };
 
         info!("已连接到设备: {}", address);

@@ -234,7 +234,8 @@ impl BleBackend for AtBleBackend {
         let connection = BleConnection {
             address: address.to_string(),
             name: self.cache.get_device(address).and_then(|d| d.name),
-            connected: true,
+            is_connected: true,
+            services: vec![],
         };
 
         Self::parse_ok_response(&responses)?;
@@ -260,7 +261,8 @@ impl BleBackend for AtBleBackend {
             BleConnection {
                 address: addr,
                 name: cache.name,
-                connected: true,
+                is_connected: true,
+                services: vec![],
             }
         }).collect())
     }

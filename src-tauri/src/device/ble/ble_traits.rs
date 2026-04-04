@@ -17,10 +17,11 @@ pub struct BleDevice {
 pub struct BleConnection {
     pub address: String,
     pub name: Option<String>,
-    pub connected: bool,
+    pub is_connected: bool,
+    pub services: Vec<BleService>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct BleService {
     pub uuid: String,
     pub primary: bool,

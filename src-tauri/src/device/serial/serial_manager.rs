@@ -6,12 +6,28 @@ use tracing::{debug, info, warn};
 use crate::error::{ComBridgeError, Result};
 use super::serial_config::{PortInfo, SerialPortConfig};
 use super::serial_port::{scan_ports, SerialPort};
+use crate::device::cache::{ChannelCache, RingBufferRef, create_ring_buffer};
 
 pub type DataCallback = Arc<dyn Fn(&str, &[u8]) + Send + Sync>;
+
+struct SerialPortCache {
+    tx_buffer: RingBufferRef,
+    rx_buffer: RingBufferRef,
+}
+
+impl SerialPortCache {
+    fn new() -> Self {
+        Self {
+            tx_buffer: create_ring_buffer(),
+            rx_buffer: create_ring_buffer(),
+        }
+    }
+}
 
 pub struct SerialManager {
     ports: RwLock<HashMap<String, Arc<Mutex<SerialPort>>>>,
     callbacks: RwLock<HashMap<String, DataCallback>>,
+    caches: RwLock<HashMap<String, SerialPortCache>>,
 }
 
 impl SerialManager {
@@ -19,6 +35,7 @@ impl SerialManager {
         Self {
             ports: RwLock::new(HashMap::new()),
             callbacks: RwLock::new(HashMap::new()),
+            caches: RwLock::new(HashMap::new()),
         }
     }
 

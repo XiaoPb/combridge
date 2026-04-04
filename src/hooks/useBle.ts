@@ -389,6 +389,22 @@ export const useBle = () => {
     return devices.find((d) => d.address === address);
   }, [devices]);
 
+  const restoreConnections = useCallback(async () => {
+    try {
+      const connectionList = await bleApi.getConnections();
+      for (const conn of connectionList) {
+        if (conn.isConnected) {
+          addConnection(conn);
+        }
+      }
+      return connectionList;
+    } catch (err) {
+      const errorMsg = handleBleError('restoreConnections', {}, err);
+      console.error('[useBle] 恢复连接状态失败:', errorMsg);
+      return [];
+    }
+  }, [addConnection]);
+
   return {
     mode,
     serialPort,
@@ -417,5 +433,6 @@ export const useBle = () => {
     isConnected,
     getCurrentConnection,
     getDeviceByAddress,
+    restoreConnections,
   };
 };

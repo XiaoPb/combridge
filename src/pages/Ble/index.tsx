@@ -58,6 +58,7 @@ const BlePage: React.FC = () => {
     writeCharacteristic,
     subscribeNotify,
     unsubscribeNotify,
+    restoreConnections,
   } = useBle();
 
   const { ports, setPorts } = useSerialStore();
@@ -69,6 +70,47 @@ const BlePage: React.FC = () => {
   useEffect(() => {
     serialApi.listPorts().then(setPorts).catch(console.error);
   }, [setPorts]);
+
+  useEffect(() => {
+    const restoreConnectedDevices = async () => {
+      try {
+        const connectionList = await restoreConnections();
+        if (!connectionList || connectionList.length === 0) return;
+
+        const tabs: Record<string, DeviceTabData> = {};
+        for (const conn of connectionList) {
+          if (!conn.isConnected) continue;
+
+          const allCharacteristics: BleCharacteristic[] = [];
+          for (const svc of conn.services || []) {
+            if (svc.characteristics) {
+              allCharacteristics.push(...svc.characteristics);
+            }
+          }
+
+          tabs[conn.address] = {
+            deviceId: conn.address,
+            name: conn.name || formatMacAddress(conn.address),
+            address: conn.address,
+            services: conn.services || [],
+            characteristics: allCharacteristics,
+            logs: [],
+            selectedCharacteristic: null,
+            discoveringServices: false,
+          };
+        }
+
+        if (Object.keys(tabs).length > 0) {
+          setDeviceTabs(tabs);
+          setActiveTabKey(Object.keys(tabs)[0]);
+        }
+      } catch (err) {
+        console.error('[BlePage] 恢复连接设备失败:', err);
+      }
+    };
+
+    restoreConnectedDevices();
+  }, [restoreConnections]);
 
   useEffect(() => {
     if (!currentDevice) return;

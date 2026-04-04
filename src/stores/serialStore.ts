@@ -12,6 +12,15 @@ export interface DataEntry {
 
 export type SerialTabType = 'launcher' | 'port';
 
+export interface SerialPreferences {
+  displayFormat: 'hex' | 'text';
+  displayMode: 'all' | 'receive' | 'send';
+  sendFormat: 'hex' | 'text';
+  appendNewline: boolean;
+  newlineType: 'lf' | 'crlf';
+  autoScroll: boolean;
+}
+
 export interface SerialTab {
   key: string;
   tabType: SerialTabType;
@@ -30,6 +39,7 @@ interface SerialState {
   activeTabKey: string | null;
   isScanning: boolean;
   error: string | null;
+  preferences: SerialPreferences;
 
   setPorts: (ports: SerialPortInfo[]) => void;
   
@@ -49,9 +59,20 @@ interface SerialState {
   
   getPortTab: (portName: string) => SerialTab | undefined;
   hasPortTab: (portName: string) => boolean;
+  
+  updatePreferences: (updates: Partial<SerialPreferences>) => void;
 }
 
 const LAUNCHER_TAB_KEY = 'serial-launcher';
+
+const DEFAULT_PREFERENCES: SerialPreferences = {
+  displayFormat: 'text',
+  displayMode: 'all',
+  sendFormat: 'text',
+  appendNewline: true,
+  newlineType: 'lf',
+  autoScroll: true,
+};
 
 const initialState = {
   ports: [],
@@ -68,6 +89,7 @@ const initialState = {
   activeTabKey: LAUNCHER_TAB_KEY,
   isScanning: false,
   error: null,
+  preferences: DEFAULT_PREFERENCES,
 };
 
 export const useSerialStore = create<SerialState>((set, get) => ({
@@ -184,6 +206,12 @@ export const useSerialStore = create<SerialState>((set, get) => ({
   hasPortTab: (portName: string) => {
     const state = get();
     return state.tabs.some(t => t.portName === portName && t.tabType === 'port');
+  },
+
+  updatePreferences: (updates: Partial<SerialPreferences>) => {
+    set((state) => ({
+      preferences: { ...state.preferences, ...updates },
+    }));
   },
 }));
 

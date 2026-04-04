@@ -87,6 +87,7 @@ export const useSerial = () => {
     activeTabKey,
     isScanning,
     error,
+    preferences,
     setPorts,
     addPortTab,
     removeTab,
@@ -98,6 +99,7 @@ export const useSerial = () => {
     setError,
     hasPortTab,
     getPortTab,
+    updatePreferences,
   } = useSerialStore();
 
   const isMountedRef = useRef(false);
@@ -292,5 +294,7 @@ export const useSerial = () => {
     removeTab,
     setError,
     hasPortTab,
+    preferences,
+    updatePreferences,
   };
 };

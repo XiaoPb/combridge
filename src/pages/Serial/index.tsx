@@ -31,20 +31,32 @@ const SerialPage: React.FC = () => {
     removeTab,
     setError,
     hasPortTab,
+    preferences,
+    updatePreferences,
   } = useSerial();
 
-  const [displayFormat, setDisplayFormat] = useState<'hex' | 'text'>('hex');
-  const [displayMode, setDisplayMode] = useState<'all' | 'receive' | 'send'>('all');
-  const [autoScroll, setAutoScroll] = useState(true);
   const [inputData, setInputData] = useState('');
-  const [sendFormat, setSendFormat] = useState<'hex' | 'text'>('text');
-  const [appendNewline, setAppendNewline] = useState(true);
-  const [newlineType, setNewlineType] = useState<'lf' | 'crlf'>('lf');
   const [selectedPort, setSelectedPort] = useState<string | null>(null);
   const [tempConfig, setTempConfig] = useState<SerialConfig>(DEFAULT_SERIAL_CONFIG);
 
   const containerRef = useRef<any>(null);
   const lastDataCountRef = useRef(0);
+
+  const {
+    displayFormat,
+    displayMode,
+    sendFormat,
+    appendNewline,
+    newlineType,
+    autoScroll,
+  } = preferences;
+
+  const setDisplayFormat = (value: 'hex' | 'text') => updatePreferences({ displayFormat: value });
+  const setDisplayMode = (value: 'all' | 'receive' | 'send') => updatePreferences({ displayMode: value });
+  const setSendFormat = (value: 'hex' | 'text') => updatePreferences({ sendFormat: value });
+  const setAppendNewline = (value: boolean) => updatePreferences({ appendNewline: value });
+  const setNewlineType = (value: 'lf' | 'crlf') => updatePreferences({ newlineType: value });
+  const setAutoScroll = (value: boolean) => updatePreferences({ autoScroll: value });
 
   useEffect(() => {
     scanPorts();

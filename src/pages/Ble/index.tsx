@@ -6,6 +6,7 @@ import { useSerialStore } from '../../stores/serialStore';
 import { serialApi, bleApi } from '../../api/tauri';
 import type { CacheData } from '../../api/types';
 import { formatBleData, getShortUuid, formatMacAddress } from '../../stores/bleStore';
+import { getServiceName, getCharacteristicName } from '../../types/ble';
 import BleModeSelector from './BleModeSelector';
 import BleScanner from './BleScanner';
 import CharacteristicPanel from './CharacteristicPanel';
@@ -66,6 +67,7 @@ const BlePage: React.FC = () => {
   const [activeTabKey, setActiveTabKey] = useState<string>(SCAN_TAB_KEY);
   const [deviceTabs, setDeviceTabs] = useState<Record<string, DeviceTabData>>({});
   const [configCollapsed, setConfigCollapsed] = useState(false);
+  const [gattCollapsed, setGattCollapsed] = useState(false);
   const processedNotificationIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -429,7 +431,7 @@ const BlePage: React.FC = () => {
       key: svc.uuid,
       title: (
         <Space>
-          <Text strong style={{ fontSize: 13 }}>Service: {getShortUuid(svc.uuid)}</Text>
+          <Text strong style={{ fontSize: 13 }}>{getServiceName(svc.uuid)} (0x{getShortUuid(svc.uuid)})</Text>
           {svc.isPrimary && <Tag color="blue" style={{ fontSize: 10 }}>Primary</Tag>}
         </Space>
       ),
@@ -437,7 +439,7 @@ const BlePage: React.FC = () => {
         key: `${svc.uuid}-${char.uuid}`,
         title: (
           <Space>
-            <Text style={{ fontSize: 13 }}>Char: {getShortUuid(char.uuid)}</Text>
+            <Text style={{ fontSize: 13 }}>{getCharacteristicName(char.uuid)} (0x{getShortUuid(char.uuid)})</Text>
             {char.properties.read && <Tag color="green" style={{ fontSize: 10 }}>R</Tag>}
             {char.properties.write && <Tag color="blue" style={{ fontSize: 10 }}>W</Tag>}
             {char.properties.notify && <Tag color="orange" style={{ fontSize: 10 }}>N</Tag>}
@@ -553,40 +555,64 @@ const BlePage: React.FC = () => {
 
     return (
       <div style={{ display: 'flex', height: '100%', gap: 8, overflow: 'hidden' }}>
-        <div style={{ flex: '1 1 50%', minWidth: 0, overflow: 'auto', padding: '0 4px' }}>
-          {tabData.discoveringServices ? (
-            <div style={{ textAlign: 'center', padding: 40 }}>
-              <Spin description="正在发现服务..." />
+        {!gattCollapsed && (
+          <div style={{ flex: '0 0 280px', minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-secondary)', borderRadius: 8, padding: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexShrink: 0 }}>
+              <Text strong style={{ fontSize: 13 }}>GATT 服务树</Text>
+              <Button
+                type="text"
+                size="small"
+                icon={<MenuFoldOutlined />}
+                onClick={() => setGattCollapsed(true)}
+                title="折叠服务树"
+              />
             </div>
-          ) : tabData.services.length === 0 ? (
-            <Empty description="暂无服务数据" />
-          ) : (
-            <Tree
-              showLine
-              showIcon={false}
-              treeData={treeData}
-              onSelect={(keys) => {
-                if (keys.length === 0) return;
-                const key = keys[0] as string;
-                for (const svc of tabData.services) {
-                  const char = (svc.characteristics || []).find((c) => `${svc.uuid}-${c.uuid}` === key);
-                  if (char) {
-                    handleCharacteristicSelectForDevice(char, tabData.deviceId);
-                    return;
-                  }
-                }
-                const svc = tabData.services.find((s) => s.uuid === key);
-                if (svc) {
-                  handleServiceSelectForDevice(svc.uuid, tabData.deviceId);
-                }
-              }}
-              style={{ fontSize: 13 }}
-            />
-          )}
-        </div>
+            <div style={{ flex: '1 1 0', overflow: 'auto', padding: '0 4px' }}>
+              {tabData.discoveringServices ? (
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                  <Spin description="正在发现服务..." />
+                </div>
+              ) : tabData.services.length === 0 ? (
+                <Empty description="暂无服务数据" />
+              ) : (
+                <Tree
+                  showLine
+                  showIcon={false}
+                  treeData={treeData}
+                  onSelect={(keys) => {
+                    if (keys.length === 0) return;
+                    const key = keys[0] as string;
+                    for (const svc of tabData.services) {
+                      const char = (svc.characteristics || []).find((c) => `${svc.uuid}-${c.uuid}` === key);
+                      if (char) {
+                        handleCharacteristicSelectForDevice(char, tabData.deviceId);
+                        return;
+                      }
+                    }
+                    const svc = tabData.services.find((s) => s.uuid === key);
+                    if (svc) {
+                      handleServiceSelectForDevice(svc.uuid, tabData.deviceId);
+                    }
+                  }}
+                  style={{ fontSize: 13 }}
+                />
+              )}
+            </div>
+          </div>
+        )}
 
-        <div style={{ flex: '1 1 50%', minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ height: 320, flexShrink: 0, overflow: 'auto', marginBottom: 8 }}>
+        {gattCollapsed && (
+          <Button
+            type="text"
+            icon={<MenuUnfoldOutlined />}
+            onClick={() => setGattCollapsed(false)}
+            style={{ flexShrink: 0, alignSelf: 'flex-start' }}
+            title="展开服务树"
+          />
+        )}
+
+        <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ maxHeight: 320, overflow: 'auto', marginBottom: 8, flexShrink: 0 }}>
             <CharacteristicPanel
               characteristic={tabData.selectedCharacteristic}
               onRead={(uuid) => handleReadForDevice(uuid, tabData.deviceId)}
@@ -596,7 +622,7 @@ const BlePage: React.FC = () => {
             />
           </div>
 
-          <div style={{ flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ flex: '1 1 0', minHeight: 400, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ marginBottom: 8, flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <Button
                 size="small"

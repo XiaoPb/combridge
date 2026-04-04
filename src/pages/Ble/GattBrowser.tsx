@@ -3,6 +3,7 @@ import { Card, Tree, Empty, Tag, Space, Typography, Spin } from 'antd';
 import { FolderOutlined, FileTextOutlined, SettingOutlined } from '@ant-design/icons';
 import type { BleService, BleCharacteristic } from '../../types';
 import { getShortUuid } from '../../stores/bleStore';
+import { getServiceName, getCharacteristicName } from '../../types/ble';
 
 const { Text } = Typography;
 
@@ -36,7 +37,7 @@ const GattBrowser: React.FC<GattBrowserProps> = ({
     title: (
       <Space>
         <FolderOutlined style={{ color: '#1890ff' }} />
-        <Text strong>Service: {getShortUuid(service.uuid)}</Text>
+        <Text strong>{getServiceName(service.uuid)} (0x{getShortUuid(service.uuid)})</Text>
         {service.isPrimary && <Tag color="blue">Primary</Tag>}
       </Space>
     ),
@@ -45,7 +46,7 @@ const GattBrowser: React.FC<GattBrowserProps> = ({
       title: (
         <Space>
           <FileTextOutlined style={{ color: '#52c41a' }} />
-          <Text>Char: {getShortUuid(char.uuid)}</Text>
+          <Text>{getCharacteristicName(char.uuid)} (0x{getShortUuid(char.uuid)})</Text>
           {getPropertyTags(char.properties).map((tag) => (
             <Tag key={tag.label} color={tag.color} style={{ fontSize: '10px', padding: '0 4px' }}>
               {tag.label}

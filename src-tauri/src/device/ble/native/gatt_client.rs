@@ -9,6 +9,7 @@ use crate::error::{ComBridgeError, Result};
 use super::super::ble_traits::{
     BleCharacteristic, BleCharacteristicProperties, BleService, NotifyCallback,
 };
+use crate::device::cache::{ChannelCache, RingBufferRef, create_ring_buffer};
 
 fn extract_short_mac(address: &str) -> String {
     if let Some(pos) = address.rfind('-') {
@@ -36,6 +37,20 @@ fn format_ble_log(mac: &str, uuid: &str, direction: &str, data: &[u8]) -> String
     )
 }
 
+struct CharacteristicCache {
+    tx_buffer: RingBufferRef,
+    rx_buffer: RingBufferRef,
+}
+
+impl CharacteristicCache {
+    fn new() -> Self {
+        Self {
+            tx_buffer: create_ring_buffer(),
+            rx_buffer: create_ring_buffer(),
+        }
+    }
+}
+
 pub struct GattClient {
     address: String,
     device: RwLock<Option<Arc<Device>>>,
@@ -44,6 +59,7 @@ pub struct GattClient {
     characteristics: RwLock<HashMap<String, Vec<Characteristic>>>,
     notify_callbacks: Mutex<HashMap<String, NotifyCallback>>,
     notify_handles: Mutex<HashMap<String, tokio::task::JoinHandle<()>>>,
+    caches: RwLock<HashMap<String, CharacteristicCache>>,
 }
 
 impl GattClient {
@@ -56,6 +72,7 @@ impl GattClient {
             characteristics: RwLock::new(HashMap::new()),
             notify_callbacks: Mutex::new(HashMap::new()),
             notify_handles: Mutex::new(HashMap::new()),
+            caches: RwLock::new(HashMap::new()),
         }
     }
 
@@ -123,6 +140,7 @@ impl GattClient {
 
         self.services.write().unwrap().clear();
         self.characteristics.write().unwrap().clear();
+        self.caches.write().unwrap().clear();
 
         let mut handles = self.notify_handles.lock().unwrap();
         for (_, handle) in handles.drain() {
@@ -282,6 +300,19 @@ impl GattClient {
 
         info!("{}", format_ble_log(&self.address, char_uuid, "R", &value));
 
+        {
+            let caches = self.caches.read().unwrap();
+            if let Some(cache) = caches.get(char_uuid) {
+                cache.rx_buffer.write(&value);
+            } else {
+                drop(caches);
+                let mut caches = self.caches.write().unwrap();
+                let cache = CharacteristicCache::new();
+                cache.rx_buffer.write(&value);
+                caches.insert(char_uuid.to_string(), cache);
+            }
+        }
+
         Ok(value)
     }
 
@@ -289,6 +320,19 @@ impl GattClient {
         let char = self.find_characteristic(char_uuid).await?;
 
         info!("{}", format_ble_log(&self.address, char_uuid, "W", data));
+
+        {
+            let caches = self.caches.read().unwrap();
+            if let Some(cache) = caches.get(char_uuid) {
+                cache.tx_buffer.write(data);
+            } else {
+                drop(caches);
+                let mut caches = self.caches.write().unwrap();
+                let cache = CharacteristicCache::new();
+                cache.tx_buffer.write(data);
+                caches.insert(char_uuid.to_string(), cache);
+            }
+        }
 
         char.write(data)
             .await
@@ -301,6 +345,19 @@ impl GattClient {
         let char = self.find_characteristic(char_uuid).await?;
 
         info!("{}", format_ble_log(&self.address, char_uuid, "W", data));
+
+        {
+            let caches = self.caches.read().unwrap();
+            if let Some(cache) = caches.get(char_uuid) {
+                cache.tx_buffer.write(data);
+            } else {
+                drop(caches);
+                let mut caches = self.caches.write().unwrap();
+                let cache = CharacteristicCache::new();
+                cache.tx_buffer.write(data);
+                caches.insert(char_uuid.to_string(), cache);
+            }
+        }
 
         char.write_without_response(data)
             .await
@@ -319,6 +376,20 @@ impl GattClient {
             .unwrap()
             .insert(char_uuid.to_string(), callback.clone());
 
+        {
+            let caches = self.caches.read().unwrap();
+            if caches.get(char_uuid).is_none() {
+                drop(caches);
+                let mut caches = self.caches.write().unwrap();
+                caches.insert(char_uuid.to_string(), CharacteristicCache::new());
+            }
+        }
+
+        let rx_buffer = {
+            let caches = self.caches.read().unwrap();
+            Arc::clone(&caches.get(char_uuid).unwrap().rx_buffer)
+        };
+
         let uuid = char_uuid.to_string();
         let device_id = self.address.clone();
         let handle = tokio::spawn(async move {
@@ -327,6 +398,7 @@ impl GattClient {
                     while let Some(result) = notifications.next().await {
                         match result {
                             Ok(data) => {
+                                rx_buffer.write(&data);
                                 info!("{}", format_ble_log(&device_id, &uuid, "N", &data));
                                 callback(&device_id, &uuid, &data);
                             }
@@ -427,6 +499,49 @@ impl GattClient {
                     primary: is_primary,
                     characteristics: ble_chars,
                 }
+            })
+            .collect()
+    }
+
+    pub fn get_cache(&self, char_uuid: &str) -> Option<ChannelCache> {
+        let caches = self.caches.read().unwrap();
+        caches.get(char_uuid).map(|cache| ChannelCache {
+            tx_cache: cache.tx_buffer.get_cache_data(),
+            rx_cache: cache.rx_buffer.get_cache_data(),
+        })
+    }
+
+    pub fn clear_cache(&self, char_uuid: &str) -> bool {
+        let caches = self.caches.read().unwrap();
+        if let Some(cache) = caches.get(char_uuid) {
+            cache.tx_buffer.clear();
+            cache.rx_buffer.clear();
+            debug!("已清除特征 {} 的缓存", char_uuid);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn get_cache_size(&self, char_uuid: &str) -> Option<(usize, usize)> {
+        let caches = self.caches.read().unwrap();
+        caches.get(char_uuid).map(|cache| {
+            (cache.tx_buffer.len(), cache.rx_buffer.len())
+        })
+    }
+
+    pub fn get_all_caches(&self) -> HashMap<String, ChannelCache> {
+        let caches = self.caches.read().unwrap();
+        caches
+            .iter()
+            .map(|(uuid, cache)| {
+                (
+                    uuid.clone(),
+                    ChannelCache {
+                        tx_cache: cache.tx_buffer.get_cache_data(),
+                        rx_cache: cache.rx_buffer.get_cache_data(),
+                    },
+                )
             })
             .collect()
     }

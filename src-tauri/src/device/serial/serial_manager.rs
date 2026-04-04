@@ -65,10 +65,18 @@ impl SerialManager {
             callbacks.insert(port_name.clone(), Arc::clone(&callback_arc));
         }
 
+        let cache = SerialPortCache::new();
+        let rx_buffer = Arc::clone(&cache.rx_buffer);
+        {
+            let mut caches = self.caches.write().unwrap();
+            caches.insert(port_name.clone(), cache);
+        }
+
         let port = SerialPort::open(config)?;
         
         let callback_clone = Arc::clone(&callback_arc);
         port.start_read_loop(move |name, data| {
+            rx_buffer.write(data);
             callback_clone(name, data);
         });
 
@@ -95,6 +103,12 @@ impl SerialManager {
             let mut callbacks = self.callbacks.write().unwrap();
             callbacks.remove(port_name);
             debug!("已移除串口 {} 的回调", port_name);
+        }
+
+        {
+            let mut caches = self.caches.write().unwrap();
+            caches.remove(port_name);
+            debug!("已清除串口 {} 的缓存", port_name);
         }
 
         port.lock().unwrap().close()?;
@@ -124,6 +138,13 @@ impl SerialManager {
             let ports = self.ports.read().unwrap();
             ports.get(port_name).map(|p| Arc::clone(p)).ok_or_else(|| ComBridgeError::serial(format!("串口 {} 未打开", port_name)))?
         };
+
+        {
+            let caches = self.caches.read().unwrap();
+            if let Some(cache) = caches.get(port_name) {
+                cache.tx_buffer.write(data);
+            }
+        }
 
         let result = {
             let port_guard = port.lock().unwrap();
@@ -171,6 +192,33 @@ impl SerialManager {
         };
         let config = port.lock().unwrap().config().clone();
         Some(config)
+    }
+
+    pub fn get_cache(&self, port_name: &str) -> Option<ChannelCache> {
+        let caches = self.caches.read().unwrap();
+        caches.get(port_name).map(|cache| ChannelCache {
+            tx_cache: cache.tx_buffer.get_cache_data(),
+            rx_cache: cache.rx_buffer.get_cache_data(),
+        })
+    }
+
+    pub fn clear_cache(&self, port_name: &str) -> bool {
+        let caches = self.caches.read().unwrap();
+        if let Some(cache) = caches.get(port_name) {
+            cache.tx_buffer.clear();
+            cache.rx_buffer.clear();
+            debug!("已清除串口 {} 的缓存", port_name);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn get_cache_size(&self, port_name: &str) -> Option<(usize, usize)> {
+        let caches = self.caches.read().unwrap();
+        caches.get(port_name).map(|cache| {
+            (cache.tx_buffer.len(), cache.rx_buffer.len())
+        })
     }
 }
 

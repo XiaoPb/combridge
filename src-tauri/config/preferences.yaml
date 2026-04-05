@@ -1,6 +1,6 @@
 serial:
-  displayFormat: hex
-  displayMode: all
+  displayFormat: text
+  displayMode: send
   sendFormat: text
   appendNewline: true
   newlineType: lf

@@ -15,7 +15,7 @@ pub struct ActionDispatcher {
     state: AppStateRef,
     persistence: StatePersistenceRef,
     serial_manager: SerialManagerRef,
-    ble_manager: BleManagerRef,
+    _ble_manager: BleManagerRef,
 }
 
 impl ActionDispatcher {
@@ -29,7 +29,7 @@ impl ActionDispatcher {
             state,
             persistence,
             serial_manager,
-            ble_manager,
+            _ble_manager: ble_manager,
         }
     }
 

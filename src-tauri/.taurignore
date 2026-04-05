@@ -1,0 +1,12 @@
+# Tauri dev watcher ignore file
+# This file controls which files should be ignored by the Tauri CLI file watcher
+
+# Ignore config files that don't need recompilation
+config/preferences.yaml
+config/*.yaml
+
+# Ignore log files
+logs/
+
+# Ignore build artifacts
+target/

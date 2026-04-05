@@ -11,18 +11,16 @@ use super::types::Gh3036FrameData;
 pub struct CsvWriter {
     file: Mutex<Option<File>>,
     output_dir: PathBuf,
-    function_id: i32,
     function_name: String,
     current_file_index: u32,
     last_frame_id: i32,
 }
 
 impl CsvWriter {
-    pub fn new(output_dir: PathBuf, function_id: i32, function_name: String) -> Self {
+    pub fn new(output_dir: PathBuf, _function_id: i32, function_name: String) -> Self {
         Self {
             file: Mutex::new(None),
             output_dir,
-            function_id,
             function_name,
             current_file_index: 0,
             last_frame_id: -1,

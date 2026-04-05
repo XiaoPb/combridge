@@ -144,10 +144,6 @@ jobs:
             bundle-suffix: .exe
             
           - os: macos-latest
-            target: x86_64-apple-darwin
-            bundle-suffix: .app
-            
-          - os: macos-latest
             target: aarch64-apple-darwin
             bundle-suffix: .app
 

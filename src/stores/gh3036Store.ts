@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { 
   Gh3036ChannelConfig, 
   Gh3036CsvConfig, 
@@ -6,6 +7,15 @@ import type {
   Gh3036RpcCommand 
 } from '../api/types';
 import { gh3036Api } from '../api/gh3036';
+import { gh3036Api as gh3036NewApi } from '../api/gh3036Api';
+
+export type Gh3036EventData = {
+  event_type: string;
+  timestamp: number;
+  data: Record<string, unknown>;
+};
+
+export type Gh3036FrameEventData = Gh3036FrameData;
 
 interface Gh3036State {
   isInitialized: boolean;
@@ -23,6 +33,16 @@ interface Gh3036State {
   frameData: Gh3036FrameData[];
   maxFrameCount: number;
   
+  eventData: Gh3036EventData[];
+  maxEventCount: number;
+  
+  isLinked: boolean;
+  
+  eventListeners: {
+    event?: UnlistenFn;
+    frame?: UnlistenFn;
+  };
+  
   setIsInitialized: (value: boolean) => void;
   setIsLoading: (value: boolean) => void;
   setError: (error: string | null) => void;
@@ -38,6 +58,11 @@ interface Gh3036State {
   addFrameData: (frame: Gh3036FrameData) => void;
   clearFrameData: () => void;
   
+  addEventData: (event: Gh3036EventData) => void;
+  clearEventData: () => void;
+  
+  setIsLinked: (value: boolean) => void;
+  
   initialize: () => Promise<void>;
   loadChannels: () => Promise<void>;
   loadCsvConfig: () => Promise<void>;
@@ -49,6 +74,11 @@ interface Gh3036State {
   updateCsvConfig: (enabled: boolean, outputDir: string) => Promise<boolean>;
   
   sendData: (data: number[]) => Promise<boolean>;
+  
+  executeRpc: (commandKey: string, params: string[]) => Promise<boolean>;
+  subscribeEvents: () => Promise<void>;
+  unsubscribeEvents: () => void;
+  loadLibraryStatus: () => Promise<void>;
 }
 
 export const useGh3036Store = create<Gh3036State>((set, get) => ({
@@ -69,6 +99,13 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   
   frameData: [],
   maxFrameCount: 1000,
+  
+  eventData: [],
+  maxEventCount: 500,
+  
+  isLinked: false,
+  
+  eventListeners: {},
   
   setIsInitialized: (value) => set({ isInitialized: value }),
   setIsLoading: (value) => set({ isLoading: value }),
@@ -92,6 +129,19 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   },
   
   clearFrameData: () => set({ frameData: [] }),
+  
+  addEventData: (event) => {
+    const { eventData, maxEventCount } = get();
+    const newData = [...eventData, event];
+    if (newData.length > maxEventCount) {
+      newData.splice(0, newData.length - maxEventCount);
+    }
+    set({ eventData: newData });
+  },
+  
+  clearEventData: () => set({ eventData: [] }),
+  
+  setIsLinked: (value) => set({ isLinked: value }),
   
   initialize: async () => {
     set({ isLoading: true, error: null });
@@ -201,6 +251,74 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
       const errorMsg = err instanceof Error ? err.message : '发送数据失败';
       set({ error: errorMsg });
       return false;
+    }
+  },
+  
+  executeRpc: async (commandKey, params) => {
+    set({ isLoading: true, error: null });
+    try {
+      await gh3036NewApi.executeRpc(commandKey, params);
+      return true;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '执行RPC指令失败';
+      set({ error: errorMsg });
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+  
+  subscribeEvents: async () => {
+    const { eventListeners } = get();
+    
+    if (eventListeners.event || eventListeners.frame) {
+      return;
+    }
+    
+    try {
+      await gh3036NewApi.subscribeEvents();
+      
+      const eventUnlisten = await listen<Gh3036EventData>('gh3036-event', (event) => {
+        get().addEventData(event.payload);
+      });
+      
+      const frameUnlisten = await listen<Gh3036FrameEventData>('gh3036-frame', (event) => {
+        get().addFrameData(event.payload);
+      });
+      
+      set({ 
+        eventListeners: { 
+          event: eventUnlisten, 
+          frame: frameUnlisten 
+        } 
+      });
+    } catch (err) {
+      console.error('订阅事件失败:', err);
+    }
+  },
+  
+  unsubscribeEvents: () => {
+    const { eventListeners } = get();
+    
+    if (eventListeners.event) {
+      eventListeners.event();
+    }
+    if (eventListeners.frame) {
+      eventListeners.frame();
+    }
+    
+    set({ eventListeners: {} });
+  },
+  
+  loadLibraryStatus: async () => {
+    try {
+      const status = await gh3036NewApi.getLibraryStatus();
+      set({ 
+        isLinked: status.isLinked, 
+        isInitialized: status.isInitialized 
+      });
+    } catch (err) {
+      console.error('加载库状态失败:', err);
     }
   },
 }));

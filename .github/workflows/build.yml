@@ -67,7 +67,7 @@ jobs:
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-12 100
           gcc --version
           g++ --version
-          
+
           if apt-cache showpkg libwebkit2gtk-4.1-dev > /dev/null 2>&1; then
             WEBKIT_PKG="libwebkit2gtk-4.1-dev"
           else
@@ -92,7 +92,13 @@ jobs:
         run: |
           mkdir -p build
           cd build
-          cmake -G Ninja ..
+
+          CMAKE_OPTS="-G Ninja"
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            CMAKE_OPTS="$CMAKE_OPTS -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12"
+          fi
+          cmake $CMAKE_OPTS ..
+          
           cmake --build . --config Release
 
       - name: Verify C library build

@@ -34,29 +34,34 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            lib-ext: .a
-            c-compiler: gcc
-            
+            compiler: gcc
+
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            lib-ext: .lib
-            c-compiler: msvc
-            
+            compiler: msvc
+
           - os: macos-latest
             target: aarch64-apple-darwin
-            lib-ext: .a
-            c-compiler: clang
+            compiler: clang
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      # ============ Linux 环境准备 ============
-      # Ubuntu 24.04 使用 webkit2gtk-4.1，旧版本使用 4.0
-      - name: Install Linux build dependencies
+      # ============ 使用 setup-cpp 安装 C/C++ 构建工具 ============
+      - name: Setup C++ build environment
+        uses: aminya/setup-cpp@v1
+        with:
+          compiler: ${{ matrix.compiler }}
+          cmake: true
+          ninja: true
+          vcpkg: false
+
+      # ============ Linux 特定依赖 ============
+      - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
+          # Ubuntu 24.04 使用 webkit2gtk-4.1，旧版本使用 4.0
           if apt-cache showpkg libwebkit2gtk-4.1-dev > /dev/null 2>&1; then
             WEBKIT_PKG="libwebkit2gtk-4.1-dev"
           else
@@ -64,45 +69,31 @@ jobs:
           fi
           sudo apt-get install -y \
             $WEBKIT_PKG \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libssl-dev \
             libgtk-3-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            cmake \
-            pkg-config
+            libudev-dev
 
-      # ============ Windows 环境准备 ============
-      - name: Setup Windows build tools
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
-      # ============ macOS 环境准备 ============
-      - name: Install macOS build dependencies
+      # ============ macOS 特定依赖 ============
+      - name: Install macOS dependencies
         if: runner.os == 'macOS'
         run: |
-          brew install cmake pkg-config
+          brew install pkg-config
 
       # ============ 编译 C 库 ============
-      - name: Build C library (CMake)
+      - name: Build C library (CMake + Ninja)
         working-directory: libs/gh_protocol
         run: |
           mkdir -p build
           cd build
-          cmake ..
+          cmake -G Ninja ..
           cmake --build . --config Release
-          
+
       - name: Verify C library build
         working-directory: libs/gh_protocol/build
         shell: bash
         run: |
           ls -la
-          # 检查生成的库文件
           if [ "${{ runner.os }}" = "Windows" ]; then
             ls -la Release/ 2>/dev/null || echo "No Release directory"
           else
@@ -134,11 +125,11 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             bundle-suffix: AppImage
-            
+
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bundle-suffix: .exe
-            
+
           - os: macos-latest
             target: aarch64-apple-darwin
             bundle-suffix: .app
@@ -180,7 +171,6 @@ jobs:
       - name: Install Linux Tauri dependencies
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
           # Ubuntu 24.04 使用 webkit2gtk-4.1，旧版本使用 4.0
           if apt-cache showpkg libwebkit2gtk-4.1-dev > /dev/null 2>&1; then
             WEBKIT_PKG="libwebkit2gtk-4.1-dev"
@@ -212,7 +202,7 @@ jobs:
           RUSTFLAGS: ${{ runner.os == 'Windows' && format('-L native={0}/libs/gh_protocol/build/Release', github.workspace) || format('-L native={0}/libs/gh_protocol/build', github.workspace) }}
         run: |
           cargo tauri build --target ${{ matrix.target }}
-          
+
       # ============ 列出构建产物 ============
       - name: List build artifacts
         shell: bash
@@ -234,7 +224,7 @@ jobs:
     needs: build-tauri
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
-    
+
     permissions:
       contents: write
       pull-requests: read
@@ -251,7 +241,7 @@ jobs:
         run: |
           echo "Artifacts ready for release:"
           ls -la artifacts/
-          
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

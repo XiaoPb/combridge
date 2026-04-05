@@ -56,12 +56,18 @@ jobs:
         uses: actions/checkout@v4
 
       # ============ Linux 环境准备 ============
+      # Ubuntu 24.04 使用 webkit2gtk-4.1，旧版本使用 4.0
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
+          if apt-cache showpkg libwebkit2gtk-4.1-dev > /dev/null 2>&1; then
+            WEBKIT_PKG="libwebkit2gtk-4.1-dev"
+          else
+            WEBKIT_PKG="libwebkit2gtk-4.0-dev"
+          fi
           sudo apt-get install -y \
-            libwebkit2gtk-4.0-dev \
+            $WEBKIT_PKG \
             build-essential \
             curl \
             wget \
@@ -97,13 +103,14 @@ jobs:
           
       - name: Verify C library build
         working-directory: libs/gh_protocol/build
+        shell: bash
         run: |
           ls -la
           # 检查生成的库文件
           if [ "${{ runner.os }}" = "Windows" ]; then
-            dir Release
+            ls -la Release/ 2>/dev/null || echo "No Release directory"
           else
-            find . -name "*.a" -o -name "*.so" -o -name "*.dylib"
+            find . -name "*.a" -o -name "*.so" -o -name "*.dylib" 2>/dev/null || echo "No library files found"
           fi
 
       # ============ 上传 C 库产物（供后续步骤使用） ============
@@ -182,8 +189,14 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
+          # Ubuntu 24.04 使用 webkit2gtk-4.1，旧版本使用 4.0
+          if apt-cache showpkg libwebkit2gtk-4.1-dev > /dev/null 2>&1; then
+            WEBKIT_PKG="libwebkit2gtk-4.1-dev"
+          else
+            WEBKIT_PKG="libwebkit2gtk-4.0-dev"
+          fi
           sudo apt-get install -y \
-            libwebkit2gtk-4.0-dev \
+            $WEBKIT_PKG \
             build-essential \
             curl \
             wget \

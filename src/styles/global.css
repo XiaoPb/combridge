@@ -622,6 +622,31 @@ pre {
   color: var(--text-primary);
 }
 
+[data-theme='dark'] .ant-message .ant-message-notice-content {
+  background-color: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+}
+
+[data-theme='dark'] .ant-message-success .anticon {
+  color: var(--success-color);
+}
+
+[data-theme='dark'] .ant-message-error .anticon {
+  color: var(--error-color);
+}
+
+[data-theme='dark'] .ant-message-warning .anticon {
+  color: var(--warning-color);
+}
+
+[data-theme='dark'] .ant-message-info .anticon {
+  color: var(--info-color);
+}
+
+[data-theme='dark'] .ant-message-loading .anticon {
+  color: var(--primary-color);
+}
+
 [data-theme='dark'] .ant-notification-notice {
   background-color: var(--bg-elevated);
   border-color: var(--border-color);

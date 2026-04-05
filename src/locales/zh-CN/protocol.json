@@ -15,7 +15,9 @@
     "device": "设备",
     "noProtocol": "暂无协议",
     "name": "名称",
-    "description": "描述"
+    "description": "描述",
+    "hooks": "钩子",
+    "boundDevices": "绑定设备"
   },
   "state": {
     "enabled": "已启用",
@@ -54,20 +56,54 @@
     "selectProtocolDevice": "请选择协议和设备",
     "bindingExists": "该绑定已存在",
     "noEnabledProtocol": "暂无已启用的协议",
-    "noAvailableDevice": "暂无可用设备"
+    "noAvailableDevice": "暂无可用设备",
+    "confirmUnload": "确定要卸载该协议吗？",
+    "clickToAddProtocol": "点击上方\"加载协议\"按钮添加协议",
+    "noBinding": "暂无绑定",
+    "saveSuccess": "保存成功",
+    "saveFailed": "保存失败",
+    "copySuccess": "已复制到剪贴板",
+    "copyFailed": "复制失败"
   },
   "tooltip": {
     "enable": "启用协议",
     "disable": "禁用协议",
     "edit": "编辑脚本",
-    "unload": "卸载协议"
+    "unload": "卸载协议",
+    "copy": "复制",
+    "undo": "撤销",
+    "fullscreen": "全屏",
+    "exitFullscreen": "退出全屏"
   },
   "editor": {
     "title": "脚本编辑器",
     "save": "保存",
     "run": "运行",
     "format": "格式化",
-    "unsaved": "未保存"
+    "unsaved": "未保存",
+    "templateTitle": "协议脚本模板",
+    "mustDefine": "必须定义以下常量",
+    "protocolName": "协议名称",
+    "protocolVersion": "协议版本",
+    "protocolDesc": "协议描述",
+    "author": "作者",
+    "optionalHooks": "可选的钩子函数",
+    "hookOnDataReceived": "接收数据处理",
+    "hookOnDataSend": "发送数据处理",
+    "hookOnConnect": "连接事件",
+    "hookOnDisconnect": "断开事件",
+    "processReceivedData": "处理接收到的数据",
+    "isByteArray": "是字节数组",
+    "processSendData": "处理要发送的数据",
+    "noDescription": "无描述",
+    "unknown": "未知",
+    "registeredHooks": "已注册的钩子",
+    "none": "无",
+    "insertIndent": "插入缩进",
+    "writeLuaScript": "在此编写 Lua 脚本",
+    "keywords": "关键字",
+    "lines": "行数",
+    "chars": "字符"
   },
   "bind": {
     "title": "协议绑定配置",

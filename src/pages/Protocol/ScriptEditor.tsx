@@ -7,6 +7,7 @@ import {
   FullscreenOutlined,
   FullscreenExitOutlined,
 } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import type { PluginInfo } from '../../api/types';
 
 const { Text } = Typography;
@@ -18,31 +19,38 @@ const LUA_KEYWORDS = [
   'true', 'until', 'while'
 ];
 
-const DEFAULT_TEMPLATE = `-- 协议脚本模板
--- 必须定义以下常量:
--- PROTOCOL_NAME: 协议名称
--- PROTOCOL_VERSION: 协议版本
+const ScriptEditor: React.FC<ScriptEditorProps> = ({
+  protocol,
+  onSave,
+  readOnly = false,
+}) => {
+  const { t } = useTranslation('protocol');
+
+  const getDefaultTemplate = () => `-- ${t('editor.templateTitle')}
+-- ${t('editor.mustDefine')}:
+-- PROTOCOL_NAME: ${t('editor.protocolName')}
+-- PROTOCOL_VERSION: ${t('editor.protocolVersion')}
 
 PROTOCOL_NAME = "MyProtocol"
 PROTOCOL_VERSION = "1.0.0"
-PROTOCOL_DESCRIPTION = "协议描述"
-PROTOCOL_AUTHOR = "作者"
+PROTOCOL_DESCRIPTION = "${t('editor.protocolDesc')}"
+PROTOCOL_AUTHOR = "${t('editor.author')}"
 
--- 可选的钩子函数:
--- on_data_received(data): 接收数据处理
--- on_data_send(data): 发送数据处理
--- on_connect(): 连接事件
--- on_disconnect(): 断开事件
+-- ${t('editor.optionalHooks')}:
+-- on_data_received(data): ${t('editor.hookOnDataReceived')}
+-- on_data_send(data): ${t('editor.hookOnDataSend')}
+-- on_connect(): ${t('editor.hookOnConnect')}
+-- on_disconnect(): ${t('editor.hookOnDisconnect')}
 
 function on_data_received(data)
-    -- 处理接收到的数据
-    -- data 是字节数组
+    -- ${t('editor.processReceivedData')}
+    -- data ${t('editor.isByteArray')}
     log("Received " .. #data .. " bytes")
     return data
 end
 
 function on_data_send(data)
-    -- 处理要发送的数据
+    -- ${t('editor.processSendData')}
     return data
 end
 
@@ -55,19 +63,8 @@ function on_disconnect()
 end
 `;
 
-interface ScriptEditorProps {
-  protocol?: PluginInfo | null;
-  onSave?: (content: string) => Promise<void>;
-  readOnly?: boolean;
-}
-
-const ScriptEditor: React.FC<ScriptEditorProps> = ({
-  protocol,
-  onSave,
-  readOnly = false,
-}) => {
-  const [content, setContent] = useState(DEFAULT_TEMPLATE);
-  const [originalContent, setOriginalContent] = useState(DEFAULT_TEMPLATE);
+  const [content, setContent] = useState(getDefaultTemplate());
+  const [originalContent, setOriginalContent] = useState(getDefaultTemplate());
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fontSize, setFontSize] = useState(14);
   const [isSaving, setIsSaving] = useState(false);
@@ -76,20 +73,20 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({
   useEffect(() => {
     if (protocol) {
       const scriptContent = `-- ${protocol.name} v${protocol.version}
--- ${protocol.description || '无描述'}
--- 作者: ${protocol.author || '未知'}
+-- ${protocol.description || t('editor.noDescription')}
+-- ${t('editor.author')}: ${protocol.author || t('editor.unknown')}
 
 PROTOCOL_NAME = "${protocol.name}"
 PROTOCOL_VERSION = "${protocol.version}"
 PROTOCOL_DESCRIPTION = "${protocol.description || ''}"
 PROTOCOL_AUTHOR = "${protocol.author || ''}"
 
--- 已注册的钩子: ${protocol.hooks.join(', ') || '无'}
+-- ${t('editor.registeredHooks')}: ${protocol.hooks.join(', ') || t('editor.none')}
 `;
       setContent(scriptContent);
       setOriginalContent(scriptContent);
     }
-  }, [protocol]);
+  }, [protocol, t]);
 
   useEffect(() => {
     setHasChanges(content !== originalContent);
@@ -102,9 +99,9 @@ PROTOCOL_AUTHOR = "${protocol.author || ''}"
     try {
       await onSave(content);
       setOriginalContent(content);
-      message.success('保存成功');
+      message.success(t('message.saveSuccess'));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '保存失败');
+      message.error(err instanceof Error ? err.message : t('message.saveFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -117,9 +114,9 @@ PROTOCOL_AUTHOR = "${protocol.author || ''}"
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(content);
-      message.success('已复制到剪贴板');
+      message.success(t('message.copySuccess'));
     } catch {
-      message.error('复制失败');
+      message.error(t('message.copyFailed'));
     }
   };
 
@@ -181,13 +178,13 @@ PROTOCOL_AUTHOR = "${protocol.author || ''}"
     <Card
       title={
         <Space>
-          <Text strong>脚本编辑器</Text>
+          <Text strong>{t('editor.title')}</Text>
           {protocol && (
             <Text type="secondary">
               {protocol.name} v{protocol.version}
             </Text>
           )}
-          {hasChanges && <Text type="warning">(未保存)</Text>}
+          {hasChanges && <Text type="warning">({t('editor.unsaved')})</Text>}
         </Space>
       }
       size="small"
@@ -206,10 +203,10 @@ PROTOCOL_AUTHOR = "${protocol.author || ''}"
               { value: 18, label: '18px' },
             ]}
           />
-          <Tooltip title="复制">
+          <Tooltip title={t('tooltip.copy')}>
             <Button size="small" icon={<CopyOutlined />} onClick={handleCopy} />
           </Tooltip>
-          <Tooltip title="撤销">
+          <Tooltip title={t('tooltip.undo')}>
             <Button
               size="small"
               icon={<UndoOutlined />}
@@ -217,7 +214,7 @@ PROTOCOL_AUTHOR = "${protocol.author || ''}"
               disabled={!hasChanges}
             />
           </Tooltip>
-          <Tooltip title={isFullscreen ? '退出全屏' : '全屏'}>
+          <Tooltip title={isFullscreen ? t('tooltip.exitFullscreen') : t('tooltip.fullscreen')}>
             <Button
               size="small"
               icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
@@ -233,7 +230,7 @@ PROTOCOL_AUTHOR = "${protocol.author || ''}"
               disabled={!hasChanges}
               onClick={handleSave}
             >
-              保存
+              {t('editor.save')}
             </Button>
           )}
         </Space>
@@ -245,9 +242,9 @@ PROTOCOL_AUTHOR = "${protocol.author || ''}"
         style={{ marginBottom: 12, fontSize: 12 }}
         title={
           <Space separator={<Text type="secondary">|</Text>}>
-            <Text type="secondary">Ctrl+S 保存</Text>
-            <Text type="secondary">Ctrl+Z 撤销</Text>
-            <Text type="secondary">Tab 插入缩进</Text>
+            <Text type="secondary">Ctrl+S {t('editor.save')}</Text>
+            <Text type="secondary">Ctrl+Z {t('tooltip.undo')}</Text>
+            <Text type="secondary">Tab {t('editor.insertIndent')}</Text>
           </Space>
         }
       />
@@ -260,20 +257,26 @@ PROTOCOL_AUTHOR = "${protocol.author || ''}"
           ...editorStyle,
           height: isFullscreen ? 'calc(100vh - 150px)' : 400,
         }}
-        placeholder="-- 在此编写 Lua 脚本..."
+        placeholder={`-- ${t('editor.writeLuaScript')}...`}
       />
       <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between' }}>
         <Space>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            关键字: {LUA_KEYWORDS.slice(0, 5).join(', ')}...
+            {t('editor.keywords')}: {LUA_KEYWORDS.slice(0, 5).join(', ')}...
           </Text>
         </Space>
         <Text type="secondary" style={{ fontSize: 12 }}>
-          行数: {content.split('\n').length} | 字符: {content.length}
+          {t('editor.lines')}: {content.split('\n').length} | {t('editor.chars')}: {content.length}
         </Text>
       </div>
     </Card>
   );
 };
+
+interface ScriptEditorProps {
+  protocol?: PluginInfo | null;
+  onSave?: (content: string) => Promise<void>;
+  readOnly?: boolean;
+}
 
 export default ScriptEditor;

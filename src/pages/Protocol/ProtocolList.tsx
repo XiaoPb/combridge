@@ -7,6 +7,7 @@ import {
   ApiOutlined,
   EditOutlined,
 } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import type { ColumnsType } from 'antd/es/table';
 import type { PluginInfo } from '../../api/types';
 import { getPluginStateColor, getPluginStateText } from '../../stores/protocolStore';
@@ -34,9 +35,11 @@ const ProtocolList: React.FC<ProtocolListProps> = ({
   onUnload,
   onEdit,
 }) => {
+  const { t } = useTranslation('protocol');
+
   const columns: ColumnsType<PluginInfo> = [
     {
-      title: '名称',
+      title: t('label.name'),
       dataIndex: 'name',
       key: 'name',
       render: (text: string, record: PluginInfo) => (
@@ -56,13 +59,13 @@ const ProtocolList: React.FC<ProtocolListProps> = ({
       render: (text: string) => <Text code>{text}</Text>,
     },
     {
-      title: '版本',
+      title: t('common:version'),
       dataIndex: 'version',
       key: 'version',
       width: 80,
     },
     {
-      title: '状态',
+      title: t('label.state'),
       dataIndex: 'state',
       key: 'state',
       width: 100,
@@ -71,7 +74,7 @@ const ProtocolList: React.FC<ProtocolListProps> = ({
       ),
     },
     {
-      title: '钩子',
+      title: t('label.hooks'),
       dataIndex: 'hooks',
       key: 'hooks',
       width: 150,
@@ -87,12 +90,12 @@ const ProtocolList: React.FC<ProtocolListProps> = ({
       ),
     },
     {
-      title: '绑定设备',
+      title: t('label.boundDevices'),
       dataIndex: 'bound_devices',
       key: 'bound_devices',
       width: 100,
       render: (devices: string[]) => (
-        <Tooltip title={devices.length > 0 ? devices.join(', ') : '无绑定'}>
+        <Tooltip title={devices.length > 0 ? devices.join(', ') : t('message.noBinding')}>
           <Tag icon={<ApiOutlined />} color={devices.length > 0 ? 'blue' : 'default'}>
             {devices.length}
           </Tag>
@@ -100,14 +103,14 @@ const ProtocolList: React.FC<ProtocolListProps> = ({
       ),
     },
     {
-      title: '描述',
+      title: t('label.description'),
       dataIndex: 'description',
       key: 'description',
       ellipsis: true,
       render: (text: string | null) => text || '-',
     },
     {
-      title: '操作',
+      title: t('common:operation'),
       key: 'actions',
       width: 180,
       render: (_: unknown, record: PluginInfo) => {
@@ -119,7 +122,7 @@ const ProtocolList: React.FC<ProtocolListProps> = ({
             {isLoaded && (
               <>
                 {isEnabled ? (
-                  <Tooltip title="禁用">
+                  <Tooltip title={t('tooltip.disable')}>
                     <Button
                       type="text"
                       size="small"
@@ -128,7 +131,7 @@ const ProtocolList: React.FC<ProtocolListProps> = ({
                     />
                   </Tooltip>
                 ) : (
-                  <Tooltip title="启用">
+                  <Tooltip title={t('tooltip.enable')}>
                     <Button
                       type="text"
                       size="small"
@@ -137,7 +140,7 @@ const ProtocolList: React.FC<ProtocolListProps> = ({
                     />
                   </Tooltip>
                 )}
-                <Tooltip title="编辑">
+                <Tooltip title={t('tooltip.edit')}>
                   <Button
                     type="text"
                     size="small"
@@ -146,12 +149,12 @@ const ProtocolList: React.FC<ProtocolListProps> = ({
                   />
                 </Tooltip>
                 <Popconfirm
-                  title="确定要卸载此协议吗？"
+                  title={t('message.confirmUnload')}
                   onConfirm={() => onUnload(record.id)}
-                  okText="确定"
-                  cancelText="取消"
+                  okText={t('common:confirm')}
+                  cancelText={t('common:cancel')}
                 >
-                  <Tooltip title="卸载">
+                  <Tooltip title={t('tooltip.unload')}>
                     <Button type="text" size="small" danger icon={<DeleteOutlined />} />
                   </Tooltip>
                 </Popconfirm>
@@ -164,7 +167,7 @@ const ProtocolList: React.FC<ProtocolListProps> = ({
   ];
 
   return (
-    <Card title="协议列表" size="small">
+    <Card title={t('title.protocolList')} size="small">
       <Table
         columns={columns}
         dataSource={protocols}
@@ -175,10 +178,10 @@ const ProtocolList: React.FC<ProtocolListProps> = ({
         locale={{
           emptyText: (
             <Empty
-              description="暂无协议"
+              description={t('label.noProtocol')}
               image={Empty.PRESENTED_IMAGE_SIMPLE}
             >
-              <Text type="secondary">点击上方"加载协议"按钮添加协议脚本</Text>
+              <Text type="secondary">{t('message.clickToAddProtocol')}</Text>
             </Empty>
           ),
         }}

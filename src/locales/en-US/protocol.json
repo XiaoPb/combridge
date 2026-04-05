@@ -15,7 +15,9 @@
     "device": "Device",
     "noProtocol": "No protocols",
     "name": "Name",
-    "description": "Description"
+    "description": "Description",
+    "hooks": "Hooks",
+    "boundDevices": "Bound Devices"
   },
   "state": {
     "enabled": "Enabled",
@@ -54,20 +56,54 @@
     "selectProtocolDevice": "Please select protocol and device",
     "bindingExists": "Binding already exists",
     "noEnabledProtocol": "No enabled protocols",
-    "noAvailableDevice": "No available devices"
+    "noAvailableDevice": "No available devices",
+    "confirmUnload": "Are you sure you want to unload this protocol?",
+    "clickToAddProtocol": "Click \"Load Protocol\" button above to add a protocol",
+    "noBinding": "No bindings",
+    "saveSuccess": "Saved successfully",
+    "saveFailed": "Failed to save",
+    "copySuccess": "Copied to clipboard",
+    "copyFailed": "Failed to copy"
   },
   "tooltip": {
     "enable": "Enable protocol",
     "disable": "Disable protocol",
     "edit": "Edit script",
-    "unload": "Unload protocol"
+    "unload": "Unload protocol",
+    "copy": "Copy",
+    "undo": "Undo",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen"
   },
   "editor": {
     "title": "Script Editor",
     "save": "Save",
     "run": "Run",
     "format": "Format",
-    "unsaved": "Unsaved"
+    "unsaved": "Unsaved",
+    "templateTitle": "Protocol Script Template",
+    "mustDefine": "Must define the following constants",
+    "protocolName": "Protocol Name",
+    "protocolVersion": "Protocol Version",
+    "protocolDesc": "Protocol Description",
+    "author": "Author",
+    "optionalHooks": "Optional hook functions",
+    "hookOnDataReceived": "Receive data handler",
+    "hookOnDataSend": "Send data handler",
+    "hookOnConnect": "Connect event",
+    "hookOnDisconnect": "Disconnect event",
+    "processReceivedData": "Process received data",
+    "isByteArray": "is byte array",
+    "processSendData": "Process data to send",
+    "noDescription": "No description",
+    "unknown": "Unknown",
+    "registeredHooks": "Registered hooks",
+    "none": "None",
+    "insertIndent": "Insert indent",
+    "writeLuaScript": "Write Lua script here",
+    "keywords": "Keywords",
+    "lines": "Lines",
+    "chars": "Chars"
   },
   "bind": {
     "title": "Protocol Binding Configuration",

@@ -11,6 +11,7 @@ import {
   BugOutlined,
 } from '@ant-design/icons';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import { systemApi } from '../../api/tauri';
 
 const { Text } = Typography;
@@ -50,18 +51,19 @@ const formatBytes = (bytes: number): string => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 };
 
-const formatUptime = (secs: number): string => {
+const formatUptime = (secs: number, t: (key: string) => string): string => {
   const days = Math.floor(secs / 86400);
   const hours = Math.floor((secs % 86400) / 3600);
   const minutes = Math.floor((secs % 3600) / 60);
   const parts: string[] = [];
-  if (days > 0) parts.push(`${days}天`);
-  if (hours > 0) parts.push(`${hours}小时`);
-  if (minutes > 0) parts.push(`${minutes}分钟`);
-  return parts.join(' ') || '刚刚启动';
+  if (days > 0) parts.push(`${days}${t('time.days')}`);
+  if (hours > 0) parts.push(`${hours}${t('time.hours')}`);
+  if (minutes > 0) parts.push(`${minutes}${t('time.minutes')}`);
+  return parts.join(' ') || t('value.justStarted');
 };
 
 const SystemInfo: React.FC = () => {
+  const { t } = useTranslation('system');
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -80,7 +82,7 @@ const SystemInfo: React.FC = () => {
         setSystemInfo(info);
         setSystemStatus(status);
       } catch (err) {
-        setError(err instanceof Error ? err.message : '获取系统信息失败');
+        setError(err instanceof Error ? err.message : t('message.loadFailed'));
       } finally {
         setLoading(false);
       }
@@ -89,7 +91,7 @@ const SystemInfo: React.FC = () => {
     fetchData();
     const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     systemApi.getAppVersion().then(setAppVersion).catch(() => {
@@ -103,7 +105,7 @@ const SystemInfo: React.FC = () => {
         <div style={{ textAlign: 'center', padding: '40px' }}>
           <Spin size="large" />
           <Text type="secondary" style={{ display: 'block', marginTop: 16 }}>
-            正在获取系统信息...
+            {t('message.loading')}
           </Text>
         </div>
       </Card>
@@ -126,21 +128,21 @@ const SystemInfo: React.FC = () => {
         title={
           <span>
             <InfoCircleOutlined style={{ marginRight: 8 }} />
-            关于 ComBridge
+            {t('title.about')}
           </span>
         }
       >
         <Descriptions column={2} size="small">
-          <Descriptions.Item label="应用名称">
+          <Descriptions.Item label={t('label.appName')}>
             <Text strong>ComBridge</Text>
           </Descriptions.Item>
-          <Descriptions.Item label="版本">
+          <Descriptions.Item label={t('label.version')}>
             <Tag color="blue">v{appVersion || systemInfo?.app_version || '未知'}</Tag>
           </Descriptions.Item>
-          <Descriptions.Item label="描述" span={2}>
-            串口与蓝牙调试工具
+          <Descriptions.Item label={t('label.description')} span={2}>
+            {t('value.description')}
           </Descriptions.Item>
-          <Descriptions.Item label="作者" span={2}>
+          <Descriptions.Item label={t('label.author')} span={2}>
             ComBridge Team
           </Descriptions.Item>
         </Descriptions>
@@ -151,21 +153,21 @@ const SystemInfo: React.FC = () => {
             icon={<QuestionCircleOutlined />}
             onClick={() => systemApi.openUrl('https://github.com/combridge/combridge/wiki')}
           >
-            文档
+            {t('button.documentation')}
           </Button>
           <Button
             type="link"
             icon={<GithubOutlined />}
             onClick={() => systemApi.openUrl('https://github.com/combridge/combridge')}
           >
-            GitHub
+            {t('button.github')}
           </Button>
           <Button
             type="link"
             icon={<BugOutlined />}
             onClick={() => systemApi.openUrl('https://github.com/combridge/combridge/issues')}
           >
-            问题反馈
+            {t('button.feedback')}
           </Button>
         </Space>
       </Card>
@@ -174,21 +176,21 @@ const SystemInfo: React.FC = () => {
         title={
           <span>
             <DesktopOutlined style={{ marginRight: 8 }} />
-            系统信息
+            {t('title.systemInfo')}
           </span>
         }
       >
         {systemInfo && (
           <Descriptions column={2} bordered size="small">
-            <Descriptions.Item label="操作系统">{systemInfo.os_name}</Descriptions.Item>
-            <Descriptions.Item label="系统版本">{systemInfo.os_version}</Descriptions.Item>
-            <Descriptions.Item label="架构">{systemInfo.arch}</Descriptions.Item>
-            <Descriptions.Item label="主机名">{systemInfo.hostname}</Descriptions.Item>
-            <Descriptions.Item label="CPU核心数">{systemInfo.cpu_count} 核</Descriptions.Item>
-            <Descriptions.Item label="总内存">
+            <Descriptions.Item label={t('label.os')}>{systemInfo.os_name}</Descriptions.Item>
+            <Descriptions.Item label={t('label.osVersion')}>{systemInfo.os_version}</Descriptions.Item>
+            <Descriptions.Item label={t('label.arch')}>{systemInfo.arch}</Descriptions.Item>
+            <Descriptions.Item label={t('label.hostname')}>{systemInfo.hostname}</Descriptions.Item>
+            <Descriptions.Item label={t('label.cpuCores')}>{systemInfo.cpu_count} {t('value.cores')}</Descriptions.Item>
+            <Descriptions.Item label={t('label.totalMemory')}>
               {formatBytes(systemInfo.total_memory)}
             </Descriptions.Item>
-            <Descriptions.Item label="应用版本">
+            <Descriptions.Item label={t('label.appVersion')}>
               <Tag color="blue">v{systemInfo.app_version}</Tag>
             </Descriptions.Item>
           </Descriptions>
@@ -199,14 +201,14 @@ const SystemInfo: React.FC = () => {
         title={
           <span>
             <CloudServerOutlined style={{ marginRight: 8 }} />
-            运行状态
+            {t('title.runtimeStatus')}
           </span>
         }
       >
         {systemStatus && (
           <div>
             <div style={{ marginBottom: 24 }}>
-              <Text strong>CPU 使用率</Text>
+              <Text strong>{t('label.cpuUsage')}</Text>
               <Progress
                 percent={Math.round(systemStatus.cpu_usage)}
                 status={systemStatus.cpu_usage > 80 ? 'exception' : 'active'}
@@ -219,7 +221,7 @@ const SystemInfo: React.FC = () => {
 
             <div style={{ marginBottom: 24 }}>
               <Text strong>
-                内存使用 ({formatBytes(systemStatus.used_memory)} /{' '}
+                {t('label.memoryUsage')} ({formatBytes(systemStatus.used_memory)} /{' '}
                 {formatBytes(systemStatus.total_memory)})
               </Text>
               <Progress
@@ -235,9 +237,9 @@ const SystemInfo: React.FC = () => {
             <div style={{ marginBottom: 16 }}>
               <Text strong>
                 <ClockCircleOutlined style={{ marginRight: 8 }} />
-                系统运行时间
+                {t('label.systemUptime')}
               </Text>
-              <Text style={{ marginLeft: 8 }}>{formatUptime(systemStatus.uptime_secs)}</Text>
+              <Text style={{ marginLeft: 8 }}>{formatUptime(systemStatus.uptime_secs, t)}</Text>
             </div>
           </div>
         )}
@@ -247,7 +249,7 @@ const SystemInfo: React.FC = () => {
         title={
           <span>
             <DatabaseOutlined style={{ marginRight: 8 }} />
-            磁盘使用
+            {t('title.diskUsage')}
           </span>
         }
       >

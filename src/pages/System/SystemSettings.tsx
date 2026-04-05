@@ -1,11 +1,13 @@
 import React, { useEffect } from 'react';
 import { Card, Form, InputNumber, Switch, Divider, Button, Space, message, Typography, Row, Col } from 'antd';
 import { LinkOutlined, SoundOutlined, ReloadOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import configService, { AppConfig } from '../../services/configService';
 
 const { Text } = Typography;
 
 const SystemSettings: React.FC = () => {
+  const { t } = useTranslation('system');
   const [form] = Form.useForm<AppConfig>();
 
   useEffect(() => {
@@ -22,17 +24,17 @@ const SystemSettings: React.FC = () => {
   const handleValuesChange = async (changedValues: Partial<AppConfig>) => {
     try {
       configService.updateConfig(changedValues);
-      message.success('设置已保存');
+      message.success(t('message.settingsSaved'));
     } catch (err) {
       console.error('Failed to save settings:', err);
-      message.error('保存设置失败');
+      message.error(t('message.saveFailed'));
     }
   };
 
   const handleReset = () => {
     configService.resetConfig();
     form.setFieldsValue(configService.getConfig());
-    message.info('设置已重置为默认值');
+    message.info(t('message.settingsReset'));
   };
 
   return (
@@ -43,7 +45,7 @@ const SystemSettings: React.FC = () => {
             title={
               <span>
                 <LinkOutlined style={{ marginRight: 8 }} />
-                连接设置
+                {t('title.connectionSettings')}
               </span>
             }
             size="small"
@@ -55,7 +57,7 @@ const SystemSettings: React.FC = () => {
             >
               <Form.Item
                 name="autoReconnect"
-                label="自动重连"
+                label={t('label.autoReconnect')}
                 valuePropName="checked"
               >
                 <Switch />
@@ -69,7 +71,7 @@ const SystemSettings: React.FC = () => {
                   getFieldValue('autoReconnect') ? (
                     <Form.Item
                       name="autoReconnectInterval"
-                      label="重连间隔 (毫秒)"
+                      label={t('label.reconnectInterval')}
                     >
                       <InputNumber min={1000} max={60000} step={1000} style={{ width: '100%' }} />
                     </Form.Item>
@@ -77,7 +79,7 @@ const SystemSettings: React.FC = () => {
                 }
               </Form.Item>
 
-              <Form.Item name="maxLogLines" label="最大日志行数">
+              <Form.Item name="maxLogLines" label={t('label.maxLogLines')}>
                 <InputNumber min={100} max={10000} step={100} style={{ width: '100%' }} />
               </Form.Item>
             </Form>
@@ -89,7 +91,7 @@ const SystemSettings: React.FC = () => {
             title={
               <span>
                 <SoundOutlined style={{ marginRight: 8 }} />
-                声音设置
+                {t('title.soundSettings')}
               </span>
             }
             size="small"
@@ -101,7 +103,7 @@ const SystemSettings: React.FC = () => {
             >
               <Form.Item
                 name="soundEnabled"
-                label="启用声音"
+                label={t('label.soundEnabled')}
                 valuePropName="checked"
               >
                 <Switch />
@@ -116,7 +118,7 @@ const SystemSettings: React.FC = () => {
                     <>
                       <Form.Item
                         name="soundOnConnect"
-                        label="连接时播放声音"
+                        label={t('label.soundOnConnect')}
                         valuePropName="checked"
                       >
                         <Switch />
@@ -124,7 +126,7 @@ const SystemSettings: React.FC = () => {
 
                       <Form.Item
                         name="soundOnDisconnect"
-                        label="断开时播放声音"
+                        label={t('label.soundOnDisconnect')}
                         valuePropName="checked"
                       >
                         <Switch />
@@ -132,7 +134,7 @@ const SystemSettings: React.FC = () => {
 
                       <Form.Item
                         name="soundOnData"
-                        label="数据传输时播放声音"
+                        label={t('label.soundOnData')}
                         valuePropName="checked"
                       >
                         <Switch />
@@ -149,12 +151,12 @@ const SystemSettings: React.FC = () => {
           <Card size="small">
             <Space>
               <Button onClick={handleReset} icon={<ReloadOutlined />}>
-                重置默认设置
+                {t('button.resetDefaults')}
               </Button>
             </Space>
             <Divider type="vertical" />
             <Text type="secondary">
-              设置修改后会自动保存
+              {t('message.autoSaveHint')}
             </Text>
           </Card>
         </Col>

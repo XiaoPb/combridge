@@ -65,49 +65,83 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
     >
       <div
         style={{
-          height: 'var(--header-height)',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: collapsed ? '0 16px' : '0 16px 0 24px',
-          borderBottom: '1px solid var(--border-color)',
+          flexDirection: 'column',
+          height: '100%',
         }}
       >
-        <h1
-          style={{
-            margin: 0,
-            fontSize: collapsed ? '16px' : '18px',
-            fontWeight: 600,
-            color: 'var(--primary-color)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-          }}
-        >
-          {collapsed ? 'CB' : 'ComBridge'}
-        </h1>
         <div
-          onClick={toggleCollapsed}
           style={{
-            cursor: 'pointer',
-            fontSize: '16px',
-            color: 'var(--text-secondary)',
+            height: 'var(--header-height)',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            padding: collapsed ? '0 16px' : '0 16px 0 24px',
+            borderBottom: '1px solid var(--border-color)',
+            flexShrink: 0,
           }}
         >
-          {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+          <h1
+            style={{
+              margin: 0,
+              fontSize: collapsed ? '16px' : '18px',
+              fontWeight: 600,
+              color: 'var(--primary-color)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+            }}
+          >
+            {collapsed ? 'CB' : 'ComBridge'}
+          </h1>
+        </div>
+        <Menu
+          mode="inline"
+          selectedKeys={[location.pathname]}
+          items={menuItems}
+          onClick={handleMenuClick}
+          style={{
+            borderRight: 0,
+            background: 'transparent',
+            flex: 1,
+            overflow: 'auto',
+          }}
+        />
+        <div
+          style={{
+            height: '48px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'flex-end',
+            padding: collapsed ? '0 16px' : '0 16px 0 24px',
+            borderTop: '1px solid var(--border-color)',
+            flexShrink: 0,
+          }}
+        >
+          <div
+            onClick={toggleCollapsed}
+            style={{
+              cursor: 'pointer',
+              fontSize: '16px',
+              color: 'var(--text-secondary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '32px',
+              height: '32px',
+              borderRadius: 'var(--border-radius)',
+              transition: 'background-color 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+          </div>
         </div>
       </div>
-      <Menu
-        mode="inline"
-        selectedKeys={[location.pathname]}
-        items={menuItems}
-        onClick={handleMenuClick}
-        style={{
-          borderRight: 0,
-          background: 'transparent',
-        }}
-      />
     </Sider>
   );
 };

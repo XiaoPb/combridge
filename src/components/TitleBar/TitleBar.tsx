@@ -123,10 +123,10 @@ const TitleBar: React.FC = () => {
   return (
     <div className="title-bar" data-tauri-drag-region>
       <div className="title-bar-left" data-tauri-drag-region>
-        <span className="app-logo">
+        <span className="app-logo" data-tauri-drag-region>
           <img src="/icon.png" alt="ComBridge" />
         </span>
-        <span className="app-name">ComBridge</span>
+        <span className="app-name" data-tauri-drag-region>ComBridge</span>
       </div>
 
       <div className="title-bar-tabs" data-tauri-drag-region>

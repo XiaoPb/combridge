@@ -620,11 +620,8 @@ pre {
 [data-theme='dark'] .ant-message-notice-content {
   background-color: var(--bg-elevated);
   color: var(--text-primary);
-}
-
-[data-theme='dark'] .ant-message .ant-message-notice-content {
-  background-color: var(--bg-elevated);
-  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 [data-theme='dark'] .ant-message-success .anticon {

@@ -89,6 +89,7 @@ jobs:
       # ============ 编译 C 库 ============
       - name: Build C library (CMake + Ninja)
         working-directory: libs/gh_protocol
+        shell: bash
         run: |
           mkdir -p build
           cd build
@@ -98,7 +99,7 @@ jobs:
             CMAKE_OPTS="$CMAKE_OPTS -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12"
           fi
           cmake $CMAKE_OPTS ..
-          
+
           cmake --build . --config Release
 
       - name: Verify C library build

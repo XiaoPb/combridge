@@ -1,0 +1,3 @@
+add_executable(gh_protocol_example main.c)
+
+target_link_libraries(gh_protocol_example gh_protocol)

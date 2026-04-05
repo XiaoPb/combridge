@@ -1,0 +1,28 @@
+
+__GHRPC__[{pchVer-150}] void GH3X_GetVersion(uint8_t uchVerType,uint8_t* pchVer,size_t* size);
+
+__GHRPC__ void GH3X_RegsWriteCmd(uint16_t* pusRegs,int32_t nSize);
+
+__GHRPC__[{pusRegValueBuffer-200}] void GH3X_RegsReadCmd(uint16_t usRegAddr,int32_t nReadLen,uint16_t* pusRegValueBuffer,int32_t* pnLen);
+
+__GHRPC__ void GH3X_RegBitFieldWriteCmd(uint16_t usRegAddr,uint8_t uchLsb,uint8_t uchMsb,uint16_t usRegVal);
+
+__GHRPC__ void GH3X_ChipCtrl(uint8_t uchCtrlType);
+
+__GHRPC__ void download_config(uint8_t uchStage);
+
+__GHRPC__ void GH3X_RegsListWriteCmd(uint16_t* usRegs,uint16_t usLen);
+
+__GHRPC__ void GH3X_SwFunctionCmd(uint32_t unTargetFuncMode,uint8_t uchCtrlType);
+__GHRPC__ void gh_low_power_cmd(uint32_t unTargetFuncMode,uint8_t uchCtrlType);
+
+__GHRPC__("FW")[{puchRet-100}] void GH3X_FwUpdateCmd(uint8_t* pSrc,uint32_t usLen,uint8_t* puchRet,uint32_t* pRetLen);
+
+__GHRPC__ void GH3X_RegsBitFieldWriteCmd(uint16_t* usRegBits,size_t size);
+
+__GHRPC__ void GHSetWorkModeCmd(uint8_t uchWorkMode);
+__GHRPC__[{pusStatus-10}] void get_chip_link_status(uint8_t type,int8_t* pusStatus,int32_t* pnLen);
+
+__GHRPC__ void gh_timestamp_set(uint32_t ts);
+
+__GHRPC__ void gh_time_set(uint32_t ts,int8_t hour_offset);

@@ -1,0 +1,463 @@
+/**
+  ****************************************************************************************
+  * @file    GH_PROTOCOL_cmd.c
+  * @author  GHealth Driver Team
+  * @brief
+  ****************************************************************************************
+  * @attention
+  #####Copyright (c) 2022 GOODIX
+   All rights reserved.
+
+  ****************************************************************************************
+  */
+
+#include <stdint.h>
+#include "gh_hal_config.h"
+#include "gh_hal_config_process.h"
+#include "gh_rpccore.h"
+#include "gh_protocol_cmd.h"
+#include "gh_public_api.h"
+#include "gh_hal_interface.h"
+#include "gh_hal_chip.h"
+#include "gh_hal_utils.h"
+#include "gh_global_config.h"
+#if ((1 == GH3036_DEMO) || (1 == GH3036_EVK))
+#include "app_log.h"
+#include "gh_app_task.h"
+#include "gh_task_common.h"
+#if (1 == GH3036_EVK)
+#include "iap_control.h"
+#endif
+#if (1 == GH3036_DEMO)
+#include "calendar.h"
+#endif
+#endif
+
+#ifndef APP_LOG_INFO
+#define APP_LOG_INFO(...)
+#endif
+
+#define VERSION_STR_LEN              (150)
+#define GH_REG_LIST_MAX_LEN          (300)
+
+volatile uint32_t g_direct_sample = 0;
+volatile uint8_t g_cmd_sample = 0;
+static uint32_t reglist_idx = 0;
+static uint32_t g_fifo_ov_cnt = 0;
+
+#if (1 == GH3036_DEMO)
+extern void flash_log_flush(uint16_t log_num);
+#endif
+
+static gh_config_reg_t gh_reglist[GH_REG_LIST_MAX_LEN] =
+{
+    {0,0},
+};
+extern void gh_hal_mutex_lock(void);
+extern void gh_hal_mutex_unlock(void);
+#if ((1 == GH3036_DEMO) || (1 == GH3036_EVK))
+extern uint8_t set_timestamp(uint32_t timestamp);
+uint8_t set_time(unsigned int timestamp, int8_t hour_offset);
+#endif
+
+__attribute__((weak)) void gh_timestamp_set(uint32_t ts)
+{
+#if ((1 == GH3036_DEMO) || (1 == GH3036_EVK))
+    set_timestamp(ts);
+#endif
+}
+
+__attribute__((weak)) void gh_time_set(uint32_t ts, int8_t hour_offset)
+{
+#if (1 == GH3036_DEMO)
+    set_time(ts, hour_offset);
+#endif
+#if (1 == GH3036_EVK)
+    set_timestamp(ts);
+#endif
+}
+
+#if (1 == GH_ALGO_EN)
+extern int32_t goodix_hba_version(uint8_t version[150]);
+extern int32_t goodix_spo2_version(uint8_t version[150]);
+extern int32_t goodix_nadt_version(uint8_t version[150]);
+extern int32_t goodix_hrv_version(uint8_t version[150]);
+
+#endif
+
+__attribute__((weak)) void gh_chip_version_get(uint8_t* pchVer, size_t* size, size_t max_size)
+{
+    gh_memset(pchVer, 0, max_size);
+    *size = 1;
+}
+
+__attribute__((weak)) void gh_ble_version_get(uint8_t* pchVer, size_t* size, size_t max_size)
+{
+    gh_memset(pchVer, 0, max_size);
+    *size = 1;
+}
+
+
+__attribute__((weak)) void GH3X_GetVersion(uint8_t uchVerType,int8_t* pchVer, size_t* size)
+{
+    gh_memset(pchVer, 0, VERSION_STR_LEN);
+    *size = 1;
+
+    switch (uchVerType)
+    {
+        case UPROTOCOL_GET_VER_TYPE_FW_VER:
+            *size = gh_strlen((const char *)gh_demo_version_get()) + 1;
+            gh_memcpy(pchVer, gh_demo_version_get(), *size);
+            break;
+        case UPROTOCOL_GET_VER_TYPE_DEMO_VER:
+            *size = gh_strlen((const char *)gh_demo_version_get()) + 1;
+            gh_memcpy(pchVer, gh_demo_version_get(), *size);
+            break;
+        case UPROTOCOL_GET_VER_TYPE_BOOTLOADER_VER:
+#if (1 == GH3036_EVK)
+            *size = gh_strlen((const char *)IapGetBootloaderVerison()) + 1;
+            gh_memcpy(pchVer, IapGetBootloaderVerison(), *size);
+#endif
+            break;
+        case UPROTOCOL_GET_VER_TYPE_PROTOCOL_VER:
+            *size = gh_strlen((const char *)gh_demo_version_get()) + 1;
+            gh_memcpy(pchVer, gh_demo_version_get(), *size);
+            break;
+        case UPROTOCOL_GET_VER_TYPE_VIRTUAL_REG_VER:
+            *size = gh_strlen((const char *)gh_virtualreg_version_get()) + 1;
+            gh_memcpy(pchVer, gh_virtualreg_version_get(), *size);
+            break;
+        case UPROTOCOL_GET_VER_TYPE_DRV_VER:
+            *size = gh_strlen((const char *)gh_demo_version_get()) + 1;
+            gh_memcpy(pchVer, gh_demo_version_get(), *size);
+            break;
+        case UPROTOCOL_GET_VER_TYPE_CHIP_VER:
+            gh_chip_version_get((uint8_t*)pchVer, size, VERSION_STR_LEN);
+            break;
+        case UPROTOCOL_GET_VER_TYPE_BLE_VER:
+            gh_ble_version_get((uint8_t*)pchVer, size, VERSION_STR_LEN);
+            break;
+        case HR_VERSION_OFFSET + UPROTOCOL_GET_VER_TYPE_ALGO_VER:
+#if (1 == GH_ALGO_HR_EN)
+            goodix_hba_version((uint8_t*)pchVer);
+#else
+            gh_strcpy((char*)pchVer, "algorithm disable!");
+#endif
+            *size = gh_strlen((const char *)pchVer) + 1;
+            break;
+        case HRV_VERSION_OFFSET + UPROTOCOL_GET_VER_TYPE_ALGO_VER:
+#if (1 == GH_ALGO_HRV_EN)
+            goodix_hrv_version((uint8_t*)pchVer);
+#else
+            gh_strcpy((char*)pchVer, "algorithm disable!");
+#endif
+            *size = gh_strlen((const char *)pchVer) + 1;
+            break;
+        case SPO2_VERSION_OFFSET + UPROTOCOL_GET_VER_TYPE_ALGO_VER:
+#if (1 == GH_ALGO_SPO2_EN)
+            goodix_spo2_version((uint8_t*)pchVer);
+#else
+            gh_strcpy((char*)pchVer, "algorithm disable!");
+#endif
+            *size = gh_strlen((const char *)pchVer) + 1;
+            break;
+        case NADT_VERSION_OFFSET + UPROTOCOL_GET_VER_TYPE_ALGO_VER:
+#if (1 == GH_ALGO_GNADT_EN || 1 == GH_ALGO_IRNADT_EN)
+            goodix_nadt_version((uint8_t*)pchVer);
+#else
+            gh_strcpy((char*)pchVer, "algorithm disable!");
+#endif
+            *size = gh_strlen((const char *)pchVer) + 1;
+            break;
+        default:
+            break;
+    }
+}
+
+__attribute__((weak)) void GH3X_IntEventReset(void)
+{
+    g_fifo_ov_cnt = 0;
+}
+
+__attribute__((weak)) void GH3X_IntEventUpdate(void)
+{
+    g_fifo_ov_cnt++;
+}
+
+__attribute__((weak)) void GH3X_IntEventCmd(void)
+{
+    if (g_direct_sample)
+    {
+        RPCPoint rpcpoint = {(uint8_t *)&g_fifo_ov_cnt, sizeof(g_fifo_ov_cnt)};
+        GHRPC_publish("int_event", "<u8*>", rpcpoint);
+    }
+}
+
+__attribute__((weak)) void GH3X_RegsWriteCmd(uint16_t* pusRegs,int32_t nSize)
+{
+    APP_LOG_INFO("[%s][1]\r\n", __FUNCTION__);
+    gh_hal_mutex_lock();
+    if(nSize >= 2)
+    {
+        uint16_t usRegAddr = pusRegs[0];
+#if 1 == GH3036_DEMO
+        if (usRegAddr == 0xFFFE)
+        {
+            flash_log_flush(pusRegs[1]);
+        }
+#endif
+        gh_exit_lowpower_mode();
+        gh_hal_config_download(usRegAddr, pusRegs[1]);
+        gh_enter_lowpower_mode();
+
+    }
+    gh_hal_mutex_unlock();
+    APP_LOG_INFO("[%s][2]\r\n", __FUNCTION__);
+}
+
+__attribute__((weak)) void GH3X_RegsReadCmd(uint16_t usRegAddr,int32_t nReadLen, uint16_t *pusRegValueBuffer, int32_t* pnLen)
+{
+    APP_LOG_INFO("[%s][1]\r\n", __FUNCTION__);
+
+    gh_hal_mutex_lock();
+    gh_exit_lowpower_mode();
+    gh_hal_regs_read(usRegAddr, pusRegValueBuffer, nReadLen);
+    gh_enter_lowpower_mode();
+    *pnLen = nReadLen;
+    gh_hal_mutex_unlock();
+    APP_LOG_INFO("[%s][2]\r\n", __FUNCTION__);
+}
+
+__attribute__((weak)) void GH3X_RegsBitFieldWriteCmd(uint16_t* usRegBits, size_t size)
+{
+    APP_LOG_INFO("[%s]\r\n", __FUNCTION__);
+}
+
+__attribute__((weak)) void get_chip_link_status(uint8_t type,int8_t* pusStatus,int32_t* pnLen)
+{
+    gh_hal_mutex_lock();
+    gh_exit_lowpower_mode();
+    uint16_t usRegValueBuffer[1];
+    gh_hal_reg_read(0x0000, usRegValueBuffer);
+    gh_enter_lowpower_mode();
+    APP_LOG_INFO("[%s][1] 0x%x\r\n", __FUNCTION__, usRegValueBuffer);
+    * pnLen = 1;
+    * pusStatus = (usRegValueBuffer[0] != 0x4B4A);
+    gh_hal_mutex_unlock();
+}
+
+__attribute__((weak)) void GH3X_RegBitFieldWriteCmd(uint16_t usRegAddr,uint8_t uchLsb,uint8_t uchMsb, uint16_t usRegVal)
+{
+    APP_LOG_INFO("[%s][2]\r\n", __FUNCTION__);
+}
+
+__attribute__((weak)) void GH3X_ChipCtrl(uint8_t uchCtrlType)
+{
+    gh_hal_mutex_lock();
+    APP_LOG_INFO("[%s][1]\r\n", __FUNCTION__);
+
+    switch (uchCtrlType)
+    {
+    case UPROTOCOL_CHIP_CTRL_TYPE_HARD_RESET:
+#if GH_SUPPORT_HARD_RESET
+        gh_hard_reset();
+#endif
+        break;
+    case UPROTOCOL_CHIP_CTRL_TYPE_SOFT_RESET:
+        gh_soft_reset();
+        break;
+    case UPROTOCOL_CHIP_CTRL_TYPE_WAKEUP:
+        gh_exit_lowpower_mode();
+        break;
+    case UPROTOCOL_CHIP_CTRL_TYPE_SLEEP:
+        gh_enter_lowpower_mode();
+        break;
+    default:
+        break;
+    }
+    gh_hal_mutex_unlock();
+    APP_LOG_INFO("[%s][2]\r\n", __FUNCTION__);
+}
+
+__attribute__((weak)) void download_config(uint8_t uchStage)
+{
+
+    APP_LOG_INFO("[%s][1] %d\r\n", __FUNCTION__, uchStage);
+    if (uchStage == 0)
+    {
+        reglist_idx = 0;
+    }
+    else if (uchStage == 1)
+    {
+#if ((1 == GH3036_DEMO) || (1 == GH3036_EVK))
+        gh_common_msg_t msg;
+        msg.src_id = GH_APP_TASK_ID;
+        msg.dst_id = GH_APP_TASK_ID;
+        msg.payload = (uint8_t *)gh_reglist;
+        msg.size = reglist_idx;
+        msg.msg_id = GH_APP_MSG_CONFIG_DOWNLOAD;
+        gh_common_msg_send(&msg, 0);
+#else
+        gh_hal_mutex_lock();
+        gh_demo_config_write(gh_reglist, reglist_idx);
+        gh_hal_mutex_unlock();
+#endif
+    }
+
+    APP_LOG_INFO("[%s][2]\r\n", __FUNCTION__);
+}
+
+__attribute__((weak)) void GH3X_RegsListWriteCmd(uint16_t* usRegs, uint16_t usLen)
+{
+
+    APP_LOG_INFO("[%s][1]\r\n", __FUNCTION__);
+    usLen -= usLen % sizeof(uint16_t);
+    for(uint16_t i = 0; i < usLen; i += sizeof(uint16_t))
+    {
+        if(reglist_idx < (GH_REG_LIST_MAX_LEN))
+        {
+            gh_reglist[reglist_idx].addr = usRegs[i];
+            gh_reglist[reglist_idx].value = usRegs[i+1];
+            reglist_idx++;
+        }
+    }
+
+    APP_LOG_INFO("[%s][2]\r\n", __FUNCTION__);
+}
+
+#if ((1 == GH3036_DEMO) || (1 == GH3036_EVK))
+void gh_cmd_stop_sample(uint8_t from_isr)
+{
+    gh_common_msg_t msg;
+
+    msg.src_id = GH_UI_TASK_ID;
+    msg.dst_id = GH_APP_TASK_ID;
+    msg.payload = NULL;
+    msg.size = 0;
+    msg.msg_id = GH_APP_MSG_GSENSOR_STOP;
+    GH_MSG_SEND_TO_FRONT_AND_FREE(&msg, from_isr);
+
+    msg.src_id = GH_APP_TASK_ID;
+    msg.dst_id = GH_APP_TASK_ID;
+    msg.payload = NULL;
+    msg.size = 0;
+    msg.msg_id = GH_APP_MSG_SAMPLE_STOP;
+    GH_MSG_SEND_TO_FRONT_AND_FREE(&msg, from_isr);
+}
+#endif
+
+__attribute__((weak)) void GH3X_SwFunctionCmd(uint32_t unTargetFuncMode, uint8_t uchCtrlType)
+{
+#if ((1 == GH3036_DEMO) || (1 == GH3036_EVK))
+
+    gh_common_msg_t msg;
+
+    if (unTargetFuncMode != 0)
+    {
+        if (0 == uchCtrlType)
+        {
+            g_direct_sample = 1;
+            g_cmd_sample = 1;
+            GH3X_IntEventReset();
+            GH3X_IntEventCmd();
+            APP_LOG_INFO("[GH3X_SwFunctionCmd] unTargetFuncMode = %d, %d\r\n", unTargetFuncMode, g_direct_sample);
+
+            msg.src_id = GH_UI_TASK_ID;
+            msg.dst_id = GH_APP_TASK_ID;
+            msg.payload = NULL;
+            msg.size = 0;
+            msg.msg_id = GH_APP_MSG_GSENSOR_START;
+            GH_MSG_SEND_AND_FREE(&msg, 0);
+
+            gh_function_en_union_t func_en;
+            func_en.bits = unTargetFuncMode;
+            if (func_en.func.function_adt_en == 1)
+            {
+                func_en.bits = 0;
+                func_en.func.function_adt_en = 1;
+                g_direct_sample = 0;
+            }
+
+            msg.src_id = GH_APP_TASK_ID;
+            msg.dst_id = GH_APP_TASK_ID;
+            msg.payload = pvPortMalloc(sizeof(func_en));
+            gh_memcpy((void *)msg.payload, (void *)&func_en, sizeof(func_en));
+            msg.size = sizeof(gh_app_sample_ctrl_t);
+            msg.msg_id = GH_APP_MSG_SAMPLE_START;
+            GH_MSG_SEND_AND_FREE(&msg, 0);
+        }
+        else if (1 == uchCtrlType)
+        {
+            g_direct_sample = 0;
+            g_cmd_sample = 0;
+            GH3X_IntEventReset();
+            APP_LOG_INFO("[GH3X_SwFunctionCmd] unTargetFuncMode = %d, %d\r\n", unTargetFuncMode, g_direct_sample);
+
+            gh_cmd_stop_sample(0);
+        }
+    }
+#else
+    if (unTargetFuncMode != 0)
+    {
+        if (0 == uchCtrlType)
+        {
+            g_direct_sample = 1;
+            GH3X_IntEventReset();
+            GH3X_IntEventCmd();
+            APP_LOG_INFO("[GH3X_SwFunctionCmd] unTargetFuncMode = %d, %d\r\n", unTargetFuncMode, g_direct_sample);
+            //1. start gsensor sample
+            //2. start gh3036 sample
+            gh_function_en_union_t func_en;
+            func_en.bits = unTargetFuncMode;
+            if (func_en.func.function_adt_en == 1)
+            {
+                func_en.bits = 0;
+                func_en.func.function_adt_en = 1;
+                g_direct_sample = 0;
+            }
+
+            gh_assist_en_union_t assist;
+            assist.bits = 0;
+            assist.assist.assist_gsensor_en = 1;
+            gh_demo_assist_config(&func_en, &assist);
+            gh_hal_mutex_lock();
+            gh_demo_function_ctrl(&func_en);
+            gh_hal_mutex_unlock();
+        }
+        else if (1 == uchCtrlType)
+        {
+            g_direct_sample = 0;
+            GH3X_IntEventReset();
+            APP_LOG_INFO("[GH3X_SwFunctionCmd] unTargetFuncMode = %d, %d\r\n", unTargetFuncMode, g_direct_sample);
+
+            //1. stop gsensor sample
+            //2. stop gh3036 sample
+            gh_function_en_union_t func_en;
+            func_en.bits = 0;
+            gh_hal_mutex_lock();
+            gh_demo_function_ctrl(&func_en);
+            gh_hal_mutex_unlock();
+        }
+    }
+    
+#endif
+}
+
+__attribute__((weak)) void gh_low_power_cmd(uint32_t unTargetFuncMode, uint8_t uchCtrlType)
+{
+
+}
+
+__attribute__((weak)) void GHSetWorkModeCmd(uint8_t uchWorkMode)
+{
+
+}
+
+__attribute__((weak)) void GH3X_FwUpdateCmd(uint8_t* pSrc, uint32_t usLen, uint8_t* puchRet, uint32_t* pRetLen)
+{
+#if (1 == GH3036_EVK)
+    IapSlavePackets(pSrc, usLen, puchRet, (u32*)pRetLen);
+#endif
+}
+
+

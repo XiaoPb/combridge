@@ -1,16 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Button, Space, Input, Modal, Typography, Alert, Tabs } from 'antd';
+import { Card, Button, Space, Input, Modal, Typography, Alert } from 'antd';
 import {
-  FolderOpenOutlined,
   ReloadOutlined,
   PlusOutlined,
-  CodeOutlined,
 } from '@ant-design/icons';
 import { useProtocol } from '../../hooks/useProtocol';
 import ProtocolList from './ProtocolList';
 import ScriptEditor from './ScriptEditor';
 import BindConfig from './BindConfig';
 import type { PluginInfo } from '../../api/types';
+import { usePageTabsStore } from '../../stores/pageTabsStore';
 
 const { Text } = Typography;
 
@@ -29,6 +28,8 @@ const ProtocolPage: React.FC = () => {
     unbindProtocol,
     setCurrentProtocol,
   } = useProtocol();
+
+  const { protocolActiveTab } = usePageTabsStore();
 
   const [loadModalVisible, setLoadModalVisible] = useState(false);
   const [newPluginId, setNewPluginId] = useState('');
@@ -85,11 +86,32 @@ const ProtocolPage: React.FC = () => {
 
   const selectedProtocol = protocols.find((p) => p.id === currentProtocol);
 
+  const renderRightContent = () => {
+    switch (protocolActiveTab) {
+      case 'bind':
+        return (
+          <BindConfig
+            protocols={protocols}
+            onBind={handleBind}
+            onUnbind={handleUnbind}
+          />
+        );
+      case 'editor':
+      default:
+        return (
+          <ScriptEditor
+            protocol={editProtocol || selectedProtocol}
+            onSave={handleSaveScript}
+          />
+        );
+    }
+  };
+
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 8 }}>
       {error && (
         <Alert
-          title="错误"
+          message="错误"
           description={error}
           type="error"
           closable
@@ -97,12 +119,13 @@ const ProtocolPage: React.FC = () => {
         />
       )}
 
-      <Card size="small" style={{ flex: '0 0 auto', marginBottom: 8, padding: 8 }} styles={{ body: { padding: 8 } }}>
+      <Card size="small" style={{ flex: '0 0 auto', marginBottom: 8 }} styles={{ body: { padding: 8 } }}>
         <Space wrap>
           <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => setLoadModalVisible(true)}
+            size="small"
           >
             加载协议
           </Button>
@@ -110,10 +133,11 @@ const ProtocolPage: React.FC = () => {
             icon={<ReloadOutlined />}
             onClick={loadProtocols}
             loading={isLoading}
+            size="small"
           >
             刷新列表
           </Button>
-          <Text type="secondary">
+          <Text type="secondary" style={{ fontSize: 12 }}>
             共 {protocols.length} 个协议，
             {protocols.filter((p) => p.state === 'Enabled').length} 个已启用
           </Text>
@@ -135,42 +159,7 @@ const ProtocolPage: React.FC = () => {
         </div>
 
         <div style={{ flex: '1 1 0', minWidth: 0, overflow: 'auto' }}>
-          <Tabs
-            defaultActiveKey="editor"
-            items={[
-              {
-                key: 'editor',
-                label: (
-                  <Space>
-                    <CodeOutlined />
-                    脚本编辑
-                  </Space>
-                ),
-                children: (
-                  <ScriptEditor
-                    protocol={editProtocol || selectedProtocol}
-                    onSave={handleSaveScript}
-                  />
-                ),
-              },
-              {
-                key: 'bind',
-                label: (
-                  <Space>
-                    <FolderOpenOutlined />
-                    绑定配置
-                  </Space>
-                ),
-                children: (
-                  <BindConfig
-                    protocols={protocols}
-                    onBind={handleBind}
-                    onUnbind={handleUnbind}
-                  />
-                ),
-              },
-            ]}
-          />
+          {renderRightContent()}
         </div>
       </div>
 
@@ -183,7 +172,7 @@ const ProtocolPage: React.FC = () => {
         cancelText="取消"
         confirmLoading={isLoading}
       >
-        <Space vertical style={{ width: '100%' }} size="middle">
+        <Space direction="vertical" style={{ width: '100%' }} size="middle">
           <div>
             <Text>协议 ID</Text>
             <Input

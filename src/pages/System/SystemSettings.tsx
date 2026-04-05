@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
-import { Card, Form, Select, InputNumber, Switch, Divider, Button, Space, message, Typography, Row, Col } from 'antd';
-import { SettingOutlined, SoundOutlined, ReloadOutlined, LinkOutlined } from '@ant-design/icons';
+import { Card, Form, InputNumber, Switch, Divider, Button, Space, message, Typography, Row, Col } from 'antd';
+import { LinkOutlined, SoundOutlined, ReloadOutlined } from '@ant-design/icons';
 import configService, { AppConfig } from '../../services/configService';
 
 const { Text } = Typography;
@@ -38,43 +38,6 @@ const SystemSettings: React.FC = () => {
   return (
     <div style={{ padding: '0 8px' }}>
       <Row gutter={[16, 16]}>
-        <Col xs={24} lg={12}>
-          <Card
-            title={
-              <span>
-                <SettingOutlined style={{ marginRight: 8 }} />
-                外观设置
-              </span>
-            }
-            size="small"
-          >
-            <Form
-              form={form}
-              layout="vertical"
-              onValuesChange={handleValuesChange}
-            >
-              <Form.Item name="theme" label="主题">
-                <Select
-                  options={[
-                    { value: 'light', label: '浅色' },
-                    { value: 'dark', label: '深色' },
-                    { value: 'system', label: '跟随系统' },
-                  ]}
-                />
-              </Form.Item>
-
-              <Form.Item name="language" label="语言">
-                <Select
-                  options={[
-                    { value: 'zh-CN', label: '简体中文' },
-                    { value: 'en-US', label: 'English' },
-                  ]}
-                />
-              </Form.Item>
-            </Form>
-          </Card>
-        </Col>
-
         <Col xs={24} lg={12}>
           <Card
             title={

@@ -3,3 +3,4 @@ export * from './bleStore';
 export * from './connectionStore';
 export * from './protocolStore';
 export * from './logStore';
+export * from './pageTabsStore';

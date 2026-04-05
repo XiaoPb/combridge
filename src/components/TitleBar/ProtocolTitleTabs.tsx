@@ -1,33 +1,25 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { CodeOutlined, FolderOpenOutlined } from '@ant-design/icons';
+import { usePageTabsStore } from '../../stores/pageTabsStore';
 
-interface ProtocolTitleTabsProps {
-  onTabChange?: (tab: 'editor' | 'bind') => void;
-}
-
-const ProtocolTitleTabs: React.FC<ProtocolTitleTabsProps> = ({ onTabChange }) => {
-  const [activeTab, setActiveTab] = useState<'editor' | 'bind'>('editor');
+const ProtocolTitleTabs: React.FC = () => {
+  const { protocolActiveTab, setProtocolActiveTab } = usePageTabsStore();
 
   const tabs = [
     { key: 'editor', label: '脚本编辑', icon: <CodeOutlined /> },
     { key: 'bind', label: '绑定配置', icon: <FolderOpenOutlined /> },
-  ];
-
-  const handleTabClick = (key: 'editor' | 'bind') => {
-    setActiveTab(key);
-    onTabChange?.(key);
-  };
+  ] as const;
 
   return (
     <div className="title-tabs-container">
       {tabs.map((tab) => {
-        const isActive = tab.key === activeTab;
+        const isActive = tab.key === protocolActiveTab;
 
         return (
           <div
             key={tab.key}
             className={`title-bar-tab ${isActive ? 'active' : ''}`}
-            onClick={() => handleTabClick(tab.key as 'editor' | 'bind')}
+            onClick={() => setProtocolActiveTab(tab.key)}
           >
             {tab.icon}
             <span>{tab.label}</span>

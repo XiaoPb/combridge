@@ -1,34 +1,26 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { InfoCircleOutlined, FileTextOutlined, SettingOutlined } from '@ant-design/icons';
+import { usePageTabsStore } from '../../stores/pageTabsStore';
 
-interface SystemTitleTabsProps {
-  onTabChange?: (tab: 'info' | 'logs' | 'settings') => void;
-}
-
-const SystemTitleTabs: React.FC<SystemTitleTabsProps> = ({ onTabChange }) => {
-  const [activeTab, setActiveTab] = useState<'info' | 'logs' | 'settings'>('info');
+const SystemTitleTabs: React.FC = () => {
+  const { systemActiveTab, setSystemActiveTab } = usePageTabsStore();
 
   const tabs = [
     { key: 'info', label: '系统信息', icon: <InfoCircleOutlined /> },
     { key: 'logs', label: '日志查看', icon: <FileTextOutlined /> },
     { key: 'settings', label: '系统设置', icon: <SettingOutlined /> },
-  ];
-
-  const handleTabClick = (key: 'info' | 'logs' | 'settings') => {
-    setActiveTab(key);
-    onTabChange?.(key);
-  };
+  ] as const;
 
   return (
     <div className="title-tabs-container">
       {tabs.map((tab) => {
-        const isActive = tab.key === activeTab;
+        const isActive = tab.key === systemActiveTab;
 
         return (
           <div
             key={tab.key}
             className={`title-bar-tab ${isActive ? 'active' : ''}`}
-            onClick={() => handleTabClick(tab.key as 'info' | 'logs' | 'settings')}
+            onClick={() => setSystemActiveTab(tab.key)}
           >
             {tab.icon}
             <span>{tab.label}</span>

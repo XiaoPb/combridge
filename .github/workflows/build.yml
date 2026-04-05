@@ -217,7 +217,7 @@ jobs:
         env:
           # 告诉 Rust 链接器在哪里找 C 库
           # Windows: build/Release, Linux/macOS: build/
-          RUSTFLAGS: ${{ runner.os == 'Windows' && '-L native=${{ github.workspace }}/libs/gh_protocol/build/Release' || '-L native=${{ github.workspace }}/libs/gh_protocol/build' }}
+          RUSTFLAGS: ${{ runner.os == 'Windows' && format('-L native={0}/libs/gh_protocol/build/Release', github.workspace) || format('-L native={0}/libs/gh_protocol/build', github.workspace) }}
         run: |
           cargo tauri build --target ${{ matrix.target }}
           

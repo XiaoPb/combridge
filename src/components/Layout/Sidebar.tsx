@@ -70,30 +70,6 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
           height: '100%',
         }}
       >
-        <div
-          style={{
-            height: 'var(--header-height)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: collapsed ? 'center' : 'flex-start',
-            padding: collapsed ? '0 16px' : '0 16px 0 24px',
-            borderBottom: '1px solid var(--border-color)',
-            flexShrink: 0,
-          }}
-        >
-          <h1
-            style={{
-              margin: 0,
-              fontSize: collapsed ? '16px' : '18px',
-              fontWeight: 600,
-              color: 'var(--primary-color)',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-            }}
-          >
-            {collapsed ? 'CB' : 'ComBridge'}
-          </h1>
-        </div>
         <Menu
           mode="inline"
           selectedKeys={[location.pathname]}

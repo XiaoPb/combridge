@@ -215,7 +215,8 @@ jobs:
         working-directory: src-tauri
         env:
           # 告诉 Rust 链接器在哪里找 C 库
-          RUSTFLAGS: "-L native=${{ github.workspace }}/libs/gh_protocol/build"
+          # Windows: build/Release, Linux/macOS: build/
+          RUSTFLAGS: ${{ runner.os == 'Windows' && '-L native=${{ github.workspace }}/libs/gh_protocol/build/Release' || '-L native=${{ github.workspace }}/libs/gh_protocol/build' }}
         run: |
           cargo tauri build --target ${{ matrix.target }}
           

@@ -224,6 +224,43 @@ impl DeviceManager {
         true
     }
 
+    /// 直接发送数据到设备（不需要预先注册）
+    ///
+    /// # 参数
+    /// - `device_type`: 设备类型
+    /// - `device_name`: 设备名称（串口名或蓝牙地址）
+    /// - `char_uuid`: 蓝牙特征 UUID（蓝牙设备必需）
+    /// - `data`: 待发送的数据
+    pub async fn send_direct(
+        &self,
+        device_type: DeviceType,
+        device_name: &str,
+        char_uuid: Option<&str>,
+        data: &[u8],
+    ) -> Result<()> {
+        info!("DeviceManager send_direct: type={:?}, name={}, {} bytes", device_type, device_name, data.len());
+        
+        match device_type {
+            DeviceType::Serial => {
+                self.serial_manager.send_data(device_name, data)?;
+                info!("DeviceManager send_direct 串口发送成功: {} bytes", data.len());
+            }
+            DeviceType::Ble => {
+                let uuid = char_uuid
+                    .ok_or_else(|| ComBridgeError::ble("缺少特征UUID"))?;
+                self.ble_manager
+                    .write_characteristic(device_name, uuid, data)
+                    .await?;
+                info!("DeviceManager send_direct 蓝牙发送成功: {} bytes", data.len());
+            }
+            DeviceType::WebSocket => {
+                debug!("WebSocket发送数据到 {}: {} bytes", device_name, data.len());
+            }
+        }
+
+        Ok(())
+    }
+
     async fn send_to_device(&self, device_id: &str, data: &[u8]) -> Result<()> {
         let devices = self.devices.read().await;
         let device = devices

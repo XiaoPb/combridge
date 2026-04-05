@@ -490,6 +490,23 @@ extern "C" {
         ...
     ) -> c_int;
 
+    /// 获取协议版本
+    ///
+    /// # 功能
+    /// 获取芯片协议版本信息
+    ///
+    /// # 参数
+    /// - `handle`: 协议句柄指针
+    /// - `ver_type`: 版本类型
+    /// - `ver`: 输出缓冲区，存储版本号
+    /// - `size`: 输出版本号大小
+    pub fn gh_protocol_get_version(
+        handle: *mut GhProtocolHandle,
+        ver_type: u8,
+        ver: *mut u8,
+        size: *mut u16,
+    );
+
     /// 寄存器写入命令
     ///
     /// # 功能

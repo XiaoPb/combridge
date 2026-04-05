@@ -24,10 +24,19 @@ use super::sync;
 use super::types::{Gh3036EventData, Gh3036FrameData};
 
 /// 通道类型枚举
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ChannelType {
     Serial,
     Ble,
+}
+
+impl From<ChannelType> for crate::device::DeviceType {
+    fn from(channel_type: ChannelType) -> Self {
+        match channel_type {
+            ChannelType::Serial => crate::device::DeviceType::Serial,
+            ChannelType::Ble => crate::device::DeviceType::Ble,
+        }
+    }
 }
 
 /// 通道配置结构体
@@ -345,18 +354,16 @@ impl Gh3036Manager {
     fn handle_send_request(device_manager: &Arc<DeviceManager>, request: SendRequest) {
         info!("GH3036 handle_send_request 开始处理: {} bytes", request.data.len());
         
-        let tx_channel = CALLBACK_CONTEXT.tx_channel.lock();
-        let Some(channel) = tx_channel.as_ref() else {
-            warn!("GH3036 TX 通道未配置，无法发送数据");
-            return;
+        let (channel_type, device_id, char_uuid) = {
+            let tx_channel = CALLBACK_CONTEXT.tx_channel.lock();
+            let Some(channel) = tx_channel.as_ref() else {
+                warn!("GH3036 TX 通道未配置，无法发送数据");
+                return;
+            };
+            (channel.channel_type, channel.device_id.clone(), channel.characteristic_uuid.clone())
         };
 
-        let route_id = match channel.channel_type {
-            ChannelType::Serial => format!("serial-{}", channel.device_id),
-            ChannelType::Ble => format!("ble-{}", channel.device_id),
-        };
-
-        info!("GH3036 handle_send_request 路由ID: {}, 数据: {:02X?}", route_id, request.data);
+        info!("GH3036 handle_send_request 设备: type={:?}, id={}, 数据: {:02X?}", channel_type, device_id, request.data);
 
         let device_manager_clone = Arc::clone(device_manager);
         let data = request.data;
@@ -364,11 +371,19 @@ impl Gh3036Manager {
         if let Some(handle) = CALLBACK_CONTEXT.runtime_handle.lock().as_ref() {
             info!("GH3036 handle_send_request 在异步运行时中发送");
             handle.spawn(async move {
-                info!("GH3036 handle_send_request 异步任务开始, route_id={}", route_id);
-                if let Err(e) = device_manager_clone.route_data(&route_id, &data).await {
-                    error!("GH3036 发送数据失败: {}", e);
-                } else {
-                    info!("GH3036 handle_send_request 发送成功: {} bytes", data.len());
+                info!("GH3036 handle_send_request 异步任务开始");
+                let result = device_manager_clone
+                    .send_direct(
+                        channel_type.into(),
+                        &device_id,
+                        char_uuid.as_deref(),
+                        &data,
+                    )
+                    .await;
+                
+                match result {
+                    Ok(_) => info!("GH3036 handle_send_request 发送成功: {} bytes", data.len()),
+                    Err(e) => error!("GH3036 handle_send_request 发送失败: {}", e),
                 }
             });
         } else {
@@ -737,21 +752,23 @@ impl Gh3036Manager {
 
         info!("GH3036 execute_version_cmd: ver_type={}", ver_type);
 
-        let key = std::ffi::CString::new("V").map_err(|e| e.to_string())?;
-        let format = std::ffi::CString::new("%d").map_err(|e| e.to_string())?;
-
-        info!("GH3036 execute_version_cmd 调用 gh_protocol_send_raw: key={:?}, format={:?}, ver_type={}", key, format, ver_type);
+        let mut ver_buf = [0u8; 64];
+        let mut ver_size: u16 = 0;
 
         unsafe {
-            let result = ffi::gh_protocol_send_raw(handle, key.as_ptr(), format.as_ptr(), ver_type as i32);
-            info!("GH3036 gh_protocol_send_raw 返回: {}", result);
-            if result < 0 {
-                return Err(format!("发送版本命令失败: {}", result));
-            }
+            info!("GH3036 execute_version_cmd 调用 gh_protocol_get_version");
+            ffi::gh_protocol_get_version(
+                handle,
+                ver_type,
+                ver_buf.as_mut_ptr(),
+                &mut ver_size,
+            );
+            info!("GH3036 gh_protocol_get_version 返回: size={}", ver_size);
         }
 
-        info!("GH3036 execute_version_cmd 完成");
-        Ok(vec![])
+        let result = ver_buf[..ver_size as usize].to_vec();
+        info!("GH3036 execute_version_cmd 完成: {:02X?}", result);
+        Ok(result)
     }
 
     fn execute_regs_write_cmd(

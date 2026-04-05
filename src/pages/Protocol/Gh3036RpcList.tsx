@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button, Input, Space, Typography, Tag, message } from 'antd';
+import { Button, Input, Space, Typography, Tag, message, Row, Col } from 'antd';
 import { PlayCircleOutlined, CaretRightOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
@@ -131,9 +131,13 @@ const Gh3036RpcList: React.FC = () => {
   };
 
   return (
-    <div style={{ height: '100%', overflow: 'auto' }}>
-      {rpcCommands.map(renderCommand)}
-    </div>
+    <Row gutter={[8, 8]}>
+      {rpcCommands.map((command) => (
+        <Col span={12} key={command.key}>
+          {renderCommand(command)}
+        </Col>
+      ))}
+    </Row>
   );
 };
 

@@ -69,30 +69,30 @@ const Gh3036Panel: React.FC = () => {
       )}
 
       <Row gutter={8} style={{ flex: '1 1 0', minHeight: 0 }}>
-        <Col span={6} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Col span={4} style={{ height: '100%' }}>
           <Card
             size="small"
             title={t('gh3036.channelConfig')}
-            style={{ flex: '0 0 auto', marginBottom: 8 }}
-            styles={{ body: { padding: 8 } }}
+            style={{ height: '100%' }}
+            styles={{ body: { padding: 8, height: 'calc(100% - 40px)', overflow: 'auto' } }}
           >
             <Gh3036ChannelConfig />
           </Card>
+        </Col>
+
+        <Col span={20} style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Card
             size="small"
             title={t('gh3036.rpcCommands')}
-            style={{ flex: '1 1 0', overflow: 'hidden' }}
-            styles={{ body: { padding: 8, height: 'calc(100% - 40px)', overflow: 'auto' } }}
+            style={{ flex: '0 0 auto' }}
+            styles={{ body: { padding: 8, maxHeight: 280, overflow: 'auto' } }}
           >
             <Gh3036RpcList />
           </Card>
-        </Col>
-
-        <Col span={18} style={{ height: '100%' }}>
           <Card
             size="small"
             title={t('gh3036.dataView')}
-            style={{ height: '100%' }}
+            style={{ flex: '1 1 0', minHeight: 0 }}
             styles={{ body: { padding: 8, height: 'calc(100% - 40px)', overflow: 'auto' } }}
           >
             <Gh3036DataView />

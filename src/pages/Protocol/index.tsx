@@ -4,6 +4,7 @@ import {
   ReloadOutlined,
   PlusOutlined,
 } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { useProtocol } from '../../hooks/useProtocol';
 import ProtocolList from './ProtocolList';
 import ScriptEditor from './ScriptEditor';
@@ -14,6 +15,7 @@ import { usePageTabsStore } from '../../stores/pageTabsStore';
 const { Text } = Typography;
 
 const ProtocolPage: React.FC = () => {
+  const { t } = useTranslation('protocol');
   const {
     protocols,
     currentProtocol,
@@ -111,7 +113,7 @@ const ProtocolPage: React.FC = () => {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 8 }}>
       {error && (
         <Alert
-          message="错误"
+          message={t('common:error')}
           description={error}
           type="error"
           closable
@@ -127,7 +129,7 @@ const ProtocolPage: React.FC = () => {
             onClick={() => setLoadModalVisible(true)}
             size="small"
           >
-            加载协议
+            {t('title.loadProtocol')}
           </Button>
           <Button
             icon={<ReloadOutlined />}
@@ -135,11 +137,10 @@ const ProtocolPage: React.FC = () => {
             loading={isLoading}
             size="small"
           >
-            刷新列表
+            {t('button.refreshList')}
           </Button>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            共 {protocols.length} 个协议，
-            {protocols.filter((p) => p.state === 'Enabled').length} 个已启用
+            {t('message.totalProtocols', { total: protocols.length, enabled: protocols.filter((p) => p.state === 'Enabled').length })}
           </Text>
         </Space>
       </Card>
@@ -164,28 +165,28 @@ const ProtocolPage: React.FC = () => {
       </div>
 
       <Modal
-        title="加载协议"
+        title={t('title.loadProtocol')}
         open={loadModalVisible}
         onOk={handleLoadProtocol}
         onCancel={() => setLoadModalVisible(false)}
-        okText="加载"
-        cancelText="取消"
+        okText={t('common:confirm')}
+        cancelText={t('common:cancel')}
         confirmLoading={isLoading}
       >
         <Space direction="vertical" style={{ width: '100%' }} size="middle">
           <div>
-            <Text>协议 ID</Text>
+            <Text>{t('label.protocolId')}</Text>
             <Input
-              placeholder="输入协议唯一标识，如: my-protocol"
+              placeholder={t('placeholder.protocolId')}
               value={newPluginId}
               onChange={(e) => setNewPluginId(e.target.value)}
               style={{ marginTop: 4 }}
             />
           </div>
           <div>
-            <Text>脚本路径</Text>
+            <Text>{t('label.scriptPath')}</Text>
             <Input
-              placeholder="输入 Lua 脚本文件路径"
+              placeholder={t('placeholder.scriptPath')}
               value={newPluginPath}
               onChange={(e) => setNewPluginPath(e.target.value)}
               style={{ marginTop: 4 }}

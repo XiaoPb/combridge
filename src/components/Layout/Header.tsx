@@ -1,16 +1,14 @@
 import React from 'react';
 import { Layout, Button, Badge, Tooltip } from 'antd';
-import { MenuFoldOutlined, MenuUnfoldOutlined, SettingOutlined, LinkOutlined } from '@ant-design/icons';
+import { SettingOutlined, LinkOutlined } from '@ant-design/icons';
 
 const { Header: AntHeader } = Layout;
 
 interface HeaderProps {
-  collapsed: boolean;
-  onCollapse: (collapsed: boolean) => void;
   onSettingsClick: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ collapsed, onCollapse, onSettingsClick }) => {
+const Header: React.FC<HeaderProps> = ({ onSettingsClick }) => {
   return (
     <AntHeader
       style={{
@@ -24,16 +22,6 @@ const Header: React.FC<HeaderProps> = ({ collapsed, onCollapse, onSettingsClick 
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <Button
-          type="text"
-          icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-          onClick={() => onCollapse(!collapsed)}
-          style={{
-            fontSize: '16px',
-            width: 48,
-            height: 48,
-          }}
-        />
         <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 500 }}>
           ComBridge - 串口与蓝牙调试工具
         </h2>

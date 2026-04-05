@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { useLocation } from 'react-router-dom';
 import {
   MinusOutlined,
@@ -122,7 +123,9 @@ const TitleBar: React.FC = () => {
   return (
     <div className="title-bar" data-tauri-drag-region>
       <div className="title-bar-left" data-tauri-drag-region>
-        <span className="app-logo">📱</span>
+        <span className="app-logo">
+          <img src="/icon.png" alt="ComBridge" />
+        </span>
         <span className="app-name">ComBridge</span>
       </div>
 

@@ -10,6 +10,7 @@ import {
   MenuUnfoldOutlined,
   MoonOutlined,
   SunOutlined,
+  GlobalOutlined,
 } from '@ant-design/icons';
 import configService from '../../services/configService';
 
@@ -145,19 +146,25 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
           style={{
             borderTop: '1px solid var(--border-color)',
             flexShrink: 0,
-            padding: '8px 0',
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: collapsed ? 'center' : 'flex-start',
-              padding: collapsed ? '8px 16px' : '8px 16px 8px 24px',
-              gap: '12px',
-            }}
-          >
-            <Tooltip title={isDarkMode ? '切换到浅色模式' : '切换到深色模式'} placement="right">
+          <Tooltip title={isDarkMode ? '切换到浅色模式' : '切换到深色模式'} placement="right">
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                padding: collapsed ? '12px 16px' : '12px 16px 12px 24px',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
               <Switch
                 checked={isDarkMode}
                 onChange={toggleTheme}
@@ -165,35 +172,33 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
                 checkedChildren={<MoonOutlined />}
                 unCheckedChildren={<SunOutlined />}
               />
-            </Tooltip>
-            <Tooltip title={language === 'zh-CN' ? 'Switch to English' : '切换到中文'} placement="right">
-              <div
-                onClick={toggleLanguage}
-                style={{
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  color: 'var(--text-secondary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '44px',
-                  height: '22px',
-                  borderRadius: 'var(--border-radius)',
-                  transition: 'background-color 0.2s',
-                  border: '1px solid var(--border-color)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
-                {language === 'zh-CN' ? '文' : 'A'}
-              </div>
-            </Tooltip>
-          </div>
+            </div>
+          </Tooltip>
+          <Tooltip title={language === 'zh-CN' ? 'Switch to English' : '切换到中文'} placement="right">
+            <div
+              onClick={toggleLanguage}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                padding: collapsed ? '12px 16px' : '12px 16px 12px 24px',
+                cursor: 'pointer',
+                color: 'var(--text-secondary)',
+                fontSize: '14px',
+                transition: 'background-color 0.2s',
+                gap: '8px',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              <GlobalOutlined style={{ fontSize: '16px' }} />
+              {!collapsed && <span>{language === 'zh-CN' ? '中文' : 'English'}</span>}
+            </div>
+          </Tooltip>
           <div
             onClick={toggleCollapsed}
             style={{
@@ -206,6 +211,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
               height: '40px',
               transition: 'background-color 0.2s',
               gap: '8px',
+              borderTop: '1px solid var(--border-color)',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = 'var(--hover-bg)';

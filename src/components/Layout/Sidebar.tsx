@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Menu, Switch, Tooltip } from 'antd';
+import { Layout, Menu, Tooltip } from 'antd';
 import {
   UsbOutlined,
   ApiOutlined,
@@ -15,6 +15,75 @@ import {
 import configService from '../../services/configService';
 
 const { Sider } = Layout;
+
+interface ThemeSwitchProps {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  collapsed: boolean;
+}
+
+const ThemeSwitch: React.FC<ThemeSwitchProps> = ({ checked, onChange, collapsed }) => {
+  return (
+    <div
+      onClick={() => onChange(!checked)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        padding: collapsed ? '12px 16px' : '12px 16px 12px 24px',
+        cursor: 'pointer',
+        transition: 'background-color 0.2s',
+        gap: '8px',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = 'transparent';
+      }}
+    >
+      <div
+        style={{
+          position: 'relative',
+          width: '44px',
+          height: '22px',
+          borderRadius: '11px',
+          backgroundColor: checked ? 'var(--primary-color)' : 'var(--border-color)',
+          transition: 'background-color 0.3s',
+          cursor: 'pointer',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            top: '2px',
+            left: checked ? '24px' : '2px',
+            width: '18px',
+            height: '18px',
+            borderRadius: '50%',
+            backgroundColor: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'left 0.3s',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+          }}
+        >
+          {checked ? (
+            <MoonOutlined style={{ fontSize: '12px', color: 'var(--primary-color)' }} />
+          ) : (
+            <SunOutlined style={{ fontSize: '12px', color: '#faad14' }} />
+          )}
+        </div>
+      </div>
+      {!collapsed && (
+        <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+          {checked ? '深色' : '浅色'}
+        </span>
+      )}
+    </div>
+  );
+};
 
 interface SidebarProps {
   collapsed: boolean;
@@ -149,30 +218,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
           }}
         >
           <Tooltip title={isDarkMode ? '切换到浅色模式' : '切换到深色模式'} placement="right">
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: collapsed ? 'center' : 'flex-start',
-                padding: collapsed ? '12px 16px' : '12px 16px 12px 24px',
-                cursor: 'pointer',
-                transition: 'background-color 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-              }}
-            >
-              <Switch
-                checked={isDarkMode}
-                onChange={toggleTheme}
-                size="small"
-                checkedChildren={<MoonOutlined />}
-                unCheckedChildren={<SunOutlined />}
-              />
-            </div>
+            <ThemeSwitch
+              checked={isDarkMode}
+              onChange={toggleTheme}
+              collapsed={collapsed}
+            />
           </Tooltip>
           <Tooltip title={language === 'zh-CN' ? 'Switch to English' : '切换到中文'} placement="right">
             <div

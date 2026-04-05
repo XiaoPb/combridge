@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Tabs, Card } from 'antd';
+import { Tabs } from 'antd';
 import { SettingOutlined, InfoCircleOutlined, FileTextOutlined } from '@ant-design/icons';
 import SystemInfo from './SystemInfo';
 import LogViewer from './LogViewer';
+import SystemSettings from './SystemSettings';
 
 const SystemPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('info');
@@ -44,16 +45,7 @@ const SystemPage: React.FC = () => {
       case 'logs':
         return <LogViewer />;
       case 'settings':
-        return (
-          <Card>
-            <div style={{ textAlign: 'center', padding: '40px 0' }}>
-              <SettingOutlined style={{ fontSize: '48px', color: 'var(--primary-color)' }} />
-              <p style={{ marginTop: 16, color: 'var(--text-secondary)' }}>
-                系统设置功能开发中...
-              </p>
-            </div>
-          </Card>
-        );
+        return <SystemSettings />;
       default:
         return null;
     }

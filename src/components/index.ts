@@ -8,4 +8,3 @@ export { default as ConfirmDialog } from './Common/ConfirmDialog';
 export { default as HexInput } from './Common/HexInput';
 
 export { default as DataLogger } from './DataLogger';
-export { default as SettingsModal } from './SettingsModal';

@@ -105,13 +105,10 @@ pub unsafe extern "C" fn gh_protocol_unlock() {
     GLOBAL_LOCK.unlock();
 }
 
-/// 延迟回调 - 阻塞线程指定时间
+/// 延迟回调 - 固定延迟 50ms
 ///
 /// # 功能
-/// 阻塞当前线程指定毫秒数
-///
-/// # 参数
-/// - `ms`: 延迟时间，单位毫秒
+/// 阻塞当前线程 50ms，用于 C 库内部延时
 ///
 /// # 实现
 /// 使用 `std::thread::sleep` 实现同步延迟
@@ -120,15 +117,10 @@ pub unsafe extern "C" fn gh_protocol_unlock() {
 /// - 此函数可能在 C 库线程中调用
 /// - 在异步环境中会阻塞当前线程
 /// - 延迟精度取决于操作系统调度
-/// - ms = 0 时立即返回
 #[no_mangle]
-pub unsafe extern "C" fn gh_protocol_delay(ms: u32) {
-    if ms == 0 {
-        return;
-    }
-    
+pub unsafe extern "C" fn gh_protocol_delay() {
     DELAYING.store(true, Ordering::SeqCst);
-    std::thread::sleep(Duration::from_millis(ms as u64));
+    std::thread::sleep(Duration::from_millis(50));
     DELAYING.store(false, Ordering::SeqCst);
 }
 
@@ -173,21 +165,11 @@ mod tests {
     fn test_delay() {
         let start = Instant::now();
         unsafe {
-            gh_protocol_delay(100);
+            gh_protocol_delay();
         }
         let elapsed = start.elapsed();
-        assert!(elapsed.as_millis() >= 100);
+        assert!(elapsed.as_millis() >= 50);
         assert!(!is_delaying());
-    }
-
-    #[test]
-    fn test_delay_zero() {
-        let start = Instant::now();
-        unsafe {
-            gh_protocol_delay(0);
-        }
-        let elapsed = start.elapsed();
-        assert!(elapsed.as_millis() < 10);
     }
 
     #[test]

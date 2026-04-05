@@ -39,14 +39,12 @@ pub type GhProtocolUnlockFn = Option<unsafe extern "C" fn()>;
 /// 延迟回调函数类型
 ///
 /// # 功能
-/// 阻塞当前线程指定时间
-///
-/// # 参数
-/// - `ms`: 延迟时间，单位毫秒
+/// 固定延迟 50ms，用于 C 库内部延时
 ///
 /// # 注意
-/// 在异步环境中需要特殊处理
-pub type GhProtocolDelayFn = Option<unsafe extern "C" fn(u32)>;
+/// - 此函数无参数，固定延迟 50ms
+/// - 在异步环境中会阻塞当前线程
+pub type GhProtocolDelayFn = Option<unsafe extern "C" fn()>;
 
 /// 发送回调函数类型
 ///
@@ -333,6 +331,7 @@ impl PackHeader {
 ///
 /// # 内存布局
 /// 与 C 库 `data_frame_t` 内存布局一致
+/// 使用 `#[repr(C, packed)]` 确保紧凑排列
 ///
 /// # 字段说明
 /// - `pack_header`: 包头位域结构（4 字节）
@@ -354,7 +353,8 @@ impl PackHeader {
 /// - `phy_value_size`: 物理值数组大小
 /// - `p_rawdata`: 原始数据数组指针
 /// - `rawdata_size`: 原始数据数组大小
-#[repr(C)]
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct DataFrame {
     /// 包头位域结构（4 字节）
     pub pack_header: PackHeader,

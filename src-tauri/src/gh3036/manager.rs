@@ -343,6 +343,8 @@ impl Gh3036Manager {
 
     /// 处理发送请求
     fn handle_send_request(device_manager: &Arc<DeviceManager>, request: SendRequest) {
+        info!("GH3036 handle_send_request 开始处理: {} bytes", request.data.len());
+        
         let tx_channel = CALLBACK_CONTEXT.tx_channel.lock();
         let Some(channel) = tx_channel.as_ref() else {
             warn!("GH3036 TX 通道未配置，无法发送数据");
@@ -354,17 +356,23 @@ impl Gh3036Manager {
             ChannelType::Ble => format!("ble-{}", channel.device_id),
         };
 
+        info!("GH3036 handle_send_request 路由ID: {}, 数据: {:02X?}", route_id, request.data);
+
         let device_manager_clone = Arc::clone(device_manager);
         let data = request.data;
         
         if let Some(handle) = CALLBACK_CONTEXT.runtime_handle.lock().as_ref() {
+            info!("GH3036 handle_send_request 在异步运行时中发送");
             handle.spawn(async move {
+                info!("GH3036 handle_send_request 异步任务开始, route_id={}", route_id);
                 if let Err(e) = device_manager_clone.route_data(&route_id, &data).await {
                     error!("GH3036 发送数据失败: {}", e);
+                } else {
+                    info!("GH3036 handle_send_request 发送成功: {} bytes", data.len());
                 }
             });
         } else {
-            debug!("GH3036 异步运行时不可用，跳过发送");
+            warn!("GH3036 异步运行时不可用，跳过发送");
         }
     }
 
@@ -442,18 +450,23 @@ impl Gh3036Manager {
     /// # 线程安全
     /// 可能在 C 库线程中调用
     unsafe extern "C" fn send_callback(data: *mut std::ffi::c_void, size: std::os::raw::c_int) {
+        info!("GH3036 send_callback 被调用: size={}", size);
+        
         if data.is_null() || size <= 0 {
+            warn!("GH3036 send_callback 参数无效: data.is_null={}, size={}", data.is_null(), size);
             return;
         }
 
         let data_slice = std::slice::from_raw_parts(data as *const u8, size as usize);
         let data_vec = data_slice.to_vec();
 
-        debug!("GH3036 send_callback: {} bytes", data_vec.len());
+        info!("GH3036 send_callback 数据: {:02X?}", data_vec);
 
         let request = SendRequest { data: data_vec };
         if let Err(e) = CALLBACK_CONTEXT.send_data_request(request) {
             error!("GH3036 发送请求入队失败: {}", e);
+        } else {
+            info!("GH3036 send_callback 发送请求已入队");
         }
     }
 
@@ -592,6 +605,8 @@ impl Gh3036Manager {
     /// - `Ok(())`: 发送成功
     /// - `Err(String)`: 发送失败
     pub async fn send_data(&self, data: &[u8]) -> Result<(), String> {
+        info!("GH3036 send_data 被调用: {} bytes, data={:02X?}", data.len(), data);
+
         let (route_id, device_id) = {
             let tx_channel = CALLBACK_CONTEXT.tx_channel.lock();
             let channel = tx_channel.as_ref().ok_or("TX 通道未配置")?;
@@ -604,15 +619,20 @@ impl Gh3036Manager {
                     format!("ble-{}", channel.device_id)
                 }
             };
+            info!("GH3036 send_data 路由ID: {}, 设备ID: {}", route_id, channel.device_id);
             (route_id, channel.device_id.clone())
         };
 
+        info!("GH3036 send_data 调用 device_manager.route_data");
         self.device_manager
             .route_data(&route_id, data)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| {
+                error!("GH3036 send_data 失败: {}", e);
+                e.to_string()
+            })?;
 
-        debug!("GH3036 发送数据: {} bytes to {}", data.len(), device_id);
+        info!("GH3036 发送数据成功: {} bytes to {}", data.len(), device_id);
         Ok(())
     }
 
@@ -662,20 +682,27 @@ impl Gh3036Manager {
     /// - `Ok(Vec<u8>)`: 执行成功，返回响应数据
     /// - `Err(String)`: 执行失败
     pub fn execute_rpc(&self, command_key: &str, params: &[String]) -> Result<Vec<u8>, String> {
+        info!("GH3036 execute_rpc 开始: key={}, params={:?}", command_key, params);
+
         if !ffi::is_linked() {
+            error!("GH3036 execute_rpc C 库未链接");
             return Err("C 库未链接，无法执行 RPC 指令".to_string());
         }
 
         let handle_opt = *self.handle.lock();
-        let handle = handle_opt.ok_or("协议实例未初始化")?;
+        let handle = handle_opt.ok_or_else(|| {
+            error!("GH3036 execute_rpc 协议实例未初始化");
+            "协议实例未初始化".to_string()
+        })?;
 
         if handle.is_null() {
+            error!("GH3036 execute_rpc 协议句柄无效");
             return Err("协议句柄无效".to_string());
         }
 
-        info!("执行 RPC 指令: key={}, params={:?}", command_key, params);
+        info!("GH3036 execute_rpc 协议句柄有效，开始执行命令");
 
-        match command_key {
+        let result = match command_key {
             "V" => self.execute_version_cmd(handle, params),
             "W" => self.execute_regs_write_cmd(handle, params),
             "R" => self.execute_regs_read_cmd(handle, params),
@@ -688,8 +715,14 @@ impl Gh3036Manager {
             "M" => self.execute_set_work_mode_cmd(handle, params),
             "TS" => self.execute_timestamp_set_cmd(handle, params),
             "TM" => self.execute_time_set_cmd(handle, params),
-            _ => Err(format!("不支持的命令键: {}", command_key)),
-        }
+            _ => {
+                error!("GH3036 execute_rpc 不支持的命令键: {}", command_key);
+                Err(format!("不支持的命令键: {}", command_key))
+            }
+        };
+
+        info!("GH3036 execute_rpc 完成: key={}, result={:?}", command_key, result.is_ok());
+        result
     }
 
     fn execute_version_cmd(
@@ -702,16 +735,22 @@ impl Gh3036Manager {
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
 
+        info!("GH3036 execute_version_cmd: ver_type={}", ver_type);
+
         let key = std::ffi::CString::new("V").map_err(|e| e.to_string())?;
         let format = std::ffi::CString::new("%d").map_err(|e| e.to_string())?;
 
+        info!("GH3036 execute_version_cmd 调用 gh_protocol_send_raw: key={:?}, format={:?}, ver_type={}", key, format, ver_type);
+
         unsafe {
             let result = ffi::gh_protocol_send_raw(handle, key.as_ptr(), format.as_ptr(), ver_type as i32);
+            info!("GH3036 gh_protocol_send_raw 返回: {}", result);
             if result < 0 {
                 return Err(format!("发送版本命令失败: {}", result));
             }
         }
 
+        info!("GH3036 execute_version_cmd 完成");
         Ok(vec![])
     }
 

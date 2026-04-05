@@ -11,7 +11,7 @@ const { useToken } = theme;
 const Gh3036RpcList: React.FC = () => {
   const { t } = useTranslation('protocol');
   const { token } = useToken();
-  const { rpcCommands, expandedCommand, setExpandedCommand, sendData, txChannel } = useGh3036Store();
+  const { rpcCommands, expandedCommand, setExpandedCommand, executeRpc, txChannel } = useGh3036Store();
   const [paramValues, setParamValues] = useState<Record<string, Record<string, string>>>({});
 
   const handleParamChange = (commandKey: string, paramName: string, value: string) => {
@@ -24,14 +24,10 @@ const Gh3036RpcList: React.FC = () => {
     }));
   };
 
-  const buildCommandData = (command: Gh3036RpcCommand): number[] => {
-    const header = [0xAA, 0x11];
-    const keyBytes = new TextEncoder().encode(command.key);
-    const keyLen = keyBytes.length;
-    
-    const data: number[] = [...header, keyLen, ...keyBytes];
-    
-    return data;
+  const getParamValues = (command: Gh3036RpcCommand): string[] => {
+    return command.params.map((param) => {
+      return paramValues[command.key]?.[param.name] ?? param.default_value ?? '';
+    });
   };
 
   const handleExecute = async (command: Gh3036RpcCommand) => {
@@ -40,8 +36,10 @@ const Gh3036RpcList: React.FC = () => {
       return;
     }
 
-    const data = buildCommandData(command);
-    const success = await sendData(data);
+    const params = getParamValues(command);
+    console.log('GH3036 handleExecute:', command.key, params);
+    
+    const success = await executeRpc(command.key, params);
     if (success) {
       message.success(t('gh3036.commandSent', { name: command.name }));
     }

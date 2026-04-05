@@ -126,3 +126,38 @@ pub async fn gh3036_get_csv_config(
 pub fn gh3036_get_rpc_commands() -> Result<Vec<RpcCommand>, ErrorResponse> {
     Ok(crate::gh3036::get_rpc_commands())
 }
+
+#[tauri::command]
+pub async fn gh3036_execute_rpc(
+    command_key: String,
+    params: Vec<String>,
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<Vec<u8>, ErrorResponse> {
+    manager
+        .execute_rpc(&command_key, &params)
+        .map_err(|e| ComBridgeError::protocol(e).to_error_response())
+}
+
+#[tauri::command]
+pub async fn gh3036_subscribe_events(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<bool, ErrorResponse> {
+    Ok(manager.subscribe_events())
+}
+
+#[tauri::command]
+pub async fn gh3036_get_library_status(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(bool, bool), ErrorResponse> {
+    Ok(manager.get_library_status())
+}
+
+#[tauri::command]
+pub async fn gh3036_on_rx_data(
+    device_id: String,
+    data: Vec<u8>,
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(), ErrorResponse> {
+    manager.on_rx_data(&device_id, &data);
+    Ok(())
+}

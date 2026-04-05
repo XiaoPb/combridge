@@ -179,6 +179,8 @@ pub struct Gh3036Manager {
     running: Arc<std::sync::atomic::AtomicBool>,
     /// 处理线程句柄
     thread_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
+    /// 事件订阅状态
+    events_subscribed: std::sync::atomic::AtomicBool,
 }
 
 unsafe impl Send for Gh3036Manager {}
@@ -199,6 +201,7 @@ impl Gh3036Manager {
             initialized: Mutex::new(false),
             running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             thread_handle: Mutex::new(None),
+            events_subscribed: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -644,6 +647,372 @@ impl Gh3036Manager {
                 }
             }
         }
+    }
+
+    /// 执行 RPC 指令
+    ///
+    /// # 功能
+    /// 根据命令键和参数执行对应的 RPC 指令
+    ///
+    /// # 参数
+    /// - `command_key`: 命令键（V、W、R、B、C、D、L、S、P、M、TS、TM）
+    /// - `params`: 参数列表
+    ///
+    /// # 返回
+    /// - `Ok(Vec<u8>)`: 执行成功，返回响应数据
+    /// - `Err(String)`: 执行失败
+    pub fn execute_rpc(&self, command_key: &str, params: &[String]) -> Result<Vec<u8>, String> {
+        if !ffi::is_linked() {
+            return Err("C 库未链接，无法执行 RPC 指令".to_string());
+        }
+
+        let handle_opt = *self.handle.lock();
+        let handle = handle_opt.ok_or("协议实例未初始化")?;
+
+        if handle.is_null() {
+            return Err("协议句柄无效".to_string());
+        }
+
+        info!("执行 RPC 指令: key={}, params={:?}", command_key, params);
+
+        match command_key {
+            "V" => self.execute_version_cmd(handle, params),
+            "W" => self.execute_regs_write_cmd(handle, params),
+            "R" => self.execute_regs_read_cmd(handle, params),
+            "B" => self.execute_reg_bitfield_write_cmd(handle, params),
+            "C" => self.execute_chip_ctrl_cmd(handle, params),
+            "D" => self.execute_download_config_cmd(handle, params),
+            "L" => self.execute_regs_list_write_cmd(handle, params),
+            "S" => self.execute_sw_function_cmd(handle, params),
+            "P" => self.execute_low_power_cmd(handle, params),
+            "M" => self.execute_set_work_mode_cmd(handle, params),
+            "TS" => self.execute_timestamp_set_cmd(handle, params),
+            "TM" => self.execute_time_set_cmd(handle, params),
+            _ => Err(format!("不支持的命令键: {}", command_key)),
+        }
+    }
+
+    fn execute_version_cmd(
+        &self,
+        handle: *mut ffi::GhProtocolHandle,
+        params: &[String],
+    ) -> Result<Vec<u8>, String> {
+        let ver_type: u8 = params
+            .first()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+
+        let key = std::ffi::CString::new("V").map_err(|e| e.to_string())?;
+        let format = std::ffi::CString::new("%d").map_err(|e| e.to_string())?;
+
+        unsafe {
+            let result = ffi::gh_protocol_send_raw(handle, key.as_ptr(), format.as_ptr(), ver_type as i32);
+            if result < 0 {
+                return Err(format!("发送版本命令失败: {}", result));
+            }
+        }
+
+        Ok(vec![])
+    }
+
+    fn execute_regs_write_cmd(
+        &self,
+        handle: *mut ffi::GhProtocolHandle,
+        params: &[String],
+    ) -> Result<Vec<u8>, String> {
+        let regs: Vec<u16> = params
+            .iter()
+            .filter_map(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16).ok())
+            .collect();
+
+        if regs.is_empty() || regs.len() % 2 != 0 {
+            return Err("寄存器数据格式错误，需要成对的地址和值".to_string());
+        }
+
+        let mut regs_mut = regs.clone();
+        unsafe {
+            ffi::gh_protocol_regs_write(handle, regs_mut.as_mut_ptr(), (regs.len() / 2) as i32);
+        }
+
+        info!("寄存器写入: {} 个寄存器", regs.len() / 2);
+        Ok(vec![])
+    }
+
+    fn execute_regs_read_cmd(
+        &self,
+        handle: *mut ffi::GhProtocolHandle,
+        params: &[String],
+    ) -> Result<Vec<u8>, String> {
+        let reg_addr: u16 = params
+            .first()
+            .and_then(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16).ok())
+            .ok_or("缺少寄存器地址参数")?;
+
+        let read_len: i32 = params
+            .get(1)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1);
+
+        let mut reg_values = vec![0u16; read_len as usize];
+        let mut actual_len: i32 = 0;
+
+        unsafe {
+            ffi::gh_protocol_regs_read(
+                handle,
+                reg_addr,
+                read_len,
+                reg_values.as_mut_ptr(),
+                &mut actual_len,
+            );
+        }
+
+        reg_values.truncate(actual_len as usize);
+        let result: Vec<u8> = reg_values
+            .iter()
+            .flat_map(|v| v.to_le_bytes())
+            .collect();
+
+        info!("寄存器读取: addr=0x{:04X}, len={}", reg_addr, actual_len);
+        Ok(result)
+    }
+
+    fn execute_reg_bitfield_write_cmd(
+        &self,
+        handle: *mut ffi::GhProtocolHandle,
+        params: &[String],
+    ) -> Result<Vec<u8>, String> {
+        let reg_addr: u16 = params
+            .first()
+            .and_then(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16).ok())
+            .ok_or("缺少寄存器地址参数")?;
+
+        let lsb: u8 = params
+            .get(1)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+
+        let msb: u8 = params
+            .get(2)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(15);
+
+        let reg_val: u16 = params
+            .get(3)
+            .and_then(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16).ok())
+            .ok_or("缺少寄存器值参数")?;
+
+        unsafe {
+            ffi::gh_protocol_reg_bitfield_write(handle, reg_addr, lsb, msb, reg_val);
+        }
+
+        info!("位域写入: addr=0x{:04X}, lsb={}, msb={}, val=0x{:04X}", reg_addr, lsb, msb, reg_val);
+        Ok(vec![])
+    }
+
+    fn execute_chip_ctrl_cmd(
+        &self,
+        handle: *mut ffi::GhProtocolHandle,
+        params: &[String],
+    ) -> Result<Vec<u8>, String> {
+        let ctrl_type: u8 = params
+            .first()
+            .and_then(|s| s.parse().ok())
+            .ok_or("缺少控制类型参数")?;
+
+        unsafe {
+            ffi::gh_protocol_chip_ctrl(handle, ctrl_type);
+        }
+
+        info!("芯片控制: type={}", ctrl_type);
+        Ok(vec![])
+    }
+
+    fn execute_download_config_cmd(
+        &self,
+        handle: *mut ffi::GhProtocolHandle,
+        params: &[String],
+    ) -> Result<Vec<u8>, String> {
+        let stage: u8 = params
+            .first()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+
+        unsafe {
+            ffi::gh_protocol_download_config(handle, stage);
+        }
+
+        info!("下载配置: stage={}", stage);
+        Ok(vec![])
+    }
+
+    fn execute_regs_list_write_cmd(
+        &self,
+        handle: *mut ffi::GhProtocolHandle,
+        params: &[String],
+    ) -> Result<Vec<u8>, String> {
+        let regs: Vec<u16> = params
+            .iter()
+            .filter_map(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16).ok())
+            .collect();
+
+        if regs.is_empty() {
+            return Err("寄存器列表为空".to_string());
+        }
+
+        let mut regs_mut = regs.clone();
+        unsafe {
+            ffi::gh_protocol_regs_list_write(handle, regs_mut.as_mut_ptr(), regs.len() as u16);
+        }
+
+        info!("寄存器列表写入: {} 个值", regs.len());
+        Ok(vec![])
+    }
+
+    fn execute_sw_function_cmd(
+        &self,
+        handle: *mut ffi::GhProtocolHandle,
+        params: &[String],
+    ) -> Result<Vec<u8>, String> {
+        let target_func_mode: u32 = params
+            .first()
+            .and_then(|s| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok())
+            .ok_or("缺少目标功能模式参数")?;
+
+        let ctrl_type: u8 = params
+            .get(1)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+
+        unsafe {
+            ffi::gh_protocol_sw_function_cmd(handle, target_func_mode, ctrl_type);
+        }
+
+        info!("软件功能命令: mode=0x{:08X}, ctrl={}", target_func_mode, ctrl_type);
+        Ok(vec![])
+    }
+
+    fn execute_low_power_cmd(
+        &self,
+        handle: *mut ffi::GhProtocolHandle,
+        params: &[String],
+    ) -> Result<Vec<u8>, String> {
+        let target_func_mode: u32 = params
+            .first()
+            .and_then(|s| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok())
+            .ok_or("缺少目标功能模式参数")?;
+
+        let ctrl_type: u8 = params
+            .get(1)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+
+        unsafe {
+            ffi::gh_protocol_low_power_cmd(handle, target_func_mode, ctrl_type);
+        }
+
+        info!("低功耗命令: mode=0x{:08X}, ctrl={}", target_func_mode, ctrl_type);
+        Ok(vec![])
+    }
+
+    fn execute_set_work_mode_cmd(
+        &self,
+        handle: *mut ffi::GhProtocolHandle,
+        params: &[String],
+    ) -> Result<Vec<u8>, String> {
+        let work_mode: u8 = params
+            .first()
+            .and_then(|s| s.parse().ok())
+            .ok_or("缺少工作模式参数")?;
+
+        unsafe {
+            ffi::gh_protocol_set_work_mode(handle, work_mode);
+        }
+
+        info!("设置工作模式: mode={}", work_mode);
+        Ok(vec![])
+    }
+
+    fn execute_timestamp_set_cmd(
+        &self,
+        handle: *mut ffi::GhProtocolHandle,
+        params: &[String],
+    ) -> Result<Vec<u8>, String> {
+        let timestamp: u32 = params
+            .first()
+            .and_then(|s| s.parse().ok())
+            .ok_or("缺少时间戳参数")?;
+
+        unsafe {
+            ffi::gh_protocol_timestamp_set(handle, timestamp);
+        }
+
+        info!("设置时间戳: {}", timestamp);
+        Ok(vec![])
+    }
+
+    fn execute_time_set_cmd(
+        &self,
+        handle: *mut ffi::GhProtocolHandle,
+        params: &[String],
+    ) -> Result<Vec<u8>, String> {
+        let timestamp: u32 = params
+            .first()
+            .and_then(|s| s.parse().ok())
+            .ok_or("缺少时间戳参数")?;
+
+        let hour_offset: i8 = params
+            .get(1)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(8);
+
+        unsafe {
+            ffi::gh_protocol_time_set(handle, timestamp, hour_offset);
+        }
+
+        info!("设置时间: timestamp={}, offset={}", timestamp, hour_offset);
+        Ok(vec![])
+    }
+
+    /// 订阅事件
+    ///
+    /// # 功能
+    /// 标记前端已准备好接收事件
+    ///
+    /// # 返回
+    /// 是否订阅成功
+    pub fn subscribe_events(&self) -> bool {
+        self.events_subscribed.store(true, std::sync::atomic::Ordering::SeqCst);
+        info!("GH3036 事件订阅已启用");
+        true
+    }
+
+    /// 检查是否已订阅事件
+    ///
+    /// # 返回
+    /// - `true`: 已订阅
+    /// - `false`: 未订阅
+    pub fn is_events_subscribed(&self) -> bool {
+        self.events_subscribed.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// 获取库状态
+    ///
+    /// # 返回
+    /// (是否已链接, 是否已初始化)
+    pub fn get_library_status(&self) -> (bool, bool) {
+        (ffi::is_linked(), self.is_initialized())
+    }
+
+    /// RX 数据接收（供设备管理器调用）
+    ///
+    /// # 功能
+    /// 将接收的数据传递给协议库处理
+    ///
+    /// # 参数
+    /// - `device_id`: 设备 ID
+    /// - `data`: 接收的数据
+    pub fn on_rx_data(&self, device_id: &str, data: &[u8]) {
+        self.on_data_received(device_id, data);
     }
 }
 

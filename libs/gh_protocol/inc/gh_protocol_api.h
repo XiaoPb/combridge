@@ -36,7 +36,7 @@ typedef void (*gh_protocol_frame_fn)(data_frame_t* frame);
 typedef struct {
     gh_protocol_lock_fn lock;
     gh_protocol_unlock_fn unlock;
-    gh_protocol_delay_fn delay;
+    gh_protocol_delay_fn delay;  ///< Delay function of 50ms
     gh_protocol_send_fn send;
     gh_protocol_event_fn event_callback;
     gh_protocol_frame_fn frame_callback;

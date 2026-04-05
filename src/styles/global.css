@@ -947,7 +947,11 @@ pre {
 
 .lang-btn:hover {
   background: var(--hover-bg);
-  border-color: var(--border-color);
+  border-color: var(--primary-color);
+}
+
+[data-theme='dark'] .lang-btn img {
+  filter: brightness(0) invert(1);
 }
 
 .window-controls {

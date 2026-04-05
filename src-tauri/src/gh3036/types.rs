@@ -74,68 +74,6 @@ impl GhFuncFixIdx {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-pub struct PackHeader {
-    pub rawdata_en: u32,
-    pub phy_value_en: u32,
-    pub gs_data_en: u32,
-    pub flags_en: u32,
-    pub alg_data_en: u32,
-    pub agc_info_en: u32,
-    pub timestamp_en: u32,
-    pub frameid_en: u32,
-    pub func_id_en: u32,
-    pub slot_cfg_en: u32,
-    pub reserved: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DataFrame {
-    pub pack_header: PackHeader,
-    pub slot_cfg: i32,
-    pub function_id: i32,
-    pub frame_id: i32,
-    pub timestamp: i32,
-    pub timestamp_high: i32,
-    pub agc_info: Vec<i32>,
-    pub agc_info_high: Vec<i32>,
-    pub algo_data: Vec<i32>,
-    pub algo_data_bits: i32,
-    pub flags: Vec<i32>,
-    pub flag_data_bits: i32,
-    pub gs_data: Vec<i32>,
-    pub gs_data_size: i32,
-    pub phy_value: Vec<i32>,
-    pub phy_value_size: i32,
-    pub rawdata: Vec<i32>,
-    pub rawdata_size: i32,
-}
-
-impl Default for DataFrame {
-    fn default() -> Self {
-        Self {
-            pack_header: PackHeader::default(),
-            slot_cfg: 0,
-            function_id: 0,
-            frame_id: 0,
-            timestamp: 0,
-            timestamp_high: 0,
-            agc_info: Vec::new(),
-            agc_info_high: Vec::new(),
-            algo_data: Vec::new(),
-            algo_data_bits: 0,
-            flags: Vec::new(),
-            flag_data_bits: 0,
-            gs_data: Vec::new(),
-            gs_data_size: 0,
-            phy_value: Vec::new(),
-            phy_value_size: 0,
-            rawdata: Vec::new(),
-            rawdata_size: 0,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Gh3036FrameData {
     pub function_id: i32,
@@ -150,8 +88,8 @@ pub struct Gh3036FrameData {
     pub phy_value: Vec<i32>,
 }
 
-impl From<&DataFrame> for Gh3036FrameData {
-    fn from(frame: &DataFrame) -> Self {
+impl Gh3036FrameData {
+    pub fn from_c_frame(frame: &super::ffi::DataFrame) -> Self {
         let func_id = frame.function_id;
         let func_name = GhFuncFixIdx::from_i32(func_id)
             .map(|f| f.name().to_string())
@@ -159,17 +97,55 @@ impl From<&DataFrame> for Gh3036FrameData {
         
         let timestamp = ((frame.timestamp_high as u64) << 32) | (frame.timestamp as u64);
         
+        let gs_data = if !frame.p_gs_data.is_null() && frame.gs_data_size > 0 {
+            unsafe { std::slice::from_raw_parts(frame.p_gs_data, frame.gs_data_size as usize).to_vec() }
+        } else {
+            vec![]
+        };
+        
+        let rawdata = if !frame.p_rawdata.is_null() && frame.rawdata_size > 0 {
+            unsafe { std::slice::from_raw_parts(frame.p_rawdata, frame.rawdata_size as usize).to_vec() }
+        } else {
+            vec![]
+        };
+        
+        let flags = if !frame.p_flags.is_null() && frame.flag_data_bits > 0 {
+            let len = (frame.flag_data_bits + 31) / 32;
+            unsafe { std::slice::from_raw_parts(frame.p_flags, len as usize).to_vec() }
+        } else {
+            vec![]
+        };
+        
+        let algo_data = if !frame.p_algo_data.is_null() && frame.algo_data_bits > 0 {
+            let len = (frame.algo_data_bits + 31) / 32;
+            unsafe { std::slice::from_raw_parts(frame.p_algo_data, len as usize).to_vec() }
+        } else {
+            vec![]
+        };
+        
+        let agc_info = if !frame.p_agc_info.is_null() && frame.agc_info_size > 0 {
+            unsafe { std::slice::from_raw_parts(frame.p_agc_info, frame.agc_info_size as usize).to_vec() }
+        } else {
+            vec![]
+        };
+        
+        let phy_value = if !frame.p_phy_value.is_null() && frame.phy_value_size > 0 {
+            unsafe { std::slice::from_raw_parts(frame.p_phy_value, frame.phy_value_size as usize).to_vec() }
+        } else {
+            vec![]
+        };
+        
         Self {
             function_id: func_id,
             function_name: func_name,
             frame_id: frame.frame_id,
             timestamp,
-            gs_data: frame.gs_data.clone(),
-            rawdata: frame.rawdata.clone(),
-            flags: frame.flags.clone(),
-            algo_data: frame.algo_data.clone(),
-            agc_info: frame.agc_info.clone(),
-            phy_value: frame.phy_value.clone(),
+            gs_data,
+            rawdata,
+            flags,
+            algo_data,
+            agc_info,
+            phy_value,
         }
     }
 }

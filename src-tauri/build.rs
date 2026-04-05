@@ -1,44 +1,23 @@
 fn main() {
-    compile_gh_protocol();
+    link_gh_protocol();
     tauri_build::build()
 }
 
-fn compile_gh_protocol() {
+fn link_gh_protocol() {
     let gh_protocol_dir = std::path::Path::new("../libs/gh_protocol");
+    let lib_path = gh_protocol_dir.join("build/Release");
     
-    if !gh_protocol_dir.exists() {
-        println!("cargo:warning=gh_protocol directory not found, skipping C library compilation");
+    if !lib_path.exists() {
+        println!("cargo:warning=gh_protocol.lib not found at {:?}, skipping C library linking", lib_path);
+        println!("cargo:warning=Please build gh_protocol first");
         return;
     }
 
-    let msvc_install_dir = std::path::Path::new("E:/Microsoft/VisualStudio/2022/Community/VC/Auxiliary/Build/vcvars64.bat");
+    println!("cargo:rustc-link-search=native={}", lib_path.display());
+    println!("cargo:rustc-link-lib=static=gh_protocol");
     
-    if std::env::var("VisualStudioVersion").is_err() {
-        println!("cargo:warning=Visual Studio environment not detected, skipping C library compilation");
-        println!("cargo:warning=Please run cargo build from Visual Studio Developer Command Prompt");
-        return;
-    }
-
-    let mut build = cc::Build::new();
-    
-    build
-        .file(gh_protocol_dir.join("src/staticmapimp.c"))
-        .file(gh_protocol_dir.join("src/slabmemory.c"))
-        .file(gh_protocol_dir.join("src/gh_rpccore.c"))
-        .file(gh_protocol_dir.join("src/gh_package.c"))
-        .file(gh_protocol_dir.join("src/gh_protocol_api.c"))
-        .file(gh_protocol_dir.join("impl/gh3036/gh_data_package.c"))
-        .include(gh_protocol_dir.join("inc"))
-        .include(gh_protocol_dir.join("impl/gh3036"))
-        .define("GH_GYRO_EN", "0")
-        .define("GH_GSENSOR_DEBUG_EN", "0")
-        .define("GH_MODULE_PROTOCOL_LOG_EN", "0")
-        .define("FLEXIBLE_ARRAY", "")
-        .warnings(false);
-    
-    build.compile("gh_protocol");
-    
-    println!("cargo:rerun-if-changed={}", gh_protocol_dir.join("src").display());
     println!("cargo:rerun-if-changed={}", gh_protocol_dir.join("inc").display());
-    println!("cargo:rerun-if-changed={}", gh_protocol_dir.join("impl/gh3036").display());
+    println!("cargo:rerun-if-changed={}", gh_protocol_dir.join("build/Release").display());
+    
+    println!("cargo:rustc-env=GH_PROTOCOL_LINKED=1");
 }

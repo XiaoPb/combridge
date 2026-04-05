@@ -9,7 +9,8 @@ use tracing::{debug, error, info};
 
 use crate::device::DeviceManager;
 use super::csv_writer::CsvWriter;
-use super::types::*;
+use super::ffi;
+use super::types::Gh3036FrameData;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ChannelType {
@@ -39,7 +40,45 @@ impl Default for CsvConfig {
     }
 }
 
+struct GhProtocolHandleWrapper {
+    handle: Option<*mut ffi::GhProtocolHandle>,
+}
+
+unsafe impl Send for GhProtocolHandleWrapper {}
+unsafe impl Sync for GhProtocolHandleWrapper {}
+
+impl GhProtocolHandleWrapper {
+    fn new() -> Self {
+        Self { handle: None }
+    }
+    
+    fn from_raw(handle: *mut ffi::GhProtocolHandle) -> Self {
+        Self { handle: Some(handle) }
+    }
+    
+    fn get(&self) -> Option<*mut ffi::GhProtocolHandle> {
+        self.handle
+    }
+    
+    fn take(&mut self) -> Option<*mut ffi::GhProtocolHandle> {
+        self.handle.take()
+    }
+}
+
+impl Drop for GhProtocolHandleWrapper {
+    fn drop(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            if !handle.is_null() && ffi::is_linked() {
+                unsafe {
+                    ffi::gh_protocol_destroy(handle);
+                }
+            }
+        }
+    }
+}
+
 pub struct Gh3036Manager {
+    handle: RwLock<GhProtocolHandleWrapper>,
     device_manager: Arc<DeviceManager>,
     app_handle: RwLock<Option<AppHandle>>,
     tx_channel: RwLock<Option<ChannelConfig>>,
@@ -55,6 +94,7 @@ unsafe impl Sync for Gh3036Manager {}
 impl Gh3036Manager {
     pub fn new(device_manager: Arc<DeviceManager>) -> Self {
         Self {
+            handle: RwLock::new(GhProtocolHandleWrapper::new()),
             device_manager,
             app_handle: RwLock::new(None),
             tx_channel: RwLock::new(None),
@@ -74,11 +114,59 @@ impl Gh3036Manager {
         *self.initialized.read().await
     }
 
+    pub fn is_library_linked() -> bool {
+        ffi::is_linked()
+    }
+
     pub async fn initialize(&self) -> Result<(), String> {
-        let mut initialized = self.initialized.write().await;
-        *initialized = true;
-        info!("GH3036 协议管理器初始化成功");
+        if !ffi::is_linked() {
+            info!("GH3036 C 库未链接，使用纯 Rust 模式");
+            let mut initialized = self.initialized.write().await;
+            *initialized = true;
+            return Ok(());
+        }
+
+        {
+            let handle_guard = self.handle.read().await;
+            if handle_guard.get().is_some() {
+                return Ok(());
+            }
+        }
+
+        let config = ffi::GhProtocolConfig {
+            lock: None,
+            unlock: None,
+            delay: None,
+            send: Some(Self::send_callback),
+            event_callback: None,
+            frame_callback: Some(Self::frame_callback),
+        };
+
+        let new_handle = unsafe { ffi::gh_protocol_create(&config) };
+        if new_handle.is_null() {
+            return Err("创建 GH3036 协议实例失败".to_string());
+        }
+
+        let wrapped_handle = GhProtocolHandleWrapper::from_raw(new_handle);
+        
+        {
+            let mut handle_guard = self.handle.write().await;
+            *handle_guard = wrapped_handle;
+        }
+        
+        {
+            let mut initialized = self.initialized.write().await;
+            *initialized = true;
+        }
+        
+        info!("GH3036 协议管理器初始化成功 (C 库模式)");
         Ok(())
+    }
+
+    unsafe extern "C" fn send_callback(_data: *mut std::ffi::c_void, _size: std::os::raw::c_int) {
+    }
+
+    unsafe extern "C" fn frame_callback(_frame: *mut ffi::DataFrame) {
     }
 
     pub async fn configure_tx_channel(&self, config: ChannelConfig) -> Result<(), String> {
@@ -154,6 +242,22 @@ impl Gh3036Manager {
             return None;
         }
 
+        if ffi::is_linked() {
+            let mut frame: ffi::DataFrame = unsafe { std::mem::zeroed() };
+            let result = unsafe {
+                ffi::gh_protocol_bytes_to_frame(
+                    data.as_ptr() as *mut u8,
+                    data.len() as i32,
+                    &mut frame,
+                )
+            };
+            
+            if result >= 0 {
+                return Some(Gh3036FrameData::from_c_frame(&frame));
+            }
+            return None;
+        }
+
         let function_id = if data.len() > 2 { data[2] as i32 } else { 0 };
         let frame_id = if data.len() > 3 { data[3] as i32 } else { 0 };
         
@@ -162,7 +266,7 @@ impl Gh3036Manager {
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
 
-        let func_name = GhFuncFixIdx::from_i32(function_id)
+        let func_name = super::types::GhFuncFixIdx::from_i32(function_id)
             .map(|f| f.name().to_string())
             .unwrap_or_else(|| format!("UNKNOWN_{}", function_id));
 
@@ -209,9 +313,5 @@ impl Gh3036Manager {
         if let Err(e) = writer.write_frame(frame_data) {
             error!("CSV 写入失败: {}", e);
         }
-    }
-
-    pub fn get_rpc_commands() -> Vec<RpcCommand> {
-        get_rpc_commands()
     }
 }

@@ -1,4 +1,5 @@
 pub mod csv_writer;
+pub mod ffi;
 pub mod manager;
 pub mod types;
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Layout } from 'antd';
 import Sidebar from './Sidebar';
+import TitleBar from '../TitleBar';
 
 const { Content } = Layout;
 
@@ -13,21 +14,24 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   return (
     <Layout style={{ height: '100vh' }}>
-      <Sidebar collapsed={collapsed} onCollapse={setCollapsed} />
+      <TitleBar />
       <Layout style={{ flex: 1 }}>
-        <Content
-          style={{
-            margin: '8px',
-            padding: '8px',
-            background: 'var(--bg-primary)',
-            borderRadius: 'var(--border-radius)',
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          {children}
-        </Content>
+        <Sidebar collapsed={collapsed} onCollapse={setCollapsed} />
+        <Layout style={{ flex: 1 }}>
+          <Content
+            style={{
+              margin: '8px',
+              padding: '8px',
+              background: 'var(--bg-primary)',
+              borderRadius: 'var(--border-radius)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            {children}
+          </Content>
+        </Layout>
       </Layout>
     </Layout>
   );

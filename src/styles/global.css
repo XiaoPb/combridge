@@ -812,3 +812,131 @@ pre {
 [data-theme='dark'] .ant-segmented-thumb {
   background-color: var(--bg-primary);
 }
+
+/* 标题栏样式 */
+.title-bar {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.title-bar-left {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.app-logo {
+  font-size: 16px;
+}
+
+.app-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--primary-color);
+}
+
+.title-bar-tabs {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 2px;
+  padding: 0 8px;
+  overflow: hidden;
+}
+
+.title-tabs-container {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.title-tabs-container::-webkit-scrollbar {
+  height: 0;
+}
+
+.title-bar-tab {
+  padding: 4px 12px;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.title-bar-tab:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.title-bar-tab.active {
+  background: var(--item-active-bg);
+  color: var(--primary-color);
+}
+
+.title-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 4px;
+  flex-shrink: 0;
+}
+
+.lang-btn {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 22px;
+  border-radius: var(--border-radius);
+  transition: background-color 0.2s;
+  border: 1px solid var(--border-color);
+}
+
+.lang-btn:hover {
+  background: var(--hover-bg);
+}
+
+.window-controls {
+  display: flex;
+  align-items: center;
+}
+
+.window-controls button {
+  width: 46px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: background-color 0.2s;
+}
+
+.window-controls button:hover {
+  background: var(--hover-bg);
+}
+
+.window-controls .close-btn:hover {
+  background: #ff4d4f;
+  color: #fff;
+}

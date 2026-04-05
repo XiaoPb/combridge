@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Form, Select, Input, Button, Space, Typography, Divider, Alert, Table, Tag } from 'antd';
 import { SendOutlined, ClearOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import type { SerialPortInfo } from '../../types';
 
 const { Text, Paragraph } = Typography;
@@ -12,20 +13,6 @@ interface AtCommandConfig {
   description: string;
   params?: string;
 }
-
-const AT_COMMANDS: AtCommandConfig[] = [
-  { name: '复位', command: 'AT+RESET', description: '复位模块' },
-  { name: '版本', command: 'AT+VERSION', description: '查询固件版本' },
-  { name: '设置名称', command: 'AT+NAME', description: '设置设备名称', params: '名称' },
-  { name: '查询名称', command: 'AT+NAME?', description: '查询当前设备名称' },
-  { name: '设置波特率', command: 'AT+BAUD', description: '设置串口波特率', params: '波特率' },
-  { name: '查询波特率', command: 'AT+BAUD?', description: '查询当前波特率' },
-  { name: '设置广播间隔', command: 'AT+ADVI', description: '设置广播间隔', params: '间隔(ms)' },
-  { name: '设置连接间隔', command: 'AT+CONN', description: '设置连接参数' },
-  { name: '进入休眠', command: 'AT+SLEEP', description: '进入低功耗模式' },
-  { name: '唤醒', command: 'AT+WAKEUP', description: '从休眠唤醒' },
-  { name: '恢复出厂', command: 'AT+DEFAULT', description: '恢复出厂设置' },
-];
 
 interface AtConfigPanelProps {
   ports: SerialPortInfo[];
@@ -47,11 +34,26 @@ const AtConfigPanel: React.FC<AtConfigPanelProps> = ({
   onPortChange,
   onSendCommand,
 }) => {
+  const { t } = useTranslation('ble');
   const [form] = Form.useForm();
   const [customCommand, setCustomCommand] = useState('');
   const [commandParam, setCommandParam] = useState('');
   const [logs, setLogs] = useState<AtLogEntry[]>([]);
   const [selectedCommand, setSelectedCommand] = useState<string | null>(null);
+
+  const AT_COMMANDS: AtCommandConfig[] = [
+    { name: t('atCommand.reset'), command: 'AT+RESET', description: t('atCommand.resetDesc') },
+    { name: t('atCommand.version'), command: 'AT+VERSION', description: t('atCommand.versionDesc') },
+    { name: t('atCommand.setName'), command: 'AT+NAME', description: t('atCommand.setNameDesc'), params: t('label.name') },
+    { name: t('atCommand.queryName'), command: 'AT+NAME?', description: t('atCommand.queryNameDesc') },
+    { name: t('atCommand.setBaud'), command: 'AT+BAUD', description: t('atCommand.setBaudDesc'), params: t('label.baudRate', { ns: 'serial' }) },
+    { name: t('atCommand.queryBaud'), command: 'AT+BAUD?', description: t('atCommand.queryBaudDesc') },
+    { name: t('atCommand.setAdvInterval'), command: 'AT+ADVI', description: t('atCommand.setAdvIntervalDesc'), params: 'ms' },
+    { name: t('atCommand.setConnInterval'), command: 'AT+CONN', description: t('atCommand.setConnIntervalDesc') },
+    { name: t('atCommand.sleep'), command: 'AT+SLEEP', description: t('atCommand.sleepDesc') },
+    { name: t('atCommand.wakeup'), command: 'AT+WAKEUP', description: t('atCommand.wakeupDesc') },
+    { name: t('atCommand.factoryReset'), command: 'AT+DEFAULT', description: t('atCommand.factoryResetDesc') },
+  ];
 
   const addLog = (direction: 'send' | 'receive', data: string) => {
     const entry: AtLogEntry = {
@@ -90,24 +92,24 @@ const AtConfigPanel: React.FC<AtConfigPanelProps> = ({
 
   const columns = [
     {
-      title: '时间',
+      title: t('label.time'),
       dataIndex: 'timestamp',
       key: 'timestamp',
       width: 100,
     },
     {
-      title: '方向',
+      title: t('label.direction'),
       dataIndex: 'direction',
       key: 'direction',
       width: 80,
       render: (dir: string) => (
         <Tag color={dir === 'send' ? 'blue' : 'green'}>
-          {dir === 'send' ? '发送' : '接收'}
+          {dir === 'send' ? t('display.send', { ns: 'serial' }) : t('display.receive', { ns: 'serial' })}
         </Tag>
       ),
     },
     {
-      title: '数据',
+      title: t('label.data'),
       dataIndex: 'data',
       key: 'data',
       render: (data: string) => <Text code>{data}</Text>,
@@ -115,21 +117,21 @@ const AtConfigPanel: React.FC<AtConfigPanelProps> = ({
   ];
 
   return (
-    <Card title="AT 指令配置" size="small">
+    <Card title={t('title.atCommandConfig')} size="small">
       <Space vertical style={{ width: '100%' }}>
         <Alert
-          title="AT 模式说明"
-          description="通过串口发送 AT 指令控制 BLE 模块。请先选择串口并确保模块已正确连接。"
+          title={t('mode.at')}
+          description={t('mode.atDesc')}
           type="info"
           showIcon
         />
 
         <Form form={form} layout="vertical" size="small">
-          <Form.Item label="串口选择">
+          <Form.Item label={t('label.selectSerial')}>
             <Select
               value={selectedPort}
               onChange={onPortChange}
-              placeholder="选择串口"
+              placeholder={t('placeholder.selectPort')}
               options={ports.map((p) => ({
                 label: p.name,
                 value: p.name,
@@ -138,12 +140,12 @@ const AtConfigPanel: React.FC<AtConfigPanelProps> = ({
           </Form.Item>
         </Form>
 
-        <Divider style={{ margin: '12px 0' }}>预设指令</Divider>
+        <Divider style={{ margin: '12px 0' }}>{t('label.presetCommands')}</Divider>
 
         <Select
           value={selectedCommand}
           onChange={(v) => setSelectedCommand(v)}
-          placeholder="选择预设指令"
+          placeholder={t('placeholder.selectPresetCommand')}
           style={{ width: '100%' }}
           options={AT_COMMANDS.map((cmd) => ({
             label: `${cmd.name} (${cmd.command})`,
@@ -158,7 +160,7 @@ const AtConfigPanel: React.FC<AtConfigPanelProps> = ({
             </Paragraph>
             {AT_COMMANDS.find((c) => c.command === selectedCommand)?.params && (
               <Input
-                placeholder={`输入参数: ${AT_COMMANDS.find((c) => c.command === selectedCommand)?.params}`}
+                placeholder={`${t('placeholder.inputParam')}: ${AT_COMMANDS.find((c) => c.command === selectedCommand)?.params}`}
                 value={commandParam}
                 onChange={(e) => setCommandParam(e.target.value)}
               />
@@ -169,17 +171,17 @@ const AtConfigPanel: React.FC<AtConfigPanelProps> = ({
               onClick={handleSendPreset}
               disabled={!selectedPort}
             >
-              发送指令
+              {t('button.sendCommand')}
             </Button>
           </>
         )}
 
-        <Divider style={{ margin: '12px 0' }}>自定义指令</Divider>
+        <Divider style={{ margin: '12px 0' }}>{t('label.customCommand')}</Divider>
 
         <TextArea
           value={customCommand}
           onChange={(e) => setCustomCommand(e.target.value)}
-          placeholder="输入自定义 AT 指令"
+          placeholder={t('placeholder.inputCustomAt')}
           rows={2}
         />
         <Button
@@ -188,10 +190,10 @@ const AtConfigPanel: React.FC<AtConfigPanelProps> = ({
           onClick={handleSendCustom}
           disabled={!selectedPort || !customCommand.trim()}
         >
-          发送
+          {t('button.send')}
         </Button>
 
-        <Divider style={{ margin: '12px 0' }}>通信日志</Divider>
+        <Divider style={{ margin: '12px 0' }}>{t('label.commLog')}</Divider>
 
         <div style={{ marginBottom: 8 }}>
           <Button
@@ -199,7 +201,7 @@ const AtConfigPanel: React.FC<AtConfigPanelProps> = ({
             icon={<ClearOutlined />}
             onClick={handleClearLogs}
           >
-            清空日志
+            {t('button.clearLog')}
           </Button>
         </div>
 
@@ -209,7 +211,7 @@ const AtConfigPanel: React.FC<AtConfigPanelProps> = ({
           size="small"
           pagination={false}
           scroll={{ y: 200 }}
-          locale={{ emptyText: '暂无日志' }}
+          locale={{ emptyText: t('placeholder.noLog') }}
         />
       </Space>
     </Card>

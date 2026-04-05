@@ -3,13 +3,19 @@
     "loadProtocol": "加载协议",
     "protocolList": "协议列表",
     "scriptEditor": "脚本编辑器",
-    "bindConfig": "绑定配置"
+    "bindConfig": "绑定配置",
+    "protocolBind": "协议绑定"
   },
   "label": {
     "protocolId": "协议 ID",
     "scriptPath": "脚本路径",
     "state": "状态",
-    "bindings": "绑定"
+    "bindings": "绑定",
+    "protocol": "协议",
+    "device": "设备",
+    "noProtocol": "暂无协议",
+    "name": "名称",
+    "description": "描述"
   },
   "state": {
     "enabled": "已启用",
@@ -24,13 +30,55 @@
     "unload": "卸载",
     "edit": "编辑",
     "bind": "绑定",
-    "unbind": "解绑"
+    "unbind": "解绑",
+    "save": "保存",
+    "run": "运行",
+    "stop": "停止"
   },
   "placeholder": {
     "protocolId": "输入协议唯一标识，如: my-protocol",
-    "scriptPath": "输入 Lua 脚本文件路径"
+    "scriptPath": "输入 Lua 脚本文件路径",
+    "selectProtocol": "选择协议",
+    "selectDevice": "选择设备",
+    "noBindings": "暂无绑定配置"
   },
   "message": {
-    "totalProtocols": "共 {{total}} 个协议，{{enabled}} 个已启用"
+    "totalProtocols": "共 {{total}} 个协议，{{enabled}} 个已启用",
+    "loadSuccess": "协议加载成功",
+    "loadFailed": "协议加载失败",
+    "enableSuccess": "协议已启用",
+    "disableSuccess": "协议已禁用",
+    "unloadSuccess": "协议已卸载",
+    "bindSuccess": "绑定成功",
+    "unbindSuccess": "解绑成功",
+    "selectProtocolDevice": "请选择协议和设备",
+    "bindingExists": "该绑定已存在",
+    "noEnabledProtocol": "暂无已启用的协议",
+    "noAvailableDevice": "暂无可用设备"
+  },
+  "tooltip": {
+    "enable": "启用协议",
+    "disable": "禁用协议",
+    "edit": "编辑脚本",
+    "unload": "卸载协议"
+  },
+  "editor": {
+    "title": "脚本编辑器",
+    "save": "保存",
+    "run": "运行",
+    "format": "格式化",
+    "unsaved": "未保存"
+  },
+  "bind": {
+    "title": "协议绑定配置",
+    "protocol": "协议",
+    "device": "设备",
+    "bind": "绑定",
+    "unbind": "解绑",
+    "noBinding": "暂无绑定",
+    "noEnabledProtocol": "暂无已启用的协议，请先启用协议后再进行绑定",
+    "noAvailableDevice": "暂无可用设备，请先打开串口或连接设备",
+    "clickBindHint": "选择协议和设备后点击\"绑定\"按钮",
+    "confirmUnbind": "确定要解绑吗？"
   }
 }

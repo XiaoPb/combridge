@@ -3,13 +3,19 @@
     "loadProtocol": "Load Protocol",
     "protocolList": "Protocol List",
     "scriptEditor": "Script Editor",
-    "bindConfig": "Bind Configuration"
+    "bindConfig": "Bind Configuration",
+    "protocolBind": "Protocol Binding"
   },
   "label": {
     "protocolId": "Protocol ID",
     "scriptPath": "Script Path",
     "state": "State",
-    "bindings": "Bindings"
+    "bindings": "Bindings",
+    "protocol": "Protocol",
+    "device": "Device",
+    "noProtocol": "No protocols",
+    "name": "Name",
+    "description": "Description"
   },
   "state": {
     "enabled": "Enabled",
@@ -24,13 +30,55 @@
     "unload": "Unload",
     "edit": "Edit",
     "bind": "Bind",
-    "unbind": "Unbind"
+    "unbind": "Unbind",
+    "save": "Save",
+    "run": "Run",
+    "stop": "Stop"
   },
   "placeholder": {
     "protocolId": "Enter unique protocol ID, e.g.: my-protocol",
-    "scriptPath": "Enter Lua script file path"
+    "scriptPath": "Enter Lua script file path",
+    "selectProtocol": "Select protocol",
+    "selectDevice": "Select device",
+    "noBindings": "No bindings"
   },
   "message": {
-    "totalProtocols": "{{total}} protocols, {{enabled}} enabled"
+    "totalProtocols": "{{total}} protocols, {{enabled}} enabled",
+    "loadSuccess": "Protocol loaded successfully",
+    "loadFailed": "Failed to load protocol",
+    "enableSuccess": "Protocol enabled",
+    "disableSuccess": "Protocol disabled",
+    "unloadSuccess": "Protocol unloaded",
+    "bindSuccess": "Bound successfully",
+    "unbindSuccess": "Unbound successfully",
+    "selectProtocolDevice": "Please select protocol and device",
+    "bindingExists": "Binding already exists",
+    "noEnabledProtocol": "No enabled protocols",
+    "noAvailableDevice": "No available devices"
+  },
+  "tooltip": {
+    "enable": "Enable protocol",
+    "disable": "Disable protocol",
+    "edit": "Edit script",
+    "unload": "Unload protocol"
+  },
+  "editor": {
+    "title": "Script Editor",
+    "save": "Save",
+    "run": "Run",
+    "format": "Format",
+    "unsaved": "Unsaved"
+  },
+  "bind": {
+    "title": "Protocol Binding Configuration",
+    "protocol": "Protocol",
+    "device": "Device",
+    "bind": "Bind",
+    "unbind": "Unbind",
+    "noBinding": "No bindings",
+    "noEnabledProtocol": "No enabled protocols. Please enable a protocol first",
+    "noAvailableDevice": "No available devices. Please open a port or connect a device first",
+    "clickBindHint": "Select protocol and device then click \"Bind\" button",
+    "confirmUnbind": "Are you sure you want to unbind?"
   }
 }

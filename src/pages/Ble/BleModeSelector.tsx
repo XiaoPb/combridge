@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, Radio, Select, Space, Typography, Alert } from 'antd';
 import { ApiOutlined, UsbOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import type { BleMode } from '../../stores/bleStore';
 
 const { Text } = Typography;
@@ -20,11 +21,13 @@ const BleModeSelector: React.FC<BleModeSelectorProps> = ({
   onModeChange,
   onSerialPortChange,
 }) => {
+  const { t } = useTranslation('ble');
+
   return (
-    <Card title="BLE 模式配置" size="small">
+    <Card title={t('title.bleModeConfig')} size="small">
       <Space vertical style={{ width: '100%' }}>
         <div>
-          <Text type="secondary">选择 BLE 工作模式：</Text>
+          <Text type="secondary">{t('label.selectBleMode')}</Text>
           <Radio.Group
             value={mode}
             onChange={(e) => onModeChange(e.target.value)}
@@ -33,13 +36,13 @@ const BleModeSelector: React.FC<BleModeSelectorProps> = ({
             <Radio.Button value="native">
               <Space>
                 <ApiOutlined />
-                Native 模式
+                {t('mode.native')}
               </Space>
             </Radio.Button>
             <Radio.Button value="at">
               <Space>
                 <UsbOutlined />
-                AT 模式
+                {t('mode.at')}
               </Space>
             </Radio.Button>
           </Radio.Group>
@@ -47,8 +50,8 @@ const BleModeSelector: React.FC<BleModeSelectorProps> = ({
 
         {mode === 'native' && (
           <Alert
-            title="Native 模式"
-            description="使用系统原生 BLE 适配器进行蓝牙通信，支持完整的 BLE 功能。"
+            title={t('mode.native')}
+            description={t('mode.nativeDesc')}
             type="info"
             showIcon
           />
@@ -57,11 +60,11 @@ const BleModeSelector: React.FC<BleModeSelectorProps> = ({
         {mode === 'at' && (
           <>
             <div>
-              <Text type="secondary">选择串口设备：</Text>
+              <Text type="secondary">{t('label.selectSerialPort')}</Text>
               <Select
                 value={serialPort}
                 onChange={onSerialPortChange}
-                placeholder="选择串口"
+                placeholder={t('placeholder.selectPort')}
                 style={{ width: '100%', marginTop: 8 }}
                 options={ports.map((p) => ({
                   label: p.name,
@@ -70,8 +73,8 @@ const BleModeSelector: React.FC<BleModeSelectorProps> = ({
               />
             </div>
             <Alert
-              title="AT 模式"
-              description="通过串口连接 BLE 模块（如 HC-08、CC2541 等），使用 AT 指令进行通信。"
+              title={t('mode.at')}
+              description={t('mode.atDesc')}
               type="info"
               showIcon
             />

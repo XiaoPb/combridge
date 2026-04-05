@@ -2,11 +2,17 @@
   "title": {
     "configPanel": "配置面板",
     "gattTree": "GATT 服务树",
-    "dataView": "数据视图"
+    "dataView": "数据视图",
+    "deviceScan": "设备扫描",
+    "characteristicPanel": "特征操作面板",
+    "bleModeConfig": "BLE 模式配置",
+    "atCommandConfig": "AT 指令配置"
   },
   "mode": {
     "native": "原生模式",
-    "at": "AT 模式"
+    "at": "AT 模式",
+    "nativeDesc": "使用系统原生 BLE 适配器进行蓝牙通信，支持完整的 BLE 功能。",
+    "atDesc": "通过串口连接 BLE 模块（如 HC-08、CC2541 等），使用 AT 指令进行通信。"
   },
   "label": {
     "scanTimeout": "扫描超时",
@@ -16,7 +22,27 @@
     "rssi": "信号强度",
     "services": "服务",
     "characteristics": "特征",
-    "properties": "属性"
+    "properties": "属性",
+    "unnamed": "未命名",
+    "macAddress": "MAC 地址",
+    "status": "状态",
+    "operation": "操作",
+    "selectBleMode": "选择 BLE 工作模式：",
+    "selectSerialPort": "选择串口设备：",
+    "uuid": "UUID",
+    "name": "名称",
+    "writeMode": "写入",
+    "writeSupport": "写入: 支持",
+    "writeNoResponse": "写入: 无响应写入",
+    "writeWithResponse": "写入: 响应写入",
+    "selectSerial": "串口选择",
+    "presetCommands": "预设指令",
+    "customCommand": "自定义指令",
+    "commLog": "通信日志",
+    "time": "时间",
+    "direction": "方向",
+    "data": "数据",
+    "scanDuration": "扫描时长"
   },
   "button": {
     "startScan": "开始扫描",
@@ -28,42 +54,113 @@
     "subscribe": "订阅",
     "unsubscribe": "取消订阅",
     "export": "导出",
-    "clear": "清空"
+    "clear": "清空",
+    "send": "发送",
+    "sendCommand": "发送指令",
+    "clearLog": "清空日志",
+    "stop": "停止",
+    "scan": "扫描"
   },
   "status": {
     "scanning": "扫描中...",
+    "scanningDevices": "正在扫描设备...",
     "connecting": "正在连接...",
     "discovering": "正在发现服务...",
     "connected": "已连接",
-    "disconnected": "已断开"
+    "disconnected": "未连接",
+    "subscribed": "已订阅"
   },
   "placeholder": {
     "noDevices": "未发现设备",
+    "noDevicesClickScan": "暂无设备，点击扫描按钮开始",
     "noServices": "暂无服务数据",
     "noLogs": "暂无交互日志...",
-    "selectCharacteristic": "请选择特征值"
+    "noLog": "暂无日志",
+    "selectCharacteristic": "请从 GATT 服务树中选择一个特征",
+    "inputData": "请输入数据",
+    "inputHex": "输入十六进制数据，如：01 02 03 FF",
+    "inputText": "输入要发送的文本数据",
+    "filterByName": "按名称过滤设备",
+    "selectPresetCommand": "选择预设指令",
+    "inputParam": "输入参数",
+    "inputCustomAt": "输入自定义 AT 指令",
+    "selectPort": "选择串口",
+    "selectProtocol": "选择协议",
+    "selectDevice": "选择设备"
   },
   "characteristic": {
     "read": "读",
     "write": "写",
     "writeWithoutResponse": "无响应写",
     "notify": "通知",
-    "indicate": "指示"
+    "indicate": "指示",
+    "notSupportWrite": "该特征不支持写入操作"
   },
   "input": {
     "format": "输入格式",
-    "withoutResponse": "无响应写入"
+    "withoutResponse": "无响应写入",
+    "waitResponse": "等待响应",
+    "noResponse": "无响应"
   },
   "message": {
     "loadPrefsFailed": "加载偏好设置失败",
     "restoreFailed": "恢复连接设备失败",
     "discoverFailed": "发现特征失败",
-    "saveLogFailed": "保存日志失败"
+    "saveLogFailed": "保存日志失败",
+    "selectProtocolDevice": "请选择协议和设备",
+    "bindingExists": "该绑定已存在"
   },
   "tooltip": {
     "collapseTree": "折叠服务树",
     "expandTree": "展开服务树",
     "autoScrollOn": "自动滚动: 开启",
-    "autoScrollOff": "自动滚动: 关闭"
+    "autoScrollOff": "自动滚动: 关闭",
+    "subscribeNotify": "订阅通知",
+    "unsubscribeNotify": "取消订阅通知",
+    "readValue": "读取特征值",
+    "enable": "启用",
+    "disable": "禁用",
+    "edit": "编辑",
+    "unload": "卸载",
+    "copy": "复制",
+    "undo": "撤销",
+    "fullscreen": "全屏",
+    "exitFullscreen": "退出全屏"
+  },
+  "atCommand": {
+    "reset": "复位",
+    "resetDesc": "复位模块",
+    "version": "版本",
+    "versionDesc": "查询固件版本",
+    "setName": "设置名称",
+    "setNameDesc": "设置设备名称",
+    "queryName": "查询名称",
+    "queryNameDesc": "查询当前设备名称",
+    "setBaud": "设置波特率",
+    "setBaudDesc": "设置串口波特率",
+    "queryBaud": "查询波特率",
+    "queryBaudDesc": "查询当前波特率",
+    "setAdvInterval": "设置广播间隔",
+    "setAdvIntervalDesc": "设置广播间隔",
+    "setConnInterval": "设置连接间隔",
+    "setConnIntervalDesc": "设置连接参数",
+    "sleep": "进入休眠",
+    "sleepDesc": "进入低功耗模式",
+    "wakeup": "唤醒",
+    "wakeupDesc": "从休眠唤醒",
+    "factoryReset": "恢复出厂",
+    "factoryResetDesc": "恢复出厂设置"
+  },
+  "bind": {
+    "title": "协议绑定配置",
+    "protocol": "协议",
+    "device": "设备",
+    "bind": "绑定",
+    "unbind": "解绑",
+    "noBinding": "暂无绑定",
+    "noEnabledProtocol": "暂无已启用的协议，请先启用协议后再进行绑定",
+    "noAvailableDevice": "暂无可用设备，请先打开串口或连接设备",
+    "clickBindHint": "选择协议和设备后点击\"绑定\"按钮",
+    "confirmUnbind": "确定要解绑吗？"
   }
 }

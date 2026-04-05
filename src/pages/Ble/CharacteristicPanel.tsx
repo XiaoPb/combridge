@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Button, Input, Segmented, Typography, Tag, message, Tooltip } from 'antd';
 import { ReadOutlined, SendOutlined, BellOutlined, BellFilled, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import type { BleCharacteristic } from '../../types';
 import { getShortUuid } from '../../stores/bleStore';
 import { getCharacteristicName } from '../../types/ble';
@@ -37,6 +38,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
   onSubscribe,
   onUnsubscribe,
 }) => {
+  const { t } = useTranslation('ble');
   const [inputData, setInputData] = useState('');
 
   if (!characteristic) {
@@ -44,7 +46,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
       <Card 
         title={
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ fontSize: 13 }}>特征操作面板</Text>
+            <Text style={{ fontSize: 13 }}>{t('title.characteristicPanel')}</Text>
             <Button
               type="text"
               size="small"
@@ -57,7 +59,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
         styles={{ body: { display: collapsed ? 'none' : 'block', padding: 8 } }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 180, color: '#999' }}>
-          请从 GATT 服务树中选择一个特征
+          {t('placeholder.selectCharacteristic')}
         </div>
       </Card>
     );
@@ -70,7 +72,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
 
   const handleWrite = () => {
     if (!inputData.trim()) {
-      message.warning('请输入数据');
+      message.warning(t('placeholder.inputData'));
       return;
     }
     onWrite(uuid, inputData, inputFormat, withoutResponse);
@@ -86,11 +88,11 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
 
   const getWriteModeText = () => {
     if (properties.write && properties.writeWithoutResponse) {
-      return '写入: 支持';
+      return t('label.writeSupport');
     } else if (properties.writeWithoutResponse) {
-      return '写入: 无响应写入';
+      return t('label.writeNoResponse');
     } else if (properties.write) {
-      return '写入: 响应写入';
+      return t('label.writeWithResponse');
     }
     return '';
   };
@@ -99,7 +101,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
     <Card 
       title={
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text style={{ fontSize: 13 }}>特征操作面板</Text>
+          <Text style={{ fontSize: 13 }}>{t('title.characteristicPanel')}</Text>
           <Button
             type="text"
             size="small"
@@ -114,41 +116,41 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
       <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexShrink: 0 }}>
         <div style={{ flex: '1 1 0', minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <Text type="secondary" style={{ fontSize: 12, flexShrink: 0 }}>UUID:</Text>
+            <Text type="secondary" style={{ fontSize: 12, flexShrink: 0 }}>{t('label.uuid')}:</Text>
             <Text code style={{ fontSize: 11, wordBreak: 'break-all' }}>{uuid}</Text>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Text type="secondary" style={{ fontSize: 12, flexShrink: 0 }}>名称:</Text>
+            <Text type="secondary" style={{ fontSize: 12, flexShrink: 0 }}>{t('label.name')}:</Text>
             <Text style={{ fontSize: 12 }}>{getCharacteristicName(uuid)} (0x{getShortUuid(uuid)})</Text>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
             <Text type="secondary" style={{ fontSize: 12 }}>{getWriteModeText()}</Text>
-            {properties.notify && <Tag color="orange" style={{ fontSize: 10, padding: '0 4px', margin: 0 }}>通知</Tag>}
-            {properties.indicate && <Tag color="purple" style={{ fontSize: 10, padding: '0 4px', margin: 0 }}>指示</Tag>}
+            {properties.notify && <Tag color="orange" style={{ fontSize: 10, padding: '0 4px', margin: 0 }}>{t('characteristic.notify')}</Tag>}
+            {properties.indicate && <Tag color="purple" style={{ fontSize: 10, padding: '0 4px', margin: 0 }}>{t('characteristic.indicate')}</Tag>}
           </div>
         </div>
         
         <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
           {canNotify && (
-            <Tooltip title={isSubscribed ? '取消订阅通知' : '订阅通知'}>
+            <Tooltip title={isSubscribed ? t('tooltip.unsubscribeNotify') : t('tooltip.subscribeNotify')}>
               <Button
                 size="small"
                 type={isSubscribed ? 'primary' : 'default'}
                 icon={isSubscribed ? <BellFilled /> : <BellOutlined />}
                 onClick={handleSubscribeToggle}
               >
-                {isSubscribed ? '已订阅' : '订阅'}
+                {isSubscribed ? t('status.subscribed') : t('button.subscribe')}
               </Button>
             </Tooltip>
           )}
           {canRead && (
-            <Tooltip title="读取特征值">
+            <Tooltip title={t('tooltip.readValue')}>
               <Button
                 size="small"
                 icon={<ReadOutlined />}
                 onClick={() => onRead(uuid)}
               >
-                读取
+                {t('button.read')}
               </Button>
             </Tooltip>
           )}
@@ -160,7 +162,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
           <TextArea
             value={inputData}
             onChange={(e) => setInputData(e.target.value)}
-            placeholder={inputFormat === 'hex' ? '输入十六进制数据，如：01 02 03 FF' : '输入要发送的文本数据'}
+            placeholder={inputFormat === 'hex' ? t('placeholder.inputHex') : t('placeholder.inputText')}
             style={{ 
               flex: '1 1 0', 
               resize: 'none',
@@ -186,8 +188,8 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
                 onChange={(value) => onWithoutResponseChange(value === 'noResponse')}
                 size="small"
                 options={[
-                  { value: 'withResponse', label: '等待响应' },
-                  { value: 'noResponse', label: '无响应' },
+                  { value: 'withResponse', label: t('input.waitResponse') },
+                  { value: 'noResponse', label: t('input.noResponse') },
                 ]}
               />
             )}
@@ -199,7 +201,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
               disabled={!inputData.trim()}
               block
             >
-              发送
+              {t('button.send')}
             </Button>
           </div>
         </div>
@@ -207,7 +209,7 @@ const CharacteristicPanel: React.FC<CharacteristicPanelProps> = ({
       
       {!canWrite && (
         <div style={{ height: 'calc(100% - 80px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999', fontSize: 12 }}>
-          该特征不支持写入操作
+          {t('characteristic.notSupportWrite')}
         </div>
       )}
     </Card>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Button, Input, Table, Space, Tag, Progress, Empty, InputNumber, Typography, Flex } from 'antd';
 import { SearchOutlined, StopOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import type { BleDeviceInfo, BleConnection } from '../../types';
 import { formatMacAddress } from '../../stores/bleStore';
 
@@ -24,6 +25,7 @@ const BleScanner: React.FC<BleScannerProps> = ({
   onStopScan,
   onConnect,
 }) => {
+  const { t } = useTranslation('ble');
   const [filterName, setFilterName] = useState('');
   const [scanTimeout, setScanTimeout] = useState(10);
 
@@ -53,13 +55,13 @@ const BleScanner: React.FC<BleScannerProps> = ({
 
   const columns = [
     {
-      title: '设备名称',
+      title: t('label.deviceName'),
       dataIndex: 'name',
       key: 'name',
-      render: (name: string) => name || <Text type="secondary">未命名</Text>,
+      render: (name: string) => name || <Text type="secondary">{t('label.unnamed')}</Text>,
     },
     {
-      title: 'MAC 地址',
+      title: t('label.macAddress'),
       dataIndex: 'address',
       key: 'address',
       width: 180,
@@ -70,7 +72,7 @@ const BleScanner: React.FC<BleScannerProps> = ({
       ),
     },
     {
-      title: '信号强度',
+      title: t('label.rssi'),
       dataIndex: 'rssi',
       key: 'rssi',
       width: 150,
@@ -90,20 +92,20 @@ const BleScanner: React.FC<BleScannerProps> = ({
         ),
     },
     {
-      title: '状态',
+      title: t('label.status'),
       key: 'status',
       width: 80,
       render: (_: unknown, record: BleDeviceInfo) => {
         const isConnected = connections?.some(c => c.address === record.address);
         return (
           <Tag color={isConnected ? 'green' : 'default'}>
-            {isConnected ? '已连接' : '未连接'}
+            {isConnected ? t('status.connected') : t('status.disconnected')}
           </Tag>
         );
       },
     },
     {
-      title: '操作',
+      title: t('label.operation'),
       key: 'action',
       width: 100,
       render: (_: unknown, record: BleDeviceInfo) => {
@@ -116,7 +118,7 @@ const BleScanner: React.FC<BleScannerProps> = ({
             disabled={isConnected === false && record.isConnectable === false}
             onClick={() => onConnect(record.address)}
           >
-            {isConnected ? '断开' : '连接'}
+            {isConnected ? t('button.disconnect') : t('button.connect')}
           </Button>
         );
       },
@@ -125,14 +127,14 @@ const BleScanner: React.FC<BleScannerProps> = ({
 
   return (
     <Card
-      title="设备扫描"
+      title={t('title.deviceScan')}
       size="small"
       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
       styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 8 }}}
       extra={
         <Space>
           <Flex align="center" gap={4}>
-            <Text type="secondary">扫描时长</Text>
+            <Text type="secondary">{t('label.scanDuration')}</Text>
             <InputNumber
               min={1}
               max={60}
@@ -141,7 +143,7 @@ const BleScanner: React.FC<BleScannerProps> = ({
               style={{ width: 80 }}
               disabled={isScanning}
             />
-            <Text type="secondary">秒</Text>
+            <Text type="secondary">{t('label.seconds')}</Text>
           </Flex>
           {isScanning ? (
             <Button
@@ -150,7 +152,7 @@ const BleScanner: React.FC<BleScannerProps> = ({
               icon={<StopOutlined />}
               onClick={onStopScan}
             >
-              停止
+              {t('button.stop')}
             </Button>
           ) : (
             <Button
@@ -158,7 +160,7 @@ const BleScanner: React.FC<BleScannerProps> = ({
               icon={<SearchOutlined />}
               onClick={handleScan}
             >
-              扫描
+              {t('button.scan')}
             </Button>
           )}
         </Space>
@@ -166,7 +168,7 @@ const BleScanner: React.FC<BleScannerProps> = ({
     >
       <Space vertical style={{ width: '100%', marginBottom: 16 }}>
         <Search
-          placeholder="按名称过滤设备"
+          placeholder={t('placeholder.filterByName')}
           value={filterName}
           onChange={(e) => setFilterName(e.target.value)}
           allowClear
@@ -182,7 +184,7 @@ const BleScanner: React.FC<BleScannerProps> = ({
             showInfo={false}
             strokeColor="#1890ff"
           />
-          <Text type="secondary">正在扫描中...</Text>
+          <Text type="secondary">{t('status.scanningDevices')}</Text>
         </div>
       )}
 
@@ -202,7 +204,7 @@ const BleScanner: React.FC<BleScannerProps> = ({
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description={
-              isScanning ? '正在扫描设备...' : '暂无设备，点击扫描按钮开始'
+              isScanning ? t('status.scanningDevices') : t('placeholder.noDevicesClickScan')
             }
           />
         </div>

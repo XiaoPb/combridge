@@ -2,11 +2,17 @@
   "title": {
     "configPanel": "Config Panel",
     "gattTree": "GATT Service Tree",
-    "dataView": "Data View"
+    "dataView": "Data View",
+    "deviceScan": "Device Scan",
+    "characteristicPanel": "Characteristic Panel",
+    "bleModeConfig": "BLE Mode Configuration",
+    "atCommandConfig": "AT Command Configuration"
   },
   "mode": {
     "native": "Native Mode",
-    "at": "AT Mode"
+    "at": "AT Mode",
+    "nativeDesc": "Use system native BLE adapter for Bluetooth communication with full BLE features.",
+    "atDesc": "Connect BLE module (e.g. HC-08, CC2541) via serial port using AT commands."
   },
   "label": {
     "scanTimeout": "Scan Timeout",
@@ -16,7 +22,27 @@
     "rssi": "RSSI",
     "services": "Services",
     "characteristics": "Characteristics",
-    "properties": "Properties"
+    "properties": "Properties",
+    "unnamed": "Unnamed",
+    "macAddress": "MAC Address",
+    "status": "Status",
+    "operation": "Operation",
+    "selectBleMode": "Select BLE mode:",
+    "selectSerialPort": "Select serial port:",
+    "uuid": "UUID",
+    "name": "Name",
+    "writeMode": "Write",
+    "writeSupport": "Write: Supported",
+    "writeNoResponse": "Write: Without Response",
+    "writeWithResponse": "Write: With Response",
+    "selectSerial": "Serial Port",
+    "presetCommands": "Preset Commands",
+    "customCommand": "Custom Command",
+    "commLog": "Communication Log",
+    "time": "Time",
+    "direction": "Direction",
+    "data": "Data",
+    "scanDuration": "Scan Duration"
   },
   "button": {
     "startScan": "Start Scan",
@@ -28,42 +54,113 @@
     "subscribe": "Subscribe",
     "unsubscribe": "Unsubscribe",
     "export": "Export",
-    "clear": "Clear"
+    "clear": "Clear",
+    "send": "Send",
+    "sendCommand": "Send Command",
+    "clearLog": "Clear Log",
+    "stop": "Stop",
+    "scan": "Scan"
   },
   "status": {
     "scanning": "Scanning...",
+    "scanningDevices": "Scanning devices...",
     "connecting": "Connecting...",
     "discovering": "Discovering services...",
     "connected": "Connected",
-    "disconnected": "Disconnected"
+    "disconnected": "Disconnected",
+    "subscribed": "Subscribed"
   },
   "placeholder": {
     "noDevices": "No devices found",
+    "noDevicesClickScan": "No devices. Click scan button to start",
     "noServices": "No service data",
     "noLogs": "No interaction logs...",
-    "selectCharacteristic": "Please select a characteristic"
+    "noLog": "No logs",
+    "selectCharacteristic": "Please select a characteristic from GATT service tree",
+    "inputData": "Please input data",
+    "inputHex": "Enter hex data, e.g.: 01 02 03 FF",
+    "inputText": "Enter text data to send",
+    "filterByName": "Filter devices by name",
+    "selectPresetCommand": "Select preset command",
+    "inputParam": "Enter parameter",
+    "inputCustomAt": "Enter custom AT command",
+    "selectPort": "Select port",
+    "selectProtocol": "Select protocol",
+    "selectDevice": "Select device"
   },
   "characteristic": {
     "read": "Read",
     "write": "Write",
     "writeWithoutResponse": "Write No Resp",
     "notify": "Notify",
-    "indicate": "Indicate"
+    "indicate": "Indicate",
+    "notSupportWrite": "This characteristic does not support write operation"
   },
   "input": {
     "format": "Input Format",
-    "withoutResponse": "Write Without Response"
+    "withoutResponse": "Write Without Response",
+    "waitResponse": "Wait Response",
+    "noResponse": "No Response"
   },
   "message": {
     "loadPrefsFailed": "Failed to load preferences",
     "restoreFailed": "Failed to restore connected devices",
     "discoverFailed": "Failed to discover characteristics",
-    "saveLogFailed": "Failed to save log"
+    "saveLogFailed": "Failed to save log",
+    "selectProtocolDevice": "Please select protocol and device",
+    "bindingExists": "Binding already exists"
   },
   "tooltip": {
     "collapseTree": "Collapse service tree",
     "expandTree": "Expand service tree",
     "autoScrollOn": "Auto scroll: On",
-    "autoScrollOff": "Auto scroll: Off"
+    "autoScrollOff": "Auto scroll: Off",
+    "subscribeNotify": "Subscribe to notifications",
+    "unsubscribeNotify": "Unsubscribe from notifications",
+    "readValue": "Read characteristic value",
+    "enable": "Enable",
+    "disable": "Disable",
+    "edit": "Edit",
+    "unload": "Unload",
+    "copy": "Copy",
+    "undo": "Undo",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen"
+  },
+  "atCommand": {
+    "reset": "Reset",
+    "resetDesc": "Reset module",
+    "version": "Version",
+    "versionDesc": "Query firmware version",
+    "setName": "Set Name",
+    "setNameDesc": "Set device name",
+    "queryName": "Query Name",
+    "queryNameDesc": "Query current device name",
+    "setBaud": "Set Baud",
+    "setBaudDesc": "Set serial baud rate",
+    "queryBaud": "Query Baud",
+    "queryBaudDesc": "Query current baud rate",
+    "setAdvInterval": "Set Adv Interval",
+    "setAdvIntervalDesc": "Set advertising interval",
+    "setConnInterval": "Set Conn Interval",
+    "setConnIntervalDesc": "Set connection parameters",
+    "sleep": "Sleep",
+    "sleepDesc": "Enter low power mode",
+    "wakeup": "Wake Up",
+    "wakeupDesc": "Wake up from sleep",
+    "factoryReset": "Factory Reset",
+    "factoryResetDesc": "Restore factory settings"
+  },
+  "bind": {
+    "title": "Protocol Binding Configuration",
+    "protocol": "Protocol",
+    "device": "Device",
+    "bind": "Bind",
+    "unbind": "Unbind",
+    "noBinding": "No bindings",
+    "noEnabledProtocol": "No enabled protocols. Please enable a protocol first",
+    "noAvailableDevice": "No available devices. Please open a port or connect a device first",
+    "clickBindHint": "Select protocol and device then click \"Bind\" button",
+    "confirmUnbind": "Are you sure you want to unbind?"
   }
 }

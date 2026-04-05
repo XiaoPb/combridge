@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { Button, Input, Space, Typography, Tag, message, Row, Col } from 'antd';
+import { Button, Input, Space, Typography, Tag, message, Row, Col, theme } from 'antd';
 import { PlayCircleOutlined, CaretRightOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
 import type { Gh3036RpcCommand, Gh3036RpcParam } from '../../api/types';
 
 const { Text } = Typography;
+const { useToken } = theme;
 
 const Gh3036RpcList: React.FC = () => {
   const { t } = useTranslation('protocol');
+  const { token } = useToken();
   const { rpcCommands, expandedCommand, setExpandedCommand, sendData, txChannel } = useGh3036Store();
   const [paramValues, setParamValues] = useState<Record<string, Record<string, string>>>({});
 
@@ -81,7 +83,7 @@ const Gh3036RpcList: React.FC = () => {
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '4px 8px',
-            background: isActive ? '#e6f7ff' : '#fafafa',
+            background: isActive ? token.colorPrimaryBg : token.colorFillSecondary,
             borderRadius: 4,
             cursor: 'pointer',
           }}
@@ -106,7 +108,7 @@ const Gh3036RpcList: React.FC = () => {
         </div>
 
         {isActive && (
-          <div style={{ padding: '8px 8px 8px 24px', background: '#fff', borderRadius: '0 0 4px 4px' }}>
+          <div style={{ padding: '8px 8px 8px 24px', background: token.colorBgContainer, borderRadius: '0 0 4px 4px', border: `1px solid ${token.colorBorderSecondary}`, borderTop: 'none' }}>
             <Text type="secondary" style={{ fontSize: 11 }}>{command.description}</Text>
             
             {command.params.length > 0 && (

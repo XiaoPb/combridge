@@ -54,7 +54,7 @@ jobs:
         uses: aminya/setup-cpp@v1
         with:
           compiler: ${{ matrix.compiler }}
-          gcc_version: ${{ matrix.gcc_version }}
+          gcc_version: ${{ matrix.gcc_version | default('') }}
           cmake: true
           ninja: true
           vcpkg: false

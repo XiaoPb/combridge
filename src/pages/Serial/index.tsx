@@ -8,12 +8,14 @@ import { serialApi } from '../../api/tauri';
 import { message } from 'antd';
 import { DEFAULT_BAUD_RATES, DEFAULT_SERIAL_CONFIG } from '../../types';
 import type { SerialConfig } from '../../types';
+import { useTranslation } from 'react-i18next';
 
 const { Sider, Content } = Layout;
 const { Text, Title } = Typography;
 const { TextArea } = Input;
 
 const SerialPage: React.FC = () => {
+  const { t } = useTranslation('serial');
   const {
     ports,
     tabs,
@@ -71,12 +73,12 @@ const SerialPage: React.FC = () => {
 
   const handleOpenPort = async () => {
     if (!selectedPort) {
-      setError('请选择串口');
+      setError(t('message.selectPort'));
       return;
     }
     
     if (hasPortTab(selectedPort)) {
-      message.warning(`串口 ${selectedPort} 已有打开的标签页`);
+      message.warning(t('message.portAlreadyOpen', { port: selectedPort }));
       return;
     }
     
@@ -137,7 +139,7 @@ const SerialPage: React.FC = () => {
 
   const handleExport = async () => {
     if (!activeTab || !activeTab.portName) {
-      message.warning('请先选择串口');
+      message.warning(t('message.selectPortFirst'));
       return;
     }
     
@@ -151,7 +153,7 @@ const SerialPage: React.FC = () => {
       .flatMap((entry) => entry.data);
     
     if (allDataToExport.length === 0) {
-      message.warning('没有数据可导出');
+      message.warning(t('message.noDataToExport'));
       return;
     }
     
@@ -161,10 +163,10 @@ const SerialPage: React.FC = () => {
         allDataToExport,
         rxData
       );
-      message.success(`数据已导出:\n日志: ${result.logPath}\n数据: ${result.datPath}`);
+      message.success(t('message.exportSuccess', { logPath: result.logPath, datPath: result.datPath }));
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : '导出失败';
-      message.error(`导出失败: ${errorMsg}`);
+      const errorMsg = error instanceof Error ? error.message : t('message.exportFailed', { error: '' }).split(':')[0];
+      message.error(t('message.exportFailed', { error: errorMsg }));
     }
   };
 
@@ -186,16 +188,16 @@ const SerialPage: React.FC = () => {
           <div style={{ padding: 16, height: '100%', overflow: 'auto' }}>
             <Title level={5} style={{ marginBottom: 16 }}>
               <UsbOutlined style={{ marginRight: 8 }} />
-              串口启动台
+              {t('title.launcher')}
             </Title>
             
             <Space direction="vertical" style={{ width: '100%' }} size="middle">
               <div>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>串口选择</Text>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{t('label.portSelect')}</Text>
                 <Space.Compact style={{ width: '100%' }}>
                   <Select
                     style={{ width: 'calc(100% - 80px)' }}
-                    placeholder="选择串口"
+                    placeholder={t('placeholder.selectPort')}
                     value={selectedPort}
                     onChange={setSelectedPort}
                     options={availablePorts.map((port) => ({
@@ -218,13 +220,13 @@ const SerialPage: React.FC = () => {
                     disabled={isScanning}
                     style={{ width: 80 }}
                   >
-                    扫描
+                    {t('button.scan')}
                   </Button>
                 </Space.Compact>
               </div>
 
               <div>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>波特率</Text>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{t('label.baudRate')}</Text>
                 <Select
                   style={{ width: '100%' }}
                   value={tempConfig.baudRate}
@@ -238,7 +240,7 @@ const SerialPage: React.FC = () => {
 
               <div style={{ display: 'flex', gap: 8 }}>
                 <div style={{ flex: 1 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>数据位</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{t('label.dataBits')}</Text>
                   <Select
                     style={{ width: '100%' }}
                     value={tempConfig.dataBits}
@@ -252,7 +254,7 @@ const SerialPage: React.FC = () => {
                   />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>停止位</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{t('label.stopBits')}</Text>
                   <Select
                     style={{ width: '100%' }}
                     value={tempConfig.stopBits}
@@ -267,28 +269,28 @@ const SerialPage: React.FC = () => {
               
               <div style={{ display: 'flex', gap: 8 }}>
                 <div style={{ flex: 1 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>校验位</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{t('label.parity')}</Text>
                   <Select
                     style={{ width: '100%' }}
                     value={tempConfig.parity}
                     onChange={(value) => setTempConfig({ ...tempConfig, parity: value })}
                     options={[
-                      { value: 'none', label: '无' },
-                      { value: 'odd', label: '奇' },
-                      { value: 'even', label: '偶' },
+                      { value: 'none', label: t('option.parityNone') },
+                      { value: 'odd', label: t('option.parityOdd') },
+                      { value: 'even', label: t('option.parityEven') },
                     ]}
                   />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>流控制</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{t('label.flowControl')}</Text>
                   <Select
                     style={{ width: '100%' }}
                     value={tempConfig.flowControl}
                     onChange={(value) => setTempConfig({ ...tempConfig, flowControl: value })}
                     options={[
-                      { value: 'none', label: '无' },
-                      { value: 'hardware', label: '硬件' },
-                      { value: 'software', label: '软件' },
+                      { value: 'none', label: t('option.flowNone') },
+                      { value: 'hardware', label: t('option.flowHardware') },
+                      { value: 'software', label: t('option.flowSoftware') },
                     ]}
                   />
                 </div>
@@ -303,12 +305,12 @@ const SerialPage: React.FC = () => {
                   block
                   size="large"
                 >
-                  打开串口
+                  {t('button.openPort')}
                 </Button>
               </div>
 
               <div style={{ marginTop: 8, padding: 8, background: 'var(--bg-primary)', borderRadius: 4 }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>当前配置:</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>{t('label.currentConfig')}:</Text>
                 <Text code style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
                   {tempConfig.baudRate}, {tempConfig.dataBits}{tempConfig.stopBits}, {tempConfig.parity}, {tempConfig.flowControl}
                 </Text>
@@ -316,7 +318,7 @@ const SerialPage: React.FC = () => {
               
               {connectedPorts.length > 0 && (
                 <div style={{ marginTop: 8 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>已连接的串口:</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{t('label.connectedPorts')}:</Text>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                     {connectedPorts.map((port) => (
                       <Tag key={port} color="success">{port}</Tag>
@@ -333,9 +335,9 @@ const SerialPage: React.FC = () => {
             <Empty
               description={
                 <Space direction="vertical" size="small">
-                  <Text>选择串口并点击"打开串口"开始通信</Text>
+                  <Text>{t('message.selectPortToStart')}</Text>
                   <Text type="secondary" style={{ fontSize: 12 }}>
-                    每个串口将创建独立的标签页
+                    {t('message.eachPortTab')}
                   </Text>
                 </Space>
               }
@@ -350,7 +352,7 @@ const SerialPage: React.FC = () => {
     if (!activeTab) {
       return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-          <Empty description="请选择串口标签页" />
+          <Empty description={t('message.selectPortTab')} />
         </div>
       );
     }
@@ -373,16 +375,16 @@ const SerialPage: React.FC = () => {
           }}
         >
           <div style={{ padding: 8, height: '100%', overflow: 'auto' }}>
-            <Title level={5} style={{ marginBottom: 8 }}>串口设置</Title>
+            <Title level={5} style={{ marginBottom: 8 }}>{t('title.settings')}</Title>
             
             <Space direction="vertical" style={{ width: '100%' }} size="middle">
               <div>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>串口</Text>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{t('label.port')}</Text>
                 <Input value={activeTab.portName} disabled style={{ width: '100%' }} />
               </div>
 
               <div>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>波特率</Text>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{t('label.baudRate')}</Text>
                 <Select
                   style={{ width: '100%' }}
                   value={activeTab.config?.baudRate || DEFAULT_SERIAL_CONFIG.baudRate}
@@ -397,7 +399,7 @@ const SerialPage: React.FC = () => {
 
               <div style={{ display: 'flex', gap: 8 }}>
                 <div style={{ flex: 1 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>数据位</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{t('label.dataBits')}</Text>
                   <Select
                     style={{ width: '100%' }}
                     value={activeTab.config?.dataBits || DEFAULT_SERIAL_CONFIG.dataBits}
@@ -412,7 +414,7 @@ const SerialPage: React.FC = () => {
                   />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>停止位</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{t('label.stopBits')}</Text>
                   <Select
                     style={{ width: '100%' }}
                     value={activeTab.config?.stopBits || DEFAULT_SERIAL_CONFIG.stopBits}
@@ -428,30 +430,30 @@ const SerialPage: React.FC = () => {
               
               <div style={{ display: 'flex', gap: 8 }}>
                 <div style={{ flex: 1 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>校验位</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{t('label.parity')}</Text>
                   <Select
                     style={{ width: '100%' }}
                     value={activeTab.config?.parity || DEFAULT_SERIAL_CONFIG.parity}
                     onChange={(value) => updateTabConfig(activeTabKey!, { parity: value })}
                     disabled={activeTab.isConnected}
                     options={[
-                      { value: 'none', label: '无' },
-                      { value: 'odd', label: '奇' },
-                      { value: 'even', label: '偶' },
+                      { value: 'none', label: t('option.parityNone') },
+                      { value: 'odd', label: t('option.parityOdd') },
+                      { value: 'even', label: t('option.parityEven') },
                     ]}
                   />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>流控制</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{t('label.flowControl')}</Text>
                   <Select
                     style={{ width: '100%' }}
                     value={activeTab.config?.flowControl || DEFAULT_SERIAL_CONFIG.flowControl}
                     onChange={(value) => updateTabConfig(activeTabKey!, { flowControl: value })}
                     disabled={activeTab.isConnected}
                     options={[
-                      { value: 'none', label: '无' },
-                      { value: 'hardware', label: '硬件' },
-                      { value: 'software', label: '软件' },
+                      { value: 'none', label: t('option.flowNone') },
+                      { value: 'hardware', label: t('option.flowHardware') },
+                      { value: 'software', label: t('option.flowSoftware') },
                     ]}
                   />
                 </div>
@@ -466,7 +468,7 @@ const SerialPage: React.FC = () => {
                     onClick={handleClosePort}
                     block
                   >
-                    关闭串口
+                    {t('button.closePort')}
                   </Button>
                 ) : (
                   <Button
@@ -475,13 +477,13 @@ const SerialPage: React.FC = () => {
                     onClick={handleReconnectPort}
                     block
                   >
-                    重新连接
+                    {t('button.reconnect')}
                   </Button>
                 )}
               </div>
 
               <div style={{ marginTop: 8, padding: 8, background: 'var(--bg-primary)', borderRadius: 4 }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>当前配置:</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>{t('label.currentConfig')}:</Text>
                 <Text code style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
                   {activeTab.config?.baudRate || DEFAULT_SERIAL_CONFIG.baudRate}, {activeTab.config?.dataBits || DEFAULT_SERIAL_CONFIG.dataBits}{activeTab.config?.stopBits || DEFAULT_SERIAL_CONFIG.stopBits}, {activeTab.config?.parity || DEFAULT_SERIAL_CONFIG.parity}, {activeTab.config?.flowControl || DEFAULT_SERIAL_CONFIG.flowControl}
                 </Text>
@@ -513,12 +515,12 @@ const SerialPage: React.FC = () => {
                     icon={activeTab.settingsCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
                     onClick={() => toggleTabSettings(activeTabKey!)}
                   />
-                  <span>数据视图</span>
+                  <span>{t('title.dataView')}</span>
                 </Space>
               }
               extra={
                 <Space>
-                  <Tooltip title={autoScroll ? '自动滚动: 开启' : '自动滚动: 关闭'}>
+                  <Tooltip title={autoScroll ? t('tooltip.autoScrollOn') : t('tooltip.autoScrollOff')}>
                     <Button
                       type={autoScroll ? 'primary' : 'default'}
                       icon={<VerticalAlignBottomOutlined />}
@@ -530,24 +532,24 @@ const SerialPage: React.FC = () => {
                     value={displayMode}
                     onChange={(value) => setDisplayMode(value as 'all' | 'receive' | 'send')}
                     options={[
-                      { value: 'all', label: '全部' },
-                      { value: 'receive', label: '接收' },
-                      { value: 'send', label: '发送' },
+                      { value: 'all', label: t('display.all') },
+                      { value: 'receive', label: t('display.receive') },
+                      { value: 'send', label: t('display.send') },
                     ]}
                   />
                   <Segmented
                     value={displayFormat}
                     onChange={(value) => setDisplayFormat(value as 'hex' | 'text')}
                     options={[
-                      { value: 'hex', label: 'HEX' },
-                      { value: 'text', label: 'TEXT' },
+                      { value: 'hex', label: t('display.hex') },
+                      { value: 'text', label: t('display.text') },
                     ]}
                   />
                   <Button icon={<DownloadOutlined />} onClick={handleExport} disabled={filteredData.length === 0} size="small">
-                    导出
+                    {t('button.export')}
                   </Button>
                   <Button icon={<ClearOutlined />} onClick={() => activeTabKey && clearTabData(activeTabKey)} disabled={filteredData.length === 0} size="small">
-                    清空
+                    {t('button.clear')}
                   </Button>
                 </Space>
               }
@@ -576,7 +578,7 @@ const SerialPage: React.FC = () => {
                   resize: 'none',
                 }}
                 readOnly
-                placeholder={(filteredData?.length || 0) === 0 ? '暂无数据' : ''}
+                placeholder={(filteredData?.length || 0) === 0 ? t('placeholder.noData') : ''}
               />
             </Card>
 
@@ -586,20 +588,20 @@ const SerialPage: React.FC = () => {
               styles={{ body: { padding: 8 } }}
               title={
                 <Space>
-                  <span>发送面板</span>
+                  <span>{t('title.sendPanel')}</span>
                   <Segmented
                     value={sendFormat}
                     onChange={(value) => setSendFormat(value as 'hex' | 'text')}
                     size="small"
                     options={[
-                      { value: 'text', label: '文本' },
-                      { value: 'hex', label: 'HEX' },
+                      { value: 'text', label: t('send.text') },
+                      { value: 'hex', label: t('display.hex') },
                     ]}
                   />
                   {sendFormat === 'text' && (
                     <>
                       <Space size={4}>
-                        <Text type="secondary" style={{ fontSize: 12 }}>追加换行</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>{t('send.appendNewline')}</Text>
                         <Switch size="small" checked={appendNewline} onChange={setAppendNewline} />
                       </Space>
                       {appendNewline && (
@@ -622,7 +624,7 @@ const SerialPage: React.FC = () => {
                 <TextArea
                   value={inputData}
                   onChange={(e) => setInputData(e.target.value)}
-                  placeholder={sendFormat === 'hex' ? '输入十六进制数据，如: 01 02 03 FF' : '输入要发送的文本'}
+                  placeholder={sendFormat === 'hex' ? t('placeholder.inputHex') : t('placeholder.inputText')}
                   disabled={!activeTab?.isConnected}
                   autoSize={{ minRows: 2, maxRows: 4 }}
                   style={{ fontFamily: sendFormat === 'hex' ? 'Consolas, Monaco, monospace' : 'inherit' }}
@@ -633,7 +635,7 @@ const SerialPage: React.FC = () => {
                   onClick={handleSendData}
                   disabled={!activeTab?.isConnected || !inputData.trim()}
                 >
-                  发送
+                  {t('button.send')}
                 </Button>
               </Space.Compact>
             </Card>

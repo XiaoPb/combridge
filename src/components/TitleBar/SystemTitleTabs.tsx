@@ -1,14 +1,16 @@
 import React from 'react';
 import { InfoCircleOutlined, FileTextOutlined, SettingOutlined } from '@ant-design/icons';
 import { usePageTabsStore } from '../../stores/pageTabsStore';
+import { useTranslation } from 'react-i18next';
 
 const SystemTitleTabs: React.FC = () => {
   const { systemActiveTab, setSystemActiveTab } = usePageTabsStore();
+  const { t } = useTranslation('system');
 
   const tabs = [
-    { key: 'info', label: '系统信息', icon: <InfoCircleOutlined /> },
-    { key: 'logs', label: '日志查看', icon: <FileTextOutlined /> },
-    { key: 'settings', label: '系统设置', icon: <SettingOutlined /> },
+    { key: 'info', label: t('tab.info'), icon: <InfoCircleOutlined /> },
+    { key: 'logs', label: t('tab.logs'), icon: <FileTextOutlined /> },
+    { key: 'settings', label: t('tab.settings'), icon: <SettingOutlined /> },
   ] as const;
 
   return (

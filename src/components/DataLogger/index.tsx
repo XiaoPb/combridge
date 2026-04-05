@@ -6,6 +6,7 @@ import {
   ArrowUpOutlined,
   ArrowDownOutlined,
 } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import LogEntry from './LogEntry';
 import LogFilter from './LogFilter';
 
@@ -63,6 +64,7 @@ const DataLogger: React.FC<DataLoggerProps> = ({
   showExport = true,
   autoScroll: _autoScroll = true,
 }) => {
+  const { t } = useTranslation('common');
   const [directionFilter, setDirectionFilter] = useState<'all' | 'send' | 'receive'>('all');
   const [formatFilter, setFormatFilter] = useState<'hex' | 'text' | 'binary'>('hex');
   const [searchText, setSearchText] = useState('');
@@ -109,7 +111,7 @@ const DataLogger: React.FC<DataLoggerProps> = ({
 
   const columns = [
     {
-      title: '时间',
+      title: t('time'),
       dataIndex: 'timestamp',
       key: 'timestamp',
       width: 100,
@@ -120,7 +122,7 @@ const DataLogger: React.FC<DataLoggerProps> = ({
       ),
     },
     {
-      title: '方向',
+      title: t('direction', { ns: 'serial' }),
       dataIndex: 'direction',
       key: 'direction',
       width: 60,
@@ -131,7 +133,7 @@ const DataLogger: React.FC<DataLoggerProps> = ({
       ),
     },
     {
-      title: '数据',
+      title: t('data', { ns: 'ble' }),
       dataIndex: 'data',
       key: 'data',
       render: (data: number[], _record: DataLogEntry) => (
@@ -139,7 +141,7 @@ const DataLogger: React.FC<DataLoggerProps> = ({
       ),
     },
     {
-      title: '长度',
+      title: t('size'),
       dataIndex: 'data',
       key: 'length',
       width: 60,
@@ -153,15 +155,15 @@ const DataLogger: React.FC<DataLoggerProps> = ({
       extra={
         <Space>
           {showExport && (
-            <Tooltip title="导出日志">
+            <Tooltip title={t('export')}>
               <Button size="small" icon={<DownloadOutlined />} onClick={handleExport}>
-                导出
+                {t('export')}
               </Button>
             </Tooltip>
           )}
-          <Tooltip title="清空日志">
+          <Tooltip title={t('clear')}>
             <Button size="small" icon={<ClearOutlined />} onClick={onClear} danger>
-              清空
+              {t('clear')}
             </Button>
           </Tooltip>
         </Space>
@@ -189,7 +191,7 @@ const DataLogger: React.FC<DataLoggerProps> = ({
             showHeader={true}
           />
         ) : (
-          <Empty description="暂无数据" style={{ padding: 20 }} />
+          <Empty description={t('noData')} style={{ padding: 20 }} />
         )}
       </div>
     </Card>

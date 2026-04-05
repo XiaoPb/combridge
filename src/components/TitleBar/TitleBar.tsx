@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { convertFileSrc } from '@tauri-apps/api/core';
 import { useLocation } from 'react-router-dom';
 import {
   MinusOutlined,
@@ -15,6 +14,8 @@ import SerialTitleTabs from './SerialTitleTabs';
 import BleTitleTabs from './BleTitleTabs';
 import ProtocolTitleTabs from './ProtocolTitleTabs';
 import SystemTitleTabs from './SystemTitleTabs';
+import { useTranslation } from 'react-i18next';
+import { changeLanguage } from '../../i18n';
 
 interface ThemeSwitchProps {
   checked: boolean;
@@ -65,6 +66,7 @@ const TitleBar: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [language, setLanguage] = useState<'zh-CN' | 'en-US'>('zh-CN');
   const [isMaximized, setIsMaximized] = useState(false);
+  useTranslation();
 
   useEffect(() => {
     const config = configService.getConfig();
@@ -101,7 +103,7 @@ const TitleBar: React.FC = () => {
 
   const toggleLanguage = () => {
     const newLanguage = language === 'zh-CN' ? 'en-US' : 'zh-CN';
-    configService.updateConfig({ language: newLanguage });
+    changeLanguage(newLanguage);
     setLanguage(newLanguage);
   };
 

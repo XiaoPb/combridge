@@ -1,0 +1,9 @@
+{
+  "menu": {
+    "serial": "Serial",
+    "ble": "BLE",
+    "protocol": "Protocol",
+    "system": "System"
+  },
+  "collapse": "Collapse sidebar"
+}

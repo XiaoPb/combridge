@@ -1,0 +1,80 @@
+{
+  "title": {
+    "about": "关于 ComBridge",
+    "systemInfo": "系统信息",
+    "runtimeStatus": "运行状态",
+    "diskUsage": "磁盘使用",
+    "connectionSettings": "连接设置",
+    "soundSettings": "声音设置"
+  },
+  "label": {
+    "appName": "应用名称",
+    "version": "版本",
+    "description": "描述",
+    "author": "作者",
+    "os": "操作系统",
+    "osVersion": "系统版本",
+    "arch": "架构",
+    "hostname": "主机名",
+    "cpuCores": "CPU核心数",
+    "totalMemory": "总内存",
+    "appVersion": "应用版本",
+    "cpuUsage": "CPU 使用率",
+    "memoryUsage": "内存使用",
+    "systemUptime": "系统运行时间",
+    "autoReconnect": "自动重连",
+    "reconnectInterval": "重连间隔 (毫秒)",
+    "maxLogLines": "最大日志行数",
+    "soundEnabled": "启用声音",
+    "soundOnConnect": "连接时播放声音",
+    "soundOnDisconnect": "断开时播放声音",
+    "soundOnData": "数据传输时播放声音"
+  },
+  "value": {
+    "description": "串口与蓝牙调试工具",
+    "justStarted": "刚刚启动",
+    "cores": "核"
+  },
+  "button": {
+    "documentation": "文档",
+    "github": "GitHub",
+    "feedback": "问题反馈",
+    "resetDefaults": "重置默认设置"
+  },
+  "message": {
+    "loading": "正在获取系统信息...",
+    "loadFailed": "获取系统信息失败",
+    "settingsSaved": "设置已保存",
+    "saveFailed": "保存设置失败",
+    "settingsReset": "设置已重置为默认值",
+    "autoSaveHint": "设置修改后会自动保存"
+  },
+  "time": {
+    "days": "天",
+    "hours": "小时",
+    "minutes": "分钟"
+  },
+  "tab": {
+    "info": "信息",
+    "logs": "日志",
+    "settings": "设置"
+  },
+  "logViewer": {
+    "title": "系统日志",
+    "level": "级别",
+    "source": "来源",
+    "message": "消息",
+    "timestamp": "时间戳",
+    "filter": {
+      "all": "全部",
+      "info": "信息",
+      "warning": "警告",
+      "error": "错误"
+    },
+    "action": {
+      "refresh": "刷新",
+      "clear": "清空",
+      "export": "导出"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "menu": {
+    "serial": "串口",
+    "ble": "BLE",
+    "protocol": "协议",
+    "system": "系统"
+  },
+  "collapse": "收起侧边栏"
+}

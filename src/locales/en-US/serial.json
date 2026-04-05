@@ -1,0 +1,71 @@
+{
+  "title": {
+    "launcher": "Serial Launcher",
+    "settings": "Serial Settings",
+    "dataView": "Data View",
+    "sendPanel": "Send Panel"
+  },
+  "label": {
+    "portSelect": "Port Selection",
+    "baudRate": "Baud Rate",
+    "dataBits": "Data Bits",
+    "stopBits": "Stop Bits",
+    "parity": "Parity",
+    "flowControl": "Flow Control",
+    "currentConfig": "Current Config",
+    "connectedPorts": "Connected Ports",
+    "port": "Port"
+  },
+  "option": {
+    "parityNone": "None",
+    "parityOdd": "Odd",
+    "parityEven": "Even",
+    "flowNone": "None",
+    "flowHardware": "Hardware",
+    "flowSoftware": "Software"
+  },
+  "button": {
+    "scan": "Scan",
+    "openPort": "Open Port",
+    "closePort": "Close Port",
+    "reconnect": "Reconnect",
+    "send": "Send",
+    "export": "Export",
+    "clear": "Clear"
+  },
+  "display": {
+    "all": "All",
+    "receive": "RX",
+    "send": "TX",
+    "hex": "HEX",
+    "text": "TEXT"
+  },
+  "send": {
+    "text": "Text",
+    "appendNewline": "Append Newline"
+  },
+  "placeholder": {
+    "selectPort": "Select port",
+    "noData": "No data",
+    "inputHex": "Enter hex data, e.g.: 01 02 03 FF",
+    "inputText": "Enter text to send"
+  },
+  "message": {
+    "selectPort": "Please select a port",
+    "portAlreadyOpen": "Port {{port}} already has an open tab",
+    "selectPortFirst": "Please select a port first",
+    "noDataToExport": "No data to export",
+    "exportSuccess": "Data exported:\nLog: {{logPath}}\nData: {{datPath}}",
+    "exportFailed": "Export failed: {{error}}",
+    "eachPortTab": "Each port will create a separate tab",
+    "selectPortToStart": "Select a port and click \"Open Port\" to start",
+    "selectPortTab": "Please select a port tab"
+  },
+  "tooltip": {
+    "autoScrollOn": "Auto scroll: On",
+    "autoScrollOff": "Auto scroll: Off"
+  },
+  "tab": {
+    "launcher": "Launcher"
+  }
+}

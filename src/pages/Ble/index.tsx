@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Alert, Space, Button, Tree, Tag, Typography, Empty, Spin, Card, Input, Segmented, Tooltip } from 'antd';
 import { MenuFoldOutlined, MenuUnfoldOutlined, ClearOutlined, DownloadOutlined, VerticalAlignBottomOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { useBle } from '../../hooks/useBle';
 import { useSerialStore } from '../../stores/serialStore';
 import { useBleStore, formatBleData, getShortUuid, formatMacAddress } from '../../stores/bleStore';
@@ -48,6 +49,7 @@ const formatTimestamp = (timestamp: number): string => {
 };
 
 const BlePage: React.FC = () => {
+  const { t } = useTranslation('ble');
   const {
     mode,
     serialPort,
@@ -86,7 +88,7 @@ const BlePage: React.FC = () => {
     loadPreferences()
       .then(() => setPreferencesLoaded(true))
       .catch((err) => {
-        console.error('[BlePage] 加载偏好设置失败:', err);
+        console.error('[BlePage]', t('message.loadPrefsFailed'), err);
         setPreferencesLoaded(true);
       });
   }, [loadPreferences]);
@@ -137,7 +139,7 @@ const BlePage: React.FC = () => {
           setCurrentDevice(firstDeviceId);
         }
       } catch (err) {
-        console.error('[BlePage] 恢复连接设备失败:', err);
+        console.error('[BlePage]', t('message.restoreFailed'), err);
       }
     };
 
@@ -307,7 +309,7 @@ const BlePage: React.FC = () => {
     try {
       await connectDevice(address);
     } catch (err) {
-      console.error('[BlePage] 连接失败:', err);
+      console.error('[BlePage] connect failed:', err);
     }
   };
 
@@ -340,7 +342,7 @@ const BlePage: React.FC = () => {
           };
         });
       } catch (err) {
-        console.error('发现特征失败:', err);
+        console.error(t('message.discoverFailed'), err);
       }
     },
     [discoverCharacteristics]
@@ -399,7 +401,7 @@ const BlePage: React.FC = () => {
           });
         }
       } catch (err) {
-        console.debug('[BlePage] 获取缓存数据失败或无缓存:', err);
+        console.debug('[BlePage] get cache failed or no cache:', err);
       }
     },
     []
@@ -525,7 +527,7 @@ const BlePage: React.FC = () => {
         await writeTextFile(filePath, logText);
       }
     } catch (err) {
-      console.error('[BlePage] 保存日志失败:', err);
+      console.error('[BlePage]', t('message.saveLogFailed'), err);
     }
   }, []);
 
@@ -583,7 +585,7 @@ const BlePage: React.FC = () => {
           }}
         >
           <Space style={{ width: '100%', justifyContent: 'space-between', marginBottom: 12 }}>
-            <Text strong>配置面板</Text>
+            <Text strong>{t('title.configPanel')}</Text>
             <Button
               type="text"
               size="small"
@@ -632,22 +634,22 @@ const BlePage: React.FC = () => {
         {!preferences.gattCollapsed && (
           <div style={{ flex: '0 0 280px', minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-secondary)', borderRadius: 8, padding: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexShrink: 0 }}>
-              <Text strong style={{ fontSize: 13 }}>GATT 服务树</Text>
+              <Text strong style={{ fontSize: 13 }}>{t('title.gattTree')}</Text>
               <Button
                 type="text"
                 size="small"
                 icon={<MenuFoldOutlined />}
                 onClick={() => updatePreferences({ gattCollapsed: true })}
-                title="折叠服务树"
+                title={t('tooltip.collapseTree')}
               />
             </div>
             <div style={{ flex: '1 1 0', overflow: 'auto', padding: '0 4px' }}>
               {tabData.discoveringServices ? (
                 <div style={{ textAlign: 'center', padding: 40 }}>
-                  <Spin description="正在发现服务..." />
+                  <Spin description={t('status.discovering')} />
                 </div>
               ) : tabData.services.length === 0 ? (
-                <Empty description="暂无服务数据" />
+                <Empty description={t('placeholder.noServices')} />
               ) : (
                 <Tree
                   showLine
@@ -681,7 +683,7 @@ const BlePage: React.FC = () => {
             icon={<MenuUnfoldOutlined />}
             onClick={() => updatePreferences({ gattCollapsed: false })}
             style={{ flexShrink: 0, alignSelf: 'flex-start' }}
-            title="展开服务树"
+            title={t('tooltip.expandTree')}
           />
         )}
 
@@ -707,10 +709,10 @@ const BlePage: React.FC = () => {
             size="small"
             style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', minHeight: 100 }}
             styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden', minHeight: 0 } }}
-            title={<span>数据视图</span>}
+            title={<span>{t('title.dataView')}</span>}
             extra={
               <Space>
-                <Tooltip title={preferences.autoScroll ? '自动滚动: 开启' : '自动滚动: 关闭'}>
+                <Tooltip title={preferences.autoScroll ? t('tooltip.autoScrollOn') : t('tooltip.autoScrollOff')}>
                   <Button
                     type={preferences.autoScroll ? 'primary' : 'default'}
                     icon={<VerticalAlignBottomOutlined />}
@@ -733,7 +735,7 @@ const BlePage: React.FC = () => {
                   onClick={() => handleExportLog(tabData)}
                   disabled={tabData.logs.length === 0}
                 >
-                  导出
+                  {t('button.export')}
                 </Button>
                 <Button
                   size="small"
@@ -741,7 +743,7 @@ const BlePage: React.FC = () => {
                   onClick={() => handleClearLogs(tabData.deviceId)}
                   disabled={tabData.logs.length === 0}
                 >
-                  清空
+                  {t('button.clear')}
                 </Button>
               </Space>
             }
@@ -775,7 +777,7 @@ const BlePage: React.FC = () => {
                 resize: 'none',
               }}
               readOnly
-              placeholder={tabData.logs.length === 0 ? '暂无交互日志...' : ''}
+              placeholder={tabData.logs.length === 0 ? t('placeholder.noLogs') : ''}
             />
           </Card>
         </div>
@@ -787,7 +789,7 @@ const BlePage: React.FC = () => {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 8 }}>
       {error && (
         <Alert
-          message="错误"
+          message={t('common:error')}
           description={error}
           type="error"
           closable
@@ -798,7 +800,7 @@ const BlePage: React.FC = () => {
 
       {isConnecting && (
         <Alert
-          message="正在连接..."
+          message={t('status.connecting')}
           type="info"
           showIcon
           style={{ marginBottom: 8, flexShrink: 0 }}

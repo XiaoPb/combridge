@@ -1,0 +1,69 @@
+{
+  "title": {
+    "configPanel": "Config Panel",
+    "gattTree": "GATT Service Tree",
+    "dataView": "Data View"
+  },
+  "mode": {
+    "native": "Native Mode",
+    "at": "AT Mode"
+  },
+  "label": {
+    "scanTimeout": "Scan Timeout",
+    "seconds": "seconds",
+    "deviceName": "Device Name",
+    "address": "Address",
+    "rssi": "RSSI",
+    "services": "Services",
+    "characteristics": "Characteristics",
+    "properties": "Properties"
+  },
+  "button": {
+    "startScan": "Start Scan",
+    "stopScan": "Stop Scan",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "read": "Read",
+    "write": "Write",
+    "subscribe": "Subscribe",
+    "unsubscribe": "Unsubscribe",
+    "export": "Export",
+    "clear": "Clear"
+  },
+  "status": {
+    "scanning": "Scanning...",
+    "connecting": "Connecting...",
+    "discovering": "Discovering services...",
+    "connected": "Connected",
+    "disconnected": "Disconnected"
+  },
+  "placeholder": {
+    "noDevices": "No devices found",
+    "noServices": "No service data",
+    "noLogs": "No interaction logs...",
+    "selectCharacteristic": "Please select a characteristic"
+  },
+  "characteristic": {
+    "read": "Read",
+    "write": "Write",
+    "writeWithoutResponse": "Write No Resp",
+    "notify": "Notify",
+    "indicate": "Indicate"
+  },
+  "input": {
+    "format": "Input Format",
+    "withoutResponse": "Write Without Response"
+  },
+  "message": {
+    "loadPrefsFailed": "Failed to load preferences",
+    "restoreFailed": "Failed to restore connected devices",
+    "discoverFailed": "Failed to discover characteristics",
+    "saveLogFailed": "Failed to save log"
+  },
+  "tooltip": {
+    "collapseTree": "Collapse service tree",
+    "expandTree": "Expand service tree",
+    "autoScrollOn": "Auto scroll: On",
+    "autoScrollOff": "Auto scroll: Off"
+  }
+}

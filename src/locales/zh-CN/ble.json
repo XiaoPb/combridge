@@ -1,0 +1,69 @@
+{
+  "title": {
+    "configPanel": "配置面板",
+    "gattTree": "GATT 服务树",
+    "dataView": "数据视图"
+  },
+  "mode": {
+    "native": "原生模式",
+    "at": "AT 模式"
+  },
+  "label": {
+    "scanTimeout": "扫描超时",
+    "seconds": "秒",
+    "deviceName": "设备名称",
+    "address": "地址",
+    "rssi": "信号强度",
+    "services": "服务",
+    "characteristics": "特征",
+    "properties": "属性"
+  },
+  "button": {
+    "startScan": "开始扫描",
+    "stopScan": "停止扫描",
+    "connect": "连接",
+    "disconnect": "断开",
+    "read": "读取",
+    "write": "写入",
+    "subscribe": "订阅",
+    "unsubscribe": "取消订阅",
+    "export": "导出",
+    "clear": "清空"
+  },
+  "status": {
+    "scanning": "扫描中...",
+    "connecting": "正在连接...",
+    "discovering": "正在发现服务...",
+    "connected": "已连接",
+    "disconnected": "已断开"
+  },
+  "placeholder": {
+    "noDevices": "未发现设备",
+    "noServices": "暂无服务数据",
+    "noLogs": "暂无交互日志...",
+    "selectCharacteristic": "请选择特征值"
+  },
+  "characteristic": {
+    "read": "读",
+    "write": "写",
+    "writeWithoutResponse": "无响应写",
+    "notify": "通知",
+    "indicate": "指示"
+  },
+  "input": {
+    "format": "输入格式",
+    "withoutResponse": "无响应写入"
+  },
+  "message": {
+    "loadPrefsFailed": "加载偏好设置失败",
+    "restoreFailed": "恢复连接设备失败",
+    "discoverFailed": "发现特征失败",
+    "saveLogFailed": "保存日志失败"
+  },
+  "tooltip": {
+    "collapseTree": "折叠服务树",
+    "expandTree": "展开服务树",
+    "autoScrollOn": "自动滚动: 开启",
+    "autoScrollOff": "自动滚动: 关闭"
+  }
+}

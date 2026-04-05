@@ -5,6 +5,7 @@ import {
   DownloadOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import {
   useLogStore,
   formatLogTimestamp,
@@ -18,6 +19,7 @@ const { Text } = Typography;
 const { Search } = Input;
 
 const LogViewer: React.FC = () => {
+  const { t } = useTranslation('system');
   const logs = useLogStore((state) => state.logs);
   const clearLogs = useLogStore((state) => state.clearLogs);
   const [filteredLogs, setFilteredLogs] = useState<LogEntry[]>([]);
@@ -74,7 +76,7 @@ const LogViewer: React.FC = () => {
 
   const columns = [
     {
-      title: '时间',
+      title: t('logViewer.timestamp'),
       dataIndex: 'timestamp',
       key: 'timestamp',
       width: 120,
@@ -83,7 +85,7 @@ const LogViewer: React.FC = () => {
       ),
     },
     {
-      title: '级别',
+      title: t('logViewer.level'),
       dataIndex: 'level',
       key: 'level',
       width: 80,
@@ -92,14 +94,14 @@ const LogViewer: React.FC = () => {
       ),
     },
     {
-      title: '来源',
+      title: t('logViewer.source'),
       dataIndex: 'source',
       key: 'source',
       width: 120,
       render: (source: string) => <Text code>{source}</Text>,
     },
     {
-      title: '消息',
+      title: t('logViewer.message'),
       dataIndex: 'message',
       key: 'message',
       render: (message: string) => <Text>{message}</Text>,
@@ -110,21 +112,21 @@ const LogViewer: React.FC = () => {
 
   return (
     <Card
-      title="日志查看器"
+      title={t('logViewer.title')}
       extra={
         <Space>
           <Button icon={<ClearOutlined />} onClick={handleClear}>
-            清空
+            {t('logViewer.action.clear')}
           </Button>
           <Button icon={<DownloadOutlined />} onClick={handleExport}>
-            导出
+            {t('logViewer.action.export')}
           </Button>
           <Button
             icon={<ReloadOutlined />}
             type={autoScroll ? 'primary' : 'default'}
             onClick={() => setAutoScroll(!autoScroll)}
           >
-            {autoScroll ? '停止滚动' : '自动滚动'}
+            {autoScroll ? t('auto', { ns: 'common' }) : t('manual', { ns: 'common' })}
           </Button>
         </Space>
       }
@@ -135,23 +137,23 @@ const LogViewer: React.FC = () => {
           onChange={setLevelFilter}
           style={{ width: 120 }}
           options={[
-            { value: 'all', label: '全部级别' },
-            { value: 'debug', label: '调试' },
-            { value: 'info', label: '信息' },
-            { value: 'warn', label: '警告' },
-            { value: 'error', label: '错误' },
+            { value: 'all', label: t('logViewer.filter.all') },
+            { value: 'debug', label: 'Debug' },
+            { value: 'info', label: t('logViewer.filter.info') },
+            { value: 'warn', label: t('logViewer.filter.warning') },
+            { value: 'error', label: t('logViewer.filter.error') },
           ]}
         />
         <Select
           value={sourceFilter}
           onChange={setSourceFilter}
           style={{ width: 150 }}
-          placeholder="选择来源"
+          placeholder={t('logViewer.source')}
           allowClear
           options={sources.map((s) => ({ value: s, label: s }))}
         />
         <Search
-          placeholder="搜索日志内容"
+          placeholder={t('search', { ns: 'common' })}
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
           style={{ width: 200 }}
@@ -173,7 +175,7 @@ const LogViewer: React.FC = () => {
             showHeader={true}
           />
         ) : (
-          <Empty description="暂无日志" />
+          <Empty description={t('noData', { ns: 'common' })} />
         )}
       </div>
     </Card>

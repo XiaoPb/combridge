@@ -1,0 +1,80 @@
+{
+  "title": {
+    "about": "About ComBridge",
+    "systemInfo": "System Information",
+    "runtimeStatus": "Runtime Status",
+    "diskUsage": "Disk Usage",
+    "connectionSettings": "Connection Settings",
+    "soundSettings": "Sound Settings"
+  },
+  "label": {
+    "appName": "App Name",
+    "version": "Version",
+    "description": "Description",
+    "author": "Author",
+    "os": "Operating System",
+    "osVersion": "OS Version",
+    "arch": "Architecture",
+    "hostname": "Hostname",
+    "cpuCores": "CPU Cores",
+    "totalMemory": "Total Memory",
+    "appVersion": "App Version",
+    "cpuUsage": "CPU Usage",
+    "memoryUsage": "Memory Usage",
+    "systemUptime": "System Uptime",
+    "autoReconnect": "Auto Reconnect",
+    "reconnectInterval": "Reconnect Interval (ms)",
+    "maxLogLines": "Max Log Lines",
+    "soundEnabled": "Enable Sound",
+    "soundOnConnect": "Sound on Connect",
+    "soundOnDisconnect": "Sound on Disconnect",
+    "soundOnData": "Sound on Data Transfer"
+  },
+  "value": {
+    "description": "Serial & Bluetooth Debug Tool",
+    "justStarted": "Just started",
+    "cores": "cores"
+  },
+  "button": {
+    "documentation": "Documentation",
+    "github": "GitHub",
+    "feedback": "Report Issue",
+    "resetDefaults": "Reset to Defaults"
+  },
+  "message": {
+    "loading": "Loading system information...",
+    "loadFailed": "Failed to load system information",
+    "settingsSaved": "Settings saved",
+    "saveFailed": "Failed to save settings",
+    "settingsReset": "Settings reset to defaults",
+    "autoSaveHint": "Settings are saved automatically"
+  },
+  "time": {
+    "days": "days",
+    "hours": "hours",
+    "minutes": "minutes"
+  },
+  "tab": {
+    "info": "Info",
+    "logs": "Logs",
+    "settings": "Settings"
+  },
+  "logViewer": {
+    "title": "System Logs",
+    "level": "Level",
+    "source": "Source",
+    "message": "Message",
+    "timestamp": "Timestamp",
+    "filter": {
+      "all": "All",
+      "info": "Info",
+      "warning": "Warning",
+      "error": "Error"
+    },
+    "action": {
+      "refresh": "Refresh",
+      "clear": "Clear",
+      "export": "Export"
+    }
+  }
+}

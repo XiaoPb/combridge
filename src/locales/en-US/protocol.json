@@ -1,0 +1,36 @@
+{
+  "title": {
+    "loadProtocol": "Load Protocol",
+    "protocolList": "Protocol List",
+    "scriptEditor": "Script Editor",
+    "bindConfig": "Bind Configuration"
+  },
+  "label": {
+    "protocolId": "Protocol ID",
+    "scriptPath": "Script Path",
+    "state": "State",
+    "bindings": "Bindings"
+  },
+  "state": {
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "loaded": "Loaded"
+  },
+  "button": {
+    "loadProtocol": "Load Protocol",
+    "refreshList": "Refresh List",
+    "enable": "Enable",
+    "disable": "Disable",
+    "unload": "Unload",
+    "edit": "Edit",
+    "bind": "Bind",
+    "unbind": "Unbind"
+  },
+  "placeholder": {
+    "protocolId": "Enter unique protocol ID, e.g.: my-protocol",
+    "scriptPath": "Enter Lua script file path"
+  },
+  "message": {
+    "totalProtocols": "{{total}} protocols, {{enabled}} enabled"
+  }
+}

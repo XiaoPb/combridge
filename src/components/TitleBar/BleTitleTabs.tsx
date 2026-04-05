@@ -3,17 +3,19 @@ import { Tag } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
 import { useBleStore, formatMacAddress } from '../../stores/bleStore';
 import { useBle } from '../../hooks/useBle';
+import { useTranslation } from 'react-i18next';
 
 const SCAN_TAB_KEY = 'scan';
 
 const BleTitleTabs: React.FC = () => {
   const { connections, currentDevice, setCurrentDevice } = useBleStore();
   const { disconnectDevice } = useBle();
+  const { t } = useTranslation('ble');
 
   const connectedDevices = connections.filter((c) => c.isConnected);
 
   const tabs = [
-    { key: SCAN_TAB_KEY, label: '扫描', isConnected: false, isClosable: false },
+    { key: SCAN_TAB_KEY, label: t('button.startScan'), isConnected: false, isClosable: false },
     ...connectedDevices.map((conn) => ({
       key: conn.address,
       label: conn.name || formatMacAddress(conn.address),

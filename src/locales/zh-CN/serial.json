@@ -1,0 +1,71 @@
+{
+  "title": {
+    "launcher": "串口启动台",
+    "settings": "串口设置",
+    "dataView": "数据视图",
+    "sendPanel": "发送面板"
+  },
+  "label": {
+    "portSelect": "串口选择",
+    "baudRate": "波特率",
+    "dataBits": "数据位",
+    "stopBits": "停止位",
+    "parity": "校验位",
+    "flowControl": "流控制",
+    "currentConfig": "当前配置",
+    "connectedPorts": "已连接的串口",
+    "port": "串口"
+  },
+  "option": {
+    "parityNone": "无",
+    "parityOdd": "奇",
+    "parityEven": "偶",
+    "flowNone": "无",
+    "flowHardware": "硬件",
+    "flowSoftware": "软件"
+  },
+  "button": {
+    "scan": "扫描",
+    "openPort": "打开串口",
+    "closePort": "关闭串口",
+    "reconnect": "重新连接",
+    "send": "发送",
+    "export": "导出",
+    "clear": "清空"
+  },
+  "display": {
+    "all": "全部",
+    "receive": "接收",
+    "send": "发送",
+    "hex": "HEX",
+    "text": "TEXT"
+  },
+  "send": {
+    "text": "文本",
+    "appendNewline": "追加换行"
+  },
+  "placeholder": {
+    "selectPort": "选择串口",
+    "noData": "暂无数据",
+    "inputHex": "输入十六进制数据，如: 01 02 03 FF",
+    "inputText": "输入要发送的文本"
+  },
+  "message": {
+    "selectPort": "请选择串口",
+    "portAlreadyOpen": "串口 {{port}} 已有打开的标签页",
+    "selectPortFirst": "请先选择串口",
+    "noDataToExport": "没有数据可导出",
+    "exportSuccess": "数据已导出:\n日志: {{logPath}}\n数据: {{datPath}}",
+    "exportFailed": "导出失败: {{error}}",
+    "eachPortTab": "每个串口将创建独立的标签页",
+    "selectPortToStart": "选择串口并点击\"打开串口\"开始通信",
+    "selectPortTab": "请选择串口标签页"
+  },
+  "tooltip": {
+    "autoScrollOn": "自动滚动: 开启",
+    "autoScrollOff": "自动滚动: 关闭"
+  },
+  "tab": {
+    "launcher": "启动台"
+  }
+}

@@ -9,6 +9,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
 } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 
 const { Sider } = Layout;
 
@@ -20,27 +21,28 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation('sidebar');
 
   const menuItems = [
     {
       key: '/serial',
       icon: <UsbOutlined />,
-      label: '串口',
+      label: t('menu.serial'),
     },
     {
       key: '/ble',
       icon: <ApiOutlined />,
-      label: 'BLE',
+      label: t('menu.ble'),
     },
     {
       key: '/protocol',
       icon: <CodeOutlined />,
-      label: '协议',
+      label: t('menu.protocol'),
     },
     {
       key: '/system',
       icon: <SettingOutlined />,
-      label: '系统',
+      label: t('menu.system'),
     },
   ];
 
@@ -104,7 +106,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
           }}
         >
           {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-          {!collapsed && <span>收起侧边栏</span>}
+          {!collapsed && <span>{t('collapse')}</span>}
         </div>
       </div>
     </Sider>

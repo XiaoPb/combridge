@@ -1,13 +1,15 @@
 import React from 'react';
 import { CodeOutlined, FolderOpenOutlined } from '@ant-design/icons';
 import { usePageTabsStore } from '../../stores/pageTabsStore';
+import { useTranslation } from 'react-i18next';
 
 const ProtocolTitleTabs: React.FC = () => {
   const { protocolActiveTab, setProtocolActiveTab } = usePageTabsStore();
+  const { t } = useTranslation('protocol');
 
   const tabs = [
-    { key: 'editor', label: '脚本编辑', icon: <CodeOutlined /> },
-    { key: 'bind', label: '绑定配置', icon: <FolderOpenOutlined /> },
+    { key: 'editor', label: t('title.scriptEditor'), icon: <CodeOutlined /> },
+    { key: 'bind', label: t('title.bindConfig'), icon: <FolderOpenOutlined /> },
   ] as const;
 
   return (

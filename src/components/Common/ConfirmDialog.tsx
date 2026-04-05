@@ -1,6 +1,7 @@
 import React from 'react';
 import { Modal, Button, Space, Typography } from 'antd';
 import { ExclamationCircleOutlined, WarningOutlined, InfoCircleOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 
 const { Text } = Typography;
 
@@ -41,13 +42,14 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   title,
   content,
   type = 'info',
-  confirmText = '确定',
-  cancelText = '取消',
+  confirmText,
+  cancelText,
   onConfirm,
   onCancel,
   loading = false,
   danger = false,
 }) => {
+  const { t } = useTranslation('common');
   const config = typeConfig[type];
 
   return (
@@ -63,7 +65,7 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       footer={
         <Space>
           <Button onClick={onCancel} disabled={loading}>
-            {cancelText}
+            {cancelText || t('cancel')}
           </Button>
           <Button
             type={danger ? 'primary' : config.okType}
@@ -71,7 +73,7 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             loading={loading}
             onClick={onConfirm}
           >
-            {confirmText}
+            {confirmText || t('confirm')}
           </Button>
         </Space>
       }

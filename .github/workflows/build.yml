@@ -40,10 +40,12 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             compiler: msvc
+            gcc_version: ""
 
           - os: macos-latest
             target: aarch64-apple-darwin
             compiler: clang
+            gcc_version: ""
 
     steps:
       - name: Checkout code
@@ -54,7 +56,7 @@ jobs:
         uses: aminya/setup-cpp@v1
         with:
           compiler: ${{ matrix.compiler }}
-          gcc_version: ${{ matrix.gcc_version | default('') }}
+          gcc_version: ${{ matrix.gcc_version }}
           cmake: true
           ninja: true
           vcpkg: false

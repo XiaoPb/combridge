@@ -886,6 +886,30 @@ pre {
   color: var(--primary-color);
 }
 
+.title-bar-tab .tab-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  border-radius: 50%;
+  opacity: 0;
+  transition: all 0.2s;
+}
+
+.title-bar-tab:hover .tab-close-btn {
+  opacity: 1;
+}
+
+.title-bar-tab .tab-close-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] .title-bar-tab .tab-close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .title-bar-right {
   display: flex;
   align-items: center;

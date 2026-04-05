@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Layout, Card, Button, Select, Spin, Typography, Space, Alert, Input, Segmented, Switch, Empty, Tag, Tabs as AntTabs, Tooltip } from 'antd';
+import { Layout, Card, Button, Select, Spin, Typography, Space, Alert, Input, Segmented, Switch, Empty, Tag, Tooltip } from 'antd';
 import type { TextAreaRef } from 'antd/es/input/TextArea';
 import { ReloadOutlined, UsbOutlined, DisconnectOutlined, SendOutlined, ClearOutlined, DownloadOutlined, MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined, VerticalAlignBottomOutlined } from '@ant-design/icons';
 import { useSerial } from '../../hooks/useSerial';
@@ -28,8 +28,6 @@ const SerialPage: React.FC = () => {
     clearTabData,
     updateTabConfig,
     toggleTabSettings,
-    setActiveTab,
-    removeTab,
     setError,
     hasPortTab,
     preferences,
@@ -106,18 +104,6 @@ const SerialPage: React.FC = () => {
     if (activeTabKey) {
       await sendData(activeTabKey, dataToSend, sendFormat);
     }
-  };
-
-  const handleRemoveTab = async (targetKey: string) => {
-    const tab = tabs.find((t) => t.key === targetKey);
-    if (tab?.isConnected) {
-      try {
-        await closePort(targetKey);
-      } catch {
-        // ignore close errors
-      }
-    }
-    removeTab(targetKey);
   };
 
   const allData = activeTab && isPortTab
@@ -658,39 +644,8 @@ const SerialPage: React.FC = () => {
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ marginBottom: 4, flexShrink: 0 }}>
-        <AntTabs
-          type="editable-card"
-          size="small"
-          activeKey={activeTabKey || undefined}
-          onChange={(key) => setActiveTab(key)}
-          onEdit={(targetKey, action) => {
-            if (action === 'remove') {
-              handleRemoveTab(targetKey as string);
-            }
-          }}
-          hideAdd={true}
-          items={tabs.map((tab) => ({
-            key: tab.key,
-            label: (
-              <span style={{ fontSize: 12 }}>
-                {tab.tabType === 'launcher' ? '启动台' : tab.portName}
-                {tab.isConnected && tab.tabType === 'port' && (
-                  <Tag color="success" style={{ marginLeft: 4, fontSize: 10 }}>
-                    ●
-                  </Tag>
-                )}
-              </span>
-            ),
-            closable: tab.tabType === 'port',
-          }))}
-          style={{ marginBottom: 0 }}
-        />
-      </div>
-      <div style={{ flex: 1, overflow: 'hidden' }}>
-        {isLauncherTab ? renderLauncherContent() : renderPortContent()}
-      </div>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 8 }}>
+      {isLauncherTab ? renderLauncherContent() : renderPortContent()}
     </div>
   );
 };

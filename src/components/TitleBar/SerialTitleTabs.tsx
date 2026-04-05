@@ -1,15 +1,29 @@
 import React from 'react';
 import { Tag } from 'antd';
-import { useSerialStore } from '../../stores/serialStore';
+import { CloseOutlined } from '@ant-design/icons';
+import { useSerial } from '../../hooks/useSerial';
 
 const SerialTitleTabs: React.FC = () => {
-  const { tabs, activeTabKey, setActiveTab } = useSerialStore();
+  const { tabs, activeTabKey, setActiveTab, removeTab, closePort } = useSerial();
+
+  const handleClose = async (e: React.MouseEvent, tabKey: string, isConnected: boolean) => {
+    e.stopPropagation();
+    if (isConnected) {
+      try {
+        await closePort(tabKey);
+      } catch {
+        // ignore close errors
+      }
+    }
+    removeTab(tabKey);
+  };
 
   return (
     <div className="title-tabs-container">
       {tabs.map((tab) => {
         const isActive = tab.key === activeTabKey;
         const label = tab.tabType === 'launcher' ? '启动台' : tab.portName;
+        const isClosable = tab.tabType === 'port';
 
         return (
           <div
@@ -22,6 +36,14 @@ const SerialTitleTabs: React.FC = () => {
               <Tag color="success" style={{ marginLeft: 4, fontSize: 10, padding: '0 4px' }}>
                 ●
               </Tag>
+            )}
+            {isClosable && (
+              <span
+                className="tab-close-btn"
+                onClick={(e) => handleClose(e, tab.key, tab.isConnected)}
+              >
+                <CloseOutlined style={{ fontSize: 10 }} />
+              </span>
             )}
           </div>
         );

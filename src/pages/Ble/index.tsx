@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Tabs, Alert, Space, Button, Tree, Tag, Typography, Empty, Spin, Card, Input, Segmented, Tooltip } from 'antd';
+import { Alert, Space, Button, Tree, Tag, Typography, Empty, Spin, Card, Input, Segmented, Tooltip } from 'antd';
 import { MenuFoldOutlined, MenuUnfoldOutlined, ClearOutlined, DownloadOutlined, VerticalAlignBottomOutlined } from '@ant-design/icons';
 import { useBle } from '../../hooks/useBle';
 import { useSerialStore } from '../../stores/serialStore';
@@ -16,23 +16,6 @@ import type { TextAreaRef } from 'antd/es/input/TextArea';
 
 const { Text } = Typography;
 const { TextArea } = Input;
-
-const bleTabsStyles = `
-  .ble-tabs-full-height.ant-tabs {
-    display: flex;
-    flex-direction: column;
-  }
-  .ble-tabs-full-height .ant-tabs-content-holder {
-    flex: 1;
-    overflow: hidden;
-  }
-  .ble-tabs-full-height .ant-tabs-content {
-    height: 100%;
-  }
-  .ble-tabs-full-height .ant-tabs-tabpane {
-    height: 100%;
-  }
-`;
 
 interface DeviceLogEntry {
   id: string;
@@ -54,8 +37,6 @@ interface DeviceTabData {
   discoveringServices: boolean;
   subscribedUuids: Set<string>;
 }
-
-const SCAN_TAB_KEY = 'scan';
 
 const formatTimestamp = (timestamp: number): string => {
   const date = new Date(timestamp);
@@ -95,7 +76,6 @@ const BlePage: React.FC = () => {
 
   const { ports, setPorts } = useSerialStore();
   const { preferences, updatePreferences, loadPreferences } = useBleStore();
-  const [activeTabKey, setActiveTabKey] = useState<string>(SCAN_TAB_KEY);
   const [deviceTabs, setDeviceTabs] = useState<Record<string, DeviceTabData>>({});
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const processedNotificationIds = useRef<Set<string>>(new Set());
@@ -154,7 +134,6 @@ const BlePage: React.FC = () => {
         if (Object.keys(tabs).length > 0) {
           setDeviceTabs(tabs);
           const firstDeviceId = Object.keys(tabs)[0];
-          setActiveTabKey(firstDeviceId);
           setCurrentDevice(firstDeviceId);
         }
       } catch (err) {
@@ -299,23 +278,24 @@ const BlePage: React.FC = () => {
     }
   }, [notifications, currentDevice, connections, addLogToDevice]);
 
+  const currentTab = currentDevice ? deviceTabs[currentDevice] : null;
+  
   useEffect(() => {
-    const tab = deviceTabs[activeTabKey];
-    if (!tab || !preferences.autoScroll) return;
+    if (!currentTab || !preferences.autoScroll) return;
     
-    const currentCount = tab.logs.length;
-    const lastCount = lastLogCountRef.current[activeTabKey] || 0;
+    const currentCount = currentTab.logs.length;
+    const lastCount = lastLogCountRef.current[currentDevice!] || 0;
     
     if (currentCount !== lastCount) {
-      lastLogCountRef.current[activeTabKey] = currentCount;
+      lastLogCountRef.current[currentDevice!] = currentCount;
       requestAnimationFrame(() => {
-        const textArea = logContainerRefs.current[activeTabKey]?.resizableTextArea?.textArea;
+        const textArea = logContainerRefs.current[currentDevice!]?.resizableTextArea?.textArea;
         if (textArea) {
           textArea.scrollTop = textArea.scrollHeight;
         }
       });
     }
-  }, [deviceTabs, activeTabKey, preferences.autoScroll]);
+  }, [currentTab, currentDevice, preferences.autoScroll]);
 
   const handleConnect = async (address: string) => {
     const existingConn = connections.find((c) => c.address === address);
@@ -326,7 +306,6 @@ const BlePage: React.FC = () => {
 
     try {
       await connectDevice(address);
-      setActiveTabKey(address);
     } catch (err) {
       console.error('[BlePage] 连接失败:', err);
     }
@@ -343,21 +322,10 @@ const BlePage: React.FC = () => {
       delete next[deviceId];
       return next;
     });
-    if (activeTabKey === deviceId) {
-      setActiveTabKey(SCAN_TAB_KEY);
+    if (currentDevice === deviceId) {
+      setCurrentDevice(null);
     }
   };
-
-  const handleTabEdit = useCallback(
-    (targetKey: string | React.MouseEvent | React.KeyboardEvent, action: 'add' | 'remove') => {
-      if (action === 'remove') {
-        const key = targetKey as string;
-        if (key === SCAN_TAB_KEY) return;
-        handleDisconnect(key);
-      }
-    },
-    [handleDisconnect]
-  );
 
   const handleServiceSelectForDevice = useCallback(
     async (serviceUuid: string, deviceId: string) => {
@@ -590,7 +558,7 @@ const BlePage: React.FC = () => {
     }));
   };
 
-  const renderScanTab = () => (
+  const renderScanContent = () => (
     <div style={{ display: 'flex', height: '100%', gap: 8, overflow: 'hidden' }}>
       <div style={{ flex: '1 1 50%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <BleScanner
@@ -653,7 +621,7 @@ const BlePage: React.FC = () => {
     </div>
   );
 
-  const renderDeviceTabContent = (tabData: DeviceTabData) => {
+  const renderDeviceContent = (tabData: DeviceTabData) => {
     const treeData = buildTreeData(tabData.services);
     const isSubscribed = tabData.selectedCharacteristic 
       ? tabData.subscribedUuids.has(tabData.selectedCharacteristic.uuid)
@@ -815,40 +783,11 @@ const BlePage: React.FC = () => {
     );
   };
 
-  const tabItems = [
-    {
-      key: SCAN_TAB_KEY,
-      label: (
-        <span style={{ fontSize: 12 }}>
-          扫描
-          {isScanning && <Tag color="processing" style={{ marginLeft: 4, fontSize: 10 }} />}
-        </span>
-      ),
-      closable: false,
-      children: renderScanTab(),
-    },
-    ...Object.entries(deviceTabs).map(([key, tab]) => {
-      return {
-        key,
-        label: (
-          <span style={{ fontSize: 12 }}>
-            {tab.name || formatMacAddress(key)}
-            <Tag color="success" style={{ marginLeft: 4, fontSize: 10 }}>●</Tag>
-          </span>
-        ),
-        closable: true,
-        children: renderDeviceTabContent(tab),
-      };
-    }),
-  ];
-
   return (
-    <>
-      <style>{bleTabsStyles}</style>
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 8 }}>
       {error && (
         <Alert
-          title="错误"
+          message="错误"
           description={error}
           type="error"
           closable
@@ -859,7 +798,7 @@ const BlePage: React.FC = () => {
 
       {isConnecting && (
         <Alert
-          title="正在连接..."
+          message="正在连接..."
           type="info"
           showIcon
           style={{ marginBottom: 8, flexShrink: 0 }}
@@ -867,21 +806,12 @@ const BlePage: React.FC = () => {
       )}
 
       <div style={{ flex: '1 1 0', minHeight: 0, overflow: 'hidden' }}>
-        <Tabs
-          type="editable-card"
-          activeKey={activeTabKey}
-          onChange={setActiveTabKey}
-          onEdit={handleTabEdit}
-          items={tabItems}
-          size="small"
-          style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-          tabBarStyle={{ marginBottom: 0, paddingLeft: 8, paddingRight: 8, flexShrink: 0 }}
-          tabBarGutter={4}
-          className="ble-tabs-full-height"
-        />
+        {currentDevice && currentTab
+          ? renderDeviceContent(currentTab)
+          : renderScanContent()
+        }
       </div>
     </div>
-    </>
   );
 };
 

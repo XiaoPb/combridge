@@ -10,10 +10,9 @@ pub async fn gh3036_init(
     manager: State<'_, Gh3036ManagerRef>,
     app_handle: AppHandle,
 ) -> Result<(), ErrorResponse> {
-    manager.set_app_handle(app_handle).await;
+    manager.set_app_handle(app_handle);
     manager
         .initialize()
-        .await
         .map_err(|e| ComBridgeError::protocol(e).to_error_response())
 }
 
@@ -21,7 +20,7 @@ pub async fn gh3036_init(
 pub async fn gh3036_is_initialized(
     manager: State<'_, Gh3036ManagerRef>,
 ) -> Result<bool, ErrorResponse> {
-    Ok(manager.is_initialized().await)
+    Ok(manager.is_initialized())
 }
 
 #[tauri::command]
@@ -51,7 +50,6 @@ pub async fn gh3036_configure_tx_channel(
 
     manager
         .configure_tx_channel(config)
-        .await
         .map_err(|e| ComBridgeError::protocol(e).to_error_response())
 }
 
@@ -82,7 +80,6 @@ pub async fn gh3036_configure_rx_channel(
 
     manager
         .configure_rx_channel(config)
-        .await
         .map_err(|e| ComBridgeError::protocol(e).to_error_response())
 }
 
@@ -90,8 +87,8 @@ pub async fn gh3036_configure_rx_channel(
 pub async fn gh3036_get_channels(
     manager: State<'_, Gh3036ManagerRef>,
 ) -> Result<(Option<ChannelConfig>, Option<ChannelConfig>), ErrorResponse> {
-    let tx = manager.get_tx_channel().await;
-    let rx = manager.get_rx_channel().await;
+    let tx = manager.get_tx_channel();
+    let rx = manager.get_rx_channel();
     Ok((tx, rx))
 }
 
@@ -115,7 +112,6 @@ pub async fn gh3036_set_csv_config(
     let config = CsvConfig { enabled, output_dir };
     manager
         .set_csv_config(config)
-        .await
         .map_err(|e| ComBridgeError::protocol(e).to_error_response())
 }
 
@@ -123,7 +119,7 @@ pub async fn gh3036_set_csv_config(
 pub async fn gh3036_get_csv_config(
     manager: State<'_, Gh3036ManagerRef>,
 ) -> Result<CsvConfig, ErrorResponse> {
-    Ok(manager.get_csv_config().await)
+    Ok(manager.get_csv_config())
 }
 
 #[tauri::command]

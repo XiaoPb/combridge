@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod device;
 pub mod error;
+pub mod gh3036;
 pub mod protocol;
 pub mod service;
 pub mod state;
@@ -8,7 +9,8 @@ pub mod websocket;
 
 use std::sync::Arc;
 
-use device::{BleManager, SerialManager};
+use device::{BleManager, DeviceManager, SerialManager};
+use gh3036::Gh3036Manager;
 use protocol::PluginManager;
 use service::LoggerService;
 use state::{create_action_dispatcher, create_app_state, create_state_persistence};
@@ -36,6 +38,9 @@ pub fn run() {
     let ble_manager = Arc::new(BleManager::new());
     let connection_pool = Arc::new(ConnectionPool::new());
     let plugin_manager = Arc::new(PluginManager::new());
+    
+    let device_manager = Arc::new(DeviceManager::new(serial_manager.clone(), ble_manager.clone()));
+    let gh3036_manager = Arc::new(Gh3036Manager::new(device_manager));
 
     let app_state = create_app_state();
     let app_data_dir = get_app_data_dir();
@@ -62,6 +67,7 @@ pub fn run() {
         .manage(app_state)
         .manage(state_persistence)
         .manage(action_dispatcher)
+        .manage(gh3036_manager)
         .setup(move |_app| {
             let ble_manager = ble_manager_clone.clone();
             tauri::async_runtime::spawn(async move {
@@ -132,6 +138,15 @@ pub fn run() {
             commands::preferences::save_preferences,
             commands::preferences::update_serial_preferences,
             commands::preferences::update_ble_preferences,
+            commands::gh3036::gh3036_init,
+            commands::gh3036::gh3036_is_initialized,
+            commands::gh3036::gh3036_configure_tx_channel,
+            commands::gh3036::gh3036_configure_rx_channel,
+            commands::gh3036::gh3036_get_channels,
+            commands::gh3036::gh3036_send_data,
+            commands::gh3036::gh3036_set_csv_config,
+            commands::gh3036::gh3036_get_csv_config,
+            commands::gh3036::gh3036_get_rpc_commands,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

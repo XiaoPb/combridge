@@ -1,5 +1,5 @@
 import React from 'react';
-import { CodeOutlined, FolderOpenOutlined } from '@ant-design/icons';
+import { CodeOutlined, FolderOpenOutlined, ApiOutlined } from '@ant-design/icons';
 import { usePageTabsStore } from '../../stores/pageTabsStore';
 import { useTranslation } from 'react-i18next';
 
@@ -10,6 +10,7 @@ const ProtocolTitleTabs: React.FC = () => {
   const tabs = [
     { key: 'editor', label: t('title.scriptEditor'), icon: <CodeOutlined /> },
     { key: 'bind', label: t('title.bindConfig'), icon: <FolderOpenOutlined /> },
+    { key: 'gh3036', label: t('title.gh3036'), icon: <ApiOutlined /> },
   ] as const;
 
   return (

@@ -537,6 +537,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bluest",
+ "cc",
  "chrono",
  "dirs 5.0.1",
  "futures",

@@ -4,7 +4,8 @@
     "protocolList": "Protocol List",
     "scriptEditor": "Script Editor",
     "bindConfig": "Bind Configuration",
-    "protocolBind": "Protocol Binding"
+    "protocolBind": "Protocol Binding",
+    "gh3036": "GH3036"
   },
   "label": {
     "protocolId": "Protocol ID",
@@ -116,5 +117,39 @@
     "noAvailableDevice": "No available devices. Please open a port or connect a device first",
     "clickBindHint": "Select protocol and device then click \"Bind\" button",
     "confirmUnbind": "Are you sure you want to unbind?"
+  },
+  "gh3036": {
+    "initializing": "Initializing GH3036...",
+    "channelConfig": "Channel Config",
+    "rpcCommands": "RPC Commands",
+    "dataView": "Data View",
+    "txChannel": "TX Channel",
+    "rxChannel": "RX Channel",
+    "channelType": "Channel Type",
+    "serial": "Serial",
+    "ble": "BLE",
+    "device": "Device",
+    "characteristic": "Characteristic",
+    "selectDevice": "Select Device",
+    "charUuidPlaceholder": "Enter characteristic UUID",
+    "saveTxChannel": "Save TX Channel",
+    "saveRxChannel": "Save RX Channel",
+    "csvSave": "CSV Save",
+    "enableCsv": "Enable CSV Save",
+    "outputDir": "Output Directory",
+    "saveCsvConfig": "Save CSV Config",
+    "execute": "Execute",
+    "noTxChannel": "Please configure TX channel first",
+    "commandSent": "Command {{name}} sent",
+    "paramArrayPlaceholder": "Enter array, comma separated",
+    "timestamp": "Timestamp",
+    "functionId": "Function ID",
+    "frameId": "Frame ID",
+    "gsData": "GS Data",
+    "rawdata": "Raw Data",
+    "algoData": "Algo Data",
+    "noData": "No data",
+    "frameCount": "{{count}} frames",
+    "clearData": "Clear Data"
   }
 }

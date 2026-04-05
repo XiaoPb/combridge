@@ -4,7 +4,8 @@
     "protocolList": "协议列表",
     "scriptEditor": "脚本编辑器",
     "bindConfig": "绑定配置",
-    "protocolBind": "协议绑定"
+    "protocolBind": "协议绑定",
+    "gh3036": "GH3036"
   },
   "label": {
     "protocolId": "协议 ID",
@@ -116,5 +117,39 @@
     "noAvailableDevice": "暂无可用设备，请先打开串口或连接设备",
     "clickBindHint": "选择协议和设备后点击\"绑定\"按钮",
     "confirmUnbind": "确定要解绑吗？"
+  },
+  "gh3036": {
+    "initializing": "正在初始化 GH3036...",
+    "channelConfig": "通道配置",
+    "rpcCommands": "RPC 指令",
+    "dataView": "数据视图",
+    "txChannel": "发送通道",
+    "rxChannel": "接收通道",
+    "channelType": "通道类型",
+    "serial": "串口",
+    "ble": "蓝牙",
+    "device": "设备",
+    "characteristic": "特征值",
+    "selectDevice": "选择设备",
+    "charUuidPlaceholder": "输入特征值 UUID",
+    "saveTxChannel": "保存发送通道",
+    "saveRxChannel": "保存接收通道",
+    "csvSave": "CSV 保存",
+    "enableCsv": "启用 CSV 保存",
+    "outputDir": "输出目录",
+    "saveCsvConfig": "保存 CSV 配置",
+    "execute": "执行",
+    "noTxChannel": "请先配置发送通道",
+    "commandSent": "指令 {{name}} 已发送",
+    "paramArrayPlaceholder": "输入数组，用逗号分隔",
+    "timestamp": "时间戳",
+    "functionId": "功能 ID",
+    "frameId": "帧 ID",
+    "gsData": "加速度数据",
+    "rawdata": "原始数据",
+    "algoData": "算法数据",
+    "noData": "暂无数据",
+    "frameCount": "共 {{count}} 帧",
+    "clearData": "清空数据"
   }
 }

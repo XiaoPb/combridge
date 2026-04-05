@@ -9,6 +9,7 @@ import { useProtocol } from '../../hooks/useProtocol';
 import ProtocolList from './ProtocolList';
 import ScriptEditor from './ScriptEditor';
 import BindConfig from './BindConfig';
+import Gh3036Panel from './Gh3036Panel';
 import type { PluginInfo } from '../../api/types';
 import { usePageTabsStore } from '../../stores/pageTabsStore';
 
@@ -90,6 +91,8 @@ const ProtocolPage: React.FC = () => {
 
   const renderRightContent = () => {
     switch (protocolActiveTab) {
+      case 'gh3036':
+        return <Gh3036Panel />;
       case 'bind':
         return (
           <BindConfig
@@ -108,6 +111,14 @@ const ProtocolPage: React.FC = () => {
         );
     }
   };
+
+  if (protocolActiveTab === 'gh3036') {
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <Gh3036Panel />
+      </div>
+    );
+  }
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 8 }}>

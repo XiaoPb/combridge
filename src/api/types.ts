@@ -128,3 +128,41 @@ export interface CacheData {
   tx: CacheEntry[];
   rx: CacheEntry[];
 }
+
+export interface Gh3036ChannelConfig {
+  channel_type: 'Serial' | 'Ble';
+  device_id: string;
+  characteristic_uuid: string | null;
+}
+
+export interface Gh3036CsvConfig {
+  enabled: boolean;
+  output_dir: string;
+}
+
+export interface Gh3036FrameData {
+  function_id: number;
+  function_name: string;
+  frame_id: number;
+  timestamp: number;
+  gs_data: number[];
+  rawdata: number[];
+  flags: number[];
+  algo_data: number[];
+  agc_info: number[];
+  phy_value: number[];
+}
+
+export interface Gh3036RpcParam {
+  name: string;
+  param_type: string;
+  description: string;
+  default_value: string | null;
+}
+
+export interface Gh3036RpcCommand {
+  key: string;
+  name: string;
+  description: string;
+  params: Gh3036RpcParam[];
+}

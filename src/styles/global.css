@@ -930,21 +930,24 @@ pre {
 
 .lang-btn {
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   width: 32px;
-  height: 22px;
-  border-radius: var(--border-radius);
-  transition: background-color 0.2s;
-  border: 1px solid var(--border-color);
+  height: 32px;
+  border-radius: 50%;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.lang-btn img {
+  width: 20px;
+  height: 20px;
 }
 
 .lang-btn:hover {
   background: var(--hover-bg);
+  border-color: var(--border-color);
 }
 
 .window-controls {

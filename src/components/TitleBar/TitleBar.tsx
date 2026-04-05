@@ -136,7 +136,7 @@ const TitleBar: React.FC = () => {
       <div className="title-bar-right">
         <ThemeSwitch checked={isDarkMode} onChange={toggleTheme} />
         <div className="lang-btn" onClick={toggleLanguage}>
-          {language === 'zh-CN' ? '文' : 'A'}
+          <img src="/languages.svg" alt="Language" />
         </div>
         <div className="window-controls">
           <button onClick={handleMinimize}><MinusOutlined /></button>

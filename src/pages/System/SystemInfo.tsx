@@ -123,7 +123,7 @@ const SystemInfo: React.FC = () => {
   }
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
+    <div style={{ display: 'grid', gap: 16, height: '100%', overflow: 'auto', paddingRight: 4 }}>
       <Card
         title={
           <span>

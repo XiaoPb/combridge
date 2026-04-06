@@ -1,4 +1,8 @@
 {
+  "tabs": {
+    "realtime": "Realtime Data",
+    "csvLoader": "CSV Loader"
+  },
   "common": {
     "error": "Error",
     "success": "Success",

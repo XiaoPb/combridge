@@ -1,4 +1,8 @@
 {
+  "tabs": {
+    "realtime": "实时数据",
+    "csvLoader": "CSV 加载"
+  },
   "common": {
     "error": "错误",
     "success": "成功",

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Row, Col, Button, Space, InputNumber, Alert, Statistic, Switch } from 'antd';
+import { Card, Row, Col, Button, Space, InputNumber, Alert, Statistic, Switch, Tabs } from 'antd';
 import {
   PlayCircleOutlined,
   PauseCircleOutlined,
@@ -12,12 +12,13 @@ import type { ParserConfig } from '../../api/waveform';
 import WaveformChart from './WaveformChart';
 import BufferConfigPanel from './BufferConfigPanel';
 import ParserConfigPanel from './ParserConfigPanel';
+import CsvLoaderTab from './CsvLoaderTab';
 
-const WaveformPage: React.FC = () => {
+const RealtimeDataTab: React.FC = () => {
   const { t } = useTranslation('waveform');
   const [displayRows, setDisplayRows] = useState(500);
   const [refreshInterval, setRefreshInterval] = useState(33);
-  
+
   const store = useWaveformStore();
 
   const {
@@ -188,6 +189,36 @@ const WaveformPage: React.FC = () => {
           </Card>
         </Col>
       </Row>
+    </div>
+  );
+};
+
+const WaveformPage: React.FC = () => {
+  const { t } = useTranslation('waveform');
+
+  const items = [
+    {
+      key: 'realtime',
+      label: t('tabs.realtime'),
+      children: <RealtimeDataTab />,
+    },
+    {
+      key: 'csvLoader',
+      label: t('tabs.csvLoader'),
+      children: <CsvLoaderTab />,
+    },
+  ];
+
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Tabs
+        defaultActiveKey="realtime"
+        items={items}
+        style={{ height: '100%' }}
+        styles={{
+          content: { height: 'calc(100% - 46px)', overflow: 'auto' },
+        }}
+      />
     </div>
   );
 };

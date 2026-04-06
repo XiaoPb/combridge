@@ -1,30 +1,53 @@
-import { onSerialData, onSerialError, onSerialConnected, onSerialDisconnected } from '../api/events';
+import {
+  onSerialData,
+  onSerialError,
+  onSerialConnected,
+  onSerialDisconnected,
+  onBleData,
+  onBleConnected,
+  onBleDisconnected,
+  onBleError,
+  onBleScanResult,
+  onBleModeChanged,
+} from '../api/events';
 import { useSerialStore, generateId } from '../stores/serialStore';
+import { useBleStore, generateBleId } from '../stores/bleStore';
 import { useLogStore } from '../stores/logStore';
 import { message } from 'antd';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 
-let listeners: {
+let serialListeners: {
   data?: UnlistenFn;
   error?: UnlistenFn;
   connected?: UnlistenFn;
   disconnected?: UnlistenFn;
 } = {};
 
-let isInitialized = false;
-let initPromise: Promise<void> | null = null;
+let bleListeners: {
+  data?: UnlistenFn;
+  connected?: UnlistenFn;
+  disconnected?: UnlistenFn;
+  error?: UnlistenFn;
+  scanResult?: UnlistenFn;
+  modeChanged?: UnlistenFn;
+} = {};
+
+let serialInitialized = false;
+let bleInitialized = false;
+let serialInitPromise: Promise<void> | null = null;
+let bleInitPromise: Promise<void> | null = null;
 
 export async function initSerialEventListeners(): Promise<void> {
-  if (isInitialized) {
+  if (serialInitialized) {
     return;
   }
 
-  if (initPromise) {
-    return initPromise;
+  if (serialInitPromise) {
+    return serialInitPromise;
   }
 
-  initPromise = (async () => {
-    listeners.data = await onSerialData((event) => {
+  serialInitPromise = (async () => {
+    serialListeners.data = await onSerialData((event) => {
       const store = useSerialStore.getState();
       store.addReceivedData(event.port_name, {
         id: generateId(),
@@ -35,19 +58,19 @@ export async function initSerialEventListeners(): Promise<void> {
       });
     });
 
-    listeners.error = await onSerialError((event) => {
+    serialListeners.error = await onSerialError((event) => {
       const store = useSerialStore.getState();
       store.setError(event.error);
       useLogStore.getState().addLog('error', 'SerialManager', `串口错误: ${event.error}`);
       message.error(`串口错误: ${event.error}`);
     });
 
-    listeners.connected = await onSerialConnected((portName) => {
+    serialListeners.connected = await onSerialConnected((portName) => {
       useLogStore.getState().addLog('info', 'SerialManager', `串口 ${portName} 已连接`);
       message.success(`串口 ${portName} 已连接`);
     });
 
-    listeners.disconnected = await onSerialDisconnected((portName) => {
+    serialListeners.disconnected = await onSerialDisconnected((portName) => {
       const store = useSerialStore.getState();
       const tab = store.tabs.find((t) => t.portName === portName && t.tabType === 'port');
       if (tab) {
@@ -57,33 +80,165 @@ export async function initSerialEventListeners(): Promise<void> {
       message.info(`串口 ${portName} 已断开`);
     });
 
-    isInitialized = true;
-    initPromise = null;
+    serialInitialized = true;
+    serialInitPromise = null;
   })();
 
-  return initPromise;
+  return serialInitPromise;
 }
 
 export async function cleanupSerialEventListeners(): Promise<void> {
-  if (listeners.data) {
-    listeners.data();
-    listeners.data = undefined;
+  if (serialListeners.data) {
+    serialListeners.data();
+    serialListeners.data = undefined;
   }
-  if (listeners.error) {
-    listeners.error();
-    listeners.error = undefined;
+  if (serialListeners.error) {
+    serialListeners.error();
+    serialListeners.error = undefined;
   }
-  if (listeners.connected) {
-    listeners.connected();
-    listeners.connected = undefined;
+  if (serialListeners.connected) {
+    serialListeners.connected();
+    serialListeners.connected = undefined;
   }
-  if (listeners.disconnected) {
-    listeners.disconnected();
-    listeners.disconnected = undefined;
+  if (serialListeners.disconnected) {
+    serialListeners.disconnected();
+    serialListeners.disconnected = undefined;
   }
-  isInitialized = false;
+  serialInitialized = false;
 }
 
 export function isSerialListenersInitialized(): boolean {
-  return isInitialized;
+  return serialInitialized;
+}
+
+export async function initBleEventListeners(): Promise<void> {
+  if (bleInitialized) {
+    return;
+  }
+
+  if (bleInitPromise) {
+    return bleInitPromise;
+  }
+
+  bleInitPromise = (async () => {
+    bleListeners.data = await onBleData((event) => {
+      const store = useBleStore.getState();
+      store.addNotification({
+        id: generateBleId(),
+        deviceId: event.deviceId,
+        characteristicUuid: event.characteristicUuid,
+        data: event.data,
+        timestamp: event.timestamp,
+      });
+    });
+
+    bleListeners.connected = await onBleConnected((event) => {
+      const store = useBleStore.getState();
+      store.addConnection({
+        deviceId: event.deviceId,
+        address: event.address,
+        name: event.name,
+        isConnected: true,
+        services: [],
+        connectedAt: Date.now(),
+      });
+      store.setIsConnecting(false);
+      useLogStore.getState().addLog('info', 'BleManager', `设备 ${event.name || event.address} 已连接`);
+      message.success(`设备 ${event.name || event.address} 已连接`);
+    });
+
+    bleListeners.disconnected = await onBleDisconnected((event) => {
+      const store = useBleStore.getState();
+      store.removeConnection(event.deviceId);
+      if (store.currentDevice === event.deviceId) {
+        store.setCurrentDevice(null);
+        store.clearServices();
+        store.clearCharacteristics();
+      }
+      useLogStore.getState().addLog('info', 'BleManager', `设备 ${event.address} 已断开`);
+      message.info(`设备 ${event.address} 已断开`);
+    });
+
+    bleListeners.error = await onBleError((event) => {
+      const errorMsg = event.error;
+      const store = useBleStore.getState();
+      store.setError(errorMsg);
+      store.setIsConnecting(false);
+      store.setIsScanning(false);
+      useLogStore.getState().addLog('error', 'BleManager', `BLE错误: ${errorMsg}`);
+      message.error(`BLE错误: ${errorMsg}`);
+    });
+
+    bleListeners.scanResult = await onBleScanResult((device: unknown) => {
+      const deviceInfo = device as {
+        address: string;
+        name?: string;
+        rssi?: number;
+        isConnectable: boolean;
+        services?: string[];
+      };
+      const store = useBleStore.getState();
+      store.addDevice({
+        address: deviceInfo.address,
+        name: deviceInfo.name,
+        rssi: deviceInfo.rssi,
+        isConnectable: deviceInfo.isConnectable,
+        services: deviceInfo.services,
+        discoveredAt: Date.now(),
+      });
+    });
+
+    bleListeners.modeChanged = await onBleModeChanged((event) => {
+      const store = useBleStore.getState();
+      store.setMode(event.mode);
+      store.setSerialPort(event.serialPort || null);
+      useLogStore.getState().addLog('info', 'BleManager', `BLE模式已切换为 ${event.mode}`);
+      message.info(`BLE模式已切换为 ${event.mode}`);
+    });
+
+    bleInitialized = true;
+    bleInitPromise = null;
+  })();
+
+  return bleInitPromise;
+}
+
+export async function cleanupBleEventListeners(): Promise<void> {
+  if (bleListeners.data) {
+    bleListeners.data();
+    bleListeners.data = undefined;
+  }
+  if (bleListeners.connected) {
+    bleListeners.connected();
+    bleListeners.connected = undefined;
+  }
+  if (bleListeners.disconnected) {
+    bleListeners.disconnected();
+    bleListeners.disconnected = undefined;
+  }
+  if (bleListeners.error) {
+    bleListeners.error();
+    bleListeners.error = undefined;
+  }
+  if (bleListeners.scanResult) {
+    bleListeners.scanResult();
+    bleListeners.scanResult = undefined;
+  }
+  if (bleListeners.modeChanged) {
+    bleListeners.modeChanged();
+    bleListeners.modeChanged = undefined;
+  }
+  bleInitialized = false;
+}
+
+export function isBleListenersInitialized(): boolean {
+  return bleInitialized;
+}
+
+export async function initAllEventListeners(): Promise<void> {
+  await Promise.all([initSerialEventListeners(), initBleEventListeners()]);
+}
+
+export async function cleanupAllEventListeners(): Promise<void> {
+  await Promise.all([cleanupSerialEventListeners(), cleanupBleEventListeners()]);
 }

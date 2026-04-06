@@ -1,10 +1,8 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { message } from 'antd';
 import { bleApi } from '../api/tauri';
-import { onBleData, onBleConnected, onBleDisconnected, onBleError, onBleScanResult, onBleModeChanged } from '../api/events';
-import { useBleStore, generateBleId, parseBleData, type BleMode } from '../stores/bleStore';
+import { useBleStore, parseBleData, type BleMode } from '../stores/bleStore';
 import { useLogStore } from '../stores/logStore';
-import type { UnlistenFn } from '@tauri-apps/api/event';
 import type { BleScanOptions, BleConnection } from '../types';
 
 const handleBleError = (operation: string, params: Record<string, unknown>, error: unknown): string => {
@@ -12,131 +10,6 @@ const handleBleError = (operation: string, params: Record<string, unknown>, erro
   console.error(`[useBle] ${operation} 失败:`, { params, error: errorMsg });
   return errorMsg;
 };
-
-let globalBleListeners: UnlistenFn[] = [];
-let bleListenerCount = 0;
-let bleListenerSetupPromise: Promise<void> | null = null;
-
-async function setupGlobalBleListeners() {
-  if (bleListenerSetupPromise) {
-    await bleListenerSetupPromise;
-  }
-
-  if (bleListenerCount > 0) {
-    bleListenerCount++;
-    return;
-  }
-
-  bleListenerSetupPromise = (async () => {
-    const unlistenData = await onBleData((event) => {
-      console.debug('[useBle] 收到BLE数据:', {
-        deviceId: event.deviceId,
-        characteristicUuid: event.characteristicUuid,
-        dataLen: event.data?.length,
-        timestamp: event.timestamp,
-      });
-      const store = useBleStore.getState();
-      store.addNotification({
-        id: generateBleId(),
-        deviceId: event.deviceId,
-        characteristicUuid: event.characteristicUuid,
-        data: event.data,
-        timestamp: event.timestamp,
-      });
-    });
-
-    const unlistenConnected = await onBleConnected((event) => {
-      const store = useBleStore.getState();
-      store.addConnection({
-        deviceId: event.deviceId,
-        address: event.address,
-        name: event.name,
-        isConnected: true,
-        services: [],
-        connectedAt: Date.now(),
-      });
-      store.setIsConnecting(false);
-      useLogStore.getState().addLog('info', 'BleManager', `设备 ${event.name || event.address} 已连接`);
-      message.success(`设备 ${event.name || event.address} 已连接`);
-    });
-
-    const unlistenDisconnected = await onBleDisconnected((event) => {
-      const store = useBleStore.getState();
-      store.removeConnection(event.deviceId);
-      if (store.currentDevice === event.deviceId) {
-        store.setCurrentDevice(null);
-        store.clearServices();
-        store.clearCharacteristics();
-      }
-      useLogStore.getState().addLog('info', 'BleManager', `设备 ${event.address} 已断开`);
-      message.info(`设备 ${event.address} 已断开`);
-    });
-
-    const unlistenError = await onBleError((event) => {
-      const errorMsg = event.error;
-      const store = useBleStore.getState();
-      store.setError(errorMsg);
-      store.setIsConnecting(false);
-      store.setIsScanning(false);
-      useLogStore.getState().addLog('error', 'BleManager', `BLE错误: ${errorMsg}`);
-      message.error(`BLE错误: ${errorMsg}`);
-    });
-
-    const unlistenScanResult = await onBleScanResult((device: unknown) => {
-      const deviceInfo = device as {
-        address: string;
-        name?: string;
-        rssi?: number;
-        isConnectable: boolean;
-        services?: string[];
-      };
-      const store = useBleStore.getState();
-      store.addDevice({
-        address: deviceInfo.address,
-        name: deviceInfo.name,
-        rssi: deviceInfo.rssi,
-        isConnectable: deviceInfo.isConnectable,
-        services: deviceInfo.services,
-        discoveredAt: Date.now(),
-      });
-    });
-
-    const unlistenModeChanged = await onBleModeChanged((event) => {
-      const store = useBleStore.getState();
-      store.setMode(event.mode);
-      store.setSerialPort(event.serialPort || null);
-      useLogStore.getState().addLog('info', 'BleManager', `BLE模式已切换为 ${event.mode}`);
-      message.info(`BLE模式已切换为 ${event.mode}`);
-    });
-
-    globalBleListeners = [
-      unlistenData,
-      unlistenConnected,
-      unlistenDisconnected,
-      unlistenError,
-      unlistenScanResult,
-      unlistenModeChanged,
-    ];
-
-    bleListenerCount++;
-    bleListenerSetupPromise = null;
-  })();
-
-  await bleListenerSetupPromise;
-}
-
-async function cleanupGlobalBleListeners() {
-  if (bleListenerSetupPromise) {
-    await bleListenerSetupPromise;
-  }
-
-  bleListenerCount--;
-  if (bleListenerCount <= 0) {
-    bleListenerCount = 0;
-    globalBleListeners.forEach((unlisten) => unlisten());
-    globalBleListeners = [];
-  }
-}
 
 export const useBle = () => {
   const {
@@ -173,17 +46,6 @@ export const useBle = () => {
 
   const addLog = useLogStore((state) => state.addLog);
   const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    setupGlobalBleListeners();
-
-    return () => {
-      cleanupGlobalBleListeners();
-      if (scanTimeoutRef.current) {
-        clearTimeout(scanTimeoutRef.current);
-      }
-    };
-  }, []);
 
   const configure = useCallback(async (newMode: BleMode, port?: string) => {
     setError(null);

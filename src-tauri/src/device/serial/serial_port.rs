@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::io::{self, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -11,13 +10,13 @@ use tracing::{debug, info, warn};
 use crate::error::{ComBridgeError, Result};
 use super::serial_config::{DataBits, FlowControl, Parity, PortInfo, SerialPortConfig, StopBits};
 
-const READ_TIMEOUT_MS: u64 = 1;
+const READ_TIMEOUT_MS: u64 = 100;
 
 pub struct SerialPort {
-    port: Arc<Mutex<Box<dyn SerialPortTrait>>>,
+    write_port: Mutex<Box<dyn SerialPortTrait>>,
     config: RwLock<SerialPortConfig>,
     is_open: Arc<AtomicBool>,
-    read_thread: RefCell<Option<JoinHandle<()>>>,
+    read_thread: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl SerialPort {
@@ -53,13 +52,13 @@ impl SerialPort {
             .open()
             .map_err(|e| ComBridgeError::serial(format!("无法打开串口 {}: {}", config.port_name, e)))?;
 
-        info!("串口 {} 已打开 (超时: {}ms)", config.port_name, READ_TIMEOUT_MS);
+        info!("串口 {} 已打开 (读取超时: {}ms)", config.port_name, READ_TIMEOUT_MS);
 
         Ok(Self {
-            port: Arc::new(Mutex::new(port)),
+            write_port: Mutex::new(port),
             config: RwLock::new(config),
             is_open: Arc::new(AtomicBool::new(true)),
-            read_thread: RefCell::new(None),
+            read_thread: Mutex::new(None),
         })
     }
 
@@ -87,31 +86,15 @@ impl SerialPort {
 
         let port_name = self.port_name();
         
-        match self.port.try_lock() {
-            Ok(mut port) => {
-                port.write_all(data)
-                    .map_err(|e| ComBridgeError::serial(format!("写入数据失败: {}", e)))?;
+        let mut port = self.write_port.lock().unwrap();
+        port.write_all(data)
+            .map_err(|e| ComBridgeError::serial(format!("写入数据失败: {}", e)))?;
 
-                port.flush()
-                    .map_err(|e| ComBridgeError::serial(format!("刷新缓冲区失败: {}", e)))?;
+        port.flush()
+            .map_err(|e| ComBridgeError::serial(format!("刷新缓冲区失败: {}", e)))?;
 
-                debug!("[WRITE] 串口 {} 发送 {} 字节: {}", port_name, data.len(), data_hex);
-                Ok(data.len())
-            }
-            Err(_) => {
-                warn!("[WRITE] 串口 {} 锁被占用，等待释放...", port_name);
-                let mut port = self.port.lock().unwrap();
-                
-                port.write_all(data)
-                    .map_err(|e| ComBridgeError::serial(format!("写入数据失败: {}", e)))?;
-                    
-                port.flush()
-                    .map_err(|e| ComBridgeError::serial(format!("刷新缓冲区失败: {}", e)))?;
-
-                debug!("[WRITE] 串口 {} 发送 {} 字节 (等待后): {}", port_name, data.len(), data_hex);
-                Ok(data.len())
-            }
-        }
+        debug!("[WRITE] 串口 {} 发送 {} 字节: {}", port_name, data.len(), data_hex);
+        Ok(data.len())
     }
 
     pub fn start_read_loop<F>(&self, mut callback: F)
@@ -119,29 +102,28 @@ impl SerialPort {
         F: FnMut(&str, &[u8]) + Send + 'static,
     {
         let is_open = Arc::clone(&self.is_open);
-        let port = Arc::clone(&self.port);
         let port_name = self.port_name();
         let pack_timeout_ms = self.config.read().unwrap().pack_timeout_ms;
+
+        let read_port = {
+            let port = self.write_port.lock().unwrap();
+            port.try_clone()
+                .map_err(|e| ComBridgeError::serial(format!("克隆串口句柄失败: {}", e)))
+                .expect("克隆串口句柄失败")
+        };
+        
+        info!("[RECV] 串口 {} 已克隆读取句柄", port_name);
 
         let handle = thread::spawn(move || {
             let mut buffer = [0u8; 4096];
             let mut data_buffer: Vec<u8> = Vec::new();
             let mut last_data_time: Option<std::time::Instant> = None;
+            let mut read_port = read_port;
             
             info!("[RECV] 串口 {} 读取线程已启动 (组包超时: {}ms)", port_name, pack_timeout_ms);
 
             while is_open.load(Ordering::SeqCst) {
-                let result = {
-                    let mut port_guard = match port.lock() {
-                        Ok(guard) => guard,
-                        Err(e) => {
-                            warn!("[RECV] 串口 {} 锁被占用: {}", port_name, e);
-                            std::thread::sleep(Duration::from_millis(1));
-                            continue;
-                        }
-                    };
-                    port_guard.read(&mut buffer)
-                };
+                let result = read_port.read(&mut buffer);
 
                 match result {
                     Ok(size) if size > 0 => {
@@ -189,7 +171,8 @@ impl SerialPort {
             info!("[RECV] 串口 {} 读取线程已退出", port_name);
         });
 
-        *self.read_thread.borrow_mut() = Some(handle);
+        let mut read_thread = self.read_thread.lock().unwrap();
+        *read_thread = Some(handle);
     }
 
     pub fn close(&self) -> Result<()> {
@@ -201,7 +184,12 @@ impl SerialPort {
         self.is_open.store(false, Ordering::SeqCst);
         info!("{} 正在关闭...", port_name);
 
-        if let Some(handle) = self.read_thread.borrow_mut().take() {
+        let handle = {
+            let mut read_thread = self.read_thread.lock().unwrap();
+            read_thread.take()
+        };
+        
+        if let Some(handle) = handle {
             let _ = handle.join();
         }
 
@@ -214,7 +202,7 @@ impl SerialPort {
             return Err(ComBridgeError::serial("串口未打开"));
         }
 
-        let port = self.port.lock().unwrap();
+        let port = self.write_port.lock().unwrap();
         port.clear(serialport::ClearBuffer::All)
             .map_err(|e| ComBridgeError::serial(format!("清除缓冲区失败: {}", e)))?;
 
@@ -227,7 +215,7 @@ impl SerialPort {
             return Err(ComBridgeError::serial("串口未打开"));
         }
 
-        let mut port = self.port.lock().unwrap();
+        let mut port = self.write_port.lock().unwrap();
         port.set_timeout(Duration::from_millis(timeout_ms))
             .map_err(|e| ComBridgeError::serial(format!("设置超时失败: {}", e)))?;
 

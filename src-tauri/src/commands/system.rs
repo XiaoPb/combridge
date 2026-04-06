@@ -1,10 +1,33 @@
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::SystemTime;
-use sysinfo::{System, Disks, RefreshKind};
+use sysinfo::{CpuRefreshKind, Disks, MemoryRefreshKind, RefreshKind, System};
 use tauri::Manager;
 
 use crate::error::{ComBridgeError, Result};
+
+static SYSTEM: Lazy<Mutex<System>> = Lazy::new(|| {
+    let mut sys = System::new_all();
+    sys.refresh_all();
+    Mutex::new(sys)
+});
+
+pub fn start_system_monitor() {
+    tokio::spawn(async {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
+        loop {
+            interval.tick().await;
+            let mut sys = SYSTEM.lock();
+            sys.refresh_specifics(
+                RefreshKind::new()
+                    .with_cpu(CpuRefreshKind::everything())
+                    .with_memory(MemoryRefreshKind::everything()),
+            );
+        }
+    });
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemInfo {
@@ -67,13 +90,9 @@ pub struct RuntimeStatus {
     pub uptime_secs: u64,
 }
 
-fn get_system() -> System {
-    System::new_all()
-}
-
 #[tauri::command]
 pub async fn get_system_info() -> Result<SystemInfo> {
-    let sys = get_system();
+    let sys = SYSTEM.lock();
 
     let os_name = System::name().unwrap_or_else(|| "Unknown".to_string());
     let os_version = System::os_version().unwrap_or_else(|| "Unknown".to_string());
@@ -96,9 +115,8 @@ pub async fn get_system_info() -> Result<SystemInfo> {
 
 #[tauri::command]
 pub async fn get_system_status() -> Result<SystemStatus> {
-    let mut sys = get_system();
-    sys.refresh_specifics(RefreshKind::everything());
-
+    let sys = SYSTEM.lock();
+    
     let cpu_usage = sys.global_cpu_info().cpu_usage();
     let total_memory = sys.total_memory();
     let used_memory = sys.used_memory();

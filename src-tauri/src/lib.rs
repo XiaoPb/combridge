@@ -79,6 +79,7 @@ pub fn run() {
                     tracing::error!("BLE 初始化失败: {}", e);
                 }
             });
+            commands::system::start_system_monitor();
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

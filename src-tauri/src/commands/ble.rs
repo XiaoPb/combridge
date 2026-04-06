@@ -3,42 +3,30 @@ use tauri::{AppHandle, Emitter, State};
 use tracing::{debug, error, info};
 
 use crate::device::ble::{
-    AtConfig, BleCharacteristic, BleConnection, BleDevice, BleManagerRef, BleMode, BleService,
+    AtConfig, AtConnectionTab, BleCharacteristic, BleConnection, BleDevice, BleManagerRef, BleMode, BleService,
 };
 use crate::error::{ComBridgeError, Result};
 
-/// BLE配置DTO，用于前端传递配置参数
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BleConfigDto {
-    /// BLE模式：native（原生）或 at（AT指令）
     pub mode: String,
-    /// AT模式下的串口名称
     pub port_name: Option<String>,
-    /// AT模式下的波特率，默认115200
     pub baud_rate: Option<u32>,
-    /// AT指令超时时间（毫秒），默认1000
     pub timeout_ms: Option<u64>,
+    pub tx_uuid: Option<String>,
+    pub rx_uuid: Option<String>,
+    pub srv_uuid: Option<String>,
 }
 
-/// BLE通知事件，用于向前端推送接收到的通知数据
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BleNotifyEvent {
-    /// 设备地址
     pub device_id: String,
-    /// 特征UUID
     pub characteristic_uuid: String,
-    /// 接收到的数据
     pub data: Vec<u8>,
-    /// 时间戳
     pub timestamp: u64,
 }
 
-/// 配置BLE模式
-/// 
-/// 配置BLE工作模式（原生或AT指令模式）
-/// - native: 使用系统原生蓝牙API
-/// - at: 通过串口AT指令控制BLE模块
 #[tauri::command]
 pub async fn configure_ble(
     manager: State<'_, BleManagerRef>,
@@ -84,6 +72,9 @@ pub async fn configure_ble(
                 port_name: port_name.clone(),
                 baud_rate: config.baud_rate.unwrap_or(115200),
                 timeout_ms: config.timeout_ms.unwrap_or(1000),
+                tx_uuid: config.tx_uuid,
+                rx_uuid: config.rx_uuid,
+                srv_uuid: config.srv_uuid,
             };
             
             debug!(
@@ -106,10 +97,6 @@ pub async fn configure_ble(
     }
 }
 
-/// 扫描BLE设备
-/// 
-/// 扫描周围的BLE设备，返回发现的设备列表
-/// duration_ms: 扫描持续时间（毫秒）
 #[tauri::command]
 pub async fn scan_ble_devices(
     manager: State<'_, BleManagerRef>,
@@ -137,9 +124,6 @@ pub async fn scan_ble_devices(
     }
 }
 
-/// 停止BLE扫描
-/// 
-/// 停止正在进行的BLE扫描，返回已发现的设备列表
 #[tauri::command]
 pub async fn stop_ble_scan(
     manager: State<'_, BleManagerRef>,
@@ -159,12 +143,10 @@ pub async fn stop_ble_scan(
     }
 }
 
-/// 连接BLE设备
-/// 
-/// 连接到指定地址的BLE设备
 #[tauri::command]
 pub async fn connect_ble(
     manager: State<'_, BleManagerRef>,
+    app: AppHandle,
     device_id: String,
 ) -> Result<BleConnection> {
     info!("尝试连接BLE设备: {}", device_id);
@@ -173,6 +155,34 @@ pub async fn connect_ble(
     match manager.connect(&device_id).await {
         Ok(conn) => {
             info!("BLE设备连接成功: {}", device_id);
+            
+            let manager_clone = manager.clone();
+            let device_id_clone = device_id.clone();
+            let app_clone = app.clone();
+            let callback = std::sync::Arc::new(move |_addr: &str, _char: &str, data: &[u8]| {
+                debug!("收到BLE通知，设备: {}, 数据长度: {}", _addr, data.len());
+                
+                let manager = manager_clone.clone();
+                let device_id = device_id_clone.clone();
+                let data_vec = data.to_vec();
+                tokio::spawn(async move {
+                    manager.add_at_received_data(&device_id, data_vec).await;
+                });
+                
+                let event = BleNotifyEvent {
+                    device_id: device_id_clone.clone(),
+                    characteristic_uuid: _char.to_string(),
+                    data: data.to_vec(),
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64,
+                };
+                let _ = app_clone.emit("ble-notify", &event);
+            });
+            
+            let _ = manager.subscribe_notify(&device_id, "", callback).await;
+            
             Ok(conn)
         }
         Err(e) => {
@@ -182,9 +192,6 @@ pub async fn connect_ble(
     }
 }
 
-/// 断开BLE连接
-///
-/// 断开与指定BLE设备的连接
 #[tauri::command]
 pub async fn disconnect_ble(
     manager: State<'_, BleManagerRef>,
@@ -205,9 +212,6 @@ pub async fn disconnect_ble(
     }
 }
 
-/// 获取BLE连接列表
-/// 
-/// 获取当前所有已连接的BLE设备列表
 #[tauri::command]
 pub async fn get_ble_connections(
     manager: State<'_, BleManagerRef>,
@@ -227,9 +231,6 @@ pub async fn get_ble_connections(
     }
 }
 
-/// 发现GATT服务
-/// 
-/// 发现指定BLE设备的所有GATT服务
 #[tauri::command]
 pub async fn discover_ble_services(
     manager: State<'_, BleManagerRef>,
@@ -253,9 +254,6 @@ pub async fn discover_ble_services(
     }
 }
 
-/// 发现GATT特征
-/// 
-/// 发现指定服务的所有GATT特征
 #[tauri::command]
 pub async fn discover_ble_characteristics(
     manager: State<'_, BleManagerRef>,
@@ -286,9 +284,6 @@ pub async fn discover_ble_characteristics(
     }
 }
 
-/// 读取特征值
-/// 
-/// 读取指定特征的值
 #[tauri::command]
 pub async fn read_ble_characteristic(
     manager: State<'_, BleManagerRef>,
@@ -310,9 +305,6 @@ pub async fn read_ble_characteristic(
     }
 }
 
-/// 写入特征值
-/// 
-/// 向指定特征写入数据
 #[tauri::command]
 pub async fn write_ble_characteristic(
     manager: State<'_, BleManagerRef>,
@@ -326,6 +318,7 @@ pub async fn write_ble_characteristic(
     match manager.write_characteristic(&device_id, &characteristic_uuid, &data).await {
         Ok(()) => {
             debug!("写入特征值成功");
+            manager.add_at_sent_data(&device_id, data).await;
             Ok(())
         }
         Err(e) => {
@@ -335,9 +328,6 @@ pub async fn write_ble_characteristic(
     }
 }
 
-/// 无响应写入特征值
-/// 
-/// 向指定特征写入数据（无响应模式，适用于高频数据传输）
 #[tauri::command]
 pub async fn write_ble_without_response(
     manager: State<'_, BleManagerRef>,
@@ -351,6 +341,7 @@ pub async fn write_ble_without_response(
     match manager.write_without_response(&device_id, &characteristic_uuid, &data).await {
         Ok(()) => {
             debug!("无响应写入成功");
+            manager.add_at_sent_data(&device_id, data).await;
             Ok(())
         }
         Err(e) => {
@@ -360,9 +351,6 @@ pub async fn write_ble_without_response(
     }
 }
 
-/// 订阅特征通知
-/// 
-/// 订阅指定特征的通知，当特征值变化时会通过事件推送到前端
 #[tauri::command]
 pub async fn subscribe_ble_notify(
     manager: State<'_, BleManagerRef>,
@@ -409,9 +397,6 @@ pub async fn subscribe_ble_notify(
     }
 }
 
-/// 取消订阅特征通知
-/// 
-/// 取消订阅指定特征的通知
 #[tauri::command]
 pub async fn unsubscribe_ble_notify(
     manager: State<'_, BleManagerRef>,
@@ -433,9 +418,6 @@ pub async fn unsubscribe_ble_notify(
     }
 }
 
-/// 获取BLE信号强度
-/// 
-/// 获取指定设备的RSSI信号强度值
 #[tauri::command]
 pub async fn get_ble_rssi(
     manager: State<'_, BleManagerRef>,
@@ -456,9 +438,6 @@ pub async fn get_ble_rssi(
     }
 }
 
-/// 获取BLE模式
-/// 
-/// 获取当前BLE的工作模式
 #[tauri::command]
 pub async fn get_ble_mode(
     manager: State<'_, BleManagerRef>,
@@ -471,9 +450,6 @@ pub async fn get_ble_mode(
     Ok(mode)
 }
 
-/// 检查BLE是否已配置
-/// 
-/// 检查BLE是否已完成初始化配置
 #[tauri::command]
 pub async fn is_ble_configured(
     manager: State<'_, BleManagerRef>,
@@ -486,9 +462,6 @@ pub async fn is_ble_configured(
     Ok(configured)
 }
 
-/// 设置BLE MTU
-/// 
-/// 与指定设备协商MTU（最大传输单元）大小
 #[tauri::command]
 pub async fn set_ble_mtu(
     manager: State<'_, BleManagerRef>,
@@ -510,9 +483,6 @@ pub async fn set_ble_mtu(
     }
 }
 
-/// 获取已订阅的特征列表
-/// 
-/// 获取指定设备当前已订阅通知的特征UUID列表
 #[tauri::command]
 pub async fn get_ble_subscriptions(
     manager: State<'_, BleManagerRef>,
@@ -524,4 +494,99 @@ pub async fn get_ble_subscriptions(
     let subscriptions = manager.get_subscriptions(&device_id).await;
     debug!("设备 {} 已订阅 {} 个特征", device_id, subscriptions.len());
     Ok(subscriptions)
+}
+
+#[tauri::command]
+pub async fn get_at_config(
+    manager: State<'_, BleManagerRef>,
+) -> Result<AtConfig> {
+    debug!("获取AT配置");
+    
+    let manager = manager.inner();
+    let config = manager.get_at_config().await;
+    Ok(config)
+}
+
+#[tauri::command]
+pub async fn update_at_uuid_config(
+    manager: State<'_, BleManagerRef>,
+    tx_uuid: Option<String>,
+    rx_uuid: Option<String>,
+    srv_uuid: Option<String>,
+) -> Result<()> {
+    info!("更新AT UUID配置");
+    
+    let manager = manager.inner();
+    manager.update_at_uuid_config(tx_uuid, rx_uuid, srv_uuid).await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_at_tabs(
+    manager: State<'_, BleManagerRef>,
+) -> Result<Vec<AtConnectionTab>> {
+    debug!("获取AT连接TAB列表");
+    
+    let manager = manager.inner();
+    let tabs = manager.get_at_tabs().await;
+    debug!("当前有 {} 个AT连接TAB", tabs.len());
+    Ok(tabs)
+}
+
+#[tauri::command]
+pub async fn get_at_tab(
+    manager: State<'_, BleManagerRef>,
+    tab_id: String,
+) -> Result<Option<AtConnectionTab>> {
+    debug!("获取AT连接TAB: {}", tab_id);
+    
+    let manager = manager.inner();
+    let tab = manager.get_at_tab(&tab_id).await;
+    Ok(tab)
+}
+
+#[tauri::command]
+pub async fn clear_at_tab_data(
+    manager: State<'_, BleManagerRef>,
+    tab_id: String,
+) -> Result<()> {
+    info!("清空AT连接TAB数据: {}", tab_id);
+    
+    let manager = manager.inner();
+    manager.clear_at_tab_data(&tab_id).await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn remove_at_tab(
+    manager: State<'_, BleManagerRef>,
+    tab_id: String,
+) -> Result<()> {
+    info!("移除AT连接TAB: {}", tab_id);
+    
+    let manager = manager.inner();
+    manager.remove_at_tab(&tab_id).await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn send_at_data(
+    manager: State<'_, BleManagerRef>,
+    device_id: String,
+    data: Vec<u8>,
+) -> Result<()> {
+    debug!("发送AT透传数据，设备: {}, 数据长度: {} 字节", device_id, data.len());
+    
+    let manager = manager.inner();
+    match manager.write_characteristic(&device_id, "", &data).await {
+        Ok(()) => {
+            debug!("AT透传数据发送成功");
+            manager.add_at_sent_data(&device_id, data).await;
+            Ok(())
+        }
+        Err(e) => {
+            error!("AT透传数据发送失败，设备: {}: {}", device_id, e);
+            Err(e)
+        }
+    }
 }

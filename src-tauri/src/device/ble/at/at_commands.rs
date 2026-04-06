@@ -3,52 +3,61 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AtCommand {
     Test,
-    Scan { duration_ms: u64 },
-    StopScan,
-    Connect { address: String },
-    Disconnect { address: String },
-    DiscoverServices { address: String },
-    DiscoverCharacteristics { address: String, service_uuid: String },
-    Read { address: String, char_uuid: String },
-    Write { address: String, char_uuid: String, data: Vec<u8> },
-    WriteWithoutResponse { address: String, char_uuid: String, data: Vec<u8> },
-    Subscribe { address: String, char_uuid: String },
-    Unsubscribe { address: String, char_uuid: String },
-    GetRssi { address: String },
-    SetMtu { address: String, mtu: u16 },
+    GetInfo,
+    GetName,
+    SetName(String),
+    GetMac,
+    SetRole(u8),
+    GetMtu,
+    SetMtu(u16),
+    GetTxUuid,
+    SetTxUuid(String),
+    GetRxUuid,
+    SetRxUuid(String),
+    GetSrvUuid,
+    SetSrvUuid(String),
+    ScanStart,
+    ScanStop,
+    Connect(String),
+    Disconnect(String),
+    SendData(Vec<u8>),
+    GetRssi(u32),
+    ExitToTransparent,
+    SetAutoExit(u8),
+    Reset,
+    Restore,
 }
 
 impl fmt::Display for AtCommand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AtCommand::Test => write!(f, "AT"),
-            AtCommand::Scan { duration_ms } => write!(f, "AT+SCAN={}", duration_ms),
-            AtCommand::StopScan => write!(f, "AT+STOPSCAN"),
-            AtCommand::Connect { address } => write!(f, "AT+CONN={}", address),
-            AtCommand::Disconnect { address } => write!(f, "AT+DISC={}", address),
-            AtCommand::DiscoverServices { address } => write!(f, "AT+SRV={}", address),
-            AtCommand::DiscoverCharacteristics { address, service_uuid } => {
-                write!(f, "AT+CHAR={},{}", address, service_uuid)
-            }
-            AtCommand::Read { address, char_uuid } => {
-                write!(f, "AT+READ={},{}", address, char_uuid)
-            }
-            AtCommand::Write { address, char_uuid, data } => {
+            AtCommand::GetInfo => write!(f, "AT+INFO?"),
+            AtCommand::GetName => write!(f, "AT+NAME?"),
+            AtCommand::SetName(name) => write!(f, "AT+NAME={}", name),
+            AtCommand::GetMac => write!(f, "AT+MAC?"),
+            AtCommand::SetRole(role) => write!(f, "AT+ROLE={}", role),
+            AtCommand::GetMtu => write!(f, "AT+MTU?"),
+            AtCommand::SetMtu(mtu) => write!(f, "AT+MTU={}", mtu),
+            AtCommand::GetTxUuid => write!(f, "AT+TXUUID?"),
+            AtCommand::SetTxUuid(uuid) => write!(f, "AT+TXUUID={}", uuid),
+            AtCommand::GetRxUuid => write!(f, "AT+RXUUID?"),
+            AtCommand::SetRxUuid(uuid) => write!(f, "AT+RXUUID={}", uuid),
+            AtCommand::GetSrvUuid => write!(f, "AT+SVRUUD?"),
+            AtCommand::SetSrvUuid(uuid) => write!(f, "AT+SVRUUD={}", uuid),
+            AtCommand::ScanStart => write!(f, "AT+SCAN=1"),
+            AtCommand::ScanStop => write!(f, "AT+SCAN=0"),
+            AtCommand::Connect(address) => write!(f, "AT+CONN={}", address),
+            AtCommand::Disconnect(address) => write!(f, "AT+DISC={}", address),
+            AtCommand::SendData(data) => {
                 let hex_data: String = data.iter().map(|b| format!("{:02X}", b)).collect();
-                write!(f, "AT+WRITE={},{},{}", address, char_uuid, hex_data)
+                write!(f, "AT+BLESEND={}", hex_data)
             }
-            AtCommand::WriteWithoutResponse { address, char_uuid, data } => {
-                let hex_data: String = data.iter().map(|b| format!("{:02X}", b)).collect();
-                write!(f, "AT+WRITEWR={},{},{}", address, char_uuid, hex_data)
-            }
-            AtCommand::Subscribe { address, char_uuid } => {
-                write!(f, "AT+NOTIFY={},{}", address, char_uuid)
-            }
-            AtCommand::Unsubscribe { address, char_uuid } => {
-                write!(f, "AT+UNNOTIFY={},{}", address, char_uuid)
-            }
-            AtCommand::GetRssi { address } => write!(f, "AT+RSSI={}", address),
-            AtCommand::SetMtu { address, mtu } => write!(f, "AT+MTU={},{}", address, mtu),
+            AtCommand::GetRssi(interval_ms) => write!(f, "AT+RSSI={:04X}", interval_ms),
+            AtCommand::ExitToTransparent => write!(f, "AT+EXIT"),
+            AtCommand::SetAutoExit(mode) => write!(f, "AT+EXIT={}", mode),
+            AtCommand::Reset => write!(f, "AT+RESET"),
+            AtCommand::Restore => write!(f, "AT+RESTORE"),
         }
     }
 }
@@ -64,15 +73,22 @@ impl AtCommand {
 pub enum AtResponse {
     Ok,
     Error { code: i32, message: String },
+    Info { info: String },
+    Name { name: String },
+    Mac { address: String },
+    Mtu { mtu: u16 },
+    TxUuid { uuid: String },
+    RxUuid { uuid: String },
+    SrvUuid { uuid: String },
+    Role { role: u8 },
     ScanResult { devices: Vec<ScanDevice> },
     Connected { address: String },
     Disconnected { address: String },
-    Services { services: Vec<ServiceInfo> },
-    Characteristics { characteristics: Vec<CharInfo> },
-    Data { address: String, char_uuid: String, data: Vec<u8> },
-    Rssi { address: String, rssi: i16 },
-    Notify { address: String, char_uuid: String, data: Vec<u8> },
-    Mtu { address: String, mtu: u16 },
+    Data { data: Vec<u8> },
+    Rssi { rssi: i16 },
+    Notify { data: Vec<u8> },
+    SleepEntry,
+    SleepExit,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,36 +96,27 @@ pub struct ScanDevice {
     pub address: String,
     pub name: Option<String>,
     pub rssi: i16,
-    pub is_connectable: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ServiceInfo {
-    pub uuid: String,
-    pub primary: bool,
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct AtConnectionConfig {
+    pub tx_uuid: Option<String>,
+    pub rx_uuid: Option<String>,
+    pub srv_uuid: Option<String>,
+    pub mtu: Option<u16>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CharInfo {
-    pub uuid: String,
-    pub service_uuid: String,
-    pub properties: u8,
-}
-
-impl CharInfo {
-    pub fn can_read(&self) -> bool {
-        (self.properties & 0x01) != 0
+impl AtConnectionConfig {
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    pub fn can_write(&self) -> bool {
-        (self.properties & 0x02) != 0
-    }
-
-    pub fn can_notify(&self) -> bool {
-        (self.properties & 0x04) != 0
-    }
-
-    pub fn can_indicate(&self) -> bool {
-        (self.properties & 0x08) != 0
+    pub fn with_uuid(tx_uuid: impl Into<String>, rx_uuid: impl Into<String>) -> Self {
+        Self {
+            tx_uuid: Some(tx_uuid.into()),
+            rx_uuid: Some(rx_uuid.into()),
+            srv_uuid: None,
+            mtu: None,
+        }
     }
 }

@@ -1,54 +1,93 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
 
 use async_trait::async_trait;
-use tracing::{debug, info, warn};
+use serde::{Deserialize, Serialize};
+use tracing::{debug, info};
 
 use crate::error::{ComBridgeError, Result};
 use super::super::ble_traits::{
     BleBackend, BleDevice, BleConnection, BleService, BleCharacteristic,
     BleCharacteristicProperties, NotifyCallback,
 };
-use super::at_commands::AtCommand;
+use super::at_commands::{AtCommand, AtResponse, AtConnectionConfig, ScanDevice};
 use super::at_parser::AtParser;
-use super::at_transport::AtTransport;
-use super::at_cache::AtCache;
+use super::at_transport::{AtTransport, TransportMode, DataCallback};
+
+const DEFAULT_SERVICE_UUID: &str = "0000FFE0-0000-1000-8000-00805F9B34FB";
+const DEFAULT_TX_UUID: &str = "0000FFE1-0000-1000-8000-00805F9B34FB";
+const DEFAULT_RX_UUID: &str = "0000FFE2-0000-1000-8000-00805F9B34FB";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AtConnectionInfo {
+    pub address: String,
+    pub name: Option<String>,
+    pub rssi: i16,
+    pub tx_uuid: String,
+    pub rx_uuid: String,
+    pub srv_uuid: String,
+    pub connected_at: Option<u64>,
+}
+
+impl Default for AtConnectionInfo {
+    fn default() -> Self {
+        Self {
+            address: String::new(),
+            name: None,
+            rssi: -100,
+            tx_uuid: DEFAULT_TX_UUID.to_string(),
+            rx_uuid: DEFAULT_RX_UUID.to_string(),
+            srv_uuid: DEFAULT_SERVICE_UUID.to_string(),
+            connected_at: None,
+        }
+    }
+}
 
 pub struct AtBleBackend {
     transport: Arc<Mutex<Option<AtTransport>>>,
-    cache: Arc<AtCache>,
+    connections: Arc<Mutex<HashMap<String, AtConnectionInfo>>>,
+    config: AtConnectionConfig,
     notify_callbacks: Arc<Mutex<HashMap<String, NotifyCallback>>>,
-    configured: Arc<Mutex<bool>>,
-    notify_thread_running: Arc<AtomicBool>,
-    notify_thread_handle: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
+    is_scanning: Arc<AtomicBool>,
 }
 
 impl AtBleBackend {
     pub fn new() -> Self {
         Self {
             transport: Arc::new(Mutex::new(None)),
-            cache: Arc::new(AtCache::new()),
+            connections: Arc::new(Mutex::new(HashMap::new())),
+            config: AtConnectionConfig::new(),
             notify_callbacks: Arc::new(Mutex::new(HashMap::new())),
-            configured: Arc::new(Mutex::new(false)),
-            notify_thread_running: Arc::new(AtomicBool::new(false)),
-            notify_thread_handle: Arc::new(Mutex::new(None)),
+            is_scanning: Arc::new(AtomicBool::new(false)),
         }
     }
 
     pub fn with_transport(transport: AtTransport) -> Self {
         Self {
             transport: Arc::new(Mutex::new(Some(transport))),
-            cache: Arc::new(AtCache::new()),
+            connections: Arc::new(Mutex::new(HashMap::new())),
+            config: AtConnectionConfig::new(),
             notify_callbacks: Arc::new(Mutex::new(HashMap::new())),
-            configured: Arc::new(Mutex::new(true)),
-            notify_thread_running: Arc::new(AtomicBool::new(false)),
-            notify_thread_handle: Arc::new(Mutex::new(None)),
+            is_scanning: Arc::new(AtomicBool::new(false)),
         }
     }
 
-    fn send_and_wait(&self, command: &AtCommand, timeout_ms: u64) -> Result<Vec<String>> {
+    pub fn with_config(transport: AtTransport, config: AtConnectionConfig) -> Self {
+        Self {
+            transport: Arc::new(Mutex::new(Some(transport))),
+            connections: Arc::new(Mutex::new(HashMap::new())),
+            config,
+            notify_callbacks: Arc::new(Mutex::new(HashMap::new())),
+            is_scanning: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub fn set_config(&mut self, config: AtConnectionConfig) {
+        self.config = config;
+    }
+
+    fn send_command_and_wait(&self, command: &AtCommand, timeout_ms: u64) -> Result<Vec<String>> {
         let mut transport_guard = self.transport.lock().unwrap();
         let transport = transport_guard.as_mut().ok_or_else(|| {
             ComBridgeError::ble("AT传输层未初始化")
@@ -73,68 +112,95 @@ impl AtBleBackend {
         }
     }
 
-    fn make_callback_key(address: &str, char_uuid: &str) -> String {
-        format!("{}:{}", address, char_uuid)
+    fn make_callback_key(address: &str) -> String {
+        address.to_string()
     }
 
-    fn start_notify_thread(&self) {
-        if self.notify_thread_running.load(Ordering::SeqCst) {
-            return;
+    fn configure_uuids(&self) -> Result<()> {
+        if let Some(ref tx_uuid) = self.config.tx_uuid {
+            self.send_command_and_wait(&AtCommand::SetTxUuid(tx_uuid.clone()), 1000)?;
+            debug!("已设置TX UUID: {}", tx_uuid);
         }
+        if let Some(ref rx_uuid) = self.config.rx_uuid {
+            self.send_command_and_wait(&AtCommand::SetRxUuid(rx_uuid.clone()), 1000)?;
+            debug!("已设置RX UUID: {}", rx_uuid);
+        }
+        if let Some(ref srv_uuid) = self.config.srv_uuid {
+            self.send_command_and_wait(&AtCommand::SetSrvUuid(srv_uuid.clone()), 1000)?;
+            debug!("已设置服务UUID: {}", srv_uuid);
+        }
+        Ok(())
+    }
 
-        self.notify_thread_running.store(true, Ordering::SeqCst);
-        let running = self.notify_thread_running.clone();
-        let transport = self.transport.clone();
+    fn build_virtual_service(&self, address: &str) -> BleService {
+        let connections = self.connections.lock().unwrap();
+        let conn_info = connections.get(address);
+        
+        let tx_uuid = conn_info
+            .map(|c| c.tx_uuid.as_str())
+            .unwrap_or(DEFAULT_TX_UUID);
+        let rx_uuid = conn_info
+            .map(|c| c.rx_uuid.as_str())
+            .unwrap_or(DEFAULT_RX_UUID);
+        let srv_uuid = conn_info
+            .map(|c| c.srv_uuid.as_str())
+            .unwrap_or(DEFAULT_SERVICE_UUID);
+
+        BleService {
+            uuid: srv_uuid.to_string(),
+            primary: true,
+            characteristics: vec![
+                BleCharacteristic {
+                    uuid: tx_uuid.to_string(),
+                    service_uuid: srv_uuid.to_string(),
+                    properties: BleCharacteristicProperties {
+                        read: false,
+                        write: false,
+                        write_without_response: false,
+                        notify: true,
+                        indicate: false,
+                    },
+                    subscribed: false,
+                },
+                BleCharacteristic {
+                    uuid: rx_uuid.to_string(),
+                    service_uuid: srv_uuid.to_string(),
+                    properties: BleCharacteristicProperties {
+                        read: false,
+                        write: true,
+                        write_without_response: true,
+                        notify: false,
+                        indicate: false,
+                    },
+                    subscribed: false,
+                },
+            ],
+        }
+    }
+
+    fn setup_transparent_callback(&self, address: String) {
         let callbacks = self.notify_callbacks.clone();
-        let parser = AtParser::new();
-
-        let handle = thread::spawn(move || {
-            info!("BLE通知监听线程已启动");
-            let parser = parser;
-
-            while running.load(Ordering::SeqCst) {
-                let notify_result = {
-                    let mut transport_guard = transport.lock().unwrap();
-                    if let Some(ref mut t) = *transport_guard {
-                        t.read_notify()
-                    } else {
-                        break;
-                    }
-                };
-
-                match notify_result {
-                    Ok(Some(line)) => {
-                        debug!("收到通知数据: {}", line);
-                        if let Ok(response) = parser.parse_response(&line) {
-                            if let super::at_commands::AtResponse::Notify { address, char_uuid, data } = response {
-                                let key = format!("{}:{}", address, char_uuid);
-                                if let Some(callback) = callbacks.lock().unwrap().get(&key) {
-                                    callback(&address, &char_uuid, &data);
-                                }
-                            }
-                        }
-                    }
-                    Ok(None) => {
-                        thread::sleep(std::time::Duration::from_millis(10));
-                    }
-                    Err(e) => {
-                        warn!("读取通知失败: {}", e);
-                        thread::sleep(std::time::Duration::from_millis(100));
-                    }
-                }
+        let address_clone = address.clone();
+        
+        let callback: DataCallback = Arc::new(move |data: &[u8]| {
+            debug!("透传接收数据: {} 字节", data.len());
+            if let Some(cb) = callbacks.lock().unwrap().get(&address_clone) {
+                cb(&address_clone, "", data);
             }
-
-            info!("BLE通知监听线程已停止");
         });
 
-        *self.notify_thread_handle.lock().unwrap() = Some(handle);
+        let mut transport_guard = self.transport.lock().unwrap();
+        if let Some(ref mut transport) = *transport_guard {
+            transport.set_data_callback(callback);
+        }
     }
 
-    fn stop_notify_thread(&self) {
-        self.notify_thread_running.store(false, Ordering::SeqCst);
-
-        if let Some(handle) = self.notify_thread_handle.lock().unwrap().take() {
-            let _ = handle.join();
+    fn scan_device_to_ble_device(device: &ScanDevice) -> BleDevice {
+        BleDevice {
+            address: device.address.clone(),
+            name: device.name.clone(),
+            rssi: Some(device.rssi),
+            is_connectable: true,
         }
     }
 }
@@ -147,7 +213,10 @@ impl Default for AtBleBackend {
 
 impl Drop for AtBleBackend {
     fn drop(&mut self) {
-        self.stop_notify_thread();
+        let mut transport_guard = self.transport.lock().unwrap();
+        if let Some(ref mut transport) = *transport_guard {
+            let _ = transport.close();
+        }
     }
 }
 
@@ -161,304 +230,200 @@ impl BleBackend for AtBleBackend {
         
         transport.send_command(&AtCommand::Test)?;
         let responses = transport.read_response(Some(1000))?;
-
         Self::parse_ok_response(&responses)?;
-        *self.configured.lock().unwrap() = true;
+
+        transport.send_command(&AtCommand::SetRole(1))?;
+        let responses = transport.read_response(Some(1000))?;
+        Self::parse_ok_response(&responses)?;
+        
         drop(transport_guard);
         
-        self.start_notify_thread();
-        info!("AT BLE后端配置成功");
+        self.configure_uuids()?;
+        info!("AT BLE后端配置成功（主机模式）");
         Ok(())
     }
 
     async fn scan(&self, duration_ms: u64) -> Result<Vec<BleDevice>> {
-        let mut transport_guard = self.transport.lock().unwrap();
-        let transport = transport_guard.as_mut().ok_or_else(|| {
-            ComBridgeError::ble("AT传输层未初始化")
-        })?;
+        self.is_scanning.store(true, Ordering::SeqCst);
         
-        transport.send_command(&AtCommand::Scan { duration_ms })?;
-        let responses = transport.read_response(Some(duration_ms + 2000))?;
-
+        let responses = self.send_command_and_wait(&AtCommand::ScanStart, duration_ms + 2000)?;
+        
         let mut devices = Vec::new();
         let parser = AtParser::new();
 
         for line in &responses {
             if line.starts_with("+SCAN:") {
                 if let Ok(response) = parser.parse_response(line) {
-                    if let super::at_commands::AtResponse::ScanResult { devices: scanned } = response {
+                    if let AtResponse::ScanResult { devices: scanned } = response {
                         for dev in scanned {
-                            self.cache.update_device(&dev.address, dev.name.clone(), dev.rssi);
-                            devices.push(BleDevice {
-                                address: dev.address,
-                                name: dev.name,
-                                rssi: Some(dev.rssi),
-                                is_connectable: dev.is_connectable,
-                            });
+                            devices.push(Self::scan_device_to_ble_device(&dev));
                         }
                     }
                 }
             }
         }
 
-        drop(transport_guard);
-        Self::parse_ok_response(&responses)?;
+        self.is_scanning.store(false, Ordering::SeqCst);
         info!("扫描完成，发现 {} 个设备", devices.len());
         Ok(devices)
     }
 
     async fn stop_scan(&self) -> Result<Vec<BleDevice>> {
-        let responses = self.send_and_wait(&AtCommand::StopScan, 3000)?;
-        
-        let devices = self.cache.get_all_devices();
-        let devices: Vec<BleDevice> = devices.into_iter().map(|(addr, cache)| {
-            BleDevice {
-                address: addr,
-                name: cache.name,
-                rssi: Some(cache.rssi),
-                is_connectable: true,
-            }
-        }).collect();
-        
+        let responses = self.send_command_and_wait(&AtCommand::ScanStop, 3000)?;
         Self::parse_ok_response(&responses)?;
-        info!("停止扫描，返回 {} 个设备", devices.len());
-        Ok(devices)
+        
+        self.is_scanning.store(false, Ordering::SeqCst);
+        info!("停止扫描");
+        Ok(Vec::new())
     }
 
     async fn connect(&self, address: &str) -> Result<BleConnection> {
-        let responses = self.send_and_wait(
-            &AtCommand::Connect { address: address.to_string() },
-            10000
+        let responses = self.send_command_and_wait(
+            &AtCommand::Connect(address.to_string()),
+            15000
         )?;
 
-        let connection = BleConnection {
-            address: address.to_string(),
-            name: self.cache.get_device(address).and_then(|d| d.name),
-            is_connected: true,
-            services: vec![],
-        };
+        let mut connected_address = address.to_string();
+        for line in &responses {
+            if line.starts_with("+CONN:") {
+                if let Ok(response) = AtParser::new().parse_response(line) {
+                    if let AtResponse::Connected { address: addr } = response {
+                        connected_address = addr;
+                    }
+                }
+            }
+        }
 
         Self::parse_ok_response(&responses)?;
-        info!("已连接到设备: {}", address);
-        Ok(connection)
+
+        let mut conn_info = AtConnectionInfo::default();
+        conn_info.address = connected_address.clone();
+        conn_info.tx_uuid = self.config.tx_uuid.clone().unwrap_or_else(|| DEFAULT_TX_UUID.to_string());
+        conn_info.rx_uuid = self.config.rx_uuid.clone().unwrap_or_else(|| DEFAULT_RX_UUID.to_string());
+        conn_info.srv_uuid = self.config.srv_uuid.clone().unwrap_or_else(|| DEFAULT_SERVICE_UUID.to_string());
+        conn_info.connected_at = Some(std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64);
+
+        self.connections.lock().unwrap().insert(connected_address.clone(), conn_info);
+
+        let mut transport_guard = self.transport.lock().unwrap();
+        if let Some(ref mut transport) = *transport_guard {
+            transport.enter_transparent_mode()?;
+        }
+
+        self.setup_transparent_callback(connected_address.clone());
+
+        info!("已连接到设备: {}", connected_address);
+        
+        let service = self.build_virtual_service(&connected_address);
+        Ok(BleConnection {
+            address: connected_address,
+            name: None,
+            is_connected: true,
+            services: vec![service],
+        })
     }
 
     async fn disconnect(&self, address: &str) -> Result<()> {
-        let responses = self.send_and_wait(
-            &AtCommand::Disconnect { address: address.to_string() },
+        let mut transport_guard = self.transport.lock().unwrap();
+        if let Some(ref mut transport) = *transport_guard {
+            let _ = transport.exit_transparent_mode();
+        }
+        drop(transport_guard);
+
+        let responses = self.send_command_and_wait(
+            &AtCommand::Disconnect(address.to_string()),
             5000
         )?;
 
-        self.cache.remove_device(address);
+        self.connections.lock().unwrap().remove(address);
+        self.notify_callbacks.lock().unwrap().remove(address);
+
         Self::parse_ok_response(&responses)?;
         info!("已断开设备: {}", address);
         Ok(())
     }
 
     async fn get_connections(&self) -> Result<Vec<BleConnection>> {
-        let devices = self.cache.get_all_devices();
-        Ok(devices
-            .into_iter()
-            .map(|(addr, cache)| {
-                let services = self.cache.get_ble_services(&addr);
+        let connections = self.connections.lock().unwrap();
+        let result: Vec<BleConnection> = connections
+            .iter()
+            .map(|(addr, info)| {
+                let service = self.build_virtual_service(addr);
                 BleConnection {
-                    address: addr,
-                    name: cache.name,
+                    address: addr.clone(),
+                    name: info.name.clone(),
                     is_connected: true,
-                    services,
+                    services: vec![service],
                 }
             })
-            .collect())
+            .collect();
+        Ok(result)
     }
 
     async fn discover_services(&self, address: &str) -> Result<Vec<BleService>> {
-        let responses = self.send_and_wait(
-            &AtCommand::DiscoverServices { address: address.to_string() },
-            5000
-        )?;
-
-        let mut services = Vec::new();
-        let parser = AtParser::new();
-
-        for line in &responses {
-            if line.starts_with("+SRV:") {
-                if let Ok(response) = parser.parse_response(line) {
-                    if let super::at_commands::AtResponse::Services { services: svcs } = response {
-                        services = svcs.into_iter().map(|s| BleService {
-                            uuid: s.uuid,
-                            primary: s.primary,
-                            characteristics: vec![],
-                        }).collect();
-                    }
-                }
-            }
-        }
-
-        self.cache.update_services(address, services.iter().map(|s| super::at_commands::ServiceInfo {
-            uuid: s.uuid.clone(),
-            primary: s.primary,
-        }).collect());
-
-        Self::parse_ok_response(&responses)?;
-        debug!("发现 {} 个服务", services.len());
-        Ok(services)
+        let service = self.build_virtual_service(address);
+        info!("返回虚拟服务（AT模块不支持服务发现）");
+        Ok(vec![service])
     }
 
-    async fn discover_characteristics(&self, address: &str, service_uuid: &str) -> Result<Vec<BleCharacteristic>> {
-        let responses = self.send_and_wait(
-            &AtCommand::DiscoverCharacteristics {
-                address: address.to_string(),
-                service_uuid: service_uuid.to_string(),
-            },
-            5000
-        )?;
-
-        let mut characteristics = Vec::new();
-        let parser = AtParser::new();
-
-        for line in &responses {
-            if line.starts_with("+CHAR:") {
-                if let Ok(response) = parser.parse_response(line) {
-                    if let super::at_commands::AtResponse::Characteristics { characteristics: chars } = response {
-                        characteristics = chars.into_iter().map(|c| {
-                            let props = BleCharacteristicProperties {
-                                read: c.can_read(),
-                                write: c.can_write(),
-                                write_without_response: c.can_write(),
-                                notify: c.can_notify(),
-                                indicate: c.can_indicate(),
-                            };
-                            BleCharacteristic {
-                                uuid: c.uuid,
-                                service_uuid: c.service_uuid,
-                                properties: props,
-                                subscribed: false,
-                            }
-                        }).collect();
-                    }
-                }
-            }
-        }
-
-        self.cache.update_characteristics(address, service_uuid, 
-            characteristics.iter().map(|c| super::at_commands::CharInfo {
-                uuid: c.uuid.clone(),
-                service_uuid: c.service_uuid.clone(),
-                properties: if c.properties.read { 0x01 } else { 0 } |
-                    if c.properties.write { 0x02 } else { 0 } |
-                    if c.properties.notify { 0x04 } else { 0 } |
-                    if c.properties.indicate { 0x08 } else { 0 },
-            }).collect()
-        );
-
-        Self::parse_ok_response(&responses)?;
-        debug!("发现 {} 个特征", characteristics.len());
-        Ok(characteristics)
+    async fn discover_characteristics(&self, address: &str, _service_uuid: &str) -> Result<Vec<BleCharacteristic>> {
+        let service = self.build_virtual_service(address);
+        info!("返回虚拟特征（AT模块不支持特征发现）");
+        Ok(service.characteristics)
     }
 
-    async fn read_characteristic(&self, address: &str, char_uuid: &str) -> Result<Vec<u8>> {
-        let responses = self.send_and_wait(
-            &AtCommand::Read {
-                address: address.to_string(),
-                char_uuid: char_uuid.to_string(),
-            },
-            5000
-        )?;
-
-        let parser = AtParser::new();
-        for line in &responses {
-            if line.starts_with("+READ:") {
-                if let Ok(response) = parser.parse_response(line) {
-                    if let super::at_commands::AtResponse::Data { data, .. } = response {
-                        return Ok(data);
-                    }
-                }
-            }
-        }
-
-        Err(ComBridgeError::ble("读取特征失败：未收到数据"))
+    async fn read_characteristic(&self, _address: &str, _char_uuid: &str) -> Result<Vec<u8>> {
+        Err(ComBridgeError::ble("AT模块不支持读取特征值，请使用透传模式接收数据"))
     }
 
-    async fn write_characteristic(&self, address: &str, char_uuid: &str, data: &[u8]) -> Result<()> {
-        let responses = self.send_and_wait(
-            &AtCommand::Write {
-                address: address.to_string(),
-                char_uuid: char_uuid.to_string(),
-                data: data.to_vec(),
-            },
-            5000
-        )?;
+    async fn write_characteristic(&self, _address: &str, _char_uuid: &str, data: &[u8]) -> Result<()> {
+        let mut transport_guard = self.transport.lock().unwrap();
+        let transport = transport_guard.as_mut().ok_or_else(|| {
+            ComBridgeError::ble("AT传输层未初始化")
+        })?;
 
-        Self::parse_ok_response(&responses)?;
+        if transport.mode() == TransportMode::Transparent {
+            transport.send_transparent_data(data)?;
+            debug!("透传发送: {} 字节", data.len());
+        } else {
+            transport.send_command(&AtCommand::SendData(data.to_vec()))?;
+            let responses = transport.read_response(Some(5000))?;
+            Self::parse_ok_response(&responses)?;
+        }
+
         Ok(())
     }
 
     async fn write_without_response(&self, address: &str, char_uuid: &str, data: &[u8]) -> Result<()> {
-        let responses = self.send_and_wait(
-            &AtCommand::WriteWithoutResponse {
-                address: address.to_string(),
-                char_uuid: char_uuid.to_string(),
-                data: data.to_vec(),
-            },
-            3000
-        )?;
-
-        Self::parse_ok_response(&responses)?;
-        debug!("无响应写入成功");
-        Ok(())
+        self.write_characteristic(address, char_uuid, data).await
     }
 
-    async fn subscribe_notify(&self, address: &str, char_uuid: &str, callback: NotifyCallback) -> Result<()> {
-        if !self.notify_thread_running.load(Ordering::SeqCst) {
-            self.start_notify_thread();
-        }
-
-        let responses = self.send_and_wait(
-            &AtCommand::Subscribe {
-                address: address.to_string(),
-                char_uuid: char_uuid.to_string(),
-            },
-            5000
-        )?;
-
-        Self::parse_ok_response(&responses)?;
-
-        let key = Self::make_callback_key(address, char_uuid);
+    async fn subscribe_notify(&self, address: &str, _char_uuid: &str, callback: NotifyCallback) -> Result<()> {
+        let key = Self::make_callback_key(address);
         self.notify_callbacks.lock().unwrap().insert(key, callback);
-
-        info!("已订阅通知: {} / {}", address, char_uuid);
+        
+        info!("已设置透传数据回调: {}", address);
         Ok(())
     }
 
-    async fn unsubscribe_notify(&self, address: &str, char_uuid: &str) -> Result<()> {
-        let responses = self.send_and_wait(
-            &AtCommand::Unsubscribe {
-                address: address.to_string(),
-                char_uuid: char_uuid.to_string(),
-            },
-            5000
-        )?;
-
-        Self::parse_ok_response(&responses)?;
-
-        let key = Self::make_callback_key(address, char_uuid);
+    async fn unsubscribe_notify(&self, address: &str, _char_uuid: &str) -> Result<()> {
+        let key = Self::make_callback_key(address);
         self.notify_callbacks.lock().unwrap().remove(&key);
-
-        info!("已取消订阅通知: {} / {}", address, char_uuid);
+        
+        info!("已移除透传数据回调: {}", address);
         Ok(())
     }
 
-    async fn get_rssi(&self, address: &str) -> Result<i16> {
-        let responses = self.send_and_wait(
-            &AtCommand::GetRssi { address: address.to_string() },
-            3000
-        )?;
+    async fn get_rssi(&self, _address: &str) -> Result<i16> {
+        let responses = self.send_command_and_wait(&AtCommand::GetRssi(0), 3000)?;
 
-        let parser = AtParser::new();
         for line in &responses {
             if line.starts_with("+RSSI:") {
-                if let Ok(response) = parser.parse_response(line) {
-                    if let super::at_commands::AtResponse::Rssi { rssi, .. } = response {
+                if let Ok(response) = AtParser::new().parse_response(line) {
+                    if let AtResponse::Rssi { rssi } = response {
                         return Ok(rssi);
                     }
                 }
@@ -468,29 +433,12 @@ impl BleBackend for AtBleBackend {
         Err(ComBridgeError::ble("获取RSSI失败"))
     }
 
-    async fn set_mtu(&self, address: &str, mtu: u16) -> Result<u16> {
-        let responses = self.send_and_wait(
-            &AtCommand::SetMtu {
-                address: address.to_string(),
-                mtu,
-            },
-            5000
-        )?;
-
-        let parser = AtParser::new();
-        for line in &responses {
-            if line.starts_with("+MTU:") {
-                if let Ok(response) = parser.parse_response(line) {
-                    if let super::at_commands::AtResponse::Mtu { mtu: actual_mtu, .. } = response {
-                        info!("MTU协商成功，实际MTU: {}", actual_mtu);
-                        return Ok(actual_mtu);
-                    }
-                }
-            }
-        }
-
+    async fn set_mtu(&self, _address: &str, mtu: u16) -> Result<u16> {
+        let responses = self.send_command_and_wait(&AtCommand::SetMtu(mtu), 3000)?;
         Self::parse_ok_response(&responses)?;
-        info!("MTU协商完成，使用请求值: {}", mtu);
+        info!("MTU设置成功: {}", mtu);
         Ok(mtu)
     }
 }
+
+pub type AtBleBackendRef = Arc<Mutex<AtBleBackend>>;

@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import type { BleDeviceInfo, BleConnection, BleService, BleCharacteristic } from '../types';
-import { preferencesApi } from '../api/tauri';
 
 export type BleMode = 'native' | 'at';
 
@@ -10,6 +9,33 @@ export interface BleNotification {
   characteristicUuid: string;
   data: number[];
   timestamp: number;
+}
+
+export interface AtConnectionTab {
+  id: string;
+  address: string;
+  name: string | null;
+  txUuid: string;
+  rxUuid: string;
+  connectedAt: number;
+  receivedData: AtDataEntry[];
+  sentData: AtDataEntry[];
+}
+
+export interface AtDataEntry {
+  id: string;
+  timestamp: number;
+  data: number[];
+  direction: 'send' | 'receive';
+}
+
+export interface AtConfig {
+  portName: string;
+  baudRate: number;
+  timeoutMs: number;
+  txUuid: string | null;
+  rxUuid: string | null;
+  srvUuid: string | null;
 }
 
 export interface BlePreferences {
@@ -46,9 +72,12 @@ interface BleState {
   isConfigured: boolean;
   error: string | null;
   preferences: BlePreferences;
-
+  atConfig: AtConfig | null;
+  atTabs: AtConnectionTab[];
+  activeAtTabId: string | null;
+  
   setMode: (mode: BleMode) => void;
-  setSerialPort: (port: string | null) => void;
+  setSerialPort: (serialPort: string | null) => void;
   setDevices: (devices: BleDeviceInfo[]) => void;
   addDevice: (device: BleDeviceInfo) => void;
   updateDevice: (address: string, device: Partial<BleDeviceInfo>) => void;
@@ -58,7 +87,7 @@ interface BleState {
   addConnection: (connection: BleConnection) => void;
   updateConnection: (address: string, connection: Partial<BleConnection>) => void;
   removeConnection: (address: string) => void;
-  setCurrentDevice: (deviceId: string | null) => void;
+  setCurrentDevice: (currentDevice: string | null) => void;
   setServices: (services: BleService[]) => void;
   addService: (service: BleService) => void;
   clearServices: () => void;
@@ -72,11 +101,20 @@ interface BleState {
   setIsConfigured: (isConfigured: boolean) => void;
   setError: (error: string | null) => void;
   loadPreferences: () => Promise<void>;
-  updatePreferences: (updates: Partial<BlePreferences>) => void;
+  updatePreferences: (updates: Partial<BlePreferences>) => Promise<void>;
   reset: () => void;
+  setAtConfig: (config: AtConfig) => void;
+  updateAtConfig: (updates: Partial<AtConfig>) => void;
+  addAtTab: (tab: AtConnectionTab) => void;
+  updateAtTab: (tabId: string, updates: Partial<AtConnectionTab>) => void;
+  removeAtTab: (tabId: string) => void;
+  setActiveAtTabId: (tabId: string | null) => void;
+  addAtReceivedData: (tabId: string, entry: AtDataEntry) => void;
+  addAtSentData: (tabId: string, entry: AtDataEntry) => void;
+  clearAtTabData: (tabId: string) => void;
 }
 
-const initialState = {
+export const useBleStore = create<BleState>((set, _get) => ({
   mode: 'native' as BleMode,
   serialPort: null,
   devices: [],
@@ -90,18 +128,17 @@ const initialState = {
   isConfigured: false,
   error: null,
   preferences: DEFAULT_PREFERENCES,
-};
+  atConfig: null,
+  atTabs: [],
+  activeAtTabId: null,
 
-export const useBleStore = create<BleState>((set) => ({
-  ...initialState,
+  setMode: (mode: BleMode) => set({ mode }),
 
-  setMode: (mode) => set({ mode }),
+  setSerialPort: (serialPort: string | null) => set({ serialPort }),
 
-  setSerialPort: (serialPort) => set({ serialPort }),
+  setDevices: (devices: BleDeviceInfo[]) => set({ devices }),
 
-  setDevices: (devices) => set({ devices }),
-
-  addDevice: (device) =>
+  addDevice: (device: BleDeviceInfo) =>
     set((state) => {
       const exists = state.devices.find((d) => d.address === device.address);
       if (exists) {
@@ -114,23 +151,23 @@ export const useBleStore = create<BleState>((set) => ({
       return { devices: [...state.devices, device] };
     }),
 
-  updateDevice: (address, device) =>
+  updateDevice: (address: string, device: Partial<BleDeviceInfo>) =>
     set((state) => ({
       devices: state.devices.map((d) =>
         d.address === address ? { ...d, ...device } : d
       ),
     })),
 
-  removeDevice: (address) =>
+  removeDevice: (address: string) =>
     set((state) => ({
       devices: state.devices.filter((d) => d.address !== address),
     })),
 
   clearDevices: () => set({ devices: [] }),
 
-  setConnections: (connections) => set({ connections }),
+  setConnections: (connections: BleConnection[]) => set({ connections }),
 
-  addConnection: (connection) =>
+  addConnection: (connection: BleConnection) =>
     set((state) => {
       const exists = state.connections.find((c) => c.address === connection.address);
       if (exists) {
@@ -143,24 +180,24 @@ export const useBleStore = create<BleState>((set) => ({
       return { connections: [...state.connections, connection] };
     }),
 
-  updateConnection: (address, connection) =>
+  updateConnection: (address: string, connection: Partial<BleConnection>) =>
     set((state) => ({
       connections: state.connections.map((c) =>
         c.address === address ? { ...c, ...connection } : c
       ),
     })),
 
-  removeConnection: (address) =>
+  removeConnection: (address: string) =>
     set((state) => ({
       connections: state.connections.filter((c) => c.address !== address),
       currentDevice: state.currentDevice === address ? null : state.currentDevice,
     })),
 
-  setCurrentDevice: (currentDevice) => set({ currentDevice }),
+  setCurrentDevice: (currentDevice: string | null) => set({ currentDevice }),
 
-  setServices: (services) => set({ services }),
+  setServices: (services: BleService[]) => set({ services }),
 
-  addService: (service) =>
+  addService: (service: BleService) =>
     set((state) => {
       const exists = state.services.find((s) => s.uuid === service.uuid);
       if (exists) {
@@ -175,9 +212,9 @@ export const useBleStore = create<BleState>((set) => ({
 
   clearServices: () => set({ services: [] }),
 
-  setCharacteristics: (characteristics) => set({ characteristics }),
+  setCharacteristics: (characteristics: BleCharacteristic[]) => set({ characteristics }),
 
-  updateCharacteristic: (uuid, characteristic) =>
+  updateCharacteristic: (uuid: string, characteristic: Partial<BleCharacteristic>) =>
     set((state) => ({
       characteristics: state.characteristics.map((c) =>
         c.uuid === uuid ? { ...c, ...characteristic } : c
@@ -186,23 +223,24 @@ export const useBleStore = create<BleState>((set) => ({
 
   clearCharacteristics: () => set({ characteristics: [] }),
 
-  addNotification: (notification) =>
+  addNotification: (notification: BleNotification) =>
     set((state) => ({
       notifications: [...state.notifications, notification].slice(-500),
     })),
 
   clearNotifications: () => set({ notifications: [] }),
 
-  setIsScanning: (isScanning) => set({ isScanning }),
+  setIsScanning: (isScanning: boolean) => set({ isScanning }),
 
-  setIsConnecting: (isConnecting) => set({ isConnecting }),
+  setIsConnecting: (isConnecting: boolean) => set({ isConnecting }),
 
-  setIsConfigured: (isConfigured) => set({ isConfigured }),
+  setIsConfigured: (isConfigured: boolean) => set({ isConfigured }),
 
-  setError: (error) => set({ error }),
+  setError: (error: string | null) => set({ error }),
 
   loadPreferences: async () => {
     try {
+      const { preferencesApi } = await import('../api/tauri');
       const prefs = await preferencesApi.get();
       if (prefs && prefs.ble) {
         set({ preferences: prefs.ble });
@@ -212,18 +250,90 @@ export const useBleStore = create<BleState>((set) => ({
     }
   },
 
-  updatePreferences: async (updates) => {
+  updatePreferences: async (updates: Partial<BlePreferences>) => {
     set((state) => ({
       preferences: { ...state.preferences, ...updates },
     }));
     try {
+      const { preferencesApi } = await import('../api/tauri');
       await preferencesApi.updateBle(useBleStore.getState().preferences);
     } catch (err) {
       console.error('保存BLE偏好设置失败:', err);
     }
   },
 
-  reset: () => set(initialState),
+  reset: () => set({
+    mode: 'native' as BleMode,
+    serialPort: null,
+    devices: [],
+    connections: [],
+    currentDevice: null,
+    services: [],
+    characteristics: [],
+    notifications: [],
+    isScanning: false,
+    isConnecting: false,
+    isConfigured: false,
+    error: null,
+    preferences: DEFAULT_PREFERENCES,
+    atConfig: null,
+    atTabs: [],
+    activeAtTabId: null,
+  }),
+
+  setAtConfig: (config: AtConfig) => set({ atConfig: config }),
+
+  updateAtConfig: (updates: Partial<AtConfig>) =>
+    set((state) => ({
+      atConfig: state.atConfig ? { ...state.atConfig, ...updates } : updates as AtConfig,
+    })),
+
+  addAtTab: (tab: AtConnectionTab) =>
+    set((state) => {
+      const exists = state.atTabs.find((t) => t.id === tab.id);
+      if (exists) return state;
+      return { atTabs: [...state.atTabs, tab] };
+    }),
+
+  updateAtTab: (tabId: string, updates: Partial<AtConnectionTab>) =>
+    set((state) => ({
+      atTabs: state.atTabs.map((t) =>
+        t.id === tabId ? { ...t, ...updates } : t
+      ),
+    })),
+
+  removeAtTab: (tabId: string) =>
+    set((state) => ({
+      atTabs: state.atTabs.filter((t) => t.id !== tabId),
+      activeAtTabId: state.activeAtTabId === tabId ? null : state.activeAtTabId,
+    })),
+
+  setActiveAtTabId: (tabId: string | null) => set({ activeAtTabId: tabId }),
+
+  addAtReceivedData: (tabId: string, entry: AtDataEntry) =>
+    set((state) => ({
+      atTabs: state.atTabs.map((t) =>
+        t.id === tabId
+          ? { ...t, receivedData: [...t.receivedData, entry].slice(-1000) }
+          : t
+      ),
+    })),
+
+  addAtSentData: (tabId: string, entry: AtDataEntry) =>
+    set((state) => ({
+      atTabs: state.atTabs.map((t) =>
+        t.id === tabId
+          ? { ...t, sentData: [...t.sentData, entry].slice(-1000) }
+          : t
+      ),
+    })),
+
+  clearAtTabData: (tabId: string) =>
+    set((state) => ({
+      atTabs: state.atTabs.map((t) =>
+        t.id === tabId ? { ...t, receivedData: [], sentData: [] } : t
+      ),
+    })),
 }));
 
 export const generateBleId = (): string => {
@@ -287,7 +397,7 @@ export const formatMacAddress = (address: string): string => {
     const macPart = parts[parts.length - 1];
     if (/^[0-9a-fA-F:]+$/.test(macPart)) {
       return macPart.toUpperCase();
-    }
+  }
   }
   return address;
 };

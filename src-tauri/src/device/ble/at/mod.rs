@@ -4,8 +4,8 @@ pub mod at_transport;
 pub mod at_cache;
 pub mod at_backend;
 
-pub use at_commands::{AtCommand, AtResponse};
+pub use at_commands::{AtCommand, AtResponse, AtConnectionConfig, ScanDevice};
 pub use at_parser::AtParser;
-pub use at_transport::AtTransport;
+pub use at_transport::{AtTransport, TransportMode, DataCallback, scan_at_ports};
 pub use at_cache::AtCache;
-pub use at_backend::AtBleBackend;
+pub use at_backend::{AtBleBackend, AtConnectionInfo};

@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::error::{ComBridgeError, Result};
-use super::at_commands::{AtResponse, ScanDevice, ServiceInfo, CharInfo};
+use super::at_commands::{AtResponse, ScanDevice};
 
 pub struct AtParser {
     buffer: VecDeque<u8>,
@@ -49,8 +49,16 @@ impl AtParser {
             return Ok(AtResponse::Ok);
         }
 
+        if line == "+SLEEP ENTRY" || line == "+ENTRY SLEEP" {
+            return Ok(AtResponse::SleepEntry);
+        }
+
+        if line == "+SLEEP EXIT" {
+            return Ok(AtResponse::SleepExit);
+        }
+
         if line.starts_with("ERROR") {
-            let parts: Vec<&str> = line.splitn(3, ':').collect();
+            let parts: Vec<&str> = line.splitn(3, '=').collect();
             let (code, message) = if parts.len() >= 3 {
                 (parts[1].trim().parse().unwrap_or(-1), parts[2].trim().to_string())
             } else if parts.len() == 2 {
@@ -59,6 +67,48 @@ impl AtParser {
                 (-1, line.to_string())
             };
             return Ok(AtResponse::Error { code, message });
+        }
+
+        if line.starts_with("+INFO:") {
+            let info = line.strip_prefix("+INFO:").unwrap_or("").trim().to_string();
+            return Ok(AtResponse::Info { info });
+        }
+
+        if line.starts_with("+NAME:") {
+            let name = line.strip_prefix("+NAME:").unwrap_or("").trim().to_string();
+            return Ok(AtResponse::Name { name });
+        }
+
+        if line.starts_with("+MAC:") {
+            let address = line.strip_prefix("+MAC:").unwrap_or("").trim().to_string();
+            return Ok(AtResponse::Mac { address });
+        }
+
+        if line.starts_with("+MTU:") {
+            let mtu_str = line.strip_prefix("+MTU:").unwrap_or("23");
+            let mtu = mtu_str.trim().parse::<u16>().unwrap_or(23);
+            return Ok(AtResponse::Mtu { mtu });
+        }
+
+        if line.starts_with("+TXUUID:") {
+            let uuid = line.strip_prefix("+TXUUID:").unwrap_or("").trim().to_string();
+            return Ok(AtResponse::TxUuid { uuid });
+        }
+
+        if line.starts_with("+RXUUID:") {
+            let uuid = line.strip_prefix("+RXUUID:").unwrap_or("").trim().to_string();
+            return Ok(AtResponse::RxUuid { uuid });
+        }
+
+        if line.starts_with("+SVRUUD:") {
+            let uuid = line.strip_prefix("+SVRUUD:").unwrap_or("").trim().to_string();
+            return Ok(AtResponse::SrvUuid { uuid });
+        }
+
+        if line.starts_with("+ROLE:") {
+            let role_str = line.strip_prefix("+ROLE:").unwrap_or("0");
+            let role = role_str.trim().parse::<u8>().unwrap_or(0);
+            return Ok(AtResponse::Role { role });
         }
 
         if line.starts_with("+SCAN:") {
@@ -76,30 +126,14 @@ impl AtParser {
             return Ok(AtResponse::Disconnected { address });
         }
 
-        if line.starts_with("+SRV:") {
-            let services = self.parse_services(line)?;
-            return Ok(AtResponse::Services { services });
-        }
-
-        if line.starts_with("+CHAR:") {
-            let characteristics = self.parse_characteristics(line)?;
-            return Ok(AtResponse::Characteristics { characteristics });
-        }
-
-        if line.starts_with("+READ:") {
-            return self.parse_read_response(line);
+        if line.starts_with("+BLESEND:") {
+            let hex_data = line.strip_prefix("+BLESEND:").unwrap_or("").trim();
+            let data = self.parse_hex_data(hex_data)?;
+            return Ok(AtResponse::Data { data });
         }
 
         if line.starts_with("+RSSI:") {
             return self.parse_rssi_response(line);
-        }
-
-        if line.starts_with("+NOTIFY:") {
-            return self.parse_notify_response(line);
-        }
-
-        if line.starts_with("+MTU:") {
-            return self.parse_mtu_response(line);
         }
 
         Err(ComBridgeError::ble(format!("未知的AT响应: {}", line)))
@@ -131,118 +165,54 @@ impl AtParser {
                     address,
                     name,
                     rssi,
-                    is_connectable: true,
                 });
             }
         }
         Ok(devices)
     }
 
-    fn parse_services(&self, line: &str) -> Result<Vec<ServiceInfo>> {
-        let content = line.strip_prefix("+SRV:").unwrap_or("");
-        if content.is_empty() || content == "NONE" {
-            return Ok(Vec::new());
-        }
-
-        let mut services = Vec::new();
-        for svc_str in content.split('|') {
-            let parts: Vec<&str> = svc_str.split(',').collect();
-            if !parts.is_empty() {
-                let uuid = parts[0].trim().to_string();
-                let primary = parts.get(1).map(|s| *s == "1").unwrap_or(true);
-                services.push(ServiceInfo { uuid, primary });
-            }
-        }
-        Ok(services)
-    }
-
-    fn parse_characteristics(&self, line: &str) -> Result<Vec<CharInfo>> {
-        let content = line.strip_prefix("+CHAR:").unwrap_or("");
-        if content.is_empty() || content == "NONE" {
-            return Ok(Vec::new());
-        }
-
-        let mut characteristics = Vec::new();
-        for char_str in content.split('|') {
-            let parts: Vec<&str> = char_str.split(',').collect();
-            if parts.len() >= 3 {
-                let uuid = parts[0].trim().to_string();
-                let service_uuid = parts[1].trim().to_string();
-                let properties = parts[2].trim().parse::<u8>().unwrap_or(0);
-                characteristics.push(CharInfo { uuid, service_uuid, properties });
-            }
-        }
-        Ok(characteristics)
-    }
-
-    fn parse_read_response(&self, line: &str) -> Result<AtResponse> {
-        let content = line.strip_prefix("+READ:").unwrap_or("");
-        let parts: Vec<&str> = content.split(',').collect();
-        
-        if parts.len() >= 3 {
-            let address = parts[0].trim().to_string();
-            let char_uuid = parts[1].trim().to_string();
-            let hex_data = parts[2].trim();
-            let data = self.parse_hex_data(hex_data)?;
-            return Ok(AtResponse::Data { address, char_uuid, data });
-        }
-
-        Err(ComBridgeError::ble(format!("无效的READ响应: {}", line)))
-    }
-
     fn parse_rssi_response(&self, line: &str) -> Result<AtResponse> {
         let content = line.strip_prefix("+RSSI:").unwrap_or("");
         let parts: Vec<&str> = content.split(',').collect();
         
-        if parts.len() >= 2 {
-            let address = parts[0].trim().to_string();
-            let rssi = parts[1].trim().parse::<i16>().unwrap_or(-100);
-            return Ok(AtResponse::Rssi { address, rssi });
+        if parts.len() >= 1 {
+            let rssi_hex = parts[0].trim();
+            if let Ok(rssi_byte) = u8::from_str_radix(rssi_hex, 16) {
+                let rssi = rssi_byte as i8 as i16;
+                return Ok(AtResponse::Rssi { rssi });
+            }
         }
 
         Err(ComBridgeError::ble(format!("无效的RSSI响应: {}", line)))
     }
 
-    fn parse_notify_response(&self, line: &str) -> Result<AtResponse> {
-        let content = line.strip_prefix("+NOTIFY:").unwrap_or("");
-        let parts: Vec<&str> = content.split(',').collect();
-        
-        if parts.len() >= 3 {
-            let address = parts[0].trim().to_string();
-            let char_uuid = parts[1].trim().to_string();
-            let hex_data = parts[2].trim();
-            let data = self.parse_hex_data(hex_data)?;
-            return Ok(AtResponse::Notify { address, char_uuid, data });
+    pub fn parse_hex_data(&self, hex: &str) -> Result<Vec<u8>> {
+        if hex.is_empty() {
+            return Ok(Vec::new());
         }
-
-        Err(ComBridgeError::ble(format!("无效的NOTIFY响应: {}", line)))
-    }
-
-    fn parse_mtu_response(&self, line: &str) -> Result<AtResponse> {
-        let content = line.strip_prefix("+MTU:").unwrap_or("");
-        let parts: Vec<&str> = content.split(',').collect();
-        
-        if parts.len() >= 2 {
-            let address = parts[0].trim().to_string();
-            let mtu = parts[1].trim().parse::<u16>().unwrap_or(23);
-            return Ok(AtResponse::Mtu { address, mtu });
-        }
-
-        Err(ComBridgeError::ble(format!("无效的MTU响应: {}", line)))
-    }
-
-    fn parse_hex_data(&self, hex: &str) -> Result<Vec<u8>> {
         (0..hex.len())
             .step_by(2)
             .map(|i| {
-                u8::from_str_radix(&hex[i..i + 2], 16)
-                    .map_err(|e| ComBridgeError::parse(format!("十六进制解析失败: {}", e)))
+                if i + 2 <= hex.len() {
+                    u8::from_str_radix(&hex[i..i + 2], 16)
+                        .map_err(|e| ComBridgeError::parse(format!("十六进制解析失败: {}", e)))
+                } else {
+                    Err(ComBridgeError::parse("十六进制数据不完整"))
+                }
             })
             .collect()
     }
 
     pub fn clear(&mut self) {
         self.buffer.clear();
+    }
+
+    pub fn buffer_len(&self) -> usize {
+        self.buffer.len()
+    }
+
+    pub fn read_all(&mut self) -> Vec<u8> {
+        self.buffer.drain(..).collect()
     }
 }
 
@@ -266,7 +236,7 @@ mod tests {
     #[test]
     fn test_parse_error() {
         let parser = AtParser::new();
-        let response = parser.parse_response("ERROR:1:Timeout").unwrap();
+        let response = parser.parse_response("ERROR=1:Timeout").unwrap();
         assert_eq!(response, AtResponse::Error { code: 1, message: "Timeout".to_string() });
     }
 
@@ -275,5 +245,37 @@ mod tests {
         let parser = AtParser::new();
         let data = parser.parse_hex_data("48656C6C6F").unwrap();
         assert_eq!(data, b"Hello");
+    }
+
+    #[test]
+    fn test_parse_scan_result() {
+        let parser = AtParser::new();
+        let response = parser.parse_response("+SCAN:112233445566,Device1,-50|778899AABBCC,Device2,-60").unwrap();
+        if let AtResponse::ScanResult { devices } = response {
+            assert_eq!(devices.len(), 2);
+            assert_eq!(devices[0].address, "112233445566");
+            assert_eq!(devices[0].name, Some("Device1".to_string()));
+            assert_eq!(devices[0].rssi, -50);
+        } else {
+            panic!("Expected ScanResult");
+        }
+    }
+
+    #[test]
+    fn test_parse_connected() {
+        let parser = AtParser::new();
+        let response = parser.parse_response("+CONN:112233445566").unwrap();
+        assert_eq!(response, AtResponse::Connected { address: "112233445566".to_string() });
+    }
+
+    #[test]
+    fn test_parse_rssi() {
+        let parser = AtParser::new();
+        let response = parser.parse_response("+RSSI:C8").unwrap();
+        if let AtResponse::Rssi { rssi } = response {
+            assert_eq!(rssi, -56);
+        } else {
+            panic!("Expected Rssi");
+        }
     }
 }

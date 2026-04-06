@@ -43,5 +43,14 @@
     "refresh": "刷新",
     "noData": "暂无数据",
     "selectBuffer": "请先选择缓冲区"
+  },
+  "sidebar": {
+    "xAxisRange": "X轴范围",
+    "rangeDisplay": "范围: {{start}} - {{end}}",
+    "chart1Columns": "图表1列选择",
+    "chart2Columns": "图表2列选择",
+    "selectColumns": "选择列",
+    "lineVisibility": "折线显示",
+    "noColumns": "暂无可用列"
   }
 }

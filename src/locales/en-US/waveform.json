@@ -43,5 +43,14 @@
     "refresh": "Refresh",
     "noData": "No data available",
     "selectBuffer": "Please select a buffer first"
+  },
+  "sidebar": {
+    "xAxisRange": "X-Axis Range",
+    "rangeDisplay": "Range: {{start}} - {{end}}",
+    "chart1Columns": "Chart 1 Columns",
+    "chart2Columns": "Chart 2 Columns",
+    "selectColumns": "Select columns",
+    "lineVisibility": "Line Visibility",
+    "noColumns": "No columns available"
   }
 }

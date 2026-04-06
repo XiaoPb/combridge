@@ -1,102 +1,11 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import { message } from 'antd';
 import { serialApi } from '../api/tauri';
-import { onSerialData, onSerialError, onSerialConnected, onSerialDisconnected } from '../api/events';
 import { useSerialStore, generateId } from '../stores/serialStore';
 import { useLogStore } from '../stores/logStore';
 import { DEFAULT_SERIAL_CONFIG } from '../types';
-import type { UnlistenFn } from '@tauri-apps/api/event';
 import type { SerialConfig } from '../types';
 import type { CacheData } from '../api/types';
-
-let globalSerialListeners: {
-  data?: UnlistenFn;
-  error?: UnlistenFn;
-  connected?: UnlistenFn;
-  disconnected?: UnlistenFn;
-} = {};
-
-let listenerCount = 0;
-let listenerSetupPromise: Promise<void> | null = null;
-
-async function setupGlobalListeners(
-  addReceivedData: (portName: string, entry: any) => void,
-  setError: (error: string | null) => void
-) {
-  if (listenerSetupPromise) {
-    await listenerSetupPromise;
-  }
-  
-  if (listenerCount > 0) {
-    listenerCount++;
-    return;
-  }
-
-  listenerSetupPromise = (async () => {
-    globalSerialListeners.data = await onSerialData((event) => {
-      addReceivedData(event.port_name, {
-        id: generateId(),
-        timestamp: event.timestamp ?? Date.now(),
-        data: event.data,
-        direction: 'receive',
-        format: 'hex',
-      });
-    });
-
-    globalSerialListeners.error = await onSerialError((event) => {
-      setError(event.error);
-      useLogStore.getState().addLog('error', 'SerialManager', `串口错误: ${event.error}`);
-      message.error(`串口错误: ${event.error}`);
-    });
-
-    globalSerialListeners.connected = await onSerialConnected((portName) => {
-      useLogStore.getState().addLog('info', 'SerialManager', `串口 ${portName} 已连接`);
-      message.success(`串口 ${portName} 已连接`);
-    });
-
-    globalSerialListeners.disconnected = await onSerialDisconnected((portName) => {
-      const store = useSerialStore.getState();
-      const tab = store.tabs.find((t) => t.portName === portName && t.tabType === 'port');
-      if (tab) {
-        store.updateTab(tab.key, { isConnected: false });
-      }
-      useLogStore.getState().addLog('info', 'SerialManager', `串口 ${portName} 已断开`);
-      message.info(`串口 ${portName} 已断开`);
-    });
-
-    listenerCount++;
-    listenerSetupPromise = null;
-  })();
-
-  await listenerSetupPromise;
-}
-
-async function cleanupGlobalListeners() {
-  if (listenerSetupPromise) {
-    await listenerSetupPromise;
-  }
-  
-  listenerCount--;
-  if (listenerCount <= 0) {
-    listenerCount = 0;
-    if (globalSerialListeners.data) {
-      globalSerialListeners.data();
-      globalSerialListeners.data = undefined;
-    }
-    if (globalSerialListeners.error) {
-      globalSerialListeners.error();
-      globalSerialListeners.error = undefined;
-    }
-    if (globalSerialListeners.connected) {
-      globalSerialListeners.connected();
-      globalSerialListeners.connected = undefined;
-    }
-    if (globalSerialListeners.disconnected) {
-      globalSerialListeners.disconnected();
-      globalSerialListeners.disconnected = undefined;
-    }
-  }
-}
 
 export const useSerial = () => {
   const {
@@ -111,7 +20,6 @@ export const useSerial = () => {
     removeTab,
     setActiveTab,
     updateTab,
-    addReceivedData,
     addSentData,
     setIsScanning,
     setError,
@@ -121,19 +29,6 @@ export const useSerial = () => {
   } = useSerialStore();
 
   const addLog = useLogStore((state) => state.addLog);
-  const isMountedRef = useRef(false);
-
-  useEffect(() => {
-    if (isMountedRef.current) return;
-    isMountedRef.current = true;
-
-    setupGlobalListeners(addReceivedData, setError);
-
-    return () => {
-      isMountedRef.current = false;
-      cleanupGlobalListeners();
-    };
-  }, [addReceivedData, setError]);
 
   const scanPorts = useCallback(async () => {
     setIsScanning(true);

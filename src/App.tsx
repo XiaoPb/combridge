@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { MainLayout } from './components';
 import { useTheme } from './hooks';
 import configService from './services/configService';
+import { initSerialEventListeners, cleanupSerialEventListeners } from './services/eventListeners';
 import './styles/global.css';
 
 const { defaultAlgorithm, darkAlgorithm } = theme;
@@ -55,6 +56,13 @@ function App() {
 
     return unsubscribe;
   }, [i18n]);
+
+  useEffect(() => {
+    initSerialEventListeners().catch(console.error);
+    return () => {
+      cleanupSerialEventListeners().catch(console.error);
+    };
+  }, []);
 
   return (
     <ConfigProvider

@@ -52,7 +52,7 @@ const CsvLoaderTab: React.FC = () => {
   const totalRows = rows.length;
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 8 }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden' }}>
       {error && (
         <Alert
           message={t('common.error')}
@@ -60,7 +60,7 @@ const CsvLoaderTab: React.FC = () => {
           type="error"
           closable
           onClose={clearError}
-          style={{ marginBottom: 8 }}
+          style={{ marginBottom: 8, flexShrink: 0 }}
         />
       )}
 
@@ -68,7 +68,7 @@ const CsvLoaderTab: React.FC = () => {
         size="small"
         title={t('csvLoader.configTitle')}
         styles={{ body: { padding: 12 } }}
-        style={{ marginBottom: 8 }}
+        style={{ marginBottom: 8, flexShrink: 0 }}
       >
         <Space wrap size="middle">
           <Button

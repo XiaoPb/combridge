@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Row, Col, Button, Space, InputNumber, Alert, Statistic, Switch, Tabs } from 'antd';
+import { Card, Row, Col, Button, Space, InputNumber, Alert, Statistic, Switch } from 'antd';
 import {
   PlayCircleOutlined,
   PauseCircleOutlined,
@@ -8,6 +8,7 @@ import {
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useWaveformStore, DEFAULT_PARSER_CONFIG } from '../../stores/waveformStore';
+import { usePageTabsStore } from '../../stores/pageTabsStore';
 import type { ParserConfig } from '../../api/waveform';
 import WaveformChart from './WaveformChart';
 import BufferConfigPanel from './BufferConfigPanel';
@@ -194,31 +195,11 @@ const RealtimeDataTab: React.FC = () => {
 };
 
 const WaveformPage: React.FC = () => {
-  const { t } = useTranslation('waveform');
-
-  const items = [
-    {
-      key: 'realtime',
-      label: t('tabs.realtime'),
-      children: <RealtimeDataTab />,
-    },
-    {
-      key: 'csvLoader',
-      label: t('tabs.csvLoader'),
-      children: <CsvLoaderTab />,
-    },
-  ];
+  const { waveformActiveTab } = usePageTabsStore();
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Tabs
-        defaultActiveKey="realtime"
-        items={items}
-        style={{ height: '100%' }}
-        styles={{
-          content: { height: 'calc(100% - 46px)', overflow: 'auto' },
-        }}
-      />
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {waveformActiveTab === 'realtime' ? <RealtimeDataTab /> : <CsvLoaderTab />}
     </div>
   );
 };

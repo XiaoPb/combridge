@@ -14,6 +14,7 @@ import SerialTitleTabs from './SerialTitleTabs';
 import BleTitleTabs from './BleTitleTabs';
 import ProtocolTitleTabs from './ProtocolTitleTabs';
 import SystemTitleTabs from './SystemTitleTabs';
+import WaveformTitleTabs from './WaveformTitleTabs';
 import { useTranslation } from 'react-i18next';
 import { changeLanguage } from '../../i18n';
 
@@ -117,6 +118,8 @@ const TitleBar: React.FC = () => {
         return <ProtocolTitleTabs />;
       case '/system':
         return <SystemTitleTabs />;
+      case '/waveform':
+        return <WaveformTitleTabs />;
       default:
         return null;
     }

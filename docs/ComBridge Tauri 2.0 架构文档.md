@@ -1,5 +1,12 @@
 # ComBridge Tauri 2.0 架构文档
 
+> **注意**：本文档已重构为模块化结构。详细架构文档请参阅：
+> - **总架构概览**：[architecture/README.md](./architecture/README.md)
+> - **后端模块文档**：[architecture/backend/](./architecture/backend/)
+> - **前端模块文档**：[architecture/frontend/](./architecture/frontend/)
+
+---
+
 ## 一、技术栈概述
 
 ### 1.1 核心技术选型

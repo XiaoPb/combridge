@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Row, Col, Button, Space, InputNumber, Alert, Statistic, Switch } from 'antd';
+import { Card, Button, Space, InputNumber, Alert, Statistic, Switch, Layout, Tooltip } from 'antd';
 import {
   PlayCircleOutlined,
   PauseCircleOutlined,
   ClearOutlined,
   ReloadOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useWaveformStore, DEFAULT_PARSER_CONFIG } from '../../stores/waveformStore';
@@ -15,10 +17,13 @@ import BufferConfigPanel from './BufferConfigPanel';
 import ParserConfigPanel from './ParserConfigPanel';
 import CsvLoaderTab from './CsvLoaderTab';
 
+const { Sider, Content } = Layout;
+
 const RealtimeDataTab: React.FC = () => {
   const { t } = useTranslation('waveform');
   const [displayRows, setDisplayRows] = useState(500);
   const [refreshInterval, setRefreshInterval] = useState(33);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const store = useWaveformStore();
 
@@ -86,25 +91,49 @@ const RealtimeDataTab: React.FC = () => {
         />
       )}
 
-      <Row gutter={8} style={{ flex: '1 1 0', minHeight: 0 }}>
-        <Col span={6} style={{ height: '100%', overflow: 'auto' }}>
-          <Space orientation="vertical" style={{ width: '100%' }} size="small">
-            <BufferConfigPanel />
-            {currentBuffer && (
-              <ParserConfigPanel
-                initialConfig={DEFAULT_PARSER_CONFIG}
-                onConfigChange={handleParserConfigChange}
-              />
-            )}
-          </Space>
-        </Col>
+      <Layout style={{ flex: '1 1 0', minHeight: 0, background: 'transparent' }}>
+        <Sider
+          collapsible
+          collapsed={sidebarCollapsed}
+          onCollapse={setSidebarCollapsed}
+          width={280}
+          collapsedWidth={0}
+          trigger={null}
+          style={{
+            background: 'var(--bg-secondary)',
+            borderRadius: '8px',
+            marginRight: sidebarCollapsed ? 0 : 8,
+            overflow: 'hidden',
+            transition: 'all 0.2s',
+          }}
+        >
+          <div style={{ padding: 8, height: '100%', overflow: 'auto' }}>
+            <Space orientation="vertical" style={{ width: '100%' }} size="small">
+              <BufferConfigPanel />
+              {currentBuffer && (
+                <ParserConfigPanel
+                  initialConfig={DEFAULT_PARSER_CONFIG}
+                  onConfigChange={handleParserConfigChange}
+                />
+              )}
+            </Space>
+          </div>
+        </Sider>
 
-        <Col span={18} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Content style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <Card
             size="small"
             styles={{ body: { padding: 8, display: 'flex', flexDirection: 'column', height: 'calc(100% - 40px)' } }}
             title={
               <Space>
+                <Tooltip title={sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}>
+                  <Button
+                    type="text"
+                    icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                    style={{ marginRight: 4 }}
+                  />
+                </Tooltip>
                 <span>{t('chart.title')}</span>
                 {status && (
                   <Statistic
@@ -188,8 +217,8 @@ const RealtimeDataTab: React.FC = () => {
               )}
             </div>
           </Card>
-        </Col>
-      </Row>
+        </Content>
+      </Layout>
     </div>
   );
 };

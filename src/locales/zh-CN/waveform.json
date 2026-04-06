@@ -55,7 +55,9 @@
     "chart2Columns": "图表2列选择",
     "selectColumns": "选择列",
     "lineVisibility": "折线显示",
-    "noColumns": "暂无可用列"
+    "noColumns": "暂无可用列",
+    "expand": "展开侧边栏",
+    "collapse": "收起侧边栏"
   },
   "csvLoader": {
     "configTitle": "CSV 解析配置",

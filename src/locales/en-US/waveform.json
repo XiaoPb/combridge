@@ -55,7 +55,9 @@
     "chart2Columns": "Chart 2 Columns",
     "selectColumns": "Select columns",
     "lineVisibility": "Line Visibility",
-    "noColumns": "No columns available"
+    "noColumns": "No columns available",
+    "expand": "Expand Sidebar",
+    "collapse": "Collapse Sidebar"
   },
   "csvLoader": {
     "configTitle": "CSV Parse Configuration",

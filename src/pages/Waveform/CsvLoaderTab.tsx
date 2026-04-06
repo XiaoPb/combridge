@@ -1,15 +1,17 @@
-import React, { useCallback } from 'react';
-import { Card, Button, Switch, InputNumber, Space, Alert, Typography, Spin } from 'antd';
-import { FileOutlined, FolderOpenOutlined } from '@ant-design/icons';
+import React, { useCallback, useState } from 'react';
+import { Card, Button, Switch, InputNumber, Space, Alert, Typography, Spin, Layout, Tooltip } from 'antd';
+import { FileOutlined, FolderOpenOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useCsvChartStore } from '../../stores/csvChartStore';
 import ChartSidebar from './ChartSidebar';
 import DualLineChart from './DualLineChart';
 
+const { Sider, Content } = Layout;
 const { Text } = Typography;
 
 const CsvLoaderTab: React.FC = () => {
   const { t } = useTranslation('waveform');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const {
     csvData,
@@ -134,12 +136,42 @@ const CsvLoaderTab: React.FC = () => {
         </Space>
       </Card>
 
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <div style={{ width: 280, height: '100%', overflow: 'auto', marginRight: 8 }}>
+      <Layout style={{ flex: 1, minHeight: 0, background: 'transparent' }}>
+        <Sider
+          collapsible
+          collapsed={sidebarCollapsed}
+          onCollapse={setSidebarCollapsed}
+          width={280}
+          collapsedWidth={0}
+          trigger={null}
+          style={{
+            background: 'var(--bg-secondary)',
+            borderRadius: '8px',
+            marginRight: sidebarCollapsed ? 0 : 8,
+            overflow: 'hidden',
+            transition: 'all 0.2s',
+          }}
+        >
           <ChartSidebar columns={columns} totalRows={totalRows} />
-        </div>
+        </Sider>
 
-        <div style={{ flex: 1, height: '100%', position: 'relative' }}>
+        <Content style={{ display: 'flex', flexDirection: 'column', position: 'relative', flex: 1, minWidth: 0 }}>
+          <Tooltip title={sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}>
+            <Button
+              type="text"
+              icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              style={{
+                position: 'absolute',
+                top: 8,
+                left: 8,
+                zIndex: 10,
+                background: 'var(--bg-secondary)',
+                borderRadius: 4,
+              }}
+            />
+          </Tooltip>
+
           {isLoading && (
             <div
               style={{
@@ -180,8 +212,8 @@ const CsvLoaderTab: React.FC = () => {
               <Text type="secondary">{t('csvLoader.noData')}</Text>
             </div>
           )}
-        </div>
-      </div>
+        </Content>
+      </Layout>
     </div>
   );
 };

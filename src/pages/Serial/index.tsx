@@ -191,7 +191,7 @@ const SerialPage: React.FC = () => {
               {t('title.launcher')}
             </Title>
             
-            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            <Space orientation="vertical" style={{ width: '100%' }} size="middle">
               <div>
                 <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{t('label.portSelect')}</Text>
                 <Space.Compact style={{ width: '100%' }}>
@@ -334,7 +334,7 @@ const SerialPage: React.FC = () => {
           <Content style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
             <Empty
               description={
-                <Space direction="vertical" size="small">
+                <Space orientation="vertical" size="small">
                   <Text>{t('message.selectPortToStart')}</Text>
                   <Text type="secondary" style={{ fontSize: 12 }}>
                     {t('message.eachPortTab')}
@@ -377,7 +377,7 @@ const SerialPage: React.FC = () => {
           <div style={{ padding: 8, height: '100%', overflow: 'auto' }}>
             <Title level={5} style={{ marginBottom: 8 }}>{t('title.settings')}</Title>
             
-            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            <Space orientation="vertical" style={{ width: '100%' }} size="middle">
               <div>
                 <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>{t('label.port')}</Text>
                 <Input value={activeTab.portName} disabled style={{ width: '100%' }} />

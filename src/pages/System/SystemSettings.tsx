@@ -154,7 +154,7 @@ const SystemSettings: React.FC = () => {
                 {t('button.resetDefaults')}
               </Button>
             </Space>
-            <Divider type="vertical" />
+            <Divider orientation="vertical" />
             <Text type="secondary">
               {t('message.autoSaveHint')}
             </Text>

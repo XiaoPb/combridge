@@ -886,15 +886,18 @@ pre {
   overflow: hidden;
 }
 
-.title-tabs-container {
+.title-tabs-container,
+.title-bar-tabs-container {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 2px;
   overflow-x: auto;
   overflow-y: hidden;
 }
 
-.title-tabs-container::-webkit-scrollbar {
+.title-tabs-container::-webkit-scrollbar,
+.title-bar-tabs-container::-webkit-scrollbar {
   height: 0;
 }
 

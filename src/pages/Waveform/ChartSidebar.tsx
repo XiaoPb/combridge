@@ -46,9 +46,9 @@ const ChartSidebar: React.FC<ChartSidebarProps> = ({ columns, totalRows }) => {
 
   return (
     <div style={{ width: 280, height: '100%', overflow: 'auto' }}>
-      <Space direction="vertical" style={{ width: '100%' }} size="middle">
+      <Space orientation="vertical" style={{ width: '100%' }} size="middle">
         <Card size="small" title={t('sidebar.xAxisRange')} styles={{ body: { padding: 12 } }}>
-          <Space direction="vertical" style={{ width: '100%' }}>
+          <Space orientation="vertical" style={{ width: '100%' }}>
             <Slider
               range
               min={0}
@@ -95,7 +95,7 @@ const ChartSidebar: React.FC<ChartSidebarProps> = ({ columns, totalRows }) => {
             onChange={handleLineVisibilityChange as (checkedValue: (string | number | boolean)[]) => void}
             style={{ width: '100%' }}
           >
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               {columns.map(col => (
                 <Checkbox key={col} value={col}>
                   {col}

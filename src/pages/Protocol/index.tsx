@@ -184,7 +184,7 @@ const ProtocolPage: React.FC = () => {
         cancelText={t('common:cancel')}
         confirmLoading={isLoading}
       >
-        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+        <Space orientation="vertical" style={{ width: '100%' }} size="middle">
           <div>
             <Text>{t('label.protocolId')}</Text>
             <Input

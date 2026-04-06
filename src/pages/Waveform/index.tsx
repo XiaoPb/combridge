@@ -88,7 +88,7 @@ const RealtimeDataTab: React.FC = () => {
 
       <Row gutter={8} style={{ flex: '1 1 0', minHeight: 0 }}>
         <Col span={6} style={{ height: '100%', overflow: 'auto' }}>
-          <Space direction="vertical" style={{ width: '100%' }} size="small">
+          <Space orientation="vertical" style={{ width: '100%' }} size="small">
             <BufferConfigPanel />
             {currentBuffer && (
               <ParserConfigPanel

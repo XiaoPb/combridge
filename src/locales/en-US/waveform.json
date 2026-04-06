@@ -52,5 +52,15 @@
     "selectColumns": "Select columns",
     "lineVisibility": "Line Visibility",
     "noColumns": "No columns available"
+  },
+  "csvLoader": {
+    "configTitle": "CSV Parse Configuration",
+    "selectFile": "Select File",
+    "reloadFile": "Reload",
+    "skipFirstRow": "Skip First Row",
+    "useSecondRowAsHeader": "Use Second Row as Header",
+    "splitColumn": "Split Column",
+    "splitColumnIndex": "Split Column Index",
+    "noData": "Please select a CSV file"
   }
 }

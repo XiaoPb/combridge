@@ -52,5 +52,15 @@
     "selectColumns": "选择列",
     "lineVisibility": "折线显示",
     "noColumns": "暂无可用列"
+  },
+  "csvLoader": {
+    "configTitle": "CSV 解析配置",
+    "selectFile": "选择文件",
+    "reloadFile": "重新加载",
+    "skipFirstRow": "跳过首行",
+    "useSecondRowAsHeader": "使用第二行作为表头",
+    "splitColumn": "分列显示",
+    "splitColumnIndex": "分列索引",
+    "noData": "请选择 CSV 文件"
   }
 }

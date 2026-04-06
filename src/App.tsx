@@ -3,7 +3,7 @@ import { ConfigProvider, theme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import enUS from 'antd/locale/en_US';
 import { MainLayout } from './components';
-import { SerialPage, BlePage, ProtocolPage, SystemPage } from './pages';
+import { SerialPage, BlePage, ProtocolPage, SystemPage, WaveformPage } from './pages';
 import { useTheme } from './hooks';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
@@ -53,6 +53,7 @@ function App() {
             <Route path="/serial" element={<SerialPage />} />
             <Route path="/ble" element={<BlePage />} />
             <Route path="/protocol" element={<ProtocolPage />} />
+            <Route path="/waveform" element={<WaveformPage />} />
             <Route path="/system" element={<SystemPage />} />
           </Routes>
         </MainLayout>

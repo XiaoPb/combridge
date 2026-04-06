@@ -5,6 +5,7 @@ pub mod gh3036;
 pub mod protocol;
 pub mod service;
 pub mod state;
+pub mod waveform;
 pub mod websocket;
 
 use std::sync::Arc;
@@ -16,6 +17,7 @@ use service::LoggerService;
 use state::{create_action_dispatcher, create_app_state, create_state_persistence};
 use tracing::info;
 use websocket::ConnectionPool;
+use crate::commands::waveform::WaveformManager;
 
 fn init_logger() {
     let _guard = LoggerService::init_default();
@@ -38,6 +40,7 @@ pub fn run() {
     let ble_manager = Arc::new(BleManager::new());
     let connection_pool = Arc::new(ConnectionPool::new());
     let plugin_manager = Arc::new(PluginManager::new());
+    let waveform_manager = Arc::new(WaveformManager::new());
     
     let device_manager = Arc::new(DeviceManager::new(serial_manager.clone(), ble_manager.clone()));
     let gh3036_manager = Arc::new(Gh3036Manager::new(device_manager));
@@ -68,6 +71,7 @@ pub fn run() {
         .manage(state_persistence)
         .manage(action_dispatcher)
         .manage(gh3036_manager)
+        .manage(waveform_manager)
         .setup(move |_app| {
             let ble_manager = ble_manager_clone.clone();
             tauri::async_runtime::spawn(async move {
@@ -151,6 +155,14 @@ pub fn run() {
             commands::gh3036::gh3036_subscribe_events,
             commands::gh3036::gh3036_get_library_status,
             commands::gh3036::gh3036_on_rx_data,
+            commands::waveform::waveform_create_buffer,
+            commands::waveform::waveform_remove_buffer,
+            commands::waveform::waveform_configure_parser,
+            commands::waveform::waveform_parse_and_store,
+            commands::waveform::waveform_read_data,
+            commands::waveform::waveform_get_status,
+            commands::waveform::waveform_clear_buffer,
+            commands::waveform::waveform_list_buffers,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

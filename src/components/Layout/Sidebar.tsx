@@ -8,6 +8,7 @@ import {
   SettingOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  LineChartOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 
@@ -38,6 +39,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
       key: '/protocol',
       icon: <CodeOutlined />,
       label: t('menu.protocol'),
+    },
+    {
+      key: '/waveform',
+      icon: <LineChartOutlined />,
+      label: t('menu.waveform'),
     },
     {
       key: '/system',

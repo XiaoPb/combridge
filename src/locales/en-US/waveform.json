@@ -1,0 +1,47 @@
+{
+  "common": {
+    "error": "Error",
+    "success": "Success",
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
+  "buffer": {
+    "title": "Buffer Configuration",
+    "select": "Select Buffer",
+    "selectPlaceholder": "Please select a buffer",
+    "newId": "New Buffer ID",
+    "idPlaceholder": "Enter buffer ID",
+    "idRequired": "Please enter buffer ID",
+    "capacity": "Buffer Capacity",
+    "create": "Create",
+    "delete": "Delete Buffer",
+    "created": "Buffer created successfully"
+  },
+  "parser": {
+    "title": "Parser Configuration",
+    "type": "Parser Type",
+    "delimiter": "Delimiter",
+    "regex": "Regular Expression",
+    "delimiterChar": "Delimiter",
+    "pattern": "Regex Pattern",
+    "patternExample": "Example: (-?\\d+),(-?\\d+),(-?\\d+)",
+    "trimWhitespace": "Trim Whitespace",
+    "columnNames": "Column Names",
+    "columnNameRequired": "Please enter column name",
+    "addColumn": "Add Column"
+  },
+  "chart": {
+    "title": "Waveform Chart",
+    "dataPoints": "Data Points",
+    "displayRows": "Display Rows",
+    "refreshInterval": "Refresh Interval",
+    "running": "Running",
+    "paused": "Paused",
+    "start": "Start",
+    "pause": "Pause",
+    "clear": "Clear",
+    "refresh": "Refresh",
+    "noData": "No data available",
+    "selectBuffer": "Please select a buffer first"
+  }
+}

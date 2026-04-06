@@ -1,0 +1,47 @@
+{
+  "common": {
+    "error": "错误",
+    "success": "成功",
+    "confirm": "确认",
+    "cancel": "取消"
+  },
+  "buffer": {
+    "title": "缓冲区配置",
+    "select": "选择缓冲区",
+    "selectPlaceholder": "请选择缓冲区",
+    "newId": "新建缓冲区ID",
+    "idPlaceholder": "输入缓冲区ID",
+    "idRequired": "请输入缓冲区ID",
+    "capacity": "缓冲区容量",
+    "create": "创建",
+    "delete": "删除缓冲区",
+    "created": "缓冲区创建成功"
+  },
+  "parser": {
+    "title": "解析器配置",
+    "type": "解析类型",
+    "delimiter": "分隔符",
+    "regex": "正则表达式",
+    "delimiterChar": "分隔符",
+    "pattern": "正则表达式",
+    "patternExample": "示例: (-?\\d+),(-?\\d+),(-?\\d+)",
+    "trimWhitespace": "去除空白",
+    "columnNames": "列名配置",
+    "columnNameRequired": "请输入列名",
+    "addColumn": "添加列"
+  },
+  "chart": {
+    "title": "波形图",
+    "dataPoints": "数据点",
+    "displayRows": "显示行数",
+    "refreshInterval": "刷新间隔",
+    "running": "运行中",
+    "paused": "已暂停",
+    "start": "开始",
+    "pause": "暂停",
+    "clear": "清空",
+    "refresh": "刷新",
+    "noData": "暂无数据",
+    "selectBuffer": "请先选择缓冲区"
+  }
+}

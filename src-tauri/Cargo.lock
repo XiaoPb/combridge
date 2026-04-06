@@ -547,6 +547,7 @@ dependencies = [
  "once_cell",
  "open",
  "parking_lot",
+ "regex",
  "rmp",
  "rmp-serde",
  "serde",

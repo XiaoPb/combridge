@@ -1,9 +1,10 @@
 {
   "menu": {
     "serial": "串口",
-    "ble": "BLE",
+    "ble": "蓝牙",
     "protocol": "协议",
+    "waveform": "波形图",
     "system": "系统"
   },
-  "collapse": "收起侧边栏"
+  "collapse": "收起菜单"
 }

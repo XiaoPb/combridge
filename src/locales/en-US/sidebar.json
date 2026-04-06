@@ -3,6 +3,7 @@
     "serial": "Serial",
     "ble": "BLE",
     "protocol": "Protocol",
+    "waveform": "Waveform",
     "system": "System"
   },
   "collapse": "Collapse sidebar"

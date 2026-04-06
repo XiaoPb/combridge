@@ -15,7 +15,7 @@ static SYSTEM: Lazy<Mutex<System>> = Lazy::new(|| {
 });
 
 pub fn start_system_monitor() {
-    tokio::spawn(async {
+    tauri::async_runtime::spawn(async {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
         loop {
             interval.tick().await;

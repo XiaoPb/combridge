@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::SystemTime;
 use sysinfo::{System, Disks, RefreshKind};
+use tauri::Manager;
 
 use crate::error::{ComBridgeError, Result};
 
@@ -236,5 +237,14 @@ pub async fn show_in_folder(path: String) -> Result<()> {
             .map_err(|e| ComBridgeError::io(format!("无法打开文件夹: {}", e)))?;
     }
 
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn show_main_window(app: tauri::AppHandle) -> Result<()> {
+    if let Some(window) = app.get_webview_window("main") {
+        window.show().map_err(|e| ComBridgeError::io(format!("显示窗口失败: {}", e)))?;
+        window.set_focus().map_err(|e| ComBridgeError::io(format!("设置焦点失败: {}", e)))?;
+    }
     Ok(())
 }

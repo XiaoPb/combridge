@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "ComBridge",
         "width": 1280,
         "height": 800,
@@ -21,7 +22,8 @@
         "fullscreen": false,
         "center": true,
         "decorations": false,
-        "transparent": true
+        "transparent": true,
+        "visible": false
       }
     ],
     "security": {

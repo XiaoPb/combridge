@@ -131,6 +131,7 @@ pub fn run() {
             commands::system::get_platform,
             commands::system::open_url,
             commands::system::show_in_folder,
+            commands::system::show_main_window,
             commands::state::dispatch_action,
             commands::state::get_state,
             commands::state::get_channel_data,

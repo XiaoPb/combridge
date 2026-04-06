@@ -155,7 +155,7 @@ const SystemInfoPage: React.FC = () => {
                 type="link"
                 size="small"
                 icon={<QuestionCircleOutlined />}
-                onClick={() => systemApi.openUrl('https://github.com/XiaoPb/combridge/wiki')}
+                onClick={() => systemApi.openUrl('https://deepwiki.com/XiaoPb/combridge')}
               >
                 {t('button.documentation')}
               </Button>

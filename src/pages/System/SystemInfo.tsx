@@ -62,7 +62,7 @@ const formatUptime = (secs: number, t: (key: string) => string): string => {
   return parts.join(' ') || t('value.justStarted');
 };
 
-const SystemInfo: React.FC = () => {
+const SystemInfoPage: React.FC = () => {
   const { t } = useTranslation('system');
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
@@ -155,7 +155,7 @@ const SystemInfo: React.FC = () => {
                 type="link"
                 size="small"
                 icon={<QuestionCircleOutlined />}
-                onClick={() => systemApi.openUrl('https://github.com/combridge/combridge/wiki')}
+                onClick={() => systemApi.openUrl('https://github.com/XiaoPb/combridge/wiki')}
               >
                 {t('button.documentation')}
               </Button>
@@ -163,7 +163,7 @@ const SystemInfo: React.FC = () => {
                 type="link"
                 size="small"
                 icon={<GithubOutlined />}
-                onClick={() => systemApi.openUrl('https://github.com/combridge/combridge')}
+                onClick={() => systemApi.openUrl('https://github.com/XiaoPb/combridge')}
               >
                 {t('button.github')}
               </Button>
@@ -171,7 +171,7 @@ const SystemInfo: React.FC = () => {
                 type="link"
                 size="small"
                 icon={<BugOutlined />}
-                onClick={() => systemApi.openUrl('https://github.com/combridge/combridge/issues')}
+                onClick={() => systemApi.openUrl('https://github.com/XiaoPb/combridge/issues')}
               >
                 {t('button.feedback')}
               </Button>
@@ -190,16 +190,16 @@ const SystemInfo: React.FC = () => {
             }
           >
             {systemInfo && (
-              <Descriptions column={1} size="small">
+              <Descriptions column={2} bordered size="small">
                 <Descriptions.Item label={t('label.os')}>{systemInfo.os_name}</Descriptions.Item>
-                <Descriptions.Item label={t('label.osVersion')}>{systemInfo.os_version}</Descriptions.Item>
                 <Descriptions.Item label={t('label.arch')}>{systemInfo.arch}</Descriptions.Item>
+                <Descriptions.Item label={t('label.osVersion')}>{systemInfo.os_version}</Descriptions.Item>
                 <Descriptions.Item label={t('label.hostname')}>{systemInfo.hostname}</Descriptions.Item>
                 <Descriptions.Item label={t('label.cpuCores')}>{systemInfo.cpu_count} {t('value.cores')}</Descriptions.Item>
                 <Descriptions.Item label={t('label.totalMemory')}>
                   {formatBytes(systemInfo.total_memory)}
                 </Descriptions.Item>
-                <Descriptions.Item label={t('label.appVersion')}>
+                <Descriptions.Item label={t('label.appVersion')} span={2}>
                   <Tag color="blue">v{systemInfo.app_version}</Tag>
                 </Descriptions.Item>
               </Descriptions>
@@ -290,4 +290,4 @@ const SystemInfo: React.FC = () => {
   );
 };
 
-export default SystemInfo;
+export default SystemInfoPage;

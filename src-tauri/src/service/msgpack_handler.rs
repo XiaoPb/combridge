@@ -22,7 +22,7 @@ pub struct ParsedMessage {
     pub metadata: HashMap<String, String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum MessageType {
     Data,
     Command,

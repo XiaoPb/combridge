@@ -1,14 +1,26 @@
-import React, { useMemo, useCallback, memo, useRef, useEffect, useState } from 'react';
+import React, { useMemo, useRef, useEffect, useCallback } from 'react';
+import * as echarts from 'echarts/core';
+import { LineChart } from 'echarts/charts';
 import {
+  LegendComponent,
+  GridComponent,
+  DataZoomComponent,
+  TooltipComponent,
+  ToolboxComponent,
+} from 'echarts/components';
+import { UniversalTransition } from 'echarts/features';
+import { CanvasRenderer } from 'echarts/renderers';
+
+echarts.use([
   LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Brush,
-} from 'recharts';
+  LegendComponent,
+  GridComponent,
+  DataZoomComponent,
+  TooltipComponent,
+  ToolboxComponent,
+  CanvasRenderer,
+  UniversalTransition,
+]);
 
 export interface ChartGroupConfig {
   name: string;
@@ -42,186 +54,227 @@ const COLORS = [
   '#fa8c16',
 ];
 
-const SAMPLING_THRESHOLD = 2000;
-
-const sampleData = <T,>(data: T[], maxPoints: number): T[] => {
-  if (data.length <= maxPoints) return data;
-  const step = Math.ceil(data.length / maxPoints);
-  const sampled: T[] = [];
-  for (let i = 0; i < data.length; i += step) {
-    sampled.push(data[i]);
-  }
-  return sampled;
-};
-
 interface SingleChartProps {
-  displayData: Record<string, number | string>[];
-  chartConfig: ChartGroupConfig;
-  columns: string[];
+  xAxisData: (string | number)[];
+  series: { name: string; data: number[]; color: string }[];
   yAxisConfigs: YAxisConfig[];
-  showXAxis: boolean;
-  showBrush: boolean;
-  brushRange: [number, number];
-  onBrushChange: (range: [number, number]) => void;
-  colorMap: Map<string, string>;
+  height: number;
+  showDataZoom: boolean;
+  visiblePoints: number;
+  chartRefs: React.MutableRefObject<(echarts.ECharts | null)[]>;
+  index: number;
+  onDataZoomChange?: (start: number, end: number) => void;
 }
 
-const SingleChart: React.FC<SingleChartProps> = memo(({
-  displayData,
-  chartConfig,
-  columns,
+const SingleChart: React.FC<SingleChartProps> = ({
+  xAxisData,
+  series,
   yAxisConfigs,
-  showXAxis,
-  showBrush,
-  brushRange,
-  onBrushChange,
-  colorMap,
+  height,
+  showDataZoom,
+  visiblePoints,
+  chartRefs,
+  index,
+  onDataZoomChange,
 }) => {
-  const visibleColumns = chartConfig.columns.filter(col => columns.includes(col));
-  
-  const yAxisConfigMap = useMemo(() => {
-    const map = new Map<string, YAxisConfig>();
-    yAxisConfigs.forEach(config => {
-      map.set(config.column, config);
-    });
-    return map;
-  }, [yAxisConfigs]);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const leftYAxes = useMemo(() => {
-    return yAxisConfigs
-      .filter(c => c.position === 'left' && visibleColumns.includes(c.column))
-      .sort((a, b) => a.offset - b.offset);
-  }, [yAxisConfigs, visibleColumns]);
+  const option = useMemo(() => {
+    const totalPoints = xAxisData.length;
+    const start = 0;
+    const end = totalPoints > 0 ? Math.min((visiblePoints / totalPoints) * 100, 100) : 100;
 
-  const rightYAxes = useMemo(() => {
-    return yAxisConfigs
-      .filter(c => c.position === 'right' && visibleColumns.includes(c.column))
-      .sort((a, b) => a.offset - b.offset);
-  }, [yAxisConfigs, visibleColumns]);
+    const yAxisOption = yAxisConfigs.map((config, idx) => ({
+      name: config.column,
+      type: 'value',
+      position: config.position,
+      offset: config.offset,
+      scale: true,
+      axisLine: {
+        show: true,
+        lineStyle: {
+          color: config.color,
+        },
+      },
+      axisLabel: {
+        color: config.color,
+      },
+      nameTextStyle: {
+        color: config.color,
+      },
+      splitLine: {
+        show: idx === 0,
+      },
+    }));
 
-  const sampledData = useMemo(() => 
-    sampleData(displayData, SAMPLING_THRESHOLD),
-    [displayData]
-  );
+    const seriesOption = series.map((s, idx) => ({
+      name: s.name,
+      type: 'line',
+      data: s.data,
+      smooth: false,
+      yAxisIndex: idx,
+      lineStyle: {
+        color: s.color,
+        width: 1.5,
+      },
+      itemStyle: {
+        color: s.color,
+      },
+      symbol: 'none',
+      animation: false,
+    }));
 
-  const renderLegend = useCallback((value: string) => (
-    <span style={{ color: 'var(--text-primary)', cursor: 'default' }}>
-      {value}
-    </span>
-  ), []);
+    const dataZoomOption = showDataZoom
+      ? [
+          {
+            type: 'slider' as const,
+            show: true,
+            start,
+            end,
+            zoomLock: false,
+            xAxisIndex: [0],
+            height: 24,
+            bottom: 8,
+            handleStyle: {
+              color: '#1890ff',
+              borderColor: '#1890ff',
+            },
+            trackStyle: {
+              backgroundColor: 'var(--bg-secondary)',
+            },
+            selectedDataBackground: {
+              lineStyle: {
+                color: '#1890ff',
+              },
+              areaStyle: {
+                color: 'rgba(24, 144, 255, 0.2)',
+              },
+            },
+            fillerColor: 'rgba(24, 144, 255, 0.15)',
+            borderColor: 'var(--border-color)',
+            textStyle: {
+              color: 'var(--text-secondary)',
+            },
+            labelPrecision: 0,
+          },
+        ]
+      : [];
 
-  if (visibleColumns.length === 0) {
-    return (
-      <div
-        style={{
-          height: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+    return {
+      animationDuration: 0,
+      progressive: 500,
+      progressiveThreshold: 3000,
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: {
+          type: 'cross',
+          lineStyle: {
+            color: 'var(--border-color)',
+          },
+          crossStyle: {
+            color: 'var(--border-color)',
+          },
+        },
+        backgroundColor: 'var(--bg-secondary)',
+        borderColor: 'var(--border-color)',
+        textStyle: {
+          color: 'var(--text-primary)',
+        },
+      },
+      legend: {
+        top: 4,
+        left: 'center',
+        orient: 'horizontal',
+        data: series.map((s) => s.name),
+        textStyle: {
+          color: 'var(--text-primary)',
+        },
+      },
+      grid: {
+        top: 40,
+        left: yAxisConfigs.filter((c) => c.position === 'left').length > 0 ? 50 + (yAxisConfigs.filter((c) => c.position === 'left').length - 1) * 40 : 40,
+        right: yAxisConfigs.filter((c) => c.position === 'right').length > 0 ? 50 + (yAxisConfigs.filter((c) => c.position === 'right').length - 1) * 40 : 20,
+        bottom: showDataZoom ? 40 : 20,
+      },
+      xAxis: {
+        type: 'category',
+        data: xAxisData,
+        boundaryGap: false,
+        splitNumber: 10,
+        axisLine: {
+          lineStyle: {
+            color: 'var(--border-color)',
+          },
+        },
+        axisLabel: {
           color: 'var(--text-secondary)',
-        }}
-      >
-        暂无曲线
-      </div>
-    );
-  }
+          formatter: (value: string | number) => {
+            const num = typeof value === 'number' ? value : parseFloat(value);
+            if (!isNaN(num)) {
+              return num.toFixed(0);
+            }
+            return value;
+          },
+        },
+      },
+      yAxis: yAxisOption.length > 0 ? yAxisOption : [{ type: 'value', scale: true }],
+      series: seriesOption,
+      dataZoom: dataZoomOption,
+    };
+  }, [xAxisData, series, yAxisConfigs, showDataZoom, visiblePoints]);
 
-  const leftOffset = 20 + leftYAxes.length * 50;
-  const rightOffset = 30 + rightYAxes.length * 50;
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    if (chartRefs.current[index]) {
+      chartRefs.current[index].dispose();
+    }
+
+    const chart = echarts.init(containerRef.current);
+    chartRefs.current[index] = chart;
+    chart.setOption(option);
+
+    if (showDataZoom && onDataZoomChange) {
+      chart.on('datazoom', (params: unknown) => {
+        const p = params as { start?: number; end?: number; batch?: Array<{ start: number; end: number }> };
+        if (p.batch) {
+          onDataZoomChange(p.batch[0].start, p.batch[0].end);
+        } else if (p.start !== undefined && p.end !== undefined) {
+          onDataZoomChange(p.start, p.end);
+        }
+      });
+    }
+
+    const handleResize = () => {
+      chart.resize();
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chart.dispose();
+      chartRefs.current[index] = null;
+    };
+  }, [option, chartRefs, index, showDataZoom, onDataZoomChange]);
+
+  useEffect(() => {
+    if (chartRefs.current[index]) {
+      chartRefs.current[index].setOption(option, { notMerge: true });
+    }
+  }, [option, chartRefs, index]);
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart
-        data={sampledData}
-        margin={{ top: 5, right: rightOffset, left: leftOffset, bottom: 5 }}
-      >
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-        {showXAxis && (
-          <XAxis
-            dataKey="index"
-            stroke="var(--text-secondary)"
-            tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-          />
-        )}
-        {leftYAxes.map((config, index) => (
-          <YAxis
-            key={`left-${config.column}`}
-            yAxisId={`y-${config.column}`}
-            orientation="left"
-            domain={['auto', 'auto']}
-            stroke={config.color}
-            tick={{ fill: config.color, fontSize: 11 }}
-            width={50}
-            label={{
-              value: config.column,
-              angle: -90,
-              position: 'insideLeft',
-              offset: 10 + index * 50,
-              fill: config.color,
-              fontSize: 11,
-            }}
-          />
-        ))}
-        {rightYAxes.map((config, index) => (
-          <YAxis
-            key={`right-${config.column}`}
-            yAxisId={`y-${config.column}`}
-            orientation="right"
-            domain={['auto', 'auto']}
-            stroke={config.color}
-            tick={{ fill: config.color, fontSize: 11 }}
-            width={50}
-            label={{
-              value: config.column,
-              angle: 90,
-              position: 'insideRight',
-              offset: 10 + index * 50,
-              fill: config.color,
-              fontSize: 11,
-            }}
-          />
-        ))}
-        <Legend
-          onClick={() => {}}
-          formatter={renderLegend}
-        />
-        {showBrush && (
-          <Brush
-            dataKey="index"
-            height={30}
-            stroke="var(--primary-color)"
-            fill="var(--bg-secondary)"
-            startIndex={brushRange[0]}
-            endIndex={brushRange[1]}
-            onChange={(e) => {
-              if (e && typeof e.startIndex === 'number' && typeof e.endIndex === 'number') {
-                onBrushChange([e.startIndex, e.endIndex]);
-              }
-            }}
-          />
-        )}
-        {visibleColumns.map((col) => {
-          const config = yAxisConfigMap.get(col);
-          const color = colorMap.get(col) || COLORS[columns.indexOf(col) % COLORS.length];
-          return (
-            <Line
-              key={col}
-              type="monotone"
-              dataKey={col}
-              stroke={color}
-              strokeWidth={1.5}
-              dot={false}
-              isAnimationActive={false}
-              yAxisId={config ? `y-${config.column}` : 'y-default'}
-            />
-          );
-        })}
-      </LineChart>
-    </ResponsiveContainer>
+    <div
+      ref={containerRef}
+      style={{
+        width: '100%',
+        height,
+        minHeight: 150,
+      }}
+    />
   );
-});
-
-SingleChart.displayName = 'SingleChart';
+};
 
 const MultiLineChart: React.FC<MultiLineChartProps> = ({
   columns,
@@ -230,29 +283,12 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   yAxisConfigs = {},
   visiblePoints = 1000,
 }) => {
-  const [brushRange, setBrushRange] = useState<[number, number]>([0, Math.min(visiblePoints - 1, rows.length - 1)]);
-  const prevRowsLengthRef = useRef(rows.length);
+  const chartRefs = useRef<(echarts.ECharts | null)[]>([]);
+  const zoomStateRef = useRef<{ start: number; end: number }>({ start: 0, end: 100 });
 
-  useEffect(() => {
-    if (rows.length !== prevRowsLengthRef.current) {
-      prevRowsLengthRef.current = rows.length;
-      setBrushRange([0, Math.min(visiblePoints - 1, rows.length - 1)]);
-    }
-  }, [rows.length, visiblePoints]);
-
-  const displayData = useMemo(() => {
-    const [start, end] = brushRange;
-    const slicedRows = rows.slice(start, end + 1);
-    return slicedRows.map((row, index) => {
-      const point: Record<string, number | string> = { index: start + index };
-      columns.forEach((col, colIndex) => {
-        if (colIndex < row.length) {
-          point[col] = row[colIndex];
-        }
-      });
-      return point;
-    });
-  }, [rows, brushRange, columns]);
+  const xAxisData = useMemo(() => {
+    return rows.map((_, index) => index);
+  }, [rows]);
 
   const colorMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -262,9 +298,24 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
     return map;
   }, [columns]);
 
-  const handleBrushChange = useCallback((range: [number, number]) => {
-    setBrushRange(range);
-  }, []);
+  const handleDataZoomChange = useCallback((start: number, end: number) => {
+    zoomStateRef.current = { start, end };
+    chartRefs.current.forEach((chart, idx) => {
+      if (chart && idx !== chartGroups.length - 1) {
+        chart.dispatchAction({
+          type: 'dataZoom',
+          start,
+          end,
+        });
+      }
+    });
+  }, [chartGroups.length]);
+
+  useEffect(() => {
+    if (chartRefs.current.filter(Boolean).length > 1) {
+      echarts.connect(chartRefs.current.filter(Boolean) as echarts.ECharts[]);
+    }
+  }, [chartGroups.length]);
 
   if (columns.length === 0 || rows.length === 0) {
     return (
@@ -304,8 +355,17 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
         const groupYAxisConfigs = yAxisConfigs[group.name] || group.columns.map((col, colIndex) => ({
           column: col,
           position: (colIndex % 2 === 0 ? 'left' : 'right') as 'left' | 'right',
-          offset: Math.floor(colIndex / 2) * 60,
+          offset: Math.floor(colIndex / 2) * 50,
           color: colorMap.get(col) || COLORS[colIndex % COLORS.length],
+        }));
+
+        const series = group.columns.map((col) => ({
+          name: col,
+          data: rows.map((row) => {
+            const colIndex = columns.indexOf(col);
+            return colIndex >= 0 && colIndex < row.length ? row[colIndex] : 0;
+          }),
+          color: colorMap.get(col) || COLORS[columns.indexOf(col) % COLORS.length],
         }));
 
         return (
@@ -314,21 +374,21 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
             style={{
               width: '100%',
               height: group.height || 300,
-              minHeight: 200,
+              minHeight: 150,
               flexShrink: 0,
               borderBottom: index < chartGroups.length - 1 ? '1px solid var(--border-color)' : 'none',
             }}
           >
             <SingleChart
-              displayData={displayData}
-              chartConfig={group}
-              columns={columns}
+              xAxisData={xAxisData}
+              series={series}
               yAxisConfigs={groupYAxisConfigs}
-              showXAxis={index === chartGroups.length - 1}
-              showBrush={index === chartGroups.length - 1}
-              brushRange={brushRange}
-              onBrushChange={handleBrushChange}
-              colorMap={colorMap}
+              height={group.height || 300}
+              showDataZoom={index === chartGroups.length - 1}
+              visiblePoints={visiblePoints}
+              chartRefs={chartRefs}
+              index={index}
+              onDataZoomChange={index === chartGroups.length - 1 ? handleDataZoomChange : undefined}
             />
           </div>
         );
@@ -337,4 +397,4 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   );
 };
 
-export default memo(MultiLineChart);
+export default React.memo(MultiLineChart);

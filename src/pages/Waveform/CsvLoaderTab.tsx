@@ -4,7 +4,7 @@ import { FileOutlined, FolderOpenOutlined, MenuFoldOutlined, MenuUnfoldOutlined 
 import { useTranslation } from 'react-i18next';
 import { useCsvChartStore } from '../../stores/csvChartStore';
 import ChartSidebar from './ChartSidebar';
-import DualLineChart from './DualLineChart';
+import MultiLineChart from './MultiLineChart';
 
 const { Sider, Content } = Layout;
 const { Text } = Typography;
@@ -17,12 +17,11 @@ const CsvLoaderTab: React.FC = () => {
     csvData,
     filePath,
     parseConfig,
+    chartGroups,
+    yAxisConfigs,
+    visiblePoints,
     isLoading,
     error,
-    chart1Columns,
-    chart2Columns,
-    xAxisRange,
-    hiddenLines,
     loadCsvFile,
     setParseConfig,
     clearError,
@@ -189,13 +188,12 @@ const CsvLoaderTab: React.FC = () => {
           )}
 
           {csvData && columns.length > 0 ? (
-            <DualLineChart
+            <MultiLineChart
               columns={columns}
               rows={rows}
-              chart1Columns={chart1Columns}
-              chart2Columns={chart2Columns}
-              xAxisRange={xAxisRange}
-              hiddenLines={hiddenLines}
+              chartGroups={chartGroups}
+              yAxisConfigs={yAxisConfigs}
+              visiblePoints={visiblePoints}
             />
           ) : (
             <div

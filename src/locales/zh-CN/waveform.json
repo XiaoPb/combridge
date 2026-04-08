@@ -53,11 +53,16 @@
     "rangeDisplay": "范围: {{start}} - {{end}}",
     "chart1Columns": "图表1列选择",
     "chart2Columns": "图表2列选择",
+    "chartGroups": "图表分组",
     "selectColumns": "选择列",
     "lineVisibility": "折线显示",
     "noColumns": "暂无可用列",
     "expand": "展开侧边栏",
-    "collapse": "收起侧边栏"
+    "collapse": "收起侧边栏",
+    "displaySettings": "显示设置",
+    "visiblePoints": "显示点数",
+    "totalRows": "总行数",
+    "height": "高度"
   },
   "csvLoader": {
     "configTitle": "CSV 解析配置",

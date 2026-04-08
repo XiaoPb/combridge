@@ -53,11 +53,16 @@
     "rangeDisplay": "Range: {{start}} - {{end}}",
     "chart1Columns": "Chart 1 Columns",
     "chart2Columns": "Chart 2 Columns",
+    "chartGroups": "Chart Groups",
     "selectColumns": "Select columns",
     "lineVisibility": "Line Visibility",
     "noColumns": "No columns available",
     "expand": "Expand Sidebar",
-    "collapse": "Collapse Sidebar"
+    "collapse": "Collapse Sidebar",
+    "displaySettings": "Display Settings",
+    "visiblePoints": "Visible Points",
+    "totalRows": "Total Rows",
+    "height": "Height"
   },
   "csvLoader": {
     "configTitle": "CSV Parse Configuration",

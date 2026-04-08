@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { Card, Slider, Select, Checkbox, Space, Typography } from 'antd';
+import { Card, Select, Checkbox, Space, Typography, Button, InputNumber } from 'antd';
+import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useCsvChartStore } from '../../stores/csvChartStore';
 
@@ -14,17 +15,15 @@ const ChartSidebar: React.FC<ChartSidebarProps> = ({ columns, totalRows }) => {
   const { t } = useTranslation('waveform');
 
   const {
-    chart1Columns,
-    chart2Columns,
-    xAxisRange,
+    chartGroups,
     hiddenLines,
-    setChart1Columns,
-    setChart2Columns,
-    setXAxisRange,
+    visiblePoints,
+    addChartGroup,
+    removeChartGroup,
+    updateChartGroup,
     toggleLineVisibility,
+    setVisiblePoints,
   } = useCsvChartStore();
-
-  const maxRange = Math.max(0, totalRows - 1);
 
   const visibleColumns = useMemo(() => {
     return columns.filter(col => !hiddenLines.includes(col));
@@ -44,49 +43,97 @@ const ChartSidebar: React.FC<ChartSidebarProps> = ({ columns, totalRows }) => {
     });
   };
 
+  const handleAddChartGroup = () => {
+    const newIndex = chartGroups.length + 1;
+    addChartGroup({
+      name: `图表${newIndex}`,
+      columns: [],
+      height: 300,
+    });
+  };
+
   return (
     <div style={{ width: 280, height: '100%', overflow: 'auto' }}>
-      <Space orientation="vertical" style={{ width: '100%' }} size="middle">
-        <Card size="small" title={t('sidebar.xAxisRange')} styles={{ body: { padding: 12 } }}>
-          <Space orientation="vertical" style={{ width: '100%' }}>
-            <Slider
-              range
-              min={0}
-              max={maxRange}
-              value={xAxisRange}
-              onChange={(value) => setXAxisRange(value as [number, number])}
-              disabled={totalRows === 0}
-            />
+      <Space direction="vertical" style={{ width: '100%' }} size="middle">
+        <Card size="small" title={t('sidebar.displaySettings')} styles={{ body: { padding: 12 } }}>
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Space>
+              <Text>{t('sidebar.visiblePoints')}</Text>
+              <InputNumber
+                min={100}
+                max={10000}
+                value={visiblePoints}
+                onChange={(v) => setVisiblePoints(v || 1000)}
+                style={{ width: 100 }}
+              />
+            </Space>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              {t('sidebar.rangeDisplay', { start: xAxisRange[0], end: xAxisRange[1] })}
+              {t('sidebar.totalRows')}: {totalRows}
             </Text>
           </Space>
         </Card>
 
-        <Card size="small" title={t('sidebar.chart1Columns')} styles={{ body: { padding: 12 } }}>
-          <Select
-            mode="multiple"
-            allowClear
-            style={{ width: '100%' }}
-            placeholder={t('sidebar.selectColumns')}
-            value={chart1Columns}
-            onChange={setChart1Columns}
-            options={columns.map(col => ({ label: col, value: col }))}
-            maxTagCount="responsive"
-          />
-        </Card>
-
-        <Card size="small" title={t('sidebar.chart2Columns')} styles={{ body: { padding: 12 } }}>
-          <Select
-            mode="multiple"
-            allowClear
-            style={{ width: '100%' }}
-            placeholder={t('sidebar.selectColumns')}
-            value={chart2Columns}
-            onChange={setChart2Columns}
-            options={columns.map(col => ({ label: col, value: col }))}
-            maxTagCount="responsive"
-          />
+        <Card 
+          size="small" 
+          title={t('sidebar.chartGroups')} 
+          styles={{ body: { padding: 12 } }}
+          extra={
+            <Button 
+              type="text" 
+              icon={<PlusOutlined />} 
+              onClick={handleAddChartGroup}
+              size="small"
+            />
+          }
+        >
+          <Space direction="vertical" style={{ width: '100%' }} size="small">
+            {chartGroups.map((group) => (
+              <Card
+                key={group.name}
+                size="small"
+                styles={{ body: { padding: 8 } }}
+                title={
+                  <Space>
+                    <Text strong style={{ fontSize: 12 }}>{group.name}</Text>
+                    {chartGroups.length > 1 && (
+                      <Button
+                        type="text"
+                        icon={<DeleteOutlined />}
+                        onClick={() => removeChartGroup(group.name)}
+                        size="small"
+                        danger
+                      />
+                    )}
+                  </Space>
+                }
+              >
+                <Space direction="vertical" style={{ width: '100%' }} size="small">
+                  <Select
+                    mode="multiple"
+                    allowClear
+                    style={{ width: '100%' }}
+                    placeholder={t('sidebar.selectColumns')}
+                    value={group.columns}
+                    onChange={(cols) => updateChartGroup(group.name, { columns: cols })}
+                    options={columns.map(col => ({ label: col, value: col }))}
+                    maxTagCount="responsive"
+                    size="small"
+                  />
+                  <Space>
+                    <Text style={{ fontSize: 11 }}>{t('sidebar.height')}</Text>
+                    <InputNumber
+                      min={150}
+                      max={600}
+                      value={group.height}
+                      onChange={(v) => updateChartGroup(group.name, { height: v || 300 })}
+                      style={{ width: 70 }}
+                      size="small"
+                    />
+                  </Space>
+                </Space>
+              </Card>
+            ))}
+          </Space>
         </Card>
 
         <Card size="small" title={t('sidebar.lineVisibility')} styles={{ body: { padding: 12 } }}>
@@ -95,7 +142,7 @@ const ChartSidebar: React.FC<ChartSidebarProps> = ({ columns, totalRows }) => {
             onChange={handleLineVisibilityChange as (checkedValue: (string | number | boolean)[]) => void}
             style={{ width: '100%' }}
           >
-            <Space orientation="vertical" style={{ width: '100%' }}>
+            <Space direction="vertical" style={{ width: '100%' }}>
               {columns.map(col => (
                 <Checkbox key={col} value={col}>
                   {col}

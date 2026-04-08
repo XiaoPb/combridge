@@ -62,7 +62,8 @@
     "displaySettings": "显示设置",
     "visiblePoints": "显示点数",
     "totalRows": "总行数",
-    "height": "高度"
+    "height": "高度",
+    "addChartGroup": "添加图表"
   },
   "csvLoader": {
     "configTitle": "CSV 解析配置",

@@ -62,7 +62,8 @@
     "displaySettings": "Display Settings",
     "visiblePoints": "Visible Points",
     "totalRows": "Total Rows",
-    "height": "Height"
+    "height": "Height",
+    "addChartGroup": "Add Chart"
   },
   "csvLoader": {
     "configTitle": "CSV Parse Configuration",

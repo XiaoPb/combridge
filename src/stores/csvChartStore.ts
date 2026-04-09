@@ -61,10 +61,9 @@ function autoAssignChartGroups(columns: string[]): ChartGroupConfig[] {
   const chColumns: string[] = [];
 
   columns.forEach((col) => {
-    const upperCol = col.toUpperCase();
-    if (upperCol === 'ACC_X' || upperCol === 'ACC_Y' || upperCol === 'ACC_Z') {
+    if (/^ACC_?[XYZ]$/i.test(col)) {
       accColumns.push(col);
-    } else if (/^CH[0-3]$/i.test(upperCol)) {
+    } else if (/^CH[0-3]/i.test(col)) {
       chColumns.push(col);
     }
   });

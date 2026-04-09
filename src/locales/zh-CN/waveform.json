@@ -73,8 +73,6 @@
     "skipInfoRows": "跳过信息区域",
     "rows": "行",
     "noHeader": "无表头",
-    "splitColumn": "分列显示",
-    "splitColumnIndex": "分列索引",
     "noData": "请选择 CSV 文件"
   }
 }

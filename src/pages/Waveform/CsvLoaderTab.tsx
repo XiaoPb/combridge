@@ -152,28 +152,6 @@ const CsvLoaderTab: React.FC = () => {
                     size="small"
                   />
                 </Space>
-
-                <Space>
-                  <Text>{t('csvLoader.splitColumn')}</Text>
-                  <Switch
-                    checked={parseConfig.splitColumn}
-                    onChange={(checked) => setParseConfig({ splitColumn: checked })}
-                    size="small"
-                  />
-                </Space>
-
-                {parseConfig.splitColumn && (
-                  <Space>
-                    <Text>{t('csvLoader.splitColumnIndex')}</Text>
-                    <InputNumber
-                      min={0}
-                      value={parseConfig.splitColumnIndex}
-                      onChange={(value) => setParseConfig({ splitColumnIndex: value ?? 0 })}
-                      style={{ width: 70 }}
-                      size="small"
-                    />
-                  </Space>
-                )}
               </Space>
             </div>
 

@@ -1,8 +1,6 @@
 export interface CsvParseConfig {
   skipInfoRows: number;
   noHeader: boolean;
-  splitColumn: boolean;
-  splitColumnIndex: number;
 }
 
 export interface CsvParseResult {
@@ -13,8 +11,6 @@ export interface CsvParseResult {
 const DEFAULT_CONFIG: CsvParseConfig = {
   skipInfoRows: 1,
   noHeader: false,
-  splitColumn: false,
-  splitColumnIndex: 0,
 };
 
 export function parseCsv(csvContent: string, config: Partial<CsvParseConfig> = {}): CsvParseResult {
@@ -59,42 +55,10 @@ export function parseCsv(csvContent: string, config: Partial<CsvParseConfig> = {
     }
   }
 
-  if (!cfg.splitColumn) {
-    return {
-      columns: rawColumns,
-      rows: rawData,
-    };
-  }
-
-  const splitIndex = Math.max(0, Math.min(cfg.splitColumnIndex, rawColumns.length > 0 ? rawColumns.length - 1 : 0));
-
-  const splitColumnName = rawColumns[splitIndex] || `Column${splitIndex}`;
-  const columns: string[] = [
-    ...rawColumns.slice(0, splitIndex),
-    `${splitColumnName}_Odd`,
-    `${splitColumnName}_Even`,
-    ...rawColumns.slice(splitIndex + 1),
-  ];
-
-  const rows: number[][] = [];
-  const halfLength = Math.floor(rawData.length / 2);
-
-  for (let i = 0; i < halfLength; i++) {
-    const oddRow = rawData[i * 2];
-    const evenRow = rawData[i * 2 + 1];
-
-    if (oddRow && evenRow) {
-      const mergedRow: number[] = [
-        ...oddRow.slice(0, splitIndex),
-        oddRow[splitIndex] ?? 0,
-        evenRow[splitIndex] ?? 0,
-        ...oddRow.slice(splitIndex + 1),
-      ];
-      rows.push(mergedRow);
-    }
-  }
-
-  return { columns, rows };
+  return {
+    columns: rawColumns,
+    rows: rawData,
+  };
 }
 
 export async function readCsvFile(filePath: string, config: Partial<CsvParseConfig> = {}): Promise<CsvParseResult> {

@@ -73,8 +73,6 @@
     "skipInfoRows": "Skip Info Rows",
     "rows": "rows",
     "noHeader": "No Header",
-    "splitColumn": "Split Column",
-    "splitColumnIndex": "Split Column Index",
     "noData": "Please select a CSV file"
   }
 }

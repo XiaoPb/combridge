@@ -42,8 +42,6 @@ export type CsvChartStore = CsvChartState & CsvChartActions;
 const DEFAULT_PARSE_CONFIG: CsvParseConfig = {
   skipInfoRows: 1,
   noHeader: false,
-  splitColumn: false,
-  splitColumnIndex: 0,
 };
 
 const DEFAULT_CHART_GROUPS: ChartGroupConfig[] = [

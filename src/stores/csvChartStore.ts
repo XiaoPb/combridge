@@ -63,7 +63,7 @@ function autoAssignChartGroups(columns: string[]): ChartGroupConfig[] {
   columns.forEach((col) => {
     if (/^ACC_?[XYZ]$/i.test(col)) {
       accColumns.push(col);
-    } else if (/^CH[0-3]/i.test(col)) {
+    } else if (/^CH\d{1}(\(.*\))?$/i.test(col)) {
       chColumns.push(col);
     }
   });

@@ -38,7 +38,6 @@ interface MultiLineChartProps {
   columns: string[];
   rows: number[][];
   chartGroups: ChartGroupConfig[];
-  yAxisConfigs?: Record<string, YAxisConfig[]>;
   sampleRate?: number;
 }
 
@@ -47,11 +46,10 @@ const COLORS = [
   '#F53F3F',
   '#00B42A',
   '#FF7D00',
-  '#722ed1',
-  '#13c2c2',
-  '#eb2f96',
-  '#fa8c16',
 ];
+
+const Y_AXIS_WIDTH = 50;
+const MAX_LINES_PER_CHART = 4;
 
 const formatScientific = (value: number): string => {
   if (value === 0) return '0';
@@ -84,7 +82,6 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   columns,
   rows,
   chartGroups,
-  yAxisConfigs = {},
   sampleRate = 25,
 }) => {
   const containerRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -108,26 +105,8 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   }, [columns]);
 
   const unifiedGridConfig = useMemo(() => {
-    let maxLeftAxisCount = 1;
-    let maxRightAxisCount = 0;
-
-    chartGroups.forEach((group) => {
-      const groupYAxisConfigs = yAxisConfigs[group.name] || group.columns.map((col, colIndex) => ({
-        column: col,
-        position: (colIndex % 2 === 0 ? 'left' : 'right') as 'left' | 'right',
-        offset: Math.floor(colIndex / 2) * 50,
-        color: colorMap.get(col) || COLORS[colIndex % COLORS.length],
-      }));
-
-      const leftCount = groupYAxisConfigs.filter((c) => c.position === 'left').length;
-      const rightCount = groupYAxisConfigs.filter((c) => c.position === 'right').length;
-
-      maxLeftAxisCount = Math.max(maxLeftAxisCount, leftCount);
-      maxRightAxisCount = Math.max(maxRightAxisCount, rightCount);
-    });
-
-    const leftWidth = 50 + (maxLeftAxisCount - 1) * 40;
-    const rightWidth = maxRightAxisCount > 0 ? 50 + (maxRightAxisCount - 1) * 40 : 20;
+    const leftWidth = Y_AXIS_WIDTH * 2;
+    const rightWidth = Y_AXIS_WIDTH * 2;
 
     return {
       top: 40,
@@ -135,44 +114,52 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
       right: rightWidth,
       bottom: 50,
     };
-  }, [chartGroups, yAxisConfigs, colorMap]);
+  }, []);
 
   const getChartOption = useCallback((
     group: ChartGroupConfig,
     groupColorMap: Map<string, string>
   ) => {
-    const groupYAxisConfigs = yAxisConfigs[group.name] || group.columns.map((col, colIndex) => ({
-      column: col,
-      position: (colIndex % 2 === 0 ? 'left' : 'right') as 'left' | 'right',
-      offset: Math.floor(colIndex / 2) * 50,
-      color: groupColorMap.get(col) || COLORS[colIndex % COLORS.length],
-    }));
+    const limitedColumns = group.columns.slice(0, MAX_LINES_PER_CHART);
 
-    const yAxisOption = groupYAxisConfigs.map((config, idx) => ({
-      name: config.column,
-      type: 'value' as const,
-      position: config.position,
-      offset: config.offset,
-      scale: true,
-      axisLine: {
-        show: true,
-        lineStyle: {
-          color: config.color,
+    const yAxisPositions: Array<{ position: 'left' | 'right'; offset: number }> = [
+      { position: 'left', offset: 0 },
+      { position: 'left', offset: Y_AXIS_WIDTH },
+      { position: 'right', offset: 0 },
+      { position: 'right', offset: Y_AXIS_WIDTH },
+    ];
+
+    const yAxisOption = yAxisPositions.map((pos, idx) => {
+      const col = limitedColumns[idx];
+      const color = col ? (groupColorMap.get(col) || COLORS[idx]) : 'transparent';
+      const hasData = !!col;
+
+      return {
+        name: col || '',
+        type: 'value' as const,
+        position: pos.position,
+        offset: pos.offset,
+        scale: true,
+        axisLine: {
+          show: hasData,
+          lineStyle: {
+            color: color,
+          },
         },
-      },
-      axisLabel: {
-        color: config.color,
-        formatter: (value: number) => formatScientific(value),
-      },
-      nameTextStyle: {
-        color: config.color,
-      },
-      splitLine: {
-        show: idx === 0,
-      },
-    }));
+        axisLabel: {
+          color: hasData ? color : 'transparent',
+          formatter: (value: number) => formatScientific(value),
+        },
+        nameTextStyle: {
+          color: hasData ? color : 'transparent',
+        },
+        splitLine: {
+          show: idx === 0,
+        },
+      };
+    });
 
-    const seriesData = group.columns.map((col) => ({
+    const seriesData = limitedColumns.map((col) => ({
       name: col,
       data: rows.map((row) => {
         const colIndex = columns.indexOf(col);
@@ -302,11 +289,11 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
           },
         },
       },
-      yAxis: yAxisOption.length > 0 ? yAxisOption : [{ type: 'value' as const, scale: true, axisLabel: { formatter: (value: number) => formatScientific(value) } }],
+      yAxis: yAxisOption,
       series: seriesOption,
       dataZoom: dataZoomOption,
     };
-  }, [xAxisData, rows, columns, yAxisConfigs, unifiedGridConfig, dataZoomState]);
+  }, [xAxisData, rows, columns, unifiedGridConfig, dataZoomState]);
 
   useEffect(() => {
     chartInstances.current.forEach((chart) => {

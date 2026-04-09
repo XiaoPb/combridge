@@ -16,7 +16,6 @@ const CsvLoaderTab: React.FC = () => {
     filePath,
     parseConfig,
     chartGroups,
-    yAxisConfigs,
     sampleRate,
     isLoading,
     error,
@@ -252,7 +251,6 @@ const CsvLoaderTab: React.FC = () => {
             columns={columns}
             rows={rows}
             chartGroups={chartGroups}
-            yAxisConfigs={yAxisConfigs}
             sampleRate={sampleRate}
           />
         ) : (

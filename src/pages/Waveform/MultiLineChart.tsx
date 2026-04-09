@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useMemo, useRef, useEffect, useCallback, useState } from 'react';
 import * as echarts from 'echarts/core';
 import { LineChart } from 'echarts/charts';
 import {
@@ -6,7 +6,6 @@ import {
   GridComponent,
   DataZoomComponent,
   TooltipComponent,
-  ToolboxComponent,
 } from 'echarts/components';
 import { UniversalTransition } from 'echarts/features';
 import { CanvasRenderer } from 'echarts/renderers';
@@ -17,7 +16,6 @@ echarts.use([
   GridComponent,
   DataZoomComponent,
   TooltipComponent,
-  ToolboxComponent,
   CanvasRenderer,
   UniversalTransition,
 ]);
@@ -40,7 +38,6 @@ interface MultiLineChartProps {
   rows: number[][];
   chartGroups: ChartGroupConfig[];
   yAxisConfigs?: Record<string, YAxisConfig[]>;
-  visiblePoints?: number;
 }
 
 const COLORS = [
@@ -54,37 +51,42 @@ const COLORS = [
   '#fa8c16',
 ];
 
-interface SingleChartProps {
-  xAxisData: (string | number)[];
-  series: { name: string; data: number[]; color: string }[];
-  yAxisConfigs: YAxisConfig[];
-  height: number;
-  showDataZoom: boolean;
-  visiblePoints: number;
-  chartRefs: React.MutableRefObject<(echarts.ECharts | null)[]>;
-  index: number;
-  onDataZoomChange?: (start: number, end: number) => void;
-}
-
-const SingleChart: React.FC<SingleChartProps> = ({
-  xAxisData,
-  series,
-  yAxisConfigs,
-  height,
-  showDataZoom,
-  visiblePoints,
-  chartRefs,
-  index,
-  onDataZoomChange,
+const MultiLineChart: React.FC<MultiLineChartProps> = ({
+  columns,
+  rows,
+  chartGroups,
+  yAxisConfigs = {},
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const chartInstances = useRef<echarts.ECharts[]>([]);
+  const [initialized, setInitialized] = useState(false);
+  const zoomStateRef = useRef<{ start: number; end: number }>({ start: 0, end: 100 });
 
-  const option = useMemo(() => {
-    const totalPoints = xAxisData.length;
-    const start = 0;
-    const end = totalPoints > 0 ? Math.min((visiblePoints / totalPoints) * 100, 100) : 100;
+  const xAxisData = useMemo(() => {
+    return rows.map((_, index) => index);
+  }, [rows]);
 
-    const yAxisOption = yAxisConfigs.map((config, idx) => ({
+  const colorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    columns.forEach((col, index) => {
+      map.set(col, COLORS[index % COLORS.length]);
+    });
+    return map;
+  }, [columns]);
+
+  const getChartOption = useCallback((
+    group: ChartGroupConfig,
+    showDataZoom: boolean,
+    groupColorMap: Map<string, string>
+  ) => {
+    const groupYAxisConfigs = yAxisConfigs[group.name] || group.columns.map((col, colIndex) => ({
+      column: col,
+      position: (colIndex % 2 === 0 ? 'left' : 'right') as 'left' | 'right',
+      offset: Math.floor(colIndex / 2) * 50,
+      color: groupColorMap.get(col) || COLORS[colIndex % COLORS.length],
+    }));
+
+    const yAxisOption = groupYAxisConfigs.map((config, idx) => ({
       name: config.column,
       type: 'value',
       position: config.position,
@@ -107,7 +109,16 @@ const SingleChart: React.FC<SingleChartProps> = ({
       },
     }));
 
-    const seriesOption = series.map((s, idx) => ({
+    const seriesData = group.columns.map((col) => ({
+      name: col,
+      data: rows.map((row) => {
+        const colIndex = columns.indexOf(col);
+        return colIndex >= 0 && colIndex < row.length ? row[colIndex] : 0;
+      }),
+      color: groupColorMap.get(col) || COLORS[columns.indexOf(col) % COLORS.length],
+    }));
+
+    const seriesOption = seriesData.map((s, idx) => ({
       name: s.name,
       type: 'line',
       data: s.data,
@@ -129,8 +140,8 @@ const SingleChart: React.FC<SingleChartProps> = ({
           {
             type: 'slider' as const,
             show: true,
-            start,
-            end,
+            start: zoomStateRef.current.start,
+            end: zoomStateRef.current.end,
             zoomLock: false,
             xAxisIndex: [0],
             height: 24,
@@ -185,15 +196,19 @@ const SingleChart: React.FC<SingleChartProps> = ({
         top: 4,
         left: 'center',
         orient: 'horizontal',
-        data: series.map((s) => s.name),
+        data: seriesData.map((s) => s.name),
         textStyle: {
           color: 'var(--text-primary)',
         },
       },
       grid: {
         top: 40,
-        left: yAxisConfigs.filter((c) => c.position === 'left').length > 0 ? 50 + (yAxisConfigs.filter((c) => c.position === 'left').length - 1) * 40 : 40,
-        right: yAxisConfigs.filter((c) => c.position === 'right').length > 0 ? 50 + (yAxisConfigs.filter((c) => c.position === 'right').length - 1) * 40 : 20,
+        left: groupYAxisConfigs.filter((c) => c.position === 'left').length > 0 
+          ? 50 + (groupYAxisConfigs.filter((c) => c.position === 'left').length - 1) * 40 
+          : 40,
+        right: groupYAxisConfigs.filter((c) => c.position === 'right').length > 0 
+          ? 50 + (groupYAxisConfigs.filter((c) => c.position === 'right').length - 1) * 40 
+          : 20,
         bottom: showDataZoom ? 40 : 20,
       },
       xAxis: {
@@ -221,101 +236,108 @@ const SingleChart: React.FC<SingleChartProps> = ({
       series: seriesOption,
       dataZoom: dataZoomOption,
     };
-  }, [xAxisData, series, yAxisConfigs, showDataZoom, visiblePoints]);
+  }, [xAxisData, rows, columns, yAxisConfigs]);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    chartInstances.current.forEach((chart) => {
+      chart?.dispose();
+    });
+    chartInstances.current = [];
 
-    if (chartRefs.current[index]) {
-      chartRefs.current[index].dispose();
+    containerRefs.current.forEach((container, index) => {
+      if (!container) return;
+
+      const chart = echarts.init(container);
+      chartInstances.current[index] = chart;
+
+      const group = chartGroups[index];
+      if (group) {
+        const option = getChartOption(group, index === chartGroups.length - 1, colorMap);
+        chart.setOption(option);
+      }
+    });
+
+    if (chartInstances.current.filter(Boolean).length > 1) {
+      echarts.connect(chartInstances.current.filter(Boolean));
     }
 
-    const chart = echarts.init(containerRef.current);
-    chartRefs.current[index] = chart;
-    chart.setOption(option);
+    setInitialized(true);
 
-    if (showDataZoom && onDataZoomChange) {
-      chart.on('datazoom', (params: unknown) => {
-        const p = params as { start?: number; end?: number; batch?: Array<{ start: number; end: number }> };
-        if (p.batch) {
-          onDataZoomChange(p.batch[0].start, p.batch[0].end);
-        } else if (p.start !== undefined && p.end !== undefined) {
-          onDataZoomChange(p.start, p.end);
+    return () => {
+      chartInstances.current.forEach((chart) => {
+        chart?.dispose();
+      });
+      chartInstances.current = [];
+      setInitialized(false);
+    };
+  }, [chartGroups, getChartOption, colorMap]);
+
+  useEffect(() => {
+    if (!initialized) return;
+
+    chartInstances.current.forEach((chart, index) => {
+      if (!chart) return;
+
+      const group = chartGroups[index];
+      if (group) {
+        const option = getChartOption(group, index === chartGroups.length - 1, colorMap);
+        chart.setOption(option, { notMerge: false });
+      }
+    });
+  }, [rows, columns, initialized, chartGroups, getChartOption, colorMap]);
+
+  useEffect(() => {
+    if (!initialized || chartInstances.current.length === 0) return;
+
+    const lastChart = chartInstances.current[chartInstances.current.length - 1];
+    if (!lastChart) return;
+
+    const handleDataZoom = (params: unknown) => {
+      const p = params as { start?: number; end?: number; batch?: Array<{ start: number; end: number }> };
+      let start: number, end: number;
+      
+      if (p.batch) {
+        start = p.batch[0].start;
+        end = p.batch[0].end;
+      } else if (p.start !== undefined && p.end !== undefined) {
+        start = p.start;
+        end = p.end;
+      } else {
+        return;
+      }
+
+      zoomStateRef.current = { start, end };
+
+      chartInstances.current.forEach((chart, idx) => {
+        if (chart && idx !== chartInstances.current.length - 1) {
+          chart.dispatchAction({
+            type: 'dataZoom',
+            start,
+            end,
+          });
         }
       });
-    }
+    };
 
+    lastChart.on('datazoom', handleDataZoom);
+
+    return () => {
+      lastChart.off('datazoom', handleDataZoom);
+    };
+  }, [initialized]);
+
+  useEffect(() => {
     const handleResize = () => {
-      chart.resize();
+      chartInstances.current.forEach((chart) => {
+        chart?.resize();
+      });
     };
 
     window.addEventListener('resize', handleResize);
-
     return () => {
       window.removeEventListener('resize', handleResize);
-      chart.dispose();
-      chartRefs.current[index] = null;
     };
-  }, [option, chartRefs, index, showDataZoom, onDataZoomChange]);
-
-  useEffect(() => {
-    if (chartRefs.current[index]) {
-      chartRefs.current[index].setOption(option, { notMerge: true });
-    }
-  }, [option, chartRefs, index]);
-
-  return (
-    <div
-      ref={containerRef}
-      style={{
-        width: '100%',
-        height,
-        minHeight: 150,
-      }}
-    />
-  );
-};
-
-const MultiLineChart: React.FC<MultiLineChartProps> = ({
-  columns,
-  rows,
-  chartGroups,
-  yAxisConfigs = {},
-  visiblePoints = 1000,
-}) => {
-  const chartRefs = useRef<(echarts.ECharts | null)[]>([]);
-  const zoomStateRef = useRef<{ start: number; end: number }>({ start: 0, end: 100 });
-
-  const xAxisData = useMemo(() => {
-    return rows.map((_, index) => index);
-  }, [rows]);
-
-  const colorMap = useMemo(() => {
-    const map = new Map<string, string>();
-    columns.forEach((col, index) => {
-      map.set(col, COLORS[index % COLORS.length]);
-    });
-    return map;
-  }, [columns]);
-
-  const handleDataZoomChange = useCallback((start: number, end: number) => {
-    zoomStateRef.current = { start, end };
-    chartRefs.current.forEach((chart, idx) => {
-      if (chart && idx !== chartGroups.length - 1) {
-        chart.dispatchAction({
-          type: 'dataZoom',
-          start,
-          end,
-        });
-      }
-    });
-  }, [chartGroups.length]);
-
-  useEffect(() => {
-    if (chartRefs.current.filter(Boolean).length > 1) {
-      echarts.connect(chartRefs.current.filter(Boolean) as echarts.ECharts[]);
-    }
-  }, [chartGroups.length]);
+  }, []);
 
   if (columns.length === 0 || rows.length === 0) {
     return (
@@ -351,48 +373,19 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
 
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
-      {chartGroups.map((group, index) => {
-        const groupYAxisConfigs = yAxisConfigs[group.name] || group.columns.map((col, colIndex) => ({
-          column: col,
-          position: (colIndex % 2 === 0 ? 'left' : 'right') as 'left' | 'right',
-          offset: Math.floor(colIndex / 2) * 50,
-          color: colorMap.get(col) || COLORS[colIndex % COLORS.length],
-        }));
-
-        const series = group.columns.map((col) => ({
-          name: col,
-          data: rows.map((row) => {
-            const colIndex = columns.indexOf(col);
-            return colIndex >= 0 && colIndex < row.length ? row[colIndex] : 0;
-          }),
-          color: colorMap.get(col) || COLORS[columns.indexOf(col) % COLORS.length],
-        }));
-
-        return (
-          <div
-            key={group.name}
-            style={{
-              width: '100%',
-              height: group.height || 300,
-              minHeight: 150,
-              flexShrink: 0,
-              borderBottom: index < chartGroups.length - 1 ? '1px solid var(--border-color)' : 'none',
-            }}
-          >
-            <SingleChart
-              xAxisData={xAxisData}
-              series={series}
-              yAxisConfigs={groupYAxisConfigs}
-              height={group.height || 300}
-              showDataZoom={index === chartGroups.length - 1}
-              visiblePoints={visiblePoints}
-              chartRefs={chartRefs}
-              index={index}
-              onDataZoomChange={index === chartGroups.length - 1 ? handleDataZoomChange : undefined}
-            />
-          </div>
-        );
-      })}
+      {chartGroups.map((group, index) => (
+        <div
+          key={group.name}
+          ref={(el) => { containerRefs.current[index] = el; }}
+          style={{
+            width: '100%',
+            height: group.height || 300,
+            minHeight: 150,
+            flexShrink: 0,
+            borderBottom: index < chartGroups.length - 1 ? '1px solid var(--border-color)' : 'none',
+          }}
+        />
+      ))}
     </div>
   );
 };

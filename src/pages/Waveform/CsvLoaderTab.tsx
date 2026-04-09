@@ -17,7 +17,6 @@ const CsvLoaderTab: React.FC = () => {
     parseConfig,
     chartGroups,
     yAxisConfigs,
-    visiblePoints,
     isLoading,
     error,
     loadCsvFile,
@@ -235,7 +234,6 @@ const CsvLoaderTab: React.FC = () => {
             rows={rows}
             chartGroups={chartGroups}
             yAxisConfigs={yAxisConfigs}
-            visiblePoints={visiblePoints}
           />
         ) : (
           <div

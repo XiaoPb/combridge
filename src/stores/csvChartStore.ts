@@ -2,6 +2,11 @@ import { create } from 'zustand';
 import { CsvParseConfig, CsvParseResult, readCsvFile } from '../utils/csvParser';
 import type { ChartGroupConfig, YAxisConfig } from '../pages/Waveform/MultiLineChart';
 
+interface DataZoomState {
+  start: number;
+  end: number;
+}
+
 interface CsvChartState {
   csvData: CsvParseResult | null;
   filePath: string | null;
@@ -12,6 +17,8 @@ interface CsvChartState {
   error: string | null;
   parseConfig: CsvParseConfig;
   visiblePoints: number;
+  sampleRate: number;
+  dataZoomState: DataZoomState;
 }
 
 interface CsvChartActions {
@@ -24,6 +31,8 @@ interface CsvChartActions {
   toggleLineVisibility: (columnName: string) => void;
   setParseConfig: (config: Partial<CsvParseConfig>) => void;
   setVisiblePoints: (points: number) => void;
+  setSampleRate: (rate: number) => void;
+  setDataZoomState: (state: DataZoomState) => void;
   clearData: () => void;
   clearError: () => void;
 }
@@ -31,7 +40,7 @@ interface CsvChartActions {
 export type CsvChartStore = CsvChartState & CsvChartActions;
 
 const DEFAULT_PARSE_CONFIG: CsvParseConfig = {
-  skipInfoRows: 0,
+  skipInfoRows: 1,
   noHeader: false,
   splitColumn: false,
   splitColumnIndex: 0,
@@ -41,6 +50,32 @@ const DEFAULT_CHART_GROUPS: ChartGroupConfig[] = [
   { name: '图表1', columns: [], height: 300 },
   { name: '图表2', columns: [], height: 300 },
 ];
+
+const DEFAULT_DATA_ZOOM_STATE: DataZoomState = {
+  start: 0,
+  end: 100,
+};
+
+function autoAssignChartGroups(columns: string[]): ChartGroupConfig[] {
+  const accColumns: string[] = [];
+  const chColumns: string[] = [];
+
+  columns.forEach((col) => {
+    const upperCol = col.toUpperCase();
+    if (upperCol === 'ACC_X' || upperCol === 'ACC_Y' || upperCol === 'ACC_Z') {
+      accColumns.push(col);
+    } else if (/^CH[0-3]$/i.test(upperCol)) {
+      chColumns.push(col);
+    }
+  });
+
+  const groups: ChartGroupConfig[] = [
+    { name: '图表1', columns: chColumns, height: 300 },
+    { name: '图表2', columns: accColumns, height: 300 },
+  ];
+
+  return groups;
+}
 
 export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
   csvData: null,
@@ -52,17 +87,31 @@ export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
   error: null,
   parseConfig: DEFAULT_PARSE_CONFIG,
   visiblePoints: 1000,
+  sampleRate: 25,
+  dataZoomState: DEFAULT_DATA_ZOOM_STATE,
 
   loadCsvFile: async (filePath: string) => {
     set({ isLoading: true, error: null });
     try {
       const config = get().parseConfig;
       const csvData = await readCsvFile(filePath, config);
+      const autoGroups = autoAssignChartGroups(csvData.columns);
+      const sampleRate = get().sampleRate;
+      const dataLength = csvData.rows.length;
+      const tenSecondsPoints = sampleRate * 10;
+
+      let dataZoomState = DEFAULT_DATA_ZOOM_STATE;
+      if (dataLength > tenSecondsPoints) {
+        const endPercent = (tenSecondsPoints / dataLength) * 100;
+        dataZoomState = { start: 0, end: endPercent };
+      }
+
       set({
         csvData,
         filePath,
-        chartGroups: DEFAULT_CHART_GROUPS,
+        chartGroups: autoGroups,
         hiddenLines: [],
+        dataZoomState,
       });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : String(err) });
@@ -117,6 +166,14 @@ export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
     set({ visiblePoints: points });
   },
 
+  setSampleRate: (rate: number) => {
+    set({ sampleRate: rate });
+  },
+
+  setDataZoomState: (state: DataZoomState) => {
+    set({ dataZoomState: state });
+  },
+
   clearData: () => {
     set({
       csvData: null,
@@ -125,6 +182,7 @@ export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
       yAxisConfigs: {},
       hiddenLines: [],
       error: null,
+      dataZoomState: DEFAULT_DATA_ZOOM_STATE,
     });
   },
 
@@ -133,4 +191,4 @@ export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
   },
 }));
 
-export { DEFAULT_PARSE_CONFIG, DEFAULT_CHART_GROUPS };
+export { DEFAULT_PARSE_CONFIG, DEFAULT_CHART_GROUPS, DEFAULT_DATA_ZOOM_STATE };

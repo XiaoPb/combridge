@@ -9,6 +9,7 @@ import {
 } from 'echarts/components';
 import { UniversalTransition } from 'echarts/features';
 import { CanvasRenderer } from 'echarts/renderers';
+import { useCsvChartStore } from '../../stores/csvChartStore';
 
 echarts.use([
   LineChart,
@@ -38,6 +39,7 @@ interface MultiLineChartProps {
   rows: number[][];
   chartGroups: ChartGroupConfig[];
   yAxisConfigs?: Record<string, YAxisConfig[]>;
+  sampleRate?: number;
 }
 
 const COLORS = [
@@ -66,21 +68,36 @@ const formatScientific = (value: number): string => {
   return value.toFixed(4);
 };
 
+const formatTime = (seconds: number): string => {
+  if (seconds < 1) {
+    return `${(seconds * 1000).toFixed(0)}ms`;
+  }
+  if (seconds < 60) {
+    return `${seconds.toFixed(2)}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${minutes}m ${secs.toFixed(1)}s`;
+};
+
 const MultiLineChart: React.FC<MultiLineChartProps> = ({
   columns,
   rows,
   chartGroups,
   yAxisConfigs = {},
+  sampleRate = 25,
 }) => {
   const containerRefs = useRef<(HTMLDivElement | null)[]>([]);
   const chartInstances = useRef<echarts.ECharts[]>([]);
   const [initialized, setInitialized] = useState(false);
-  const zoomStateRef = useRef<{ start: number; end: number }>({ start: 0, end: 100 });
   const isZoomingRef = useRef(false);
 
+  const { dataZoomState, setDataZoomState } = useCsvChartStore();
+
   const xAxisData = useMemo(() => {
-    return rows.map((_, index) => index);
-  }, [rows]);
+    const interval = 1 / sampleRate;
+    return rows.map((_, index) => index * interval);
+  }, [rows, sampleRate]);
 
   const colorMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -185,8 +202,8 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
       {
         type: 'slider' as const,
         show: true,
-        start: zoomStateRef.current.start,
-        end: zoomStateRef.current.end,
+        start: dataZoomState.start,
+        end: dataZoomState.end,
         zoomLock: false,
         xAxisIndex: [0],
         height: 24,
@@ -211,7 +228,10 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
         textStyle: {
           color: 'var(--text-secondary)',
         },
-        labelPrecision: 0,
+        labelFormatter: (value: number) => {
+          const timeValue = xAxisData[Math.floor(value * (xAxisData.length - 1) / 100)];
+          return formatTime(timeValue);
+        },
       },
     ];
 
@@ -236,11 +256,11 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
           color: 'var(--text-primary)',
         },
         formatter: (params: unknown) => {
-          const items = params as Array<{ seriesName: string; value: number | number[]; color: string }>;
+          const items = params as Array<{ seriesName: string; value: number | number[]; color: string; dataIndex?: number }>;
           if (!Array.isArray(items)) return '';
-          const firstValue = items[0]?.value;
-          const index = Array.isArray(firstValue) ? firstValue[0] : firstValue;
-          let html = `<div style="font-weight: bold; margin-bottom: 4px;">Index: ${index}</div>`;
+          const dataIndex = items[0]?.dataIndex ?? 0;
+          const timeValue = xAxisData[dataIndex];
+          let html = `<div style="font-weight: bold; margin-bottom: 4px;">${t('chart.time')}: ${formatTime(timeValue)}</div>`;
           items.forEach((item) => {
             const val = Array.isArray(item.value) ? item.value[1] : item.value;
             html += `<div style="display: flex; align-items: center; gap: 8px;">
@@ -276,7 +296,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
           formatter: (value: string | number) => {
             const num = typeof value === 'number' ? value : parseFloat(value);
             if (!isNaN(num)) {
-              return num.toFixed(0);
+              return formatTime(num);
             }
             return value;
           },
@@ -286,7 +306,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
       series: seriesOption,
       dataZoom: dataZoomOption,
     };
-  }, [xAxisData, rows, columns, yAxisConfigs, unifiedGridConfig]);
+  }, [xAxisData, rows, columns, yAxisConfigs, unifiedGridConfig, dataZoomState]);
 
   useEffect(() => {
     chartInstances.current.forEach((chart) => {
@@ -334,7 +354,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
         chart.setOption(option, { notMerge: false });
       }
     });
-  }, [rows, columns, initialized, chartGroups, getChartOption, colorMap]);
+  }, [rows, columns, initialized, chartGroups, getChartOption, colorMap, sampleRate]);
 
   useEffect(() => {
     if (!initialized || chartInstances.current.length === 0) return;
@@ -357,7 +377,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
         return;
       }
 
-      zoomStateRef.current = { start, end };
+      setDataZoomState({ start, end });
 
       chartInstances.current.forEach((chart, idx) => {
         if (chart && idx !== chartIndex) {
@@ -386,7 +406,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
     return () => {
       disposers.forEach((dispose) => dispose());
     };
-  }, [initialized]);
+  }, [initialized, setDataZoomState]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -451,5 +471,12 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
     </div>
   );
 };
+
+function t(key: string): string {
+  const translations: Record<string, string> = {
+    'chart.time': '时间',
+  };
+  return translations[key] || key;
+}
 
 export default React.memo(MultiLineChart);

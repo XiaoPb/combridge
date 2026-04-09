@@ -17,10 +17,12 @@ const CsvLoaderTab: React.FC = () => {
     parseConfig,
     chartGroups,
     yAxisConfigs,
+    sampleRate,
     isLoading,
     error,
     loadCsvFile,
     setParseConfig,
+    setSampleRate,
     clearError,
     addChartGroup,
     removeChartGroup,
@@ -117,6 +119,19 @@ const CsvLoaderTab: React.FC = () => {
           <>
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-color)' }}>
               <Space wrap size="middle">
+                <Space>
+                  <Text>{t('csvLoader.sampleRate')}</Text>
+                  <InputNumber
+                    min={1}
+                    max={10000}
+                    value={sampleRate}
+                    onChange={(value) => setSampleRate(value ?? 25)}
+                    style={{ width: 80 }}
+                    size="small"
+                  />
+                  <Text type="secondary">Hz</Text>
+                </Space>
+
                 <Space>
                   <Text>{t('csvLoader.skipInfoRows')}</Text>
                   <InputNumber
@@ -238,6 +253,7 @@ const CsvLoaderTab: React.FC = () => {
             rows={rows}
             chartGroups={chartGroups}
             yAxisConfigs={yAxisConfigs}
+            sampleRate={sampleRate}
           />
         ) : (
           <div

@@ -69,6 +69,7 @@
     "configTitle": "CSV Parse Configuration",
     "selectFile": "Select File",
     "reloadFile": "Reload",
+    "sampleRate": "Sample Rate",
     "skipInfoRows": "Skip Info Rows",
     "rows": "rows",
     "noHeader": "No Header",

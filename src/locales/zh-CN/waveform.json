@@ -69,6 +69,7 @@
     "configTitle": "CSV 解析配置",
     "selectFile": "选择文件",
     "reloadFile": "重新加载",
+    "sampleRate": "采样率",
     "skipInfoRows": "跳过信息区域",
     "rows": "行",
     "noHeader": "无表头",

@@ -11,7 +11,7 @@ export interface CsvParseResult {
 }
 
 const DEFAULT_CONFIG: CsvParseConfig = {
-  skipInfoRows: 0,
+  skipInfoRows: 1,
   noHeader: false,
   splitColumn: false,
   splitColumnIndex: 0,

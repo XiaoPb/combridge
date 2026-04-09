@@ -217,10 +217,12 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
           color: 'var(--text-secondary)',
         },
         labelFormatter: (value: number) => {
-          if (xAxisData.length === 0) return '0ms';
-          const index = Math.round(value * (xAxisData.length - 1) / 100);
-          const clampedIndex = Math.max(0, Math.min(index, xAxisData.length - 1));
-          const timeValue = xAxisData[clampedIndex];
+          if (rows.length === 0) return '0ms';
+          const interval = 1 / sampleRate;
+          const totalPoints = rows.length;
+          const index = Math.round(value * (totalPoints - 1) / 100);
+          const clampedIndex = Math.max(0, Math.min(index, totalPoints - 1));
+          const timeValue = clampedIndex * interval;
           return formatTime(timeValue);
         },
       },

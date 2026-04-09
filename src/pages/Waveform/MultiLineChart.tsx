@@ -124,8 +124,8 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
 
     const yAxisPositions: Array<{ position: 'left' | 'right'; offset: number }> = [
       { position: 'left', offset: 0 },
-      { position: 'left', offset: Y_AXIS_WIDTH },
       { position: 'right', offset: 0 },
+      { position: 'left', offset: Y_AXIS_WIDTH },
       { position: 'right', offset: Y_AXIS_WIDTH },
     ];
 

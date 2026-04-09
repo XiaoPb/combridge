@@ -51,6 +51,21 @@ const COLORS = [
   '#fa8c16',
 ];
 
+const formatScientific = (value: number): string => {
+  if (value === 0) return '0';
+  const absValue = Math.abs(value);
+  if (absValue >= 10000 || absValue < 0.001) {
+    return value.toExponential(1);
+  }
+  if (absValue >= 100) {
+    return value.toFixed(0);
+  }
+  if (absValue >= 1) {
+    return value.toFixed(2);
+  }
+  return value.toFixed(4);
+};
+
 const MultiLineChart: React.FC<MultiLineChartProps> = ({
   columns,
   rows,
@@ -61,6 +76,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   const chartInstances = useRef<echarts.ECharts[]>([]);
   const [initialized, setInitialized] = useState(false);
   const zoomStateRef = useRef<{ start: number; end: number }>({ start: 0, end: 100 });
+  const isZoomingRef = useRef(false);
 
   const xAxisData = useMemo(() => {
     return rows.map((_, index) => index);
@@ -74,9 +90,38 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
     return map;
   }, [columns]);
 
+  const unifiedGridConfig = useMemo(() => {
+    let maxLeftAxisCount = 1;
+    let maxRightAxisCount = 0;
+
+    chartGroups.forEach((group) => {
+      const groupYAxisConfigs = yAxisConfigs[group.name] || group.columns.map((col, colIndex) => ({
+        column: col,
+        position: (colIndex % 2 === 0 ? 'left' : 'right') as 'left' | 'right',
+        offset: Math.floor(colIndex / 2) * 50,
+        color: colorMap.get(col) || COLORS[colIndex % COLORS.length],
+      }));
+
+      const leftCount = groupYAxisConfigs.filter((c) => c.position === 'left').length;
+      const rightCount = groupYAxisConfigs.filter((c) => c.position === 'right').length;
+
+      maxLeftAxisCount = Math.max(maxLeftAxisCount, leftCount);
+      maxRightAxisCount = Math.max(maxRightAxisCount, rightCount);
+    });
+
+    const leftWidth = 50 + (maxLeftAxisCount - 1) * 40;
+    const rightWidth = maxRightAxisCount > 0 ? 50 + (maxRightAxisCount - 1) * 40 : 20;
+
+    return {
+      top: 40,
+      left: leftWidth,
+      right: rightWidth,
+      bottom: 50,
+    };
+  }, [chartGroups, yAxisConfigs, colorMap]);
+
   const getChartOption = useCallback((
     group: ChartGroupConfig,
-    showDataZoom: boolean,
     groupColorMap: Map<string, string>
   ) => {
     const groupYAxisConfigs = yAxisConfigs[group.name] || group.columns.map((col, colIndex) => ({
@@ -88,7 +133,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
 
     const yAxisOption = groupYAxisConfigs.map((config, idx) => ({
       name: config.column,
-      type: 'value',
+      type: 'value' as const,
       position: config.position,
       offset: config.offset,
       scale: true,
@@ -100,6 +145,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
       },
       axisLabel: {
         color: config.color,
+        formatter: (value: number) => formatScientific(value),
       },
       nameTextStyle: {
         color: config.color,
@@ -120,7 +166,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
 
     const seriesOption = seriesData.map((s, idx) => ({
       name: s.name,
-      type: 'line',
+      type: 'line' as const,
       data: s.data,
       smooth: false,
       yAxisIndex: idx,
@@ -135,41 +181,39 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
       animation: false,
     }));
 
-    const dataZoomOption = showDataZoom
-      ? [
-          {
-            type: 'slider' as const,
-            show: true,
-            start: zoomStateRef.current.start,
-            end: zoomStateRef.current.end,
-            zoomLock: false,
-            xAxisIndex: [0],
-            height: 24,
-            bottom: 8,
-            handleStyle: {
-              color: '#1890ff',
-              borderColor: '#1890ff',
-            },
-            trackStyle: {
-              backgroundColor: 'var(--bg-secondary)',
-            },
-            selectedDataBackground: {
-              lineStyle: {
-                color: '#1890ff',
-              },
-              areaStyle: {
-                color: 'rgba(24, 144, 255, 0.2)',
-              },
-            },
-            fillerColor: 'rgba(24, 144, 255, 0.15)',
-            borderColor: 'var(--border-color)',
-            textStyle: {
-              color: 'var(--text-secondary)',
-            },
-            labelPrecision: 0,
+    const dataZoomOption = [
+      {
+        type: 'slider' as const,
+        show: true,
+        start: zoomStateRef.current.start,
+        end: zoomStateRef.current.end,
+        zoomLock: false,
+        xAxisIndex: [0],
+        height: 24,
+        bottom: 8,
+        handleStyle: {
+          color: '#1890ff',
+          borderColor: '#1890ff',
+        },
+        trackStyle: {
+          backgroundColor: 'var(--bg-secondary)',
+        },
+        selectedDataBackground: {
+          lineStyle: {
+            color: '#1890ff',
           },
-        ]
-      : [];
+          areaStyle: {
+            color: 'rgba(24, 144, 255, 0.2)',
+          },
+        },
+        fillerColor: 'rgba(24, 144, 255, 0.15)',
+        borderColor: 'var(--border-color)',
+        textStyle: {
+          color: 'var(--text-secondary)',
+        },
+        labelPrecision: 0,
+      },
+    ];
 
     return {
       animationDuration: 0,
@@ -191,6 +235,21 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
         textStyle: {
           color: 'var(--text-primary)',
         },
+        formatter: (params: unknown) => {
+          const items = params as Array<{ seriesName: string; value: number | number[]; color: string }>;
+          if (!Array.isArray(items)) return '';
+          const firstValue = items[0]?.value;
+          const index = Array.isArray(firstValue) ? firstValue[0] : firstValue;
+          let html = `<div style="font-weight: bold; margin-bottom: 4px;">Index: ${index}</div>`;
+          items.forEach((item) => {
+            const val = Array.isArray(item.value) ? item.value[1] : item.value;
+            html += `<div style="display: flex; align-items: center; gap: 8px;">
+              <span style="display: inline-block; width: 10px; height: 10px; background: ${item.color}; border-radius: 50%;"></span>
+              <span>${item.seriesName}: ${formatScientific(val)}</span>
+            </div>`;
+          });
+          return html;
+        },
       },
       legend: {
         top: 4,
@@ -201,16 +260,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
           color: 'var(--text-primary)',
         },
       },
-      grid: {
-        top: 40,
-        left: groupYAxisConfigs.filter((c) => c.position === 'left').length > 0 
-          ? 50 + (groupYAxisConfigs.filter((c) => c.position === 'left').length - 1) * 40 
-          : 40,
-        right: groupYAxisConfigs.filter((c) => c.position === 'right').length > 0 
-          ? 50 + (groupYAxisConfigs.filter((c) => c.position === 'right').length - 1) * 40 
-          : 20,
-        bottom: showDataZoom ? 40 : 20,
-      },
+      grid: unifiedGridConfig,
       xAxis: {
         type: 'category',
         data: xAxisData,
@@ -232,11 +282,11 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
           },
         },
       },
-      yAxis: yAxisOption.length > 0 ? yAxisOption : [{ type: 'value', scale: true }],
+      yAxis: yAxisOption.length > 0 ? yAxisOption : [{ type: 'value' as const, scale: true, axisLabel: { formatter: (value: number) => formatScientific(value) } }],
       series: seriesOption,
       dataZoom: dataZoomOption,
     };
-  }, [xAxisData, rows, columns, yAxisConfigs]);
+  }, [xAxisData, rows, columns, yAxisConfigs, unifiedGridConfig]);
 
   useEffect(() => {
     chartInstances.current.forEach((chart) => {
@@ -252,7 +302,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
 
       const group = chartGroups[index];
       if (group) {
-        const option = getChartOption(group, index === chartGroups.length - 1, colorMap);
+        const option = getChartOption(group, colorMap);
         chart.setOption(option);
       }
     });
@@ -280,7 +330,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
 
       const group = chartGroups[index];
       if (group) {
-        const option = getChartOption(group, index === chartGroups.length - 1, colorMap);
+        const option = getChartOption(group, colorMap);
         chart.setOption(option, { notMerge: false });
       }
     });
@@ -289,13 +339,13 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   useEffect(() => {
     if (!initialized || chartInstances.current.length === 0) return;
 
-    const lastChart = chartInstances.current[chartInstances.current.length - 1];
-    if (!lastChart) return;
+    const handleDataZoom = (chartIndex: number) => (params: unknown) => {
+      if (isZoomingRef.current) return;
+      isZoomingRef.current = true;
 
-    const handleDataZoom = (params: unknown) => {
       const p = params as { start?: number; end?: number; batch?: Array<{ start: number; end: number }> };
       let start: number, end: number;
-      
+
       if (p.batch) {
         start = p.batch[0].start;
         end = p.batch[0].end;
@@ -303,13 +353,14 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
         start = p.start;
         end = p.end;
       } else {
+        isZoomingRef.current = false;
         return;
       }
 
       zoomStateRef.current = { start, end };
 
       chartInstances.current.forEach((chart, idx) => {
-        if (chart && idx !== chartInstances.current.length - 1) {
+        if (chart && idx !== chartIndex) {
           chart.dispatchAction({
             type: 'dataZoom',
             start,
@@ -317,12 +368,23 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
           });
         }
       });
+
+      setTimeout(() => {
+        isZoomingRef.current = false;
+      }, 50);
     };
 
-    lastChart.on('datazoom', handleDataZoom);
+    const disposers: Array<() => void> = [];
+
+    chartInstances.current.forEach((chart, index) => {
+      if (!chart) return;
+      const handler = handleDataZoom(index);
+      chart.on('datazoom', handler);
+      disposers.push(() => chart.off('datazoom', handler));
+    });
 
     return () => {
-      lastChart.off('datazoom', handleDataZoom);
+      disposers.forEach((dispose) => dispose());
     };
   }, [initialized]);
 

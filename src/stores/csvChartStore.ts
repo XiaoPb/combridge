@@ -31,8 +31,8 @@ interface CsvChartActions {
 export type CsvChartStore = CsvChartState & CsvChartActions;
 
 const DEFAULT_PARSE_CONFIG: CsvParseConfig = {
-  skipFirstRow: false,
-  useSecondRowAsHeader: false,
+  skipInfoRows: 0,
+  noHeader: false,
   splitColumn: false,
   splitColumnIndex: 0,
 };

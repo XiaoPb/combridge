@@ -118,19 +118,23 @@ const CsvLoaderTab: React.FC = () => {
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-color)' }}>
               <Space wrap size="middle">
                 <Space>
-                  <Text>{t('csvLoader.skipFirstRow')}</Text>
-                  <Switch
-                    checked={parseConfig.skipFirstRow}
-                    onChange={(checked) => setParseConfig({ skipFirstRow: checked })}
+                  <Text>{t('csvLoader.skipInfoRows')}</Text>
+                  <InputNumber
+                    min={0}
+                    max={100}
+                    value={parseConfig.skipInfoRows}
+                    onChange={(value) => setParseConfig({ skipInfoRows: value ?? 0 })}
+                    style={{ width: 70 }}
                     size="small"
                   />
+                  <Text type="secondary">{t('csvLoader.rows')}</Text>
                 </Space>
 
                 <Space>
-                  <Text>{t('csvLoader.useSecondRowAsHeader')}</Text>
+                  <Text>{t('csvLoader.noHeader')}</Text>
                   <Switch
-                    checked={parseConfig.useSecondRowAsHeader}
-                    onChange={(checked) => setParseConfig({ useSecondRowAsHeader: checked })}
+                    checked={parseConfig.noHeader}
+                    onChange={(checked) => setParseConfig({ noHeader: checked })}
                     size="small"
                   />
                 </Space>

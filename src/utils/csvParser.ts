@@ -1,6 +1,6 @@
 export interface CsvParseConfig {
-  skipFirstRow: boolean;
-  useSecondRowAsHeader: boolean;
+  skipInfoRows: number;
+  noHeader: boolean;
   splitColumn: boolean;
   splitColumnIndex: number;
 }
@@ -11,8 +11,8 @@ export interface CsvParseResult {
 }
 
 const DEFAULT_CONFIG: CsvParseConfig = {
-  skipFirstRow: false,
-  useSecondRowAsHeader: false,
+  skipInfoRows: 0,
+  noHeader: false,
   splitColumn: false,
   splitColumnIndex: 0,
 };
@@ -25,24 +25,27 @@ export function parseCsv(csvContent: string, config: Partial<CsvParseConfig> = {
     return { columns: [], rows: [] };
   }
 
-  let headerLineIndex = 0;
-  let dataStartIndex = 0;
-
-  if (cfg.skipFirstRow) {
-    dataStartIndex = 1;
-    if (cfg.useSecondRowAsHeader) {
-      headerLineIndex = 1;
-      dataStartIndex = 2;
-    }
-  } else if (cfg.useSecondRowAsHeader) {
-    headerLineIndex = 1;
-    dataStartIndex = 2;
+  const skipRows = Math.max(0, cfg.skipInfoRows);
+  const dataStartIndex = skipRows;
+  
+  if (dataStartIndex >= lines.length) {
+    return { columns: [], rows: [] };
   }
 
-  const headerLine = lines[headerLineIndex] || '';
-  const rawColumns = headerLine.split(',').map(col => col.trim());
+  let rawColumns: string[];
+  let dataLines: string[];
 
-  const dataLines = lines.slice(dataStartIndex);
+  if (cfg.noHeader) {
+    const firstDataLine = lines[dataStartIndex] || '';
+    const columnCount = firstDataLine.split(',').length;
+    rawColumns = Array.from({ length: columnCount }, (_, i) => `CH${i}`);
+    dataLines = lines.slice(dataStartIndex);
+  } else {
+    const headerLine = lines[dataStartIndex] || '';
+    rawColumns = headerLine.split(',').map(col => col.trim());
+    dataLines = lines.slice(dataStartIndex + 1);
+  }
+
   const rawData: number[][] = [];
 
   for (const line of dataLines) {

@@ -66,7 +66,8 @@ const formatScientific = (value: number): string => {
   return value.toFixed(4);
 };
 
-const formatTime = (seconds: number): string => {
+const formatTime = (seconds: number | undefined): string => {
+  if (seconds === undefined || isNaN(seconds)) return '0ms';
   if (seconds < 1) {
     return `${(seconds * 1000).toFixed(0)}ms`;
   }
@@ -216,8 +217,11 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
           color: 'var(--text-secondary)',
         },
         labelFormatter: (value: number) => {
-          const timeValue = xAxisData[Math.floor(value * (xAxisData.length - 1) / 100)];
-          return formatTime(timeValue);
+          if (xAxisData.length === 0) return '0ms';
+          const index = Math.floor(value * (xAxisData.length - 1) / 100);
+          const clampedIndex = Math.max(0, Math.min(index, xAxisData.length - 1));
+          const timeValue = xAxisData[clampedIndex];
+          return timeValue !== undefined ? formatTime(timeValue) : '0ms';
         },
       },
     ];

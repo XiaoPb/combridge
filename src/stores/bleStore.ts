@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { BleDeviceInfo, BleConnection, BleService, BleCharacteristic } from '../types';
+import { preferencesApi } from '../api/tauri';
 
 export type BleMode = 'native' | 'at';
 
@@ -240,7 +241,6 @@ export const useBleStore = create<BleState>((set, _get) => ({
 
   loadPreferences: async () => {
     try {
-      const { preferencesApi } = await import('../api/tauri');
       const prefs = await preferencesApi.get();
       if (prefs && prefs.ble) {
         set({ preferences: prefs.ble });
@@ -255,7 +255,6 @@ export const useBleStore = create<BleState>((set, _get) => ({
       preferences: { ...state.preferences, ...updates },
     }));
     try {
-      const { preferencesApi } = await import('../api/tauri');
       await preferencesApi.updateBle(useBleStore.getState().preferences);
     } catch (err) {
       console.error('保存BLE偏好设置失败:', err);

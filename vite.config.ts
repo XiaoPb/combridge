@@ -33,9 +33,6 @@ export default defineConfig(async () => ({
               return 'vendor';
             }
             if (id.includes('antd/') || id.includes('@ant-design/')) {
-              if (id.includes('@ant-design/icons')) {
-                return 'antd-icons';
-              }
               return 'antd';
             }
             if (id.includes('i18next') || id.includes('react-i18next')) {
@@ -48,7 +45,6 @@ export default defineConfig(async () => ({
               return 'tauri';
             }
           }
-          return undefined;
         },
       },
     },

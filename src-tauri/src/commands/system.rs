@@ -2,10 +2,10 @@ use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::env;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 use sysinfo::{CpuRefreshKind, Disks, MemoryRefreshKind, RefreshKind, System};
 use tauri::Manager;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::error::{ComBridgeError, Result};
 
@@ -325,9 +325,103 @@ pub async fn get_window_status(app: tauri::AppHandle) -> Result<WindowStatus> {
 
 #[tauri::command]
 pub async fn show_main_window(app: tauri::AppHandle) -> Result<()> {
-    if let Some(window) = app.get_webview_window("main") {
-        window.show().map_err(|e| ComBridgeError::io(format!("显示窗口失败: {}", e)))?;
-        window.set_focus().map_err(|e| ComBridgeError::io(format!("设置焦点失败: {}", e)))?;
+    const MAX_RETRIES: u32 = 3;
+    const RETRY_DELAY_MS: u64 = 500;
+
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| ComBridgeError::io("未找到主窗口".to_string()))?;
+
+    info!("开始显示主窗口，最多尝试 {} 次", MAX_RETRIES);
+
+    for attempt in 1..=MAX_RETRIES {
+        if attempt > 1 {
+            info!("第 {} 次重试显示窗口，等待 {}ms", attempt - 1, RETRY_DELAY_MS);
+            tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
+        }
+
+        match window.show() {
+            Ok(_) => {
+                info!("窗口显示成功（第 {} 次尝试）", attempt);
+
+                match window.set_focus() {
+                    Ok(_) => {
+                        info!("窗口焦点设置成功");
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        warn!("第 {} 次尝试设置焦点失败: {}", attempt, e);
+                        if attempt == MAX_RETRIES {
+                            return Err(ComBridgeError::io(format!(
+                                "设置窗口焦点失败（已尝试 {} 次）: {}",
+                                MAX_RETRIES, e
+                            )));
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("第 {} 次尝试显示窗口失败: {}", attempt, e);
+
+                if attempt == MAX_RETRIES {
+                    info!("所有尝试均失败，执行延迟显示窗口的备用方案");
+                    return attempt_delayed_show(&window, MAX_RETRIES).await;
+                }
+            }
+        }
     }
+
     Ok(())
+}
+
+async fn attempt_delayed_show(window: &tauri::WebviewWindow, retries: u32) -> Result<()> {
+    const DELAY_MS: u64 = 1000;
+
+    info!("执行延迟显示窗口备用方案，延迟 {}ms 后再次尝试", DELAY_MS);
+    tokio::time::sleep(Duration::from_millis(DELAY_MS)).await;
+
+    window
+        .show()
+        .map_err(|e| {
+            warn!("延迟显示窗口失败: {}", e);
+            ComBridgeError::io(format!(
+                "显示窗口失败（已重试 {} 次并尝试延迟显示）: {}",
+                retries + 1,
+                e
+            ))
+        })?;
+
+    info!("延迟显示窗口成功");
+
+    window.set_focus().map_err(|e| {
+        warn!("延迟显示后设置焦点失败: {}", e);
+        ComBridgeError::io(format!("设置窗口焦点失败: {}", e))
+    })?;
+
+    info!("延迟显示窗口并设置焦点成功");
+    Ok(())
+}
+
+#[tauri::command]
+#[cfg(feature = "devtools")]
+pub async fn open_devtools(app: tauri::AppHandle) -> Result<()> {
+    if let Some(window) = app.get_webview_window("main") {
+        window.open_devtools();
+        info!("已打开开发者工具");
+        Ok(())
+    } else {
+        Err(ComBridgeError::io("未找到主窗口".to_string()))
+    }
+}
+
+#[tauri::command]
+#[cfg(feature = "devtools")]
+pub async fn close_devtools(app: tauri::AppHandle) -> Result<()> {
+    if let Some(window) = app.get_webview_window("main") {
+        window.close_devtools();
+        info!("已关闭开发者工具");
+        Ok(())
+    } else {
+        Err(ComBridgeError::io("未找到主窗口".to_string()))
+    }
 }

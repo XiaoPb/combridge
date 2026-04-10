@@ -69,20 +69,22 @@ impl LoggerService {
         let mut guard = None;
         if config.file_enabled {
             let log_dir = config.file_path.parent().unwrap_or(&PathBuf::from(".")).to_path_buf();
-            let log_file = config
-                .file_path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("combridge.log");
+            
+            if !log_dir.exists() {
+                std::fs::create_dir_all(&log_dir)?;
+            }
 
-            let file_appender = tracing_appender::rolling::Builder::new()
-                .rotation(tracing_appender::rolling::Rotation::DAILY)
-                .filename_prefix(log_file.trim_end_matches(".log"))
-                .filename_suffix("log")
-                .max_log_files(config.max_files)
-                .build(log_dir)?;
+            let now = chrono::Local::now();
+            let timestamp = now.format("%Y-%m-%d-%H-%M-%S");
+            let log_filename = format!("combridge_system_{}.log", timestamp);
+            let log_path = log_dir.join(&log_filename);
 
-            let (non_blocking, worker_guard) = tracing_appender::non_blocking(file_appender);
+            let file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_path)?;
+            
+            let (non_blocking, worker_guard) = tracing_appender::non_blocking(file);
             guard = Some(worker_guard);
 
             let file_layer = fmt::layer()

@@ -1,6 +1,6 @@
 [package]
 name = "combridge-rust"
-version = "0.5.0"
+version = "0.5.2"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -47,6 +47,24 @@ regex = "1"
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["dwmapi", "winuser", "windef"] }
 winreg = "0.52"
+
+[features]
+default = []
+devtools = ["tauri/devtools"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+opt-level = 0
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
 
 [dev-dependencies]
 tempfile = "3"

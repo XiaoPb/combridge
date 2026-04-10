@@ -15,7 +15,6 @@ use compat::check_compatibility;
 use device::{BleManager, DeviceManager, SerialManager};
 use gh3036::Gh3036Manager;
 use protocol::PluginManager;
-use service::LoggerService;
 use state::{create_action_dispatcher, create_app_state, create_state_persistence};
 use tauri::Manager;
 use tracing::{info, error, warn};
@@ -23,9 +22,34 @@ use websocket::ConnectionPool;
 use crate::commands::waveform::WaveformManager;
 
 fn init_logger() {
-    let _guard = LoggerService::init_default();
+    let exe_path = std::env::current_exe()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let exe_dir = exe_path.parent()
+        .unwrap_or(std::path::Path::new("."));
+    
+    let log_dir = exe_dir.join("log");
+    
+    let now = chrono::Local::now();
+    let log_filename = format!(
+        "combridge_system_{}.log",
+        now.format("%Y-%m-%d-%H-%M-%S")
+    );
+    
+    let log_path = log_dir.join(&log_filename);
+    
+    let config = service::logger::LoggerConfig {
+        level: "info".to_string(),
+        console_enabled: true,
+        file_enabled: true,
+        file_path: log_path.clone(),
+        max_file_size: 10 * 1024 * 1024,
+        max_files: 10,
+    };
+    
+    let _guard = service::logger::LoggerService::init(config);
     std::mem::forget(_guard);
     info!("ComBridge Rust 应用启动");
+    info!("日志文件: {}", log_path.display());
 }
 
 fn get_app_data_dir() -> std::path::PathBuf {
@@ -211,6 +235,11 @@ pub fn run() {
             commands::system::open_url,
             commands::system::show_in_folder,
             commands::system::show_main_window,
+            commands::system::get_window_status,
+            #[cfg(feature = "devtools")]
+            commands::system::open_devtools,
+            #[cfg(feature = "devtools")]
+            commands::system::close_devtools,
             commands::state::dispatch_action,
             commands::state::get_state,
             commands::state::get_channel_data,

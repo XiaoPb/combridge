@@ -1,3 +1,4 @@
+import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import type { SerialConfig, SerialPortInfo } from '../types';
 import type { BleDeviceInfo, BleScanOptions, BleConnection, BleService, BleCharacteristic } from '../types';
 import type { 
@@ -17,7 +18,6 @@ import type { SerialPreferences } from '../stores/serialStore';
 import type { BlePreferences } from '../stores/bleStore';
 
 export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
   return tauriInvoke<T>(cmd, args);
 }
 

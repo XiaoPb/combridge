@@ -20,9 +20,8 @@ impl Default for CompatInfo {
 
 #[cfg(target_os = "windows")]
 pub fn check_transparent_window_support() -> bool {
-    use std::ptr;
     use winapi::um::dwmapi::DwmIsCompositionEnabled;
-    use winapi::shared::windef::BOOL;
+    use winapi::shared::minwindef::BOOL;
 
     unsafe {
         let mut enabled: BOOL = 0;
@@ -122,7 +121,7 @@ pub fn check_compatibility() -> CompatInfo {
     let info = CompatInfo {
         transparent_supported,
         webview2_installed,
-        webview2_version,
+        webview2_version: webview2_version.clone(),
     };
 
     info!(

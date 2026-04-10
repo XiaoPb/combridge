@@ -1,0 +1,26 @@
+{
+  "title": "Welcome to ComBridge",
+  "subtitle": "Select a module to get started",
+  "modules": {
+    "serial": {
+      "name": "Serial Communication",
+      "description": "Connect, send and receive data with serial devices"
+    },
+    "ble": {
+      "name": "BLE Communication",
+      "description": "Scan, connect and interact with BLE devices"
+    },
+    "protocol": {
+      "name": "Protocol Management",
+      "description": "Configure communication protocols and parse data"
+    },
+    "waveform": {
+      "name": "Waveform Display",
+      "description": "Real-time visualization of data waveforms"
+    },
+    "system": {
+      "name": "System Settings",
+      "description": "Application configuration and preferences"
+    }
+  }
+}

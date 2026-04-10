@@ -1,5 +1,6 @@
 {
   "menu": {
+    "home": "Home",
     "serial": "Serial",
     "ble": "BLE",
     "protocol": "Protocol",

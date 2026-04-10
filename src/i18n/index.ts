@@ -9,6 +9,7 @@ import zhCNBle from '../locales/zh-CN/ble.json';
 import zhCNProtocol from '../locales/zh-CN/protocol.json';
 import zhCNSystem from '../locales/zh-CN/system.json';
 import zhCNWaveform from '../locales/zh-CN/waveform.json';
+import zhCNHome from '../locales/zh-CN/home.json';
 
 import enUSCommon from '../locales/en-US/common.json';
 import enUSSidebar from '../locales/en-US/sidebar.json';
@@ -17,6 +18,7 @@ import enUSBle from '../locales/en-US/ble.json';
 import enUSProtocol from '../locales/en-US/protocol.json';
 import enUSSystem from '../locales/en-US/system.json';
 import enUSWaveform from '../locales/en-US/waveform.json';
+import enUSHome from '../locales/en-US/home.json';
 
 const resources = {
   'zh-CN': {
@@ -27,6 +29,7 @@ const resources = {
     protocol: zhCNProtocol,
     system: zhCNSystem,
     waveform: zhCNWaveform,
+    home: zhCNHome,
   },
   'en-US': {
     common: enUSCommon,
@@ -36,6 +39,7 @@ const resources = {
     protocol: enUSProtocol,
     system: enUSSystem,
     waveform: enUSWaveform,
+    home: enUSHome,
   },
 };
 

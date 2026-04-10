@@ -27,7 +27,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
 
   const menuItems = [
     {
-      key: '/home',
+      key: '/',
       icon: <HomeOutlined />,
       label: t('menu.home'),
     },

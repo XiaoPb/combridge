@@ -1,0 +1,26 @@
+{
+  "title": "欢迎使用 ComBridge",
+  "subtitle": "选择一个功能模块开始使用",
+  "modules": {
+    "serial": {
+      "name": "串口通信",
+      "description": "串口设备的连接、数据收发和调试"
+    },
+    "ble": {
+      "name": "蓝牙通信",
+      "description": "BLE设备的扫描、连接和数据交互"
+    },
+    "protocol": {
+      "name": "协议管理",
+      "description": "通信协议的配置和数据解析"
+    },
+    "waveform": {
+      "name": "波形显示",
+      "description": "实时数据波形的可视化展示"
+    },
+    "system": {
+      "name": "系统设置",
+      "description": "应用程序的配置和偏好设置"
+    }
+  }
+}

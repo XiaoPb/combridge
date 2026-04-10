@@ -19,7 +19,6 @@ const BlePage = lazy(() => import('./pages/Ble'));
 const ProtocolPage = lazy(() => import('./pages/Protocol'));
 const SystemPage = lazy(() => import('./pages/System'));
 const WaveformPage = lazy(() => import('./pages/Waveform'));
-const HomePage = lazy(() => import('./pages/Home'));
 
 const LOADING_TIMEOUT_MS = 30000;
 
@@ -166,8 +165,7 @@ function AppContent() {
           <ErrorBoundary>
             <Suspense fallback={<PageLoader onLoadTimeout={handleLoadTimeout} />}>
               <Routes>
-                <Route path="/" element={<Navigate to="/home" replace />} />
-                <Route path="/home" element={<HomePage />} />
+                <Route path="/" element={<HomePage />} />
                 <Route path="/serial" element={<SerialPage />} />
                 <Route path="/ble" element={<BlePage />} />
                 <Route path="/protocol" element={<ProtocolPage />} />

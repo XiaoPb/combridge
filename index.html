@@ -4,12 +4,29 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri + React + Typescript</title>
+    <title>ComBridge</title>
     <!-- React DevTools: 运行 npm run devtools 后取消注释下一行 -->
     <script src="http://localhost:8097"></script>
   </head>
 
   <body>
+    <div id="splash-screen" class="splash-screen">
+      <div class="splash-content">
+        <div class="splash-icon">
+          <img src="/icon.png" alt="ComBridge" />
+        </div>
+        <div class="splash-text">
+          <span class="splash-title">ComBridge</span>
+          <span class="splash-loading">
+            <span data-i18n="zh">加载中...</span>
+            <span data-i18n="en">Loading...</span>
+          </span>
+        </div>
+        <div class="splash-spinner">
+          <div class="spinner-ring"></div>
+        </div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

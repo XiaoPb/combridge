@@ -5,6 +5,7 @@ use std::env;
 use std::time::SystemTime;
 use sysinfo::{CpuRefreshKind, Disks, MemoryRefreshKind, RefreshKind, System};
 use tauri::Manager;
+use tracing::info;
 
 use crate::error::{ComBridgeError, Result};
 
@@ -256,6 +257,70 @@ pub async fn show_in_folder(path: String) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowStatus {
+    pub label: String,
+    pub title: String,
+    pub visible: bool,
+    pub focused: bool,
+    pub maximized: bool,
+    pub minimized: bool,
+    pub fullscreen: bool,
+    pub width: u32,
+    pub height: u32,
+    pub x: i32,
+    pub y: i32,
+}
+
+#[tauri::command]
+pub async fn get_window_status(app: tauri::AppHandle) -> Result<WindowStatus> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| ComBridgeError::io("未找到主窗口".to_string()))?;
+
+    let label = window.label().to_string();
+    let title = window.title().map_err(|e| ComBridgeError::io(format!("获取窗口标题失败: {}", e)))?;
+    let visible = window.is_visible().map_err(|e| ComBridgeError::io(format!("获取窗口可见性失败: {}", e)))?;
+    let focused = window.is_focused().map_err(|e| ComBridgeError::io(format!("获取窗口焦点状态失败: {}", e)))?;
+    let maximized = window.is_maximized().map_err(|e| ComBridgeError::io(format!("获取窗口最大化状态失败: {}", e)))?;
+    let minimized = window.is_minimized().map_err(|e| ComBridgeError::io(format!("获取窗口最小化状态失败: {}", e)))?;
+    let fullscreen = window.is_fullscreen().map_err(|e| ComBridgeError::io(format!("获取窗口全屏状态失败: {}", e)))?;
+
+    let scale_factor = window
+        .scale_factor()
+        .map_err(|e| ComBridgeError::io(format!("获取缩放因子失败: {}", e)))?;
+    let inner_size = window
+        .inner_size()
+        .map_err(|e| ComBridgeError::io(format!("获取窗口大小失败: {}", e)))?;
+    let outer_position = window
+        .outer_position()
+        .map_err(|e| ComBridgeError::io(format!("获取窗口位置失败: {}", e)))?;
+
+    let width = (inner_size.width as f64 / scale_factor as f64) as u32;
+    let height = (inner_size.height as f64 / scale_factor as f64) as u32;
+    let x = outer_position.x;
+    let y = outer_position.y;
+
+    info!(
+        "窗口状态诊断: label={}, visible={}, focused={}, maximized={}, minimized={}, size={}x{}, position=({},{})",
+        label, visible, focused, maximized, minimized, width, height, x, y
+    );
+
+    Ok(WindowStatus {
+        label,
+        title,
+        visible,
+        focused,
+        maximized,
+        minimized,
+        fullscreen,
+        width,
+        height,
+        x,
+        y,
+    })
 }
 
 #[tauri::command]

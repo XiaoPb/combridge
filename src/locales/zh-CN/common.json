@@ -76,5 +76,17 @@
     "maxLength": "长度不能超过 {{max}} 个字符",
     "minValue": "值不能小于 {{min}}",
     "maxValue": "值不能大于 {{max}}"
+  },
+  "error": {
+    "pageError": "页面出错了",
+    "pageErrorDesc": "抱歉，页面遇到了一些问题。请尝试刷新页面或联系管理员。",
+    "retry": "重试",
+    "refreshPage": "刷新页面",
+    "errorMessage": "错误信息",
+    "componentStack": "组件堆栈",
+    "loadingTimeout": "加载超时",
+    "loadingTimeoutDesc": "页面加载时间过长，请检查网络连接后重试",
+    "loadFailed": "加载失败",
+    "loadFailedDesc": "页面加载失败，请刷新页面重试"
   }
 }

@@ -76,5 +76,17 @@
     "maxLength": "Length must not exceed {{max}} characters",
     "minValue": "Value must be at least {{min}}",
     "maxValue": "Value must not exceed {{max}}"
+  },
+  "error": {
+    "pageError": "Page Error",
+    "pageErrorDesc": "Sorry, the page encountered some problems. Please try refreshing the page or contact the administrator.",
+    "retry": "Retry",
+    "refreshPage": "Refresh Page",
+    "errorMessage": "Error Message",
+    "componentStack": "Component Stack",
+    "loadingTimeout": "Loading Timeout",
+    "loadingTimeoutDesc": "The page is taking too long to load. Please check your network connection and try again",
+    "loadFailed": "Load Failed",
+    "loadFailedDesc": "Failed to load the page. Please refresh and try again"
   }
 }

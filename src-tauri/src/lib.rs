@@ -140,6 +140,7 @@ pub fn run() {
             commands::system::open_url,
             commands::system::show_in_folder,
             commands::system::show_main_window,
+            commands::system::get_window_status,
             commands::state::dispatch_action,
             commands::state::get_state,
             commands::state::get_channel_data,

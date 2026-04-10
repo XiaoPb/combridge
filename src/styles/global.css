@@ -1009,3 +1009,127 @@ pre {
   background: #ff4d4f;
   color: #fff;
 }
+
+.splash-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  transition: opacity 0.3s ease-out, visibility 0.3s ease-out;
+}
+
+.splash-screen.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.splash-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.splash-icon {
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: splash-icon-pulse 2s ease-in-out infinite;
+}
+
+.splash-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 12px rgba(24, 144, 255, 0.3));
+}
+
+@keyframes splash-icon-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.splash-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.splash-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--primary-color);
+  letter-spacing: 1px;
+}
+
+.splash-loading {
+  font-size: 14px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.splash-loading span[data-i18n="en"] {
+  display: none;
+}
+
+.splash-loading span[data-i18n="zh"] {
+  display: inline;
+}
+
+html[lang="en"] .splash-loading span[data-i18n="zh"] {
+  display: none;
+}
+
+html[lang="en"] .splash-loading span[data-i18n="en"] {
+  display: inline;
+}
+
+.splash-spinner {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner-ring {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes spinner-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+[data-theme='dark'] .splash-screen {
+  background: var(--bg-primary);
+}
+
+[data-theme='dark'] .splash-icon img {
+  filter: drop-shadow(0 4px 12px rgba(24, 144, 255, 0.4));
+}

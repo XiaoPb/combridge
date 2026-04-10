@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { Result, Button, Typography } from 'antd';
+import { useTranslation } from 'react-i18next';
 
 const { Paragraph, Text } = Typography;
 
@@ -13,6 +14,68 @@ interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
   errorInfo: ErrorInfo | null;
+}
+
+interface ErrorDisplayProps {
+  error: Error | null;
+  errorInfo: ErrorInfo | null;
+  onReset: () => void;
+}
+
+function ErrorDisplay({ error, errorInfo, onReset }: ErrorDisplayProps) {
+  const { t } = useTranslation();
+
+  return (
+    <div style={{ padding: 24 }}>
+      <Result
+        status="error"
+        title={t('common:error.pageError')}
+        subTitle={t('common:error.pageErrorDesc')}
+        extra={[
+          <Button key="reset" type="primary" onClick={onReset}>
+            {t('common:error.retry')}
+          </Button>,
+          <Button key="reload" onClick={() => window.location.reload()}>
+            {t('common:error.refreshPage')}
+          </Button>,
+        ]}
+      >
+        <div style={{ textAlign: 'left', maxWidth: 600, margin: '0 auto' }}>
+          <Paragraph>
+            <Text strong style={{ fontSize: 16 }}>
+              {t('common:error.errorMessage')}:
+            </Text>
+          </Paragraph>
+          <Paragraph>
+            <Text code>{error?.message}</Text>
+          </Paragraph>
+          {errorInfo && (
+            <>
+              <Paragraph>
+                <Text strong style={{ fontSize: 16 }}>
+                  {t('common:error.componentStack')}:
+                </Text>
+              </Paragraph>
+              <Paragraph>
+                <pre
+                  style={{
+                    fontSize: 12,
+                    overflow: 'auto',
+                    maxHeight: 200,
+                    backgroundColor: '#f5f5f5',
+                    padding: 12,
+                    borderRadius: 4,
+                  }}
+                >
+                  {errorInfo.componentStack}
+                </pre>
+              </Paragraph>
+            </>
+          )}
+        </div>
+      </Result>
+    </div>
+  );
 }
 
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
@@ -52,55 +115,11 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       }
 
       return (
-        <div style={{ padding: 24 }}>
-          <Result
-            status="error"
-            title="页面出错了"
-            subTitle="抱歉，页面遇到了一些问题。请尝试刷新页面或联系管理员。"
-            extra={[
-              <Button key="reset" type="primary" onClick={this.handleReset}>
-                重试
-              </Button>,
-              <Button key="reload" onClick={() => window.location.reload()}>
-                刷新页面
-              </Button>,
-            ]}
-          >
-            <div style={{ textAlign: 'left', maxWidth: 600, margin: '0 auto' }}>
-              <Paragraph>
-                <Text strong style={{ fontSize: 16 }}>
-                  错误信息:
-                </Text>
-              </Paragraph>
-              <Paragraph>
-                <Text code>{this.state.error?.message}</Text>
-              </Paragraph>
-              {this.state.errorInfo && (
-                <>
-                  <Paragraph>
-                    <Text strong style={{ fontSize: 16 }}>
-                      组件堆栈:
-                    </Text>
-                  </Paragraph>
-                  <Paragraph>
-                    <pre
-                      style={{
-                        fontSize: 12,
-                        overflow: 'auto',
-                        maxHeight: 200,
-                        backgroundColor: '#f5f5f5',
-                        padding: 12,
-                        borderRadius: 4,
-                      }}
-                    >
-                      {this.state.errorInfo.componentStack}
-                    </pre>
-                  </Paragraph>
-                </>
-              )}
-            </div>
-          </Result>
-        </div>
+        <ErrorDisplay
+          error={this.state.error}
+          errorInfo={this.state.errorInfo}
+          onReset={this.handleReset}
+        />
       );
     }
 

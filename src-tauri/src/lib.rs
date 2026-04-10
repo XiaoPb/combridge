@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod compat;
 pub mod device;
 pub mod error;
 pub mod gh3036;
@@ -10,13 +11,14 @@ pub mod websocket;
 
 use std::sync::Arc;
 
+use compat::check_compatibility;
 use device::{BleManager, DeviceManager, SerialManager};
 use gh3036::Gh3036Manager;
 use protocol::PluginManager;
 use service::LoggerService;
 use state::{create_action_dispatcher, create_app_state, create_state_persistence};
 use tauri::Manager;
-use tracing::{info, error};
+use tracing::{info, error, warn};
 use websocket::ConnectionPool;
 use crate::commands::waveform::WaveformManager;
 
@@ -31,6 +33,15 @@ fn get_app_data_dir() -> std::path::PathBuf {
         .or_else(|| dirs::data_dir())
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("combridge")
+}
+
+#[cfg(target_os = "windows")]
+fn downgrade_window_transparency(window: &tauri::WebviewWindow) -> Result<(), String> {
+    window.set_decorations(true).map_err(|e| format!("设置窗口装饰失败: {}", e))?;
+    
+    info!("窗口已设置为有边框模式");
+    
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -76,10 +87,30 @@ pub fn run() {
         .setup(move |app| {
             info!("Tauri setup hook 开始执行");
             
+            let compat_info = check_compatibility();
+            
+            if !compat_info.webview2_installed {
+                error!("WebView2 运行时未安装，应用可能无法正常运行");
+                error!("请从以下地址下载并安装 WebView2 运行时: {}", compat::get_webview2_bootstrapper_url());
+            }
+            
             let main_window = app.get_webview_window("main");
             match main_window {
                 Some(window) => {
                     info!("主窗口获取成功, label: {}", window.label());
+                    
+                    if !compat_info.transparent_supported {
+                        warn!("系统不支持透明窗口，正在降级为非透明模式");
+                        
+                        #[cfg(target_os = "windows")]
+                        {
+                            if let Err(e) = downgrade_window_transparency(&window) {
+                                error!("窗口降级失败: {}", e);
+                            } else {
+                                info!("窗口已成功降级为非透明模式");
+                            }
+                        }
+                    }
                     
                     match window.is_visible() {
                         Ok(visible) => info!("主窗口可见状态: {}", visible),

@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu } from 'antd';
 import {
+  HomeOutlined,
   UsbOutlined,
   ApiOutlined,
   CodeOutlined,
@@ -25,6 +26,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
   const { t } = useTranslation('sidebar');
 
   const menuItems = [
+    {
+      key: '/home',
+      icon: <HomeOutlined />,
+      label: t('menu.home'),
+    },
     {
       key: '/serial',
       icon: <UsbOutlined />,

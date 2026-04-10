@@ -15,7 +15,8 @@ use gh3036::Gh3036Manager;
 use protocol::PluginManager;
 use service::LoggerService;
 use state::{create_action_dispatcher, create_app_state, create_state_persistence};
-use tracing::info;
+use tauri::Manager;
+use tracing::{info, error};
 use websocket::ConnectionPool;
 use crate::commands::waveform::WaveformManager;
 
@@ -72,14 +73,53 @@ pub fn run() {
         .manage(action_dispatcher)
         .manage(gh3036_manager)
         .manage(waveform_manager)
-        .setup(move |_app| {
+        .setup(move |app| {
+            info!("Tauri setup hook 开始执行");
+            
+            let main_window = app.get_webview_window("main");
+            match main_window {
+                Some(window) => {
+                    info!("主窗口获取成功, label: {}", window.label());
+                    
+                    match window.is_visible() {
+                        Ok(visible) => info!("主窗口可见状态: {}", visible),
+                        Err(e) => error!("获取主窗口可见状态失败: {}", e),
+                    }
+                    
+                    match window.is_maximized() {
+                        Ok(maximized) => info!("主窗口最大化状态: {}", maximized),
+                        Err(e) => error!("获取主窗口最大化状态失败: {}", e),
+                    }
+                    
+                    match window.is_minimized() {
+                        Ok(minimized) => info!("主窗口最小化状态: {}", minimized),
+                        Err(e) => error!("获取主窗口最小化状态失败: {}", e),
+                    }
+                    
+                    match window.is_focused() {
+                        Ok(focused) => info!("主窗口焦点状态: {}", focused),
+                        Err(e) => error!("获取主窗口焦点状态失败: {}", e),
+                    }
+                }
+                None => {
+                    error!("主窗口获取失败，窗口可能未正确创建");
+                }
+            }
+            
+            info!("开始初始化 BLE 管理器");
             let ble_manager = ble_manager_clone.clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = ble_manager.initialize().await {
-                    tracing::error!("BLE 初始化失败: {}", e);
+                    error!("BLE 初始化失败: {}", e);
+                } else {
+                    info!("BLE 初始化成功");
                 }
             });
+            
+            info!("启动系统监控");
             commands::system::start_system_monitor();
+            
+            info!("Tauri setup hook 执行完成");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -140,7 +180,6 @@ pub fn run() {
             commands::system::open_url,
             commands::system::show_in_folder,
             commands::system::show_main_window,
-            commands::system::get_window_status,
             commands::state::dispatch_action,
             commands::state::get_state,
             commands::state::get_channel_data,

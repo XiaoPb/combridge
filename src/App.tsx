@@ -78,7 +78,6 @@ function AppContent() {
   const { isDark } = useTheme();
   const { i18n } = useTranslation();
   const [antdLocale, setAntdLocale] = useState(zhCN);
-  const [loadError, setLoadError] = useState<Error | null>(null);
 
   useEffect(() => {
     const config = configService.getConfig();
@@ -114,31 +113,25 @@ function AppContent() {
     };
   }, []);
 
+  useEffect(() => {
+    const hideSplashScreen = () => {
+      const splash = document.getElementById('splash-screen');
+      if (splash) {
+        splash.classList.add('hidden');
+        setTimeout(() => {
+          splash.remove();
+        }, 300);
+      }
+    };
+
+    requestAnimationFrame(() => {
+      setTimeout(hideSplashScreen, 100);
+    });
+  }, []);
+
   const handleLoadTimeout = useCallback(() => {
     console.error('Page loading timeout after 30 seconds');
   }, []);
-
-  const handleLoadError = useCallback((error: Error) => {
-    console.error('Page loading error:', error);
-    setLoadError(error);
-  }, []);
-
-  if (loadError) {
-    return (
-      <div style={{ padding: 24 }}>
-        <Result
-          status="error"
-          title="加载失败"
-          subTitle="页面加载失败，请刷新页面重试"
-          extra={[
-            <Button key="reload" type="primary" onClick={() => window.location.reload()}>
-              刷新页面
-            </Button>,
-          ]}
-        />
-      </div>
-    );
-  }
 
   return (
     <ConfigProvider

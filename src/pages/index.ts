@@ -1,3 +1,4 @@
+export { default as HomePage } from './Home';
 export { default as SerialPage } from './Serial';
 export { default as BlePage } from './Ble';
 export { default as ProtocolPage } from './Protocol';

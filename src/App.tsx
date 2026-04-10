@@ -13,11 +13,13 @@ import './styles/global.css';
 
 const { defaultAlgorithm, darkAlgorithm } = theme;
 
+const HomePage = lazy(() => import('./pages/Home'));
 const SerialPage = lazy(() => import('./pages/Serial'));
 const BlePage = lazy(() => import('./pages/Ble'));
 const ProtocolPage = lazy(() => import('./pages/Protocol'));
 const SystemPage = lazy(() => import('./pages/System'));
 const WaveformPage = lazy(() => import('./pages/Waveform'));
+const HomePage = lazy(() => import('./pages/Home'));
 
 const LOADING_TIMEOUT_MS = 30000;
 
@@ -129,6 +131,22 @@ function AppContent() {
     });
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'F12' || (event.ctrlKey && event.shiftKey && event.key === 'I')) {
+        event.preventDefault();
+        invoke('open_devtools').catch((err) => {
+          console.error('Failed to open devtools:', err);
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   const handleLoadTimeout = useCallback(() => {
     console.error('Page loading timeout after 30 seconds');
   }, []);
@@ -148,7 +166,8 @@ function AppContent() {
           <ErrorBoundary>
             <Suspense fallback={<PageLoader onLoadTimeout={handleLoadTimeout} />}>
               <Routes>
-                <Route path="/" element={<Navigate to="/serial" replace />} />
+                <Route path="/" element={<Navigate to="/home" replace />} />
+                <Route path="/home" element={<HomePage />} />
                 <Route path="/serial" element={<SerialPage />} />
                 <Route path="/ble" element={<BlePage />} />
                 <Route path="/protocol" element={<ProtocolPage />} />

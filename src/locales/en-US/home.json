@@ -12,15 +12,29 @@
     },
     "protocol": {
       "name": "Protocol Management",
-      "description": "Configure communication protocols and parse data"
+      "description": "Configure communication protocols and parse data",
+      "tabs": {
+        "editor": "Script Editor",
+        "bind": "Bind Config",
+        "gh3036": "GH3036"
+      }
     },
     "waveform": {
       "name": "Waveform Display",
-      "description": "Real-time visualization of data waveforms"
+      "description": "Real-time visualization of data waveforms",
+      "tabs": {
+        "realtime": "Realtime Data",
+        "csvLoader": "CSV Loader"
+      }
     },
     "system": {
       "name": "System Settings",
-      "description": "Application configuration and preferences"
+      "description": "Application configuration and preferences",
+      "tabs": {
+        "info": "System Info",
+        "logs": "System Logs",
+        "settings": "Preferences"
+      }
     }
   }
 }

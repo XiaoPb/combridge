@@ -12,15 +12,29 @@
     },
     "protocol": {
       "name": "协议管理",
-      "description": "通信协议的配置和数据解析"
+      "description": "通信协议的配置和数据解析",
+      "tabs": {
+        "editor": "脚本编辑器",
+        "bind": "绑定配置",
+        "gh3036": "GH3036"
+      }
     },
     "waveform": {
       "name": "波形显示",
-      "description": "实时数据波形的可视化展示"
+      "description": "实时数据波形的可视化展示",
+      "tabs": {
+        "realtime": "实时数据",
+        "csvLoader": "CSV 加载"
+      }
     },
     "system": {
       "name": "系统设置",
-      "description": "应用程序的配置和偏好设置"
+      "description": "应用程序的配置和偏好设置",
+      "tabs": {
+        "info": "系统信息",
+        "logs": "系统日志",
+        "settings": "偏好设置"
+      }
     }
   }
 }

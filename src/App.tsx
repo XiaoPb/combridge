@@ -146,6 +146,21 @@ function AppContent() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleContextMenu = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const isChartArea = target?.closest('.chart-container') !== null;
+      if (!isChartArea) {
+        event.preventDefault();
+      }
+    };
+
+    document.addEventListener('contextmenu', handleContextMenu);
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, []);
+
   const handleLoadTimeout = useCallback(() => {
     console.error('Page loading timeout after 30 seconds');
   }, []);

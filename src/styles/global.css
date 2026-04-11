@@ -1133,3 +1133,25 @@ html[lang="en"] .splash-loading span[data-i18n="en"] {
 [data-theme='dark'] .splash-icon img {
   filter: drop-shadow(0 4px 12px rgba(24, 144, 255, 0.4));
 }
+
+.chart-context-menu {
+  position: fixed;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  min-width: 120px;
+}
+
+.chart-context-menu-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 13px;
+  transition: background-color 0.2s;
+}
+
+.chart-context-menu-item:hover {
+  background: var(--hover-bg);
+}

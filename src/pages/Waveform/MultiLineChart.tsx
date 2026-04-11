@@ -79,6 +79,12 @@ const formatTime = (seconds: number | undefined): string => {
   return `${minutes}m ${secs.toFixed(1)}s`;
 };
 
+interface ContextMenuPosition {
+  x: number;
+  y: number;
+  chartIndex: number;
+}
+
 const MultiLineChart: React.FC<MultiLineChartProps> = ({
   columns,
   rows,
@@ -89,6 +95,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   const chartInstances = useRef<echarts.ECharts[]>([]);
   const [initialized, setInitialized] = useState(false);
   const isZoomingRef = useRef(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
 
   const { dataZoomState, setDataZoomState } = useCsvChartStore();
 
@@ -301,6 +308,65 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
     };
   }, [xAxisData, rows, columns, unifiedGridConfig, dataZoomState]);
 
+  const handleContextMenu = useCallback((chartIndex: number) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, chartIndex });
+  }, []);
+
+  const handleSaveAsPNG = useCallback(() => {
+    if (!contextMenu) return;
+    const chart = chartInstances.current[contextMenu.chartIndex];
+    if (!chart) return;
+
+    const url = chart.getDataURL({
+      type: 'png',
+      pixelRatio: 2,
+      backgroundColor: '#fff',
+    });
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `waveform_${chartGroups[contextMenu.chartIndex]?.name || 'chart'}_${Date.now()}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setContextMenu(null);
+  }, [contextMenu, chartGroups]);
+
+  const handleSaveAsSVG = useCallback(() => {
+    if (!contextMenu) return;
+    const chart = chartInstances.current[contextMenu.chartIndex];
+    if (!chart) return;
+
+    const url = chart.getDataURL({
+      type: 'svg',
+      backgroundColor: '#fff',
+    });
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `waveform_${chartGroups[contextMenu.chartIndex]?.name || 'chart'}_${Date.now()}.svg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setContextMenu(null);
+  }, [contextMenu, chartGroups]);
+
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setContextMenu(null);
+    };
+    if (contextMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => {
+        document.removeEventListener('click', handleClickOutside);
+      };
+    }
+  }, [contextMenu]);
+
   useEffect(() => {
     chartInstances.current.forEach((chart) => {
       chart?.dispose();
@@ -452,6 +518,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
         <div
           key={group.name}
           ref={(el) => { containerRefs.current[index] = el; }}
+          className="chart-container"
           style={{
             width: '100%',
             height: group.height || 300,
@@ -459,8 +526,39 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
             flexShrink: 0,
             borderBottom: index < chartGroups.length - 1 ? '1px solid var(--border-color)' : 'none',
           }}
+          onContextMenu={handleContextMenu(index)}
         />
       ))}
+
+      {contextMenu && (
+        <div
+          className="chart-context-menu"
+          style={{
+            left: contextMenu.x,
+            top: contextMenu.y,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            className="chart-context-menu-item"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSaveAsPNG();
+            }}
+          >
+            保存为 PNG
+          </div>
+          <div
+            className="chart-context-menu-item"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSaveAsSVG();
+            }}
+          >
+            保存为 SVG
+          </div>
+        </div>
+      )}
     </div>
   );
 };

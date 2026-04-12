@@ -23,6 +23,7 @@ interface DashboardState {
   isEditMode: boolean;
   selectedWidget: string | null;
   parserScripts: ParserScriptInfo[];
+  lastError: string | null;
 
   setCurrentDashboard: (dashboard: DashboardConfig | null) => void;
   saveDashboard: (dashboard: DashboardConfig) => void;
@@ -42,6 +43,9 @@ interface DashboardState {
   removeWidget: (id: string) => void;
   setParserScripts: (scripts: ParserScriptInfo[]) => void;
   createNewDashboard: () => void;
+  getSelectedWidget: () => WidgetConfig | null;
+  setLastError: (error: string | null) => void;
+  resetDashboard: () => void;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 11);
@@ -62,6 +66,7 @@ export const useDashboardStore = create<DashboardState>()(
       isEditMode: false,
       selectedWidget: null,
       parserScripts: [],
+      lastError: null,
 
       setCurrentDashboard: (dashboard) => set({ currentDashboard: dashboard }),
 
@@ -168,6 +173,30 @@ export const useDashboardStore = create<DashboardState>()(
           refreshRate: 100,
         };
         set({ currentDashboard: newDashboard });
+      },
+
+      getSelectedWidget: () => {
+        const { currentDashboard, selectedWidget } = get();
+        if (!currentDashboard || !selectedWidget) return null;
+        return currentDashboard.widgets.find((w) => w.id === selectedWidget) || null;
+      },
+
+      setLastError: (error) => set({ lastError: error }),
+
+      resetDashboard: () => {
+        set({
+          currentDashboard: null,
+          dataSourceType: 'serial',
+          connectedDevice: null,
+          parserType: 'json',
+          parserScript: null,
+          parserConfig: {},
+          isRunning: false,
+          dataBuffer: [],
+          isEditMode: false,
+          selectedWidget: null,
+          lastError: null,
+        });
       },
     }),
     {

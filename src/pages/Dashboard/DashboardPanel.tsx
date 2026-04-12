@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { Tabs, Table, Input, Typography, Button, Space, message } from 'antd';
-import { SendOutlined, ClearOutlined } from '@ant-design/icons';
+import React, { useState, useEffect } from 'react';
+import { Tabs, Table, Input, Typography, Button, Space, message, Form, InputNumber, ColorPicker, Popconfirm, Empty } from 'antd';
+import type { Color } from 'antd/es/color-picker';
+import { SendOutlined, ClearOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useDashboardStore } from '../../stores/dashboardStore';
-import type { DataPoint } from '../../types/dashboard';
+import type { DataPoint, WidgetConfig } from '../../types/dashboard';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -79,6 +80,51 @@ const DashboardPanel: React.FC = () => {
     message.success(t('dataCleared') || 'Data cleared');
   };
 
+  const { selectedWidget, getSelectedWidget, updateWidget, removeWidget, setSelectedWidget } = useDashboardStore();
+  const [widgetForm] = Form.useForm();
+  const [selectedWidgetConfig, setSelectedWidgetConfig] = useState<WidgetConfig | null>(null);
+
+  useEffect(() => {
+    const widget = getSelectedWidget();
+    setSelectedWidgetConfig(widget);
+    if (widget) {
+      widgetForm.setFieldsValue({
+        title: widget.title,
+        dataKey: widget.dataKey,
+        min: widget.min,
+        max: widget.max,
+        unit: widget.unit,
+        color: widget.color || '#1890ff',
+      });
+    } else {
+      widgetForm.resetFields();
+    }
+  }, [selectedWidget, getSelectedWidget, widgetForm]);
+
+  const handleWidgetFormChange = (_: Record<string, unknown>, allValues: Record<string, unknown>) => {
+    if (!selectedWidget) return;
+    const colorValue = allValues.color;
+    const colorString = typeof colorValue === 'string' 
+      ? colorValue 
+      : (colorValue as Color)?.toHexString?.() || allValues.color;
+    updateWidget(selectedWidget, {
+      title: allValues.title as string,
+      dataKey: allValues.dataKey as string,
+      min: allValues.min as number | undefined,
+      max: allValues.max as number | undefined,
+      unit: allValues.unit as string | undefined,
+      color: colorString as string | undefined,
+    });
+  };
+
+  const handleDeleteWidget = () => {
+    if (!selectedWidget) return;
+    removeWidget(selectedWidget);
+    setSelectedWidget(null);
+    widgetForm.resetFields();
+    message.success(t('widget.delete') || 'Widget deleted');
+  };
+
   const tabItems = [
     {
       key: 'data',
@@ -147,6 +193,63 @@ const DashboardPanel: React.FC = () => {
             {t('send') || 'Send'}
           </Button>
         </div>
+      ),
+    },
+    {
+      key: 'widget',
+      label: t('widget.title'),
+      children: selectedWidgetConfig ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Text strong>{t('widget.properties')}</Text>
+          <Form
+            form={widgetForm}
+            layout="vertical"
+            size="small"
+            onValuesChange={handleWidgetFormChange}
+          >
+            <Form.Item name="title" label={t('widget.title')}>
+              <Input placeholder={t('widget.title')} />
+            </Form.Item>
+            <Form.Item
+              name="dataKey"
+              label={t('widget.dataKey')}
+              rules={[{ required: true, message: t('widget.noDataKey') }]}
+            >
+              <Input placeholder={t('widget.dataKey')} />
+            </Form.Item>
+            <Form.Item name="min" label={t('widget.min')}>
+              <InputNumber style={{ width: '100%' }} placeholder={t('widget.min')} />
+            </Form.Item>
+            <Form.Item name="max" label={t('widget.max')}>
+              <InputNumber style={{ width: '100%' }} placeholder={t('widget.max')} />
+            </Form.Item>
+            <Form.Item name="unit" label={t('widget.unit')}>
+              <Input placeholder={t('widget.unit')} />
+            </Form.Item>
+            <Form.Item name="color" label={t('widget.color')}>
+              <ColorPicker format="hex" showText />
+            </Form.Item>
+          </Form>
+          <Popconfirm
+            title={t('widget.deleteConfirm')}
+            onConfirm={handleDeleteWidget}
+            okText={t('widget.delete')}
+            cancelText={t('jsonImport.cancel')}
+          >
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              style={{ marginTop: 8 }}
+            >
+              {t('widget.delete')}
+            </Button>
+          </Popconfirm>
+        </div>
+      ) : (
+        <Empty
+          description={t('widget.selectType')}
+          style={{ marginTop: 40 }}
+        />
       ),
     },
   ];

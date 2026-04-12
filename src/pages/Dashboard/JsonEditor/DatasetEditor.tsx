@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Form, Input, InputNumber, Select, Switch, ColorPicker, Button, Space, Row, Col } from 'antd';
+import { Card, Form, Input, InputNumber, Select, Switch, ColorPicker, Button, Row, Col } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { DatasetConfig } from '../../../types/dashboard';
@@ -23,11 +23,6 @@ const DatasetEditor: React.FC<DatasetEditorProps> = ({ dataset, onChange, onRemo
     { value: 'text', label: t('widgetTypes.text') || '文本' },
     { value: 'led', label: t('widgetTypes.led') || 'LED' },
   ];
-
-  const getSupportConfig = (widgetType: string): boolean => {
-    const matrix = WIDGET_SUPPORT_MATRIX[widgetType] || WIDGET_SUPPORT_MATRIX.text;
-    return matrix[widgetType as keyof typeof matrix] ?? false;
-  };
 
   const getWidgetSupport = (field: string): boolean => {
     const widgetType = dataset.widget || 'text';

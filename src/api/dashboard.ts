@@ -11,6 +11,10 @@ export const dashboardApi = {
     return invoke('get_parser_scripts');
   },
 
+  async getParserScriptContent(name: string): Promise<string> {
+    return invoke('get_parser_script_content', { name });
+  },
+
   async saveParserScript(name: string, content: string): Promise<void> {
     return invoke('save_parser_script', { name, content });
   },
@@ -56,7 +60,15 @@ export const dashboardApi = {
   },
 
   async saveJsonFile(fileName: string, config: DashboardJsonConfig): Promise<void> {
-    return invoke('save_json_file', { file_name: fileName, config });
+    console.debug('[dashboardApi] saveJsonFile called with:', { fileName, config });
+    try {
+      const result = await invoke('save_json_file', { file_name: fileName, config });
+      console.debug('[dashboardApi] saveJsonFile result:', result);
+      return result as void;
+    } catch (error) {
+      console.error('[dashboardApi] saveJsonFile error:', error);
+      throw error;
+    }
   },
 
   async deleteJsonFile(fileName: string): Promise<void> {

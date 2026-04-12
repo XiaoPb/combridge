@@ -1,16 +1,21 @@
 import React, { useEffect, useRef } from 'react';
 import { theme } from 'antd';
-import type { WidgetConfig } from '../../../types/dashboard';
-import { useDashboardStore } from '../../../stores/dashboardStore';
 
 interface AccelerometerWidgetProps {
-  config: WidgetConfig;
+  values: { x: number; y: number; z: number };
+  min?: number;
+  max?: number;
+  color?: string;
 }
 
-const AccelerometerWidget: React.FC<AccelerometerWidgetProps> = ({ config }) => {
+const AccelerometerWidget: React.FC<AccelerometerWidgetProps> = ({
+  values,
+  min = -10,
+  max = 10,
+  color,
+}) => {
   const { token } = theme.useToken();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { dataBuffer } = useDashboardStore();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -49,32 +54,28 @@ const AccelerometerWidget: React.FC<AccelerometerWidgetProps> = ({ config }) => 
     ctx.lineTo(centerX, centerY + radius);
     ctx.stroke();
 
-    const lastData = dataBuffer[dataBuffer.length - 1];
-    const accX = lastData?.values[`${config.dataKey}_x`] ?? 0;
-    const accY = lastData?.values[`${config.dataKey}_y`] ?? 0;
-    const accZ = lastData?.values[`${config.dataKey}_z`] ?? 0;
-
-    const scale = radius / 20;
-    const ballX = centerX + accX * scale;
-    const ballY = centerY - accY * scale;
+    const range = max - min || 1;
+    const scale = radius / (range / 2);
+    const ballX = centerX + values.x * scale;
+    const ballY = centerY - values.y * scale;
 
     ctx.beginPath();
     ctx.arc(ballX, ballY, 8, 0, Math.PI * 2);
-    ctx.fillStyle = config.color || token.colorPrimary;
+    ctx.fillStyle = color || token.colorPrimary;
     ctx.fill();
 
     ctx.fillStyle = token.colorText;
     ctx.font = '10px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`X: ${accX.toFixed(2)}`, 5, rect.height - 30);
-    ctx.fillText(`Y: ${accY.toFixed(2)}`, 5, rect.height - 18);
-    ctx.fillText(`Z: ${accZ.toFixed(2)}`, 5, rect.height - 6);
-  }, [dataBuffer, config, token]);
+    ctx.fillText(`X: ${values.x.toFixed(2)}`, 5, rect.height - 30);
+    ctx.fillText(`Y: ${values.y.toFixed(2)}`, 5, rect.height - 18);
+    ctx.fillText(`Z: ${values.z.toFixed(2)}`, 5, rect.height - 6);
+  }, [values, min, max, color, token]);
 
   return (
     <canvas
       ref={canvasRef}
-      style={{ width: '100%', height: '100%', display: 'block' }}
+      style={{ width: '100%', height: 150, display: 'block' }}
     />
   );
 };

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Card, Button, Switch, Select, Space, Empty, Tag } from 'antd';
-import { ClearOutlined, PauseOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { ClearOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import type { RawDataPoint } from '../../types/dashboard';
@@ -27,13 +27,11 @@ const ConsolePanel: React.FC = () => {
 
   const formatTimestamp = (timestamp: number): string => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString('zh-CN', {
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      fractionalSecondDigits: 3,
-    });
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const seconds = date.getSeconds().toString().padStart(2, '0');
+    const ms = date.getMilliseconds().toString().padStart(3, '0');
+    return `${hours}:${minutes}:${seconds}.${ms}`;
   };
 
   const handleClear = () => {

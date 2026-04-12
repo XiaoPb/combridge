@@ -1,19 +1,21 @@
 import React from 'react';
 import { theme } from 'antd';
-import type { WidgetConfig } from '../../../types/dashboard';
-import { useDashboardStore } from '../../../stores/dashboardStore';
 
 interface LedWidgetProps {
-  config: WidgetConfig;
+  title: string;
+  value: number;
+  threshold?: number;
+  color?: string;
 }
 
-const LedWidget: React.FC<LedWidgetProps> = ({ config }) => {
+const LedWidget: React.FC<LedWidgetProps> = ({
+  title,
+  value,
+  threshold = 0.5,
+  color,
+}) => {
   const { token } = theme.useToken();
-  const { dataBuffer } = useDashboardStore();
-
-  const lastData = dataBuffer[dataBuffer.length - 1];
-  const value = lastData?.values[config.dataKey];
-  const isOn = value !== undefined && value > (config.min ?? 0.5);
+  const isOn = value >= threshold;
 
   return (
     <div
@@ -26,16 +28,17 @@ const LedWidget: React.FC<LedWidgetProps> = ({ config }) => {
         gap: 8,
       }}
     >
+      <span style={{ fontSize: 12, color: token.colorTextSecondary }}>{title}</span>
       <div
         style={{
           width: 40,
           height: 40,
           borderRadius: '50%',
           background: isOn
-            ? config.color || token.colorSuccess
+            ? color || token.colorSuccess
             : token.colorFillSecondary,
           boxShadow: isOn
-            ? `0 0 10px ${config.color || token.colorSuccess}`
+            ? `0 0 10px ${color || token.colorSuccess}`
             : 'none',
           transition: 'all 0.3s',
         }}

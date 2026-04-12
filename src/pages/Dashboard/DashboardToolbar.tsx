@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
-import { Space, Button, Select, Dropdown, message, Input, Popconfirm } from 'antd';
+import { Space, Button, Select, Dropdown, message, Popconfirm } from 'antd';
 import {
   PlayCircleOutlined,
   PauseCircleOutlined,
   PlusOutlined,
   SaveOutlined,
-  FolderOpenOutlined,
   SettingOutlined,
   DownloadOutlined,
   UploadOutlined,
@@ -37,7 +36,6 @@ const DashboardToolbar: React.FC = () => {
     setIsEditMode,
   } = useDashboardStore();
   const [showScriptManager, setShowScriptManager] = useState(false);
-  const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState('');
 
   const handleToggleRun = () => {
@@ -59,15 +57,6 @@ const DashboardToolbar: React.FC = () => {
     if (currentDashboard) {
       deleteDashboard(currentDashboard.id);
       message.success(t('dashboardDeleted') || 'Dashboard deleted');
-    }
-  };
-
-  const handleRename = () => {
-    if (currentDashboard && newName.trim()) {
-      renameDashboard(currentDashboard.id, newName.trim());
-      setEditingName(false);
-      setNewName('');
-      message.success(t('dashboardRenamed') || 'Dashboard renamed');
     }
   };
 
@@ -93,10 +82,9 @@ const DashboardToolbar: React.FC = () => {
       ],
     });
 
-    if (selected) {
-      const path = typeof selected === 'string' ? selected : selected.path;
+    if (selected && typeof selected === 'string') {
       try {
-        const content = await readFile(path);
+        const content = await readFile(selected);
         const text = new TextDecoder().decode(content);
         const dashboard = JSON.parse(text) as DashboardConfig;
 

@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
-import { Card, Row, Col, Alert, Spin } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Collapse, Alert, Spin } from 'antd';
 import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
+import { SettingOutlined, CodeOutlined } from '@ant-design/icons';
 import { useGh3036Store } from '../../stores/gh3036Store';
 import Gh3036RpcList from './Gh3036RpcList';
 import Gh3036ChannelConfig from './Gh3036ChannelConfig';
@@ -20,6 +21,8 @@ const Gh3036Panel: React.FC = () => {
     loadRpcCommands,
     addFrameData,
   } = useGh3036Store();
+
+  const [activeKeys, setActiveKeys] = useState<string[]>(['channel', 'commands']);
 
   useEffect(() => {
     if (!isInitialized) {
@@ -56,6 +59,29 @@ const Gh3036Panel: React.FC = () => {
     );
   }
 
+  const collapseItems = [
+    {
+      key: 'channel',
+      label: (
+        <span>
+          <SettingOutlined style={{ marginRight: 8 }} />
+          {t('gh3036.channelConfig')}
+        </span>
+      ),
+      children: <Gh3036ChannelConfig />,
+    },
+    {
+      key: 'commands',
+      label: (
+        <span>
+          <CodeOutlined style={{ marginRight: 8 }} />
+          {t('gh3036.rpcCommands')}
+        </span>
+      ),
+      children: <Gh3036RpcList />,
+    },
+  ];
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 8, padding: 8 }}>
       {error && (
@@ -68,37 +94,17 @@ const Gh3036Panel: React.FC = () => {
         />
       )}
 
-      <Row gutter={8} style={{ flex: '1 1 0', minHeight: 0 }}>
-        <Col span={4} style={{ height: '100%' }}>
-          <Card
-            size="small"
-            title={t('gh3036.channelConfig')}
-            style={{ height: '100%' }}
-            styles={{ body: { padding: 8, height: 'calc(100% - 40px)', overflow: 'auto' } }}
-          >
-            <Gh3036ChannelConfig />
-          </Card>
-        </Col>
+      <Collapse
+        activeKey={activeKeys}
+        onChange={(keys) => setActiveKeys(keys as string[])}
+        items={collapseItems}
+        size="small"
+        style={{ flexShrink: 0 }}
+      />
 
-        <Col span={20} style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <Card
-            size="small"
-            title={t('gh3036.rpcCommands')}
-            style={{ flex: '0 0 auto' }}
-            styles={{ body: { padding: 8, maxHeight: 280, overflow: 'auto' } }}
-          >
-            <Gh3036RpcList />
-          </Card>
-          <Card
-            size="small"
-            title={t('gh3036.dataView')}
-            style={{ flex: '1 1 0', minHeight: 0 }}
-            styles={{ body: { padding: 8, height: 'calc(100% - 40px)', overflow: 'auto' } }}
-          >
-            <Gh3036DataView />
-          </Card>
-        </Col>
-      </Row>
+      <div style={{ flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <Gh3036DataView />
+      </div>
     </div>
   );
 };

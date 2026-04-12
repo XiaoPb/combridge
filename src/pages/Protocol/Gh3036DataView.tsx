@@ -1,5 +1,5 @@
 import React from 'react';
-import { Table, Button, Empty, Typography, Tag } from 'antd';
+import { Table, Button, Empty, Typography, Tag, Card } from 'antd';
 import { ClearOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
@@ -77,20 +77,22 @@ const Gh3036DataView: React.FC = () => {
 
   if (frameData.length === 0) {
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ flex: '1 1 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Empty description={t('gh3036.noData')} />
-        </div>
-      </div>
+      <Card
+        size="small"
+        title={t('gh3036.dataView')}
+        style={{ height: '100%' }}
+        styles={{ body: { padding: 8, height: 'calc(100% - 40px)', display: 'flex', alignItems: 'center', justifyContent: 'center' } }}
+      >
+        <Empty description={t('gh3036.noData')} />
+      </Card>
     );
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          {t('gh3036.frameCount', { count: frameData.length })}
-        </Text>
+    <Card
+      size="small"
+      title={t('gh3036.dataView')}
+      extra={
         <Button
           size="small"
           icon={<ClearOutlined />}
@@ -98,18 +100,19 @@ const Gh3036DataView: React.FC = () => {
         >
           {t('gh3036.clearData')}
         </Button>
-      </div>
-      <div style={{ flex: '1 1 0', overflow: 'auto' }}>
-        <Table
-          size="small"
-          dataSource={frameData}
-          columns={columns}
-          rowKey={(record, index) => `${record.timestamp}-${index}`}
-          pagination={false}
-          scroll={{ y: 'calc(100% - 40px)' }}
-        />
-      </div>
-    </div>
+      }
+      style={{ height: '100%' }}
+      styles={{ body: { padding: 8, height: 'calc(100% - 40px)', overflow: 'auto' } }}
+    >
+      <Table
+        size="small"
+        dataSource={frameData}
+        columns={columns}
+        rowKey={(record, index) => `${record.timestamp}-${index}`}
+        pagination={false}
+        scroll={{ y: 'calc(100% - 40px)' }}
+      />
+    </Card>
   );
 };
 

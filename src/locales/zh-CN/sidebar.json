@@ -4,6 +4,7 @@
     "serial": "串口",
     "ble": "蓝牙",
     "protocol": "协议",
+    "dashboard": "仪表盘",
     "waveform": "波形图",
     "system": "系统"
   },

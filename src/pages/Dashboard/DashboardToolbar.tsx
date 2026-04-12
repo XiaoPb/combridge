@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Space, Button, Select, Dropdown, message, Input, Popconfirm } from 'antd';
 import {
   PlayCircleOutlined,
-  PauseCircleOutlined
+  PauseCircleOutlined,
   PlusOutlined,
   SaveOutlined,
   FolderOpenOutlined,

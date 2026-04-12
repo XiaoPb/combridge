@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+pub use crate::device::serial::serial_config::{DataBits, Parity, StopBits};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ChannelDirection {
@@ -87,47 +89,7 @@ impl Channel {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum DataBits {
-    Five = 5,
-    Six = 6,
-    Seven = 7,
-    Eight = 8,
-}
 
-impl Default for DataBits {
-    fn default() -> Self {
-        DataBits::Eight
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Parity {
-    None,
-    Odd,
-    Even,
-}
-
-impl Default for Parity {
-    fn default() -> Self {
-        Parity::None
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum StopBits {
-    One = 1,
-    Two = 2,
-}
-
-impl Default for StopBits {
-    fn default() -> Self {
-        StopBits::One
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -199,7 +161,7 @@ impl SerialDevice {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct BleDevice {
+pub struct BleDeviceState {
     pub id: String,
     pub name: String,
     pub mac: String,
@@ -210,7 +172,7 @@ pub struct BleDevice {
     pub channels: HashMap<String, Channel>,
 }
 
-impl BleDevice {
+impl BleDeviceState {
     pub fn new(id: String, name: String, mac: String) -> Self {
         Self {
             id,
@@ -252,7 +214,7 @@ impl BleDevice {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Device {
     Serial(SerialDevice),
-    Ble(BleDevice),
+    Ble(BleDeviceState),
 }
 
 impl Device {

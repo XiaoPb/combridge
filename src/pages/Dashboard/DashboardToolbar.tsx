@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { Space, Button, Select, Dropdown, message } from 'antd';
+import { Space, Button, Select, Dropdown, message, Input, Popconfirm } from 'antd';
 import {
   PlayCircleOutlined,
-  PauseCircleOutlined,
+  PauseCircleOutlined
   PlusOutlined,
   SaveOutlined,
   FolderOpenOutlined,
   SettingOutlined,
   DownloadOutlined,
   UploadOutlined,
+  DeleteOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -29,10 +31,14 @@ const DashboardToolbar: React.FC = () => {
     createNewDashboard,
     savedDashboards,
     setCurrentDashboard,
+    deleteDashboard,
+    renameDashboard,
     isEditMode,
     setIsEditMode,
   } = useDashboardStore();
   const [showScriptManager, setShowScriptManager] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [newName, setNewName] = useState('');
 
   const handleToggleRun = () => {
     setIsRunning(!isRunning);
@@ -47,6 +53,22 @@ const DashboardToolbar: React.FC = () => {
 
   const handleNew = () => {
     createNewDashboard();
+  };
+
+  const handleDelete = () => {
+    if (currentDashboard) {
+      deleteDashboard(currentDashboard.id);
+      message.success(t('dashboardDeleted') || 'Dashboard deleted');
+    }
+  };
+
+  const handleRename = () => {
+    if (currentDashboard && newName.trim()) {
+      renameDashboard(currentDashboard.id, newName.trim());
+      setEditingName(false);
+      setNewName('');
+      message.success(t('dashboardRenamed') || 'Dashboard renamed');
+    }
   };
 
   const handleExport = () => {
@@ -127,6 +149,28 @@ const DashboardToolbar: React.FC = () => {
         <Button icon={<SaveOutlined />} onClick={handleSave}>
           {t('save')}
         </Button>
+        <Button
+          icon={<EditOutlined />}
+          onClick={() => {
+            setNewName(currentDashboard?.name || '');
+            setEditingName(true);
+          }}
+        >
+          {t('rename')}
+        </Button>
+        <Popconfirm
+          title={t('deleteConfirm')}
+          onConfirm={handleDelete}
+          disabled={savedDashboards.length <= 1}
+        >
+          <Button
+            icon={<DeleteOutlined />}
+            danger
+            disabled={savedDashboards.length <= 1}
+          >
+            {t('delete')}
+          </Button>
+        </Popconfirm>
       </Space>
 
       <DataSourceSelector />

@@ -206,8 +206,7 @@ impl ParserScriptManager {
         }
 
         let chunk = lua.load(&content)
-            .set_name(name)
-            .map_err(|e| format!("Failed to load script: {}", e))?;
+            .set_name(name);
 
         let parser: Value = chunk.eval()
             .map_err(|e| format!("Failed to execute script: {}", e))?;
@@ -224,7 +223,7 @@ impl ParserScriptManager {
         let mut output = HashMap::new();
 
         if let Some(result_table) = result.as_table() {
-            for pair in result_table.pairs::<String, Value>() {
+            for pair in result_table.clone().pairs::<String, Value>() {
                 if let Ok((key, value)) = pair {
                     if let Some(num) = value_as_f64(&value) {
                         output.insert(key, num);
@@ -300,7 +299,7 @@ impl ParserScriptManager {
                         serde_json::Value::Null => "null",
                     };
 
-                    let sample_value = if *field_type != "object" && *field_type != "array" {
+                    let sample_value = if field_type != "object" && field_type != "array" {
                         Some(val.clone())
                     } else {
                         None
@@ -314,7 +313,7 @@ impl ParserScriptManager {
                         depth,
                     });
 
-                    if *field_type == "object" {
+                    if field_type == "object" {
                         Self::extract_json_fields(val, &path, depth + 1, fields);
                     }
                 }
@@ -533,8 +532,11 @@ fn extract_lua_field(content: &str, field_name: &str) -> Option<String> {
 fn value_as_f64(value: &Value) -> Option<f64> {
     match value {
         Value::Integer(i) => Some(*i as f64),
-        Value::Number(n) => Some(n.into()),
-        Value::String(s) => s.parse().ok(),
+        Value::Number(n) => Some(*n),
+        Value::String(s) => {
+            let str = s.to_str().ok()?;
+            str.parse::<f64>().ok()
+        }
         _ => None,
     }
 }

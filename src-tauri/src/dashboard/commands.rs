@@ -1,6 +1,5 @@
 use std::sync::Arc;
-use parking_lot::Mutex;
-use tauri::{AppHandle, Manager, State};
+use tauri::State;
 use super::parser_scripts::{ParserScriptManager, ParserScriptInfo, JsonStructureInfo, FieldDefinition};
 
 pub type ParserScriptManagerRef = Arc<ParserScriptManager>;

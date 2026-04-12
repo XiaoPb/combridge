@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Arc;
 use parking_lot::Mutex;
-use mlua::{Lua, Result as LuaResult, Value};
+use mlua::{Lua, Value};
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn, error, debug};
+use tracing::{info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParserScriptInfo {
@@ -48,7 +47,6 @@ pub struct FieldDefinition {
 pub struct ParserScriptManager {
     built_in_scripts_dir: PathBuf,
     user_scripts_dir: PathBuf,
-    lua: Lua,
     scripts_cache: Mutex<HashMap<String, ParserScriptInfo>>,
 }
 
@@ -62,17 +60,9 @@ impl ParserScriptManager {
 
         let user_scripts_dir = app_data_dir.join("parser_scripts");
 
-        let lua = Lua::new();
-
-        let json_lib = include_str!("../../parser_scripts/json.lua");
-        if let Err(e) = lua.load(json_lib).set_name("json").exec() {
-            warn!("Failed to load JSON library: {}", e);
-        }
-
         Self {
             built_in_scripts_dir,
             user_scripts_dir,
-            lua,
             scripts_cache: Mutex::new(HashMap::new()),
         }
     }
@@ -208,7 +198,14 @@ impl ParserScriptManager {
     pub fn execute_script(&self, name: &str, data: &str) -> Result<HashMap<String, f64>, String> {
         let content = self.get_script_content(name)?;
 
-        let chunk = self.lua.load(&content)
+        let lua = Lua::new();
+
+        let json_lib = include_str!("../../parser_scripts/json.lua");
+        if let Err(e) = lua.load(json_lib).set_name("json").exec() {
+            warn!("Failed to load JSON library: {}", e);
+        }
+
+        let chunk = lua.load(&content)
             .set_name(name)
             .map_err(|e| format!("Failed to load script: {}", e))?;
 

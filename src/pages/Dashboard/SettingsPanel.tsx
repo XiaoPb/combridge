@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Select, Button, Divider, message, Space, Empty } from 'antd';
-import { DownloadOutlined, FileJsonOutlined, PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons';
+import { DownloadOutlined, FileOutlined, PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile } from '@tauri-apps/plugin-fs';
@@ -121,7 +121,7 @@ const SettingsPanel: React.FC = () => {
           placeholder={t('settings.selectConfig') || '选择配置文件'}
           loading={loading}
           style={{ width: '100%' }}
-          suffixIcon={<FileJsonOutlined />}
+          suffixIcon={<FileOutlined />}
         >
           {jsonFiles.map((file) => (
             <Select.Option key={file} value={file}>

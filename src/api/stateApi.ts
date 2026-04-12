@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from './tauri';
 import { listen } from '@tauri-apps/api/event';
 import type { Action, ActionResult, AppState, Device } from '../types/state';
 

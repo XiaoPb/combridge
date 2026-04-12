@@ -4,7 +4,7 @@ import {
   DashboardOutlined,
   CodeOutlined,
   SettingOutlined,
-  CodeSquareOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useDashboardStore } from '../../stores/dashboardStore';
@@ -14,7 +14,7 @@ const tabIcons: Record<TabType, React.ReactNode> = {
   dashboard: <DashboardOutlined />,
   console: <CodeOutlined />,
   settings: <SettingOutlined />,
-  jsonEditor: <CodeSquareOutlined />,
+  jsonEditor: <FileTextOutlined />,
 };
 
 const tabColors: Record<TabType, string> = {

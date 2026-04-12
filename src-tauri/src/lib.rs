@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod compat;
+pub mod dashboard;
 pub mod device;
 pub mod error;
 pub mod gh3036;
@@ -12,6 +13,7 @@ pub mod websocket;
 use std::sync::Arc;
 
 use compat::check_compatibility;
+use dashboard::create_parser_script_manager;
 use device::{BleManager, DeviceManager, SerialManager};
 use gh3036::Gh3036Manager;
 use protocol::PluginManager;
@@ -83,13 +85,15 @@ pub fn run() {
 
     let app_state = create_app_state();
     let app_data_dir = get_app_data_dir();
-    let state_persistence = create_state_persistence(app_data_dir);
+    let state_persistence = create_state_persistence(app_data_dir.clone());
     let action_dispatcher = create_action_dispatcher(
         app_state.clone(),
         state_persistence.clone(),
         serial_manager.clone(),
         ble_manager.clone(),
     );
+    
+    let parser_script_manager = create_parser_script_manager(app_data_dir);
 
     info!("服务初始化完成");
 
@@ -108,6 +112,7 @@ pub fn run() {
         .manage(action_dispatcher)
         .manage(gh3036_manager)
         .manage(waveform_manager)
+        .manage(parser_script_manager)
         .setup(move |app| {
             info!("Tauri setup hook 开始执行");
             
@@ -272,6 +277,16 @@ pub fn run() {
             commands::waveform::waveform_get_status,
             commands::waveform::waveform_clear_buffer,
             commands::waveform::waveform_list_buffers,
+            commands::dashboard::get_parser_scripts,
+            commands::dashboard::get_parser_script_content,
+            commands::dashboard::save_parser_script,
+            commands::dashboard::delete_parser_script,
+            commands::dashboard::execute_parser_script,
+            commands::dashboard::init_default_parser_scripts,
+            commands::dashboard::analyze_json_structure,
+            commands::dashboard::generate_parser_from_json,
+            commands::dashboard::get_parser_defined_fields,
+            commands::dashboard::merge_json_to_parser,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

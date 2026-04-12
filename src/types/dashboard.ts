@@ -53,8 +53,8 @@ export interface ParserScriptInfo {
 export interface JsonFieldInfo {
   path: string;
   name: string;
-  type: 'number' | 'string' | 'boolean' | 'object' | 'array';
-  sampleValue?: unknown;
+  field_type: 'number' | 'string' | 'boolean' | 'object' | 'array';
+  sample_value?: unknown;
   depth: number;
 }
 

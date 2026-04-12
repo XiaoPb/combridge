@@ -1,5 +1,5 @@
-import React from 'react';
-import { Space, Button, Select, Dropdown } from 'antd';
+import React, { useRef } from 'react';
+import { Space, Button, Select, Dropdown, message } from 'antd';
 import {
   PlayCircleOutlined,
   PauseCircleOutlined,
@@ -11,8 +11,11 @@ import {
   UploadOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { open } from '@tauri-apps/plugin-dialog';
+import { readFile } from '@tauri-apps/plugin-fs';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import DataSourceSelector from './DataSourceSelector';
+import type { DashboardConfig } from '../../types/dashboard';
 
 const DashboardToolbar: React.FC = () => {
   const { t } = useTranslation('dashboard');
@@ -35,6 +38,7 @@ const DashboardToolbar: React.FC = () => {
   const handleSave = () => {
     if (currentDashboard) {
       saveDashboard(currentDashboard);
+      message.success(t('dashboardSaved') || 'Dashboard saved');
     }
   };
 
@@ -52,6 +56,36 @@ const DashboardToolbar: React.FC = () => {
       a.download = `${currentDashboard.name}.json`;
       a.click();
       URL.revokeObjectURL(url);
+      message.success(t('dashboardExported') || 'Dashboard exported');
+    }
+  };
+
+  const handleImport = async () => {
+    const selected = await open({
+      multiple: false,
+      filters: [
+        { name: 'Dashboard Files', extensions: ['json'] },
+      ],
+    });
+
+    if (selected) {
+      const path = typeof selected === 'string' ? selected : selected.path;
+      try {
+        const content = await readFile(path);
+        const text = new TextDecoder().decode(content);
+        const dashboard = JSON.parse(text) as DashboardConfig;
+
+        if (!dashboard.id || !dashboard.name || !dashboard.widgets) {
+          message.error(t('invalidDashboard') || 'Invalid dashboard file');
+          return;
+        }
+
+        dashboard.id = `imported_${Date.now()}`;
+        saveDashboard(dashboard);
+        message.success(t('dashboardImported') || 'Dashboard imported');
+      } catch (error) {
+        message.error(t('importError') || 'Failed to import dashboard');
+      }
     }
   };
 
@@ -90,7 +124,6 @@ const DashboardToolbar: React.FC = () => {
         <Button icon={<SaveOutlined />} onClick={handleSave}>
           {t('save')}
         </Button>
-        <Button icon={<FolderOpenOutlined />}>{t('open')}</Button>
       </Space>
 
       <DataSourceSelector />
@@ -124,6 +157,7 @@ const DashboardToolbar: React.FC = () => {
                 key: 'import',
                 icon: <UploadOutlined />,
                 label: t('import'),
+                onClick: handleImport,
               },
             ],
           }}

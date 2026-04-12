@@ -13,24 +13,7 @@ pub mod websocket;
 use std::sync::Arc;
 
 use compat::check_compatibility;
-use dashboard::{
-    create_parser_script_manager,
-    create_json_config_manager,
-    get_parser_scripts,
-    get_parser_script_content,
-    save_parser_script,
-    delete_parser_script,
-    execute_parser_script,
-    init_default_parser_scripts,
-    analyze_json_structure,
-    generate_parser_from_json,
-    get_parser_defined_fields,
-    merge_json_to_parser,
-    get_json_files,
-    save_json_file,
-    delete_json_file,
-    load_json_file,
-};
+use dashboard::{create_parser_script_manager, create_json_config_manager};
 use device::{BleManager, DeviceManager, SerialManager};
 use gh3036::Gh3036Manager;
 use protocol::PluginManager;

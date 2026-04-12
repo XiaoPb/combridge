@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatasetConfig {
@@ -86,7 +87,7 @@ impl JsonConfigManager {
         fs::write(&path, content)
             .map_err(|e| format!("Failed to write json file: {}", e))?;
         
-        log::info!("Saved json config to: {:?}", path);
+        info!("Saved json config to: {:?}", path);
         Ok(())
     }
 
@@ -100,7 +101,7 @@ impl JsonConfigManager {
         fs::remove_file(&path)
             .map_err(|e| format!("Failed to delete json file: {}", e))?;
         
-        log::info!("Deleted json config: {:?}", path);
+        info!("Deleted json config: {:?}", path);
         Ok(())
     }
 

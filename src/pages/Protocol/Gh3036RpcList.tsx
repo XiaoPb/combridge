@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { Button, Input, Space, Typography, Tag, message, Row, Col, theme } from 'antd';
-import { PlayCircleOutlined, CaretRightOutlined } from '@ant-design/icons';
+import { Button, Input, Select, Typography, message, Row, Col, theme } from 'antd';
+import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
-import type { Gh3036RpcCommand, Gh3036RpcParam } from '../../api/types';
 
 const { Text } = Typography;
 const { useToken } = theme;
@@ -11,133 +10,380 @@ const { useToken } = theme;
 const Gh3036RpcList: React.FC = () => {
   const { t } = useTranslation('protocol');
   const { token } = useToken();
-  const { rpcCommands, expandedCommand, setExpandedCommand, executeRpc, txChannel } = useGh3036Store();
-  const [paramValues, setParamValues] = useState<Record<string, Record<string, string>>>({});
+  const { executeRpc, txChannel } = useGh3036Store();
 
-  const handleParamChange = (commandKey: string, paramName: string, value: string) => {
-    setParamValues((prev) => ({
-      ...prev,
-      [commandKey]: {
-        ...prev[commandKey],
-        [paramName]: value,
-      },
-    }));
-  };
+  const [workMode, setWorkMode] = useState<string>('mcuOnline');
+  const [version, setVersion] = useState<string>(t('gh3036.versionNone'));
+  const [command, setCommand] = useState<string>('idle');
+  const [writeRegAddr, setWriteRegAddr] = useState<string>('0000');
+  const [writeRegValue, setWriteRegValue] = useState<string>('0000');
+  const [readRegAddr, setReadRegAddr] = useState<string>('0000');
+  const [readRegValue, setReadRegValue] = useState<string>('0000');
+  const [configPath, setConfigPath] = useState<string>('');
+  const [selectedFunctions, setSelectedFunctions] = useState<string[]>(['adt', 'hr', 'hrv', 'hsm', 'fpbp']);
+  const [extendedCmd, setExtendedCmd] = useState<string>('');
+  const [isRunning, setIsRunning] = useState<boolean>(false);
 
-  const getParamValues = (command: Gh3036RpcCommand): string[] => {
-    return command.params.map((param) => {
-      return paramValues[command.key]?.[param.name] ?? param.default_value ?? '';
-    });
-  };
+  const workModeOptions = [
+    { value: 'mcuOnline', label: t('gh3036.workModes.mcuOnline') },
+    { value: 'mcuOffline', label: t('gh3036.workModes.mcuOffline') },
+    { value: 'dspOnline', label: t('gh3036.workModes.dspOnline') },
+    { value: 'dspOffline', label: t('gh3036.workModes.dspOffline') },
+  ];
 
-  const handleExecute = async (command: Gh3036RpcCommand) => {
+  const commandOptions = [
+    { value: 'idle', label: t('gh3036.commands.idle') },
+    { value: 'reset', label: t('gh3036.commands.reset') },
+    { value: 'sleep', label: t('gh3036.commands.sleep') },
+    { value: 'wakeup', label: t('gh3036.commands.wakeup') },
+  ];
+
+  const functionOptions = [
+    { value: 'adt', label: t('gh3036.functions.adt') },
+    { value: 'hr', label: t('gh3036.functions.hr') },
+    { value: 'spo2', label: t('gh3036.functions.spo2') },
+    { value: 'hrv', label: t('gh3036.functions.hrv') },
+    { value: 'hsm', label: t('gh3036.functions.hsm') },
+    { value: 'fpbp', label: t('gh3036.functions.fpbp') },
+  ];
+
+  const handleExecuteRpc = async (commandKey: string, params: string[]) => {
     if (!txChannel) {
       message.error(t('gh3036.noTxChannel'));
+      return false;
+    }
+    const success = await executeRpc(commandKey, params);
+    if (success) {
+      message.success(t('gh3036.commandSent', { name: commandKey }));
+    }
+    return success;
+  };
+
+  const handleRestart = async () => {
+    await handleExecuteRpc('M', [workMode]);
+  };
+
+  const handleGetVersion = async () => {
+    const success = await handleExecuteRpc('V', ['0']);
+    if (success) {
+      setVersion('1.0.0');
+    }
+  };
+
+  const handleSendCommand = async () => {
+    const ctrlTypeMap: Record<string, string> = {
+      idle: '0',
+      reset: '194',
+      sleep: '196',
+      wakeup: '195',
+    };
+    await handleExecuteRpc('C', [ctrlTypeMap[command] || '0']);
+  };
+
+  const handleWriteReg = async () => {
+    const addr = parseInt(writeRegAddr, 16);
+    const value = parseInt(writeRegValue, 16);
+    await handleExecuteRpc('W', [addr.toString(), value.toString()]);
+  };
+
+  const handleReadReg = async () => {
+    const addr = parseInt(readRegAddr, 16);
+    const success = await handleExecuteRpc('R', [addr.toString(), '1']);
+    if (success) {
+      setReadRegValue('0000');
+    }
+  };
+
+  const handleLoadConfig = async () => {
+    if (!configPath.trim()) {
+      message.error(t('gh3036.configPathPlaceholder'));
       return;
     }
+    await handleExecuteRpc('D', ['0']);
+  };
 
-    const params = getParamValues(command);
-    console.log('GH3036 handleExecute:', command.key, params);
+  const handleStartFunction = async () => {
+    if (selectedFunctions.length === 0) {
+      message.error(t('gh3036.functionSelectPlaceholder'));
+      return;
+    }
+    const funcBits = selectedFunctions.reduce((acc, func) => {
+      const bitMap: Record<string, number> = {
+        adt: 1,
+        hr: 2,
+        spo2: 4,
+        hrv: 8,
+        hsm: 16,
+        fpbp: 32,
+      };
+      return acc | (bitMap[func] || 0);
+    }, 0);
     
-    const success = await executeRpc(command.key, params);
+    const success = await handleExecuteRpc('S', [funcBits.toString(), '0']);
     if (success) {
-      message.success(t('gh3036.commandSent', { name: command.name }));
+      setIsRunning(true);
     }
   };
 
-  const renderParamInput = (command: Gh3036RpcCommand, param: Gh3036RpcParam) => {
-    const value = paramValues[command.key]?.[param.name] ?? param.default_value ?? '';
-
-    if (param.param_type.includes('[]')) {
-      return (
-        <Input.TextArea
-          size="small"
-          placeholder={t('gh3036.paramArrayPlaceholder')}
-          value={value}
-          onChange={(e) => handleParamChange(command.key, param.name, e.target.value)}
-          rows={2}
-        />
-      );
+  const handleStopFunction = async () => {
+    const success = await handleExecuteRpc('S', ['0', '1']);
+    if (success) {
+      setIsRunning(false);
     }
-
-    return (
-      <Input
-        size="small"
-        placeholder={param.description}
-        value={value}
-        onChange={(e) => handleParamChange(command.key, param.name, e.target.value)}
-      />
-    );
   };
 
-  const renderCommand = (command: Gh3036RpcCommand) => {
-    const isActive = expandedCommand === command.key;
+  const handleSendExtended = async () => {
+    if (!extendedCmd.trim()) {
+      message.error(t('gh3036.extendedCommandPlaceholder'));
+      return;
+    }
+    const parts = extendedCmd.split(',').map(s => s.trim());
+    if (parts.length > 0) {
+      const cmdKey = parts[0];
+      const params = parts.slice(1);
+      await handleExecuteRpc(cmdKey, params);
+    }
+  };
 
-    return (
-      <div key={command.key} style={{ marginBottom: 4 }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '4px 8px',
-            background: isActive ? token.colorPrimaryBg : token.colorFillSecondary,
-            borderRadius: 4,
-            cursor: 'pointer',
-          }}
-          onClick={() => setExpandedCommand(isActive ? null : command.key)}
-        >
-          <Space>
-            <CaretRightOutlined rotate={isActive ? 90 : 0} style={{ fontSize: 10 }} />
-            <Text strong style={{ fontSize: 12 }}>{command.name}</Text>
-            <Tag color="blue" style={{ fontSize: 10, margin: 0 }}>{command.key}</Tag>
-          </Space>
-          <Button
-            type="primary"
-            size="small"
-            icon={<PlayCircleOutlined />}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleExecute(command);
-            }}
-          >
-            {t('gh3036.execute')}
-          </Button>
-        </div>
+  const rowStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '8px 0',
+    borderBottom: `1px solid ${token.colorBorderSecondary}`,
+  };
 
-        {isActive && (
-          <div style={{ padding: '8px 8px 8px 24px', background: token.colorBgContainer, borderRadius: '0 0 4px 4px', border: `1px solid ${token.colorBorderSecondary}`, borderTop: 'none' }}>
-            <Text type="secondary" style={{ fontSize: 11 }}>{command.description}</Text>
-            
-            {command.params.length > 0 && (
-              <div style={{ marginTop: 8 }}>
-                {command.params.map((param) => (
-                  <div key={param.name} style={{ marginBottom: 8 }}>
-                    <div style={{ marginBottom: 4 }}>
-                      <Text style={{ fontSize: 11 }}>{param.name}</Text>
-                      <Text type="secondary" style={{ fontSize: 10, marginLeft: 4 }}>
-                        ({param.param_type})
-                      </Text>
-                    </div>
-                    {renderParamInput(command, param)}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
+  const labelStyle: React.CSSProperties = {
+    width: 80,
+    flexShrink: 0,
+    fontSize: 13,
+    color: token.colorTextSecondary,
+  };
+
+  const controlStyle: React.CSSProperties = {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  };
+
+  const buttonStyle: React.CSSProperties = {
+    width: 90,
+    flexShrink: 0,
+  };
+
+  const inputGroupStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
+  };
+
+  const smallInputStyle: React.CSSProperties = {
+    width: 100,
   };
 
   return (
-    <Row gutter={[8, 8]}>
-      {rpcCommands.map((command) => (
-        <Col span={12} key={command.key}>
-          {renderCommand(command)}
+    <div style={{ background: token.colorBgContainer }}>
+      <Row gutter={[0, 0]}>
+        <Col span={24}>
+          <div style={rowStyle}>
+            <Text style={labelStyle}>{t('gh3036.modeSelect')}</Text>
+            <div style={controlStyle}>
+              <Select
+                value={workMode}
+                onChange={setWorkMode}
+                options={workModeOptions}
+                style={{ flex: 1 }}
+                size="small"
+              />
+            </div>
+            <Button
+              size="small"
+              icon={<ReloadOutlined />}
+              onClick={handleRestart}
+              style={buttonStyle}
+            >
+              {t('gh3036.restart')}
+            </Button>
+          </div>
         </Col>
-      ))}
-    </Row>
+
+        <Col span={24}>
+          <div style={rowStyle}>
+            <Text style={labelStyle}>{t('gh3036.versionGet')}</Text>
+            <div style={controlStyle}>
+              <Text style={{ fontSize: 13 }}>{version}</Text>
+            </div>
+            <Button
+              size="small"
+              onClick={handleGetVersion}
+              style={buttonStyle}
+            >
+              {t('gh3036.getVersion')}
+            </Button>
+          </div>
+        </Col>
+
+        <Col span={24}>
+          <div style={rowStyle}>
+            <Text style={labelStyle}>{t('gh3036.sendCommand')}</Text>
+            <div style={controlStyle}>
+              <Select
+                value={command}
+                onChange={setCommand}
+                options={commandOptions}
+                style={{ flex: 1 }}
+                size="small"
+              />
+            </div>
+            <Button
+              size="small"
+              onClick={handleSendCommand}
+              style={buttonStyle}
+            >
+              {t('gh3036.sendCommand')}
+            </Button>
+          </div>
+        </Col>
+
+        <Col span={24}>
+          <div style={rowStyle}>
+            <Text style={labelStyle}>{t('gh3036.writeRegister')}</Text>
+            <div style={controlStyle}>
+              <div style={inputGroupStyle}>
+                <Text style={{ fontSize: 11, color: token.colorTextTertiary }}>{t('gh3036.regAddr')}:</Text>
+                <Input
+                  size="small"
+                  value={writeRegAddr}
+                  onChange={(e) => setWriteRegAddr(e.target.value)}
+                  style={smallInputStyle}
+                  maxLength={4}
+                />
+                <Text style={{ fontSize: 11, color: token.colorTextTertiary }}>{t('gh3036.regValue')}:</Text>
+                <Input
+                  size="small"
+                  value={writeRegValue}
+                  onChange={(e) => setWriteRegValue(e.target.value)}
+                  style={smallInputStyle}
+                  maxLength={4}
+                />
+              </div>
+            </div>
+            <Button
+              size="small"
+              onClick={handleWriteReg}
+              style={buttonStyle}
+            >
+              {t('gh3036.writeReg')}
+            </Button>
+          </div>
+        </Col>
+
+        <Col span={24}>
+          <div style={rowStyle}>
+            <Text style={labelStyle}>{t('gh3036.readRegister')}</Text>
+            <div style={controlStyle}>
+              <div style={inputGroupStyle}>
+                <Text style={{ fontSize: 11, color: token.colorTextTertiary }}>{t('gh3036.regAddr')}:</Text>
+                <Input
+                  size="small"
+                  value={readRegAddr}
+                  onChange={(e) => setReadRegAddr(e.target.value)}
+                  style={smallInputStyle}
+                  maxLength={4}
+                />
+                <Text style={{ fontSize: 11, color: token.colorTextTertiary }}>{t('gh3036.regValue')}:</Text>
+                <Input
+                  size="small"
+                  value={readRegValue}
+                  readOnly
+                  style={{ ...smallInputStyle, background: token.colorFillSecondary }}
+                  maxLength={4}
+                />
+              </div>
+            </div>
+            <Button
+              size="small"
+              onClick={handleReadReg}
+              style={buttonStyle}
+            >
+              {t('gh3036.readReg')}
+            </Button>
+          </div>
+        </Col>
+
+        <Col span={24}>
+          <div style={rowStyle}>
+            <Text style={labelStyle}>{t('gh3036.configLoad')}</Text>
+            <div style={controlStyle}>
+              <Input
+                size="small"
+                placeholder={t('gh3036.configPathPlaceholder')}
+                value={configPath}
+                onChange={(e) => setConfigPath(e.target.value)}
+                style={{ flex: 1 }}
+              />
+            </div>
+            <Button
+              size="small"
+              onClick={handleLoadConfig}
+              style={buttonStyle}
+            >
+              {t('gh3036.loadConfig')}
+            </Button>
+          </div>
+        </Col>
+
+        <Col span={24}>
+          <div style={rowStyle}>
+            <Text style={labelStyle}>{t('gh3036.functionSelect')}</Text>
+            <div style={controlStyle}>
+              <Select
+                mode="multiple"
+                value={selectedFunctions}
+                onChange={setSelectedFunctions}
+                options={functionOptions}
+                style={{ flex: 1 }}
+                size="small"
+                maxTagCount={3}
+              />
+            </div>
+            <Button
+              type={isRunning ? 'default' : 'primary'}
+              size="small"
+              icon={<PlayCircleOutlined />}
+              onClick={isRunning ? handleStopFunction : handleStartFunction}
+              style={buttonStyle}
+              danger={isRunning}
+            >
+              {isRunning ? t('gh3036.stop') : t('gh3036.start')}
+            </Button>
+          </div>
+        </Col>
+
+        <Col span={24}>
+          <div style={{ ...rowStyle, borderBottom: 'none' }}>
+            <Text style={labelStyle}>{t('gh3036.extendedCommand')}</Text>
+            <div style={controlStyle}>
+              <Input
+                size="small"
+                placeholder={t('gh3036.extendedCommandPlaceholder')}
+                value={extendedCmd}
+                onChange={(e) => setExtendedCmd(e.target.value)}
+                style={{ flex: 1 }}
+              />
+            </div>
+            <Button
+              size="small"
+              onClick={handleSendExtended}
+              style={buttonStyle}
+            >
+              {t('gh3036.send')}
+            </Button>
+          </div>
+        </Col>
+      </Row>
+    </div>
   );
 };
 

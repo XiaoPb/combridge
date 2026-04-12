@@ -121,7 +121,7 @@
   "gh3036": {
     "initializing": "正在初始化 GH3036...",
     "channelConfig": "通道配置",
-    "rpcCommands": "RPC 指令",
+    "rpcCommands": "CardiffRPC命令",
     "dataView": "数据视图",
     "txChannel": "发送通道",
     "rxChannel": "接收通道",
@@ -150,6 +150,50 @@
     "algoData": "算法数据",
     "noData": "暂无数据",
     "frameCount": "共 {{count}} 帧",
-    "clearData": "清空数据"
+    "clearData": "清空数据",
+    "modeSelect": "模式选择",
+    "modeSelectPlaceholder": "选择工作模式",
+    "restart": "重新开始",
+    "versionGet": "版本获取",
+    "versionNone": "None",
+    "getVersion": "获取版本",
+    "sendCommand": "发送命令",
+    "commandSelectPlaceholder": "选择命令",
+    "writeRegister": "写寄存器",
+    "regAddr": "REG ADDR",
+    "regValue": "VALUE",
+    "writeReg": "写寄存器",
+    "readRegister": "读寄存器",
+    "readReg": "读寄存器",
+    "configLoad": "配置加载",
+    "configPathPlaceholder": "输入配置文件路径",
+    "loadConfig": "加载配置",
+    "functionSelect": "功能选择",
+    "functionSelectPlaceholder": "选择功能",
+    "start": "启动",
+    "stop": "停止",
+    "extendedCommand": "扩展指令",
+    "extendedCommandPlaceholder": "输入扩展指令",
+    "send": "发送",
+    "workModes": {
+      "mcuOnline": "Mcu Online Work Mode",
+      "mcuOffline": "Mcu Offline Work Mode",
+      "dspOnline": "Dsp Online Work Mode",
+      "dspOffline": "Dsp Offline Work Mode"
+    },
+    "commands": {
+      "idle": "IDLE",
+      "reset": "RESET",
+      "sleep": "SLEEP",
+      "wakeup": "WAKEUP"
+    },
+    "functions": {
+      "adt": "ADT",
+      "hr": "HR",
+      "spo2": "SPO2",
+      "hrv": "HRV",
+      "hsm": "HSM",
+      "fpbp": "FPBP"
+    }
   }
 }

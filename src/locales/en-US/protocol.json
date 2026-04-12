@@ -121,7 +121,7 @@
   "gh3036": {
     "initializing": "Initializing GH3036...",
     "channelConfig": "Channel Config",
-    "rpcCommands": "RPC Commands",
+    "rpcCommands": "CardiffRPC Commands",
     "dataView": "Data View",
     "txChannel": "TX Channel",
     "rxChannel": "RX Channel",
@@ -150,6 +150,50 @@
     "algoData": "Algo Data",
     "noData": "No data",
     "frameCount": "{{count}} frames",
-    "clearData": "Clear Data"
+    "clearData": "Clear Data",
+    "modeSelect": "Mode Select",
+    "modeSelectPlaceholder": "Select work mode",
+    "restart": "Restart",
+    "versionGet": "Version Get",
+    "versionNone": "None",
+    "getVersion": "Get Version",
+    "sendCommand": "Send Command",
+    "commandSelectPlaceholder": "Select command",
+    "writeRegister": "Write Register",
+    "regAddr": "REG ADDR",
+    "regValue": "VALUE",
+    "writeReg": "Write Reg",
+    "readRegister": "Read Register",
+    "readReg": "Read Reg",
+    "configLoad": "Config Load",
+    "configPathPlaceholder": "Enter config file path",
+    "loadConfig": "Load Config",
+    "functionSelect": "Function Select",
+    "functionSelectPlaceholder": "Select function",
+    "start": "Start",
+    "stop": "Stop",
+    "extendedCommand": "Extended Command",
+    "extendedCommandPlaceholder": "Enter extended command",
+    "send": "Send",
+    "workModes": {
+      "mcuOnline": "Mcu Online Work Mode",
+      "mcuOffline": "Mcu Offline Work Mode",
+      "dspOnline": "Dsp Online Work Mode",
+      "dspOffline": "Dsp Offline Work Mode"
+    },
+    "commands": {
+      "idle": "IDLE",
+      "reset": "RESET",
+      "sleep": "SLEEP",
+      "wakeup": "WAKEUP"
+    },
+    "functions": {
+      "adt": "ADT",
+      "hr": "HR",
+      "spo2": "SPO2",
+      "hrv": "HRV",
+      "hsm": "HSM",
+      "fpbp": "FPBP"
+    }
   }
 }

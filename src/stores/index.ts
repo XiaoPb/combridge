@@ -4,3 +4,7 @@ export * from './connectionStore';
 export * from './protocolStore';
 export * from './logStore';
 export * from './pageTabsStore';
+export * from './dashboardStore';
+export * from './gh3036Store';
+export * from './waveformStore';
+export * from './csvChartStore';

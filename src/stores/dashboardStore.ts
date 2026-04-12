@@ -7,7 +7,13 @@ import type {
   ParserType,
   WidgetConfig,
   ParserScriptInfo,
+  TabType,
+  DashboardJsonConfig,
+  RawDataPoint,
+  SerialConfig,
+  BleConfig,
 } from '../types/dashboard';
+import { DEFAULT_JSON_CONFIG } from '../types/dashboard';
 
 interface DashboardState {
   currentDashboard: DashboardConfig | null;
@@ -24,6 +30,14 @@ interface DashboardState {
   selectedWidget: string | null;
   parserScripts: ParserScriptInfo[];
   lastError: string | null;
+
+  activeTabs: TabType[];
+  jsonConfig: DashboardJsonConfig;
+  jsonFiles: string[];
+  rawDataBuffer: RawDataPoint[];
+  parsedDataBuffer: DataPoint[];
+  serialConfig: SerialConfig;
+  bleConfig: BleConfig | null;
 
   setCurrentDashboard: (dashboard: DashboardConfig | null) => void;
   saveDashboard: (dashboard: DashboardConfig) => void;
@@ -47,9 +61,30 @@ interface DashboardState {
   getSelectedWidget: () => WidgetConfig | null;
   setLastError: (error: string | null) => void;
   resetDashboard: () => void;
+
+  setActiveTabs: (tabs: TabType[]) => void;
+  toggleTab: (tab: TabType) => void;
+  setJsonConfig: (config: DashboardJsonConfig) => void;
+  setJsonFiles: (files: string[]) => void;
+  addRawDataPoint: (point: RawDataPoint) => void;
+  clearRawDataBuffer: () => void;
+  addParsedDataPoint: (point: DataPoint) => void;
+  clearParsedDataBuffer: () => void;
+  setSerialConfig: (config: SerialConfig) => void;
+  setBleConfig: (config: BleConfig | null) => void;
+  exportToCsv: () => string;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 11);
+
+const DEFAULT_SERIAL_CONFIG_VALUE = {
+  port: '',
+  baudRate: 115200,
+  dataBits: 8 as const,
+  stopBits: 1 as const,
+  parity: 'none' as const,
+  flowControl: 'none' as const,
+};
 
 export const useDashboardStore = create<DashboardState>()(
   persist(
@@ -68,6 +103,14 @@ export const useDashboardStore = create<DashboardState>()(
       selectedWidget: null,
       parserScripts: [],
       lastError: null,
+
+      activeTabs: ['dashboard'],
+      jsonConfig: DEFAULT_JSON_CONFIG,
+      jsonFiles: [],
+      rawDataBuffer: [],
+      parsedDataBuffer: [],
+      serialConfig: DEFAULT_SERIAL_CONFIG_VALUE,
+      bleConfig: null,
 
       setCurrentDashboard: (dashboard) => set({ currentDashboard: dashboard }),
 
@@ -215,7 +258,87 @@ export const useDashboardStore = create<DashboardState>()(
           isEditMode: false,
           selectedWidget: null,
           lastError: null,
+          activeTabs: ['dashboard'],
+          rawDataBuffer: [],
+          parsedDataBuffer: [],
         });
+      },
+
+      setActiveTabs: (tabs) => set({ activeTabs: tabs }),
+
+      toggleTab: (tab) => {
+        const { activeTabs } = get();
+        if (tab === 'jsonEditor') {
+          if (activeTabs.includes('jsonEditor')) {
+            set({ activeTabs: activeTabs.filter((t) => t !== 'jsonEditor') });
+          } else {
+            set({ activeTabs: ['jsonEditor'] });
+          }
+        } else {
+          let newTabs = activeTabs.filter((t) => t !== 'jsonEditor');
+          if (newTabs.includes(tab)) {
+            newTabs = newTabs.filter((t) => t !== tab);
+            if (newTabs.length === 0) {
+              newTabs = ['dashboard'];
+            }
+          } else {
+            newTabs = [...newTabs, tab];
+          }
+          set({ activeTabs: newTabs });
+        }
+      },
+
+      setJsonConfig: (config) => set({ jsonConfig: config }),
+
+      setJsonFiles: (files) => set({ jsonFiles: files }),
+
+      addRawDataPoint: (point) => {
+        const { rawDataBuffer, maxBufferSize } = get();
+        const newBuffer = [...rawDataBuffer, point];
+        if (newBuffer.length > maxBufferSize) {
+          newBuffer.shift();
+        }
+        set({ rawDataBuffer: newBuffer });
+      },
+
+      clearRawDataBuffer: () => set({ rawDataBuffer: [] }),
+
+      addParsedDataPoint: (point) => {
+        const { parsedDataBuffer, maxBufferSize } = get();
+        const newBuffer = [...parsedDataBuffer, point];
+        if (newBuffer.length > maxBufferSize) {
+          newBuffer.shift();
+        }
+        set({ parsedDataBuffer: newBuffer });
+      },
+
+      clearParsedDataBuffer: () => set({ parsedDataBuffer: [] }),
+
+      setSerialConfig: (config) => set({ serialConfig: config }),
+
+      setBleConfig: (config) => set({ bleConfig: config }),
+
+      exportToCsv: () => {
+        const { parsedDataBuffer } = get();
+        if (parsedDataBuffer.length === 0) {
+          return '';
+        }
+
+        const allKeys = new Set<string>();
+        parsedDataBuffer.forEach((point) => {
+          Object.keys(point.values).forEach((key) => allKeys.add(key));
+        });
+        const keys = ['timestamp', ...Array.from(allKeys)];
+
+        const rows = parsedDataBuffer.map((point) => {
+          const row = [point.timestamp.toString()];
+          keys.slice(1).forEach((key) => {
+            row.push(point.values[key]?.toString() ?? '');
+          });
+          return row.join(',');
+        });
+
+        return [keys.join(','), ...rows].join('\n');
       },
     }),
     {
@@ -223,6 +346,8 @@ export const useDashboardStore = create<DashboardState>()(
       partialize: (state) => ({
         savedDashboards: state.savedDashboards,
         maxBufferSize: state.maxBufferSize,
+        serialConfig: state.serialConfig,
+        activeTabs: state.activeTabs,
       }),
     }
   )

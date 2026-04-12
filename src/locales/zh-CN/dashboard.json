@@ -37,6 +37,105 @@
   "manualInputPlaceholder": "输入 JSON 数据进行测试...",
   "selectDevice": "选择设备",
   "selectFile": "选择文件",
+
+  "tabs": {
+    "dashboard": "仪表盘",
+    "console": "控制台",
+    "settings": "设置",
+    "jsonEditor": "JSON编辑器"
+  },
+
+  "console": {
+    "title": "控制台",
+    "timestamp": "时间戳",
+    "direction": "方向",
+    "data": "数据",
+    "hex": "HEX",
+    "ascii": "ASCII",
+    "autoScroll": "自动滚动",
+    "clear": "清空",
+    "noData": "暂无数据"
+  },
+
+  "settings": {
+    "title": "设置",
+    "dataSource": "数据源",
+    "serial": "串口",
+    "ble": "蓝牙",
+    "file": "文件",
+    "manual": "手动输入",
+    "serialConfig": "串口配置",
+    "bleConfig": "蓝牙配置",
+    "fileConfig": "文件配置",
+    "manualConfig": "手动输入配置",
+    "exportCsv": "导出CSV",
+    "exportSuccess": "导出成功",
+    "exportError": "导出失败",
+    "noData": "暂无数据可导出",
+    "dataExport": "数据导出",
+    "dataPoints": "数据点"
+  },
+
+  "jsonEditor": {
+    "title": "JSON编辑器",
+    "newFile": "新建",
+    "save": "保存",
+    "delete": "删除",
+    "fileList": "文件列表",
+    "noFiles": "暂无文件",
+    "untitled": "未命名",
+    "fileNameRequired": "请输入文件名",
+    "fileCreated": "文件已创建",
+    "noFileSelected": "请先选择或创建文件",
+    "saveSuccess": "保存成功",
+    "saveError": "保存失败",
+    "deleteConfirm": "确认删除",
+    "deleteConfirmMessage": "确定要删除此文件吗？",
+    "deleteSuccess": "删除成功",
+    "deleteError": "删除失败",
+    "loadError": "加载失败",
+    "fileNamePlaceholder": "请输入文件名",
+    "basicConfig": "基本配置",
+    "frameConfig": "帧配置",
+    "title": "仪表盘标题",
+    "titlePlaceholder": "请输入标题",
+    "decoder": "解码器类型",
+    "decoderRaw": "原始数据",
+    "decoderCustom": "自定义解析",
+    "frameDetection": "帧检测模式",
+    "frameDetectionNone": "无帧检测",
+    "frameDetectionMarker": "帧标志检测",
+    "frameStart": "帧起始标志",
+    "frameEnd": "帧结束标志",
+    "parserFunction": "解析函数",
+    "parserFunctionHint": "JavaScript函数，接收帧数据字符串，返回解析后的数组",
+    "groups": "组件组",
+    "addGroup": "添加组件组",
+    "noGroups": "暂无组件组，点击上方按钮添加",
+    "datasets": "数据集",
+    "addDataset": "添加数据集",
+    "index": "索引",
+    "title": "标题",
+    "units": "单位",
+    "widget": "组件",
+    "color": "颜色",
+    "min": "最小值",
+    "max": "最大值",
+    "graph": "图表",
+    "led": "LED",
+    "ledHigh": "LED阈值",
+    "alarm": "报警",
+    "log": "日志",
+    "fft": "FFT",
+    "fftSamples": "FFT采样数",
+    "fftSamplingRate": "FFT采样率",
+    "jsonPreview": "JSON预览",
+    "copy": "复制",
+    "copySuccess": "已复制到剪贴板",
+    "copyError": "复制失败",
+    "download": "下载"
+  },
+
   "widgetTypes": {
     "lineChart": "折线图",
     "lineChartDesc": "显示数据随时间变化的趋势",
@@ -51,14 +150,20 @@
     "compass": "指南针",
     "compassDesc": "显示方向角度",
     "accelerometer": "加速度计",
-    "accelerometerDesc": "显示三轴加速度"
+    "accelerometerDesc": "显示三轴加速度",
+    "gyro": "陀螺仪",
+    "gyroDesc": "显示三轴角速度",
+    "bar": "柱状图",
+    "custom": "自定义"
   },
+
   "dataSource": {
     "serial": "串口",
     "ble": "蓝牙",
     "file": "文件",
     "manual": "手动输入"
   },
+
   "parser": {
     "title": "解析器配置",
     "selectParser": "选择解析器",
@@ -95,6 +200,7 @@
     "mergeSuccess": "字段已合并",
     "mergeError": "合并字段失败"
   },
+
   "widget": {
     "title": "组件配置",
     "add": "添加组件",
@@ -116,6 +222,7 @@
     "noDataKey": "请输入数据键",
     "properties": "组件属性"
   },
+
   "jsonImport": {
     "title": "从 JSON 生成解析脚本",
     "selectFile": "选择文件",
@@ -136,6 +243,7 @@
     "generateError": "生成脚本失败",
     "sample": "示例"
   },
+
   "jsonMerge": {
     "title": "合并字段到脚本",
     "selectScript": "选择目标脚本",
@@ -156,6 +264,7 @@
     "new": "新增",
     "sample": "示例"
   },
+
   "running": {
     "noDataSource": "请选择数据源",
     "noDevice": "请选择设备",

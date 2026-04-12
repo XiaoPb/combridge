@@ -1,127 +1,54 @@
 import React, { useEffect, useRef, useCallback } from 'react';
-import { Layout } from 'antd';
+import { Layout, message } from 'antd';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import { dashboardApi } from '../../api/dashboard';
-import { onSerialData, onBleData } from '../../api/events';
+import { onSerialData, onBleData, onParsedData } from '../../api/events';
 import { useLogStore } from '../../stores/logStore';
-import DashboardToolbar from './DashboardToolbar';
+import DashboardTabs from './DashboardTabs';
 import DashboardCanvas from './DashboardCanvas';
-import DashboardPanel from './DashboardPanel';
+import ConsolePanel from './ConsolePanel';
+import SettingsPanel from './SettingsPanel';
+import JsonEditor from './JsonEditor';
 import type { UnlistenFn } from '@tauri-apps/api/event';
-import type { SerialDataEvent, BleDataEvent } from '../../api/events';
+import type { SerialDataEvent, BleDataEvent, ParsedDataEvent } from '../../api/events';
 
 const { Content, Sider } = Layout;
 
 const DashboardPage: React.FC = () => {
   const {
-    currentDashboard,
-    createNewDashboard,
-    setParserScripts,
+    activeTabs,
+    jsonConfig,
+    setJsonConfig,
+    setJsonFiles,
     isRunning,
     dataSourceType,
-    parserScript,
-    parserType,
-    addDataPoint,
+    addRawDataPoint,
+    addParsedDataPoint,
     setLastError,
   } = useDashboardStore();
 
   const listenersRef = useRef<{
     serialData?: UnlistenFn;
     bleData?: UnlistenFn;
+    parsedData?: UnlistenFn;
   }>({});
 
-  const parseData = useCallback(async (rawData: number[]): Promise<Record<string, number> | null> => {
-    try {
-      const dataString = rawData.map((b) => String.fromCharCode(b)).join('');
+  useEffect(() => {
+    const init = async () => {
+      try {
+        await dashboardApi.initDefaultParserScripts();
+        const scripts = await dashboardApi.getParserScripts();
+        useDashboardStore.getState().setParserScripts(scripts);
 
-      if (parserType === 'json') {
-        try {
-          const parsed = JSON.parse(dataString);
-          const values: Record<string, number> = {};
-          for (const [key, value] of Object.entries(parsed)) {
-            if (typeof value === 'number') {
-              values[key] = value;
-            }
-          }
-          return Object.keys(values).length > 0 ? values : null;
-        } catch {
-          console.error('[Dashboard] JSON解析失败');
-          return null;
-        }
+        const jsonFiles = await dashboardApi.getJsonFiles();
+        setJsonFiles(jsonFiles);
+      } catch (error) {
+        console.error('Failed to initialize dashboard:', error);
       }
+    };
 
-      if (parserType === 'lua' && parserScript) {
-        try {
-          const result = await dashboardApi.executeParserScript(parserScript, dataString);
-          return result;
-        } catch (error) {
-          console.error('[Dashboard] Lua脚本解析失败:', error);
-          return null;
-        }
-      }
-
-      if (parserType === 'delimiter') {
-        const values: Record<string, number> = {};
-        const parts = dataString.split(/[,\s\t]+/).filter((s) => s.length > 0);
-        parts.forEach((part, index) => {
-          const num = parseFloat(part);
-          if (!isNaN(num)) {
-            values[`field_${index}`] = num;
-          }
-        });
-        return Object.keys(values).length > 0 ? values : null;
-      }
-
-      return null;
-    } catch (error) {
-      console.error('[Dashboard] 数据解析异常:', error);
-      return null;
-    }
-  }, [parserType, parserScript]);
-
-  const handleSerialData = useCallback(async (event: SerialDataEvent) => {
-    if (!isRunning || dataSourceType !== 'serial') {
-      return;
-    }
-
-    try {
-      const values = await parseData(event.data);
-      if (values) {
-        addDataPoint({
-          timestamp: event.timestamp ?? Date.now(),
-          values,
-        });
-        useLogStore.getState().addLog('debug', 'Dashboard', `串口数据解析成功: ${JSON.stringify(values)}`);
-      }
-    } catch (error) {
-      const errorMsg = `串口数据解析失败: ${error}`;
-      console.error(`[Dashboard] ${errorMsg}`);
-      setLastError(errorMsg);
-      useLogStore.getState().addLog('error', 'Dashboard', errorMsg);
-    }
-  }, [isRunning, dataSourceType, parseData, addDataPoint, setLastError]);
-
-  const handleBleData = useCallback(async (event: BleDataEvent) => {
-    if (!isRunning || dataSourceType !== 'ble') {
-      return;
-    }
-
-    try {
-      const values = await parseData(event.data);
-      if (values) {
-        addDataPoint({
-          timestamp: event.timestamp ?? Date.now(),
-          values,
-        });
-        useLogStore.getState().addLog('debug', 'Dashboard', `蓝牙数据解析成功: ${JSON.stringify(values)}`);
-      }
-    } catch (error) {
-      const errorMsg = `蓝牙数据解析失败: ${error}`;
-      console.error(`[Dashboard] ${errorMsg}`);
-      setLastError(errorMsg);
-      useLogStore.getState().addLog('error', 'Dashboard', errorMsg);
-    }
-  }, [isRunning, dataSourceType, parseData, addDataPoint, setLastError]);
+    init();
+  }, [setJsonFiles]);
 
   useEffect(() => {
     const setupDataListeners = async () => {
@@ -133,6 +60,10 @@ const DashboardPage: React.FC = () => {
         listenersRef.current.bleData();
         listenersRef.current.bleData = undefined;
       }
+      if (listenersRef.current.parsedData) {
+        listenersRef.current.parsedData();
+        listenersRef.current.parsedData = undefined;
+      }
 
       if (!isRunning) {
         useLogStore.getState().addLog('info', 'Dashboard', '数据流已停止');
@@ -141,24 +72,45 @@ const DashboardPage: React.FC = () => {
 
       if (dataSourceType === 'serial') {
         try {
-          listenersRef.current.serialData = await onSerialData(handleSerialData);
+          listenersRef.current.serialData = await onSerialData((event: SerialDataEvent) => {
+            addRawDataPoint({
+              timestamp: event.timestamp ?? Date.now(),
+              data: event.data,
+              direction: 'RX',
+            });
+          });
           useLogStore.getState().addLog('info', 'Dashboard', '串口数据监听已启动');
         } catch (error) {
           const errorMsg = `启动串口监听失败: ${error}`;
           console.error(`[Dashboard] ${errorMsg}`);
           setLastError(errorMsg);
-          useLogStore.getState().addLog('error', 'Dashboard', errorMsg);
         }
       } else if (dataSourceType === 'ble') {
         try {
-          listenersRef.current.bleData = await onBleData(handleBleData);
+          listenersRef.current.bleData = await onBleData((event: BleDataEvent) => {
+            addRawDataPoint({
+              timestamp: event.timestamp ?? Date.now(),
+              data: event.data,
+              direction: 'RX',
+            });
+          });
           useLogStore.getState().addLog('info', 'Dashboard', '蓝牙数据监听已启动');
         } catch (error) {
           const errorMsg = `启动蓝牙监听失败: ${error}`;
           console.error(`[Dashboard] ${errorMsg}`);
           setLastError(errorMsg);
-          useLogStore.getState().addLog('error', 'Dashboard', errorMsg);
         }
+      }
+
+      try {
+        listenersRef.current.parsedData = await onParsedData((event: ParsedDataEvent) => {
+          addParsedDataPoint({
+            timestamp: event.timestamp,
+            values: event.values,
+          });
+        });
+      } catch (error) {
+        console.error('[Dashboard] Failed to register parsed data listener:', error);
       }
     };
 
@@ -167,47 +119,59 @@ const DashboardPage: React.FC = () => {
     return () => {
       if (listenersRef.current.serialData) {
         listenersRef.current.serialData();
-        listenersRef.current.serialData = undefined;
       }
       if (listenersRef.current.bleData) {
         listenersRef.current.bleData();
-        listenersRef.current.bleData = undefined;
+      }
+      if (listenersRef.current.parsedData) {
+        listenersRef.current.parsedData();
       }
     };
-  }, [isRunning, dataSourceType, handleSerialData, handleBleData, setLastError]);
+  }, [isRunning, dataSourceType, addRawDataPoint, addParsedDataPoint, setLastError]);
 
-  useEffect(() => {
-    const init = async () => {
-      try {
-        await dashboardApi.initDefaultParserScripts();
-        const scripts = await dashboardApi.getParserScripts();
-        setParserScripts(scripts);
-      } catch (error) {
-        console.error('Failed to initialize parser scripts:', error);
-      }
-    };
+  const isJsonEditorActive = activeTabs.includes('jsonEditor');
 
-    init();
+  if (isJsonEditorActive) {
+    return (
+      <Layout style={{ height: '100%', background: 'transparent' }}>
+        <DashboardTabs />
+        <JsonEditor />
+      </Layout>
+    );
+  }
 
-    if (!currentDashboard) {
-      createNewDashboard();
-    }
-  }, []);
+  const showDashboard = activeTabs.includes('dashboard');
+  const showConsole = activeTabs.includes('console');
+  const showSettings = activeTabs.includes('settings');
 
   return (
     <Layout style={{ height: '100%', background: 'transparent' }}>
-      <DashboardToolbar />
+      <DashboardTabs />
       <Layout>
         <Content style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <DashboardCanvas />
+          {showDashboard && !showConsole && <DashboardCanvas />}
+          {showConsole && !showDashboard && <ConsolePanel />}
+          {showDashboard && showConsole && (
+            <Layout style={{ height: '100%' }}>
+              <Content style={{ flex: 1 }}>
+                <DashboardCanvas />
+              </Content>
+              <Sider width={400} theme="light" style={{ borderLeft: '1px solid #f0f0f0' }}>
+                <ConsolePanel />
+              </Sider>
+            </Layout>
+          )}
+          {!showDashboard && !showConsole && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#999' }}>
+              请选择要显示的TAB
+            </div>
+          )}
         </Content>
-        <Sider
-          width={320}
-          theme="light"
-          style={{ borderLeft: '1px solid #f0f0f0' }}
-        >
-          <DashboardPanel />
-        </Sider>
+        {showSettings && (
+          <Sider width={320} theme="light" style={{ borderLeft: '1px solid #f0f0f0' }}>
+            <SettingsPanel />
+          </Sider>
+        )}
       </Layout>
     </Layout>
   );

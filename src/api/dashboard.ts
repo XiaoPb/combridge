@@ -3,15 +3,12 @@ import type {
   ParserScriptInfo,
   JsonStructureInfo,
   FieldDefinition,
+  DashboardJsonConfig,
 } from '../types/dashboard';
 
 export const dashboardApi = {
   async getParserScripts(): Promise<ParserScriptInfo[]> {
     return invoke('get_parser_scripts');
-  },
-
-  async getParserScriptContent(name: string): Promise<string> {
-    return invoke('get_parser_script_content', { name });
   },
 
   async saveParserScript(name: string, content: string): Promise<void> {
@@ -22,10 +19,7 @@ export const dashboardApi = {
     return invoke('delete_parser_script', { name });
   },
 
-  async executeParserScript(
-    name: string,
-    data: string
-  ): Promise<Record<string, number>> {
+  async executeParserScript(name: string, data: string): Promise<Record<string, number>> {
     return invoke('execute_parser_script', { name, data });
   },
 
@@ -35,10 +29,10 @@ export const dashboardApi = {
 
   async generateParserFromJson(
     jsonContent: string,
-    scriptName: string,
+    name: string,
     selectedFields: string[]
   ): Promise<string> {
-    return invoke('generate_parser_from_json', { jsonContent, scriptName, selectedFields });
+    return invoke('generate_parser_from_json', { jsonContent, name, selectedFields });
   },
 
   async mergeJsonToParser(
@@ -55,5 +49,21 @@ export const dashboardApi = {
 
   async getParserDefinedFields(scriptName: string): Promise<FieldDefinition[]> {
     return invoke('get_parser_defined_fields', { scriptName });
+  },
+
+  async getJsonFiles(): Promise<string[]> {
+    return invoke('get_json_files');
+  },
+
+  async saveJsonFile(fileName: string, config: DashboardJsonConfig): Promise<void> {
+    return invoke('save_json_file', { fileName, config });
+  },
+
+  async deleteJsonFile(fileName: string): Promise<void> {
+    return invoke('delete_json_file', { fileName });
+  },
+
+  async loadJsonFile(fileName: string): Promise<DashboardJsonConfig> {
+    return invoke('load_json_file', { fileName });
   },
 };

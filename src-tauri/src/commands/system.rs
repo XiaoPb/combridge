@@ -187,7 +187,7 @@ pub async fn get_runtime_status(
     connection_pool: tauri::State<'_, crate::websocket::ConnectionPoolRef>,
     plugin_manager: tauri::State<'_, std::sync::Arc<crate::protocol::PluginManager>>,
 ) -> Result<RuntimeStatus> {
-    let serial_ports_open = serial_manager.inner().get_open_ports().len();
+    let serial_ports_open = serial_manager.inner().get_open_ports()?.len();
     let ble_connections = ble_manager.inner().get_connections().await?.len();
     let websocket_connections = connection_pool.inner().get_all_status().await.len();
     let protocols_loaded = plugin_manager.inner().list_protocols()?.len();

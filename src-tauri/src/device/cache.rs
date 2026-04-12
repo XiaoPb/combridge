@@ -1,6 +1,8 @@
 use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 
+use crate::error::{ComBridgeError, Result};
+
 const DEFAULT_CAPACITY: usize = 4 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -170,34 +172,42 @@ impl ThreadSafeRingBuffer {
         }
     }
 
-    pub fn write(&self, data: &[u8]) {
-        let mut buffer = self.inner.lock().unwrap();
+    pub fn write(&self, data: &[u8]) -> Result<()> {
+        let mut buffer = self.inner.lock()
+            .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
         buffer.write(data);
+        Ok(())
     }
 
-    pub fn read_all(&self) -> Vec<u8> {
-        let buffer = self.inner.lock().unwrap();
-        buffer.read_all()
+    pub fn read_all(&self) -> Result<Vec<u8>> {
+        let buffer = self.inner.lock()
+            .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
+        Ok(buffer.read_all())
     }
 
-    pub fn get_cache_data(&self) -> CacheData {
-        let buffer = self.inner.lock().unwrap();
-        buffer.get_cache_data()
+    pub fn get_cache_data(&self) -> Result<CacheData> {
+        let buffer = self.inner.lock()
+            .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
+        Ok(buffer.get_cache_data())
     }
 
-    pub fn clear(&self) {
-        let mut buffer = self.inner.lock().unwrap();
+    pub fn clear(&self) -> Result<()> {
+        let mut buffer = self.inner.lock()
+            .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
         buffer.clear();
+        Ok(())
     }
 
-    pub fn len(&self) -> usize {
-        let buffer = self.inner.lock().unwrap();
-        buffer.len()
+    pub fn len(&self) -> Result<usize> {
+        let buffer = self.inner.lock()
+            .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
+        Ok(buffer.len())
     }
 
-    pub fn is_empty(&self) -> bool {
-        let buffer = self.inner.lock().unwrap();
-        buffer.is_empty()
+    pub fn is_empty(&self) -> Result<bool> {
+        let buffer = self.inner.lock()
+            .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
+        Ok(buffer.is_empty())
     }
 }
 
@@ -276,14 +286,14 @@ mod tests {
     fn test_thread_safe_ring_buffer() {
         let buffer = create_ring_buffer_with_capacity(100);
         
-        buffer.write(&[1, 2, 3]);
-        buffer.write(&[4, 5]);
+        buffer.write(&[1, 2, 3]).unwrap();
+        buffer.write(&[4, 5]).unwrap();
         
-        assert_eq!(buffer.len(), 5);
-        assert_eq!(buffer.read_all(), vec![1, 2, 3, 4, 5]);
+        assert_eq!(buffer.len().unwrap(), 5);
+        assert_eq!(buffer.read_all().unwrap(), vec![1, 2, 3, 4, 5]);
         
-        buffer.clear();
-        assert!(buffer.is_empty());
+        buffer.clear().unwrap();
+        assert!(buffer.is_empty().unwrap());
     }
 
     #[test]

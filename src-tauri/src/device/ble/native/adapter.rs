@@ -165,7 +165,7 @@ impl BleAdapter {
             .ok_or_else(|| ComBridgeError::ble(format!("设备未找到: {}", address)))?;
 
         let client = self.get_or_create_client(address);
-        client.set_device(device, self.adapter.clone());
+        client.set_device(device, self.adapter.clone())?;
         client.connect().await?;
 
         Ok(client)

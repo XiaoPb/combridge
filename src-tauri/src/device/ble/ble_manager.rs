@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{error, info, warn};
 
 use crate::error::{ComBridgeError, Result};
 use super::ble_traits::{
@@ -121,7 +121,8 @@ impl BleManager {
                 Ok(())
             }
             Err(e) => {
-                info!("BLE 原生后端初始化失败（可能系统不支持）: {}", e);
+                error!("BLE 原生后端初始化失败: {}", e);
+                warn!("原生BLE不可用，将使用AT模式作为后备");
                 Ok(())
             }
         }
@@ -132,10 +133,30 @@ impl BleManager {
     }
 
     pub async fn set_mode(&self, mode: BleMode) -> Result<()> {
-        let mut current_mode = self.mode.write().await;
-        *current_mode = mode;
-        info!("BLE模式切换为: {}", mode);
-        Ok(())
+        match mode {
+            BleMode::Native => {
+                match self.configure_native().await {
+                    Ok(()) => {
+                        info!("BLE模式切换为: {}", mode);
+                        Ok(())
+                    }
+                    Err(e) => {
+                        error!("切换到原生BLE模式失败: {}", e);
+                        warn!("回退到AT模式");
+                        let config = self.at_config.read().await.clone();
+                        self.configure_at(config).await?;
+                        info!("BLE模式回退为: AT (原生不可用)");
+                        Ok(())
+                    }
+                }
+            }
+            BleMode::At => {
+                let config = self.at_config.read().await.clone();
+                self.configure_at(config).await?;
+                info!("BLE模式切换为: {}", mode);
+                Ok(())
+            }
+        }
     }
 
     pub async fn configure_native(&self) -> Result<()> {
@@ -145,7 +166,7 @@ impl BleManager {
         let mut backend_guard = self.backend.write().await;
         *backend_guard = Some(Backend::Native(backend));
         
-        self.set_mode(BleMode::Native).await?;
+        *self.mode.write().await = BleMode::Native;
         info!("原生BLE后端配置完成");
         Ok(())
     }
@@ -161,7 +182,7 @@ impl BleManager {
         let mut backend_guard = self.backend.write().await;
         *backend_guard = Some(Backend::At(backend));
         
-        self.set_mode(BleMode::At).await?;
+        *self.mode.write().await = BleMode::At;
         info!("AT BLE后端配置完成: {}", self.at_config.read().await.port_name);
         Ok(())
     }
@@ -222,12 +243,18 @@ impl BleManager {
         let mode = self.mode.read().await;
         if *mode == BleMode::At {
             let config = self.at_config.read().await;
+            let tx_uuid = config.tx_uuid.clone().ok_or_else(|| {
+                ComBridgeError::ble("AT模式连接需要配置tx_uuid")
+            })?;
+            let rx_uuid = config.rx_uuid.clone().ok_or_else(|| {
+                ComBridgeError::ble("AT模式连接需要配置rx_uuid")
+            })?;
             let tab = AtConnectionTab {
                 id: format!("at-{}-{}", address, chrono::Utc::now().timestamp()),
                 address: address.to_string(),
                 name: connection.name.clone(),
-                tx_uuid: config.tx_uuid.clone().unwrap_or_default(),
-                rx_uuid: config.rx_uuid.clone().unwrap_or_default(),
+                tx_uuid,
+                rx_uuid,
                 connected_at: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()

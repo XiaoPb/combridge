@@ -1,0 +1,138 @@
+import React from 'react';
+import { Space, Button, Select, Dropdown } from 'antd';
+import {
+  PlayCircleOutlined,
+  PauseCircleOutlined,
+  PlusOutlined,
+  SaveOutlined,
+  FolderOpenOutlined,
+  SettingOutlined,
+  DownloadOutlined,
+  UploadOutlined,
+} from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
+import { useDashboardStore } from '../../stores/dashboardStore';
+import DataSourceSelector from './DataSourceSelector';
+
+const DashboardToolbar: React.FC = () => {
+  const { t } = useTranslation('dashboard');
+  const {
+    isRunning,
+    setIsRunning,
+    currentDashboard,
+    saveDashboard,
+    createNewDashboard,
+    savedDashboards,
+    setCurrentDashboard,
+    isEditMode,
+    setIsEditMode,
+  } = useDashboardStore();
+
+  const handleToggleRun = () => {
+    setIsRunning(!isRunning);
+  };
+
+  const handleSave = () => {
+    if (currentDashboard) {
+      saveDashboard(currentDashboard);
+    }
+  };
+
+  const handleNew = () => {
+    createNewDashboard();
+  };
+
+  const handleExport = () => {
+    if (currentDashboard) {
+      const json = JSON.stringify(currentDashboard, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${currentDashboard.name}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const dashboardOptions = savedDashboards.map((d) => ({
+    label: d.name,
+    value: d.id,
+  }));
+
+  return (
+    <div
+      style={{
+        padding: '8px 16px',
+        borderBottom: '1px solid #f0f0f0',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        background: '#fff',
+      }}
+    >
+      <Space>
+        <Select
+          value={currentDashboard?.id}
+          onChange={(id) => {
+            const dashboard = savedDashboards.find((d) => d.id === id);
+            if (dashboard) {
+              setCurrentDashboard(dashboard);
+            }
+          }}
+          options={dashboardOptions}
+          style={{ width: 200 }}
+          placeholder={t('selectDashboard')}
+        />
+        <Button icon={<PlusOutlined />} onClick={handleNew}>
+          {t('new')}
+        </Button>
+        <Button icon={<SaveOutlined />} onClick={handleSave}>
+          {t('save')}
+        </Button>
+        <Button icon={<FolderOpenOutlined />}>{t('open')}</Button>
+      </Space>
+
+      <DataSourceSelector />
+
+      <Space>
+        <Button
+          type={isRunning ? 'default' : 'primary'}
+          icon={isRunning ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
+          onClick={handleToggleRun}
+          danger={isRunning}
+        >
+          {isRunning ? t('stop') : t('start')}
+        </Button>
+        <Button
+          type={isEditMode ? 'primary' : 'default'}
+          icon={<SettingOutlined />}
+          onClick={() => setIsEditMode(!isEditMode)}
+        >
+          {t('edit')}
+        </Button>
+        <Dropdown
+          menu={{
+            items: [
+              {
+                key: 'export',
+                icon: <DownloadOutlined />,
+                label: t('export'),
+                onClick: handleExport,
+              },
+              {
+                key: 'import',
+                icon: <UploadOutlined />,
+                label: t('import'),
+              },
+            ],
+          }}
+        >
+          <Button icon={<DownloadOutlined />} />
+        </Dropdown>
+      </Space>
+    </div>
+  );
+};
+
+export default DashboardToolbar;

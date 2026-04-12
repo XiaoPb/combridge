@@ -7,6 +7,7 @@ import zhCNSidebar from '../locales/zh-CN/sidebar.json';
 import zhCNSerial from '../locales/zh-CN/serial.json';
 import zhCNBle from '../locales/zh-CN/ble.json';
 import zhCNProtocol from '../locales/zh-CN/protocol.json';
+import zhCNDashboard from '../locales/zh-CN/dashboard.json';
 import zhCNSystem from '../locales/zh-CN/system.json';
 import zhCNWaveform from '../locales/zh-CN/waveform.json';
 import zhCNHome from '../locales/zh-CN/home.json';
@@ -16,6 +17,7 @@ import enUSSidebar from '../locales/en-US/sidebar.json';
 import enUSSerial from '../locales/en-US/serial.json';
 import enUSBle from '../locales/en-US/ble.json';
 import enUSProtocol from '../locales/en-US/protocol.json';
+import enUSDashboard from '../locales/en-US/dashboard.json';
 import enUSSystem from '../locales/en-US/system.json';
 import enUSWaveform from '../locales/en-US/waveform.json';
 import enUSHome from '../locales/en-US/home.json';
@@ -27,6 +29,7 @@ const resources = {
     serial: zhCNSerial,
     ble: zhCNBle,
     protocol: zhCNProtocol,
+    dashboard: zhCNDashboard,
     system: zhCNSystem,
     waveform: zhCNWaveform,
     home: zhCNHome,
@@ -37,6 +40,7 @@ const resources = {
     serial: enUSSerial,
     ble: enUSBle,
     protocol: enUSProtocol,
+    dashboard: enUSDashboard,
     system: enUSSystem,
     waveform: enUSWaveform,
     home: enUSHome,

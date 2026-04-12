@@ -4,6 +4,7 @@
     "serial": "Serial",
     "ble": "BLE",
     "protocol": "Protocol",
+    "dashboard": "Dashboard",
     "waveform": "Waveform",
     "system": "System"
   },

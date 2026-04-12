@@ -10,6 +10,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   LineChartOutlined,
+  DashboardOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 
@@ -45,6 +46,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
       key: '/protocol',
       icon: <CodeOutlined />,
       label: t('menu.protocol'),
+    },
+    {
+      key: '/dashboard',
+      icon: <DashboardOutlined />,
+      label: t('menu.dashboard'),
     },
     {
       key: '/waveform',

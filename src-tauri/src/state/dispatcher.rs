@@ -15,7 +15,7 @@ pub struct ActionDispatcher {
     state: AppStateRef,
     persistence: StatePersistenceRef,
     serial_manager: SerialManagerRef,
-    _ble_manager: BleManagerRef,
+    ble_manager: BleManagerRef,
 }
 
 impl ActionDispatcher {
@@ -29,7 +29,7 @@ impl ActionDispatcher {
             state,
             persistence,
             serial_manager,
-            _ble_manager: ble_manager,
+            ble_manager,
         }
     }
 
@@ -215,8 +215,46 @@ impl ActionDispatcher {
         }
     }
 
-    async fn connect_ble(&self, _device_id: &str, _app: &AppHandle) -> ActionResult {
-        ActionResult::failure("BLE 连接暂未实现")
+    async fn connect_ble(&self, device_id: &str, _app: &AppHandle) -> ActionResult {
+        let address = {
+            let state = self.state.read().await;
+            match state.get_ble_device(device_id) {
+                Some(bd) => bd.mac.clone(),
+                None => return ActionResult::failure(format!("BLE 设备不存在: {}", device_id)),
+            }
+        };
+
+        match self.ble_manager.connect(&address).await {
+            Ok(_connection) => {
+                info!("BLE 设备 {} ({}) 已连接", device_id, address);
+                ActionResult::success_with_message(format!("BLE 设备 {} 已连接", address))
+            }
+            Err(e) => {
+                error!("连接 BLE 设备 {} 失败: {}", address, e);
+                ActionResult::failure(format!("连接 BLE 设备失败: {}", e))
+            }
+        }
+    }
+
+    async fn disconnect_ble(&self, device_id: &str) -> ActionResult {
+        let address = {
+            let state = self.state.read().await;
+            match state.get_ble_device(device_id) {
+                Some(bd) => bd.mac.clone(),
+                None => return ActionResult::failure(format!("BLE 设备不存在: {}", device_id)),
+            }
+        };
+
+        match self.ble_manager.disconnect(&address).await {
+            Ok(()) => {
+                info!("BLE 设备 {} ({}) 已断开", device_id, address);
+                ActionResult::success_with_message(format!("BLE 设备 {} 已断开", address))
+            }
+            Err(e) => {
+                error!("断开 BLE 设备 {} 失败: {}", address, e);
+                ActionResult::failure(format!("断开 BLE 设备失败: {}", e))
+            }
+        }
     }
 
     async fn handle_device_disconnect(&self, device_id: &str) -> ActionResult {
@@ -245,7 +283,7 @@ impl ActionDispatcher {
                     None => ActionResult::failure(format!("串口设备不存在: {}", device_id)),
                 }
             }
-            "ble" => ActionResult::failure("BLE 断开暂未实现"),
+            "ble" => self.disconnect_ble(device_id).await,
             _ => ActionResult::failure(format!("未知的设备类型: {}", device_type)),
         };
 
@@ -362,7 +400,28 @@ impl ActionDispatcher {
                     None => ActionResult::failure(format!("串口设备不存在: {}", device_id)),
                 }
             }
-            "ble" => ActionResult::failure("BLE 发送暂未实现"),
+            "ble" => {
+                let address = {
+                    let state = self.state.read().await;
+                    match state.get_ble_device(device_id) {
+                        Some(bd) => bd.mac.clone(),
+                        None => return ActionResult::failure(format!("BLE 设备不存在: {}", device_id)),
+                    }
+                };
+
+                let char_uuid = match channel_id.rsplit_once('_') {
+                    Some((uuid, _direction)) => uuid.to_string(),
+                    None => channel_id.to_string(),
+                };
+
+                match self.ble_manager.write_characteristic(&address, &char_uuid, data).await {
+                    Ok(()) => ActionResult::success_with_data(serde_json::json!({ "bytesSent": data.len() })),
+                    Err(e) => {
+                        error!("BLE 发送数据失败 (设备: {}, 特征: {}): {}", address, char_uuid, e);
+                        ActionResult::failure(format!("BLE 发送数据失败: {}", e))
+                    }
+                }
+            }
             _ => ActionResult::failure(format!("未知的设备类型: {}", device_type)),
         };
 

@@ -13,7 +13,24 @@ pub mod websocket;
 use std::sync::Arc;
 
 use compat::check_compatibility;
-use dashboard::create_parser_script_manager;
+use dashboard::{
+    create_parser_script_manager,
+    create_json_config_manager,
+    get_parser_scripts,
+    get_parser_script_content,
+    save_parser_script,
+    delete_parser_script,
+    execute_parser_script,
+    init_default_parser_scripts,
+    analyze_json_structure,
+    generate_parser_from_json,
+    get_parser_defined_fields,
+    merge_json_to_parser,
+    get_json_files,
+    save_json_file,
+    delete_json_file,
+    load_json_file,
+};
 use device::{BleManager, DeviceManager, SerialManager};
 use gh3036::Gh3036Manager;
 use protocol::PluginManager;
@@ -93,7 +110,8 @@ pub fn run() {
         ble_manager.clone(),
     );
     
-    let parser_script_manager = create_parser_script_manager(app_data_dir);
+    let parser_script_manager = create_parser_script_manager(app_data_dir.clone());
+    let json_config_manager = create_json_config_manager(app_data_dir);
 
     info!("服务初始化完成");
 
@@ -113,6 +131,7 @@ pub fn run() {
         .manage(gh3036_manager)
         .manage(waveform_manager)
         .manage(parser_script_manager)
+        .manage(json_config_manager)
         .setup(move |app| {
             info!("Tauri setup hook 开始执行");
             
@@ -287,6 +306,10 @@ pub fn run() {
             dashboard::generate_parser_from_json,
             dashboard::get_parser_defined_fields,
             dashboard::merge_json_to_parser,
+            dashboard::get_json_files,
+            dashboard::save_json_file,
+            dashboard::delete_json_file,
+            dashboard::load_json_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

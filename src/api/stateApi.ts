@@ -40,18 +40,12 @@ export async function getWindowState(): Promise<AppState['windowState']> {
 export function subscribeToStateChanges(
   callback: (state: AppState) => void
 ): () => void {
-  let unlisten: (() => void) | null = null;
-  
-  listen<AppState>(STATE_CHANGE_EVENT, (event) => {
+  const listenPromise = listen<AppState>(STATE_CHANGE_EVENT, (event) => {
     callback(event.payload);
-  }).then((fn) => {
-    unlisten = fn;
   });
-  
+
   return () => {
-    if (unlisten) {
-      unlisten();
-    }
+    listenPromise.then((unlisten) => unlisten());
   };
 }
 

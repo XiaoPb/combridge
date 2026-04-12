@@ -47,6 +47,11 @@ export type BleModeChangedEvent = {
   serialPort?: string;
 };
 
+export type ParsedDataEvent = {
+  timestamp: number;
+  values: Record<string, number>;
+};
+
 export const TauriEvents = {
   SERIAL_DATA: 'serial-data',
   SERIAL_ERROR: 'serial-error',
@@ -58,6 +63,7 @@ export const TauriEvents = {
   BLE_ERROR: 'ble-error',
   BLE_SCAN_RESULT: 'ble-scan-result',
   BLE_MODE_CHANGED: 'ble-mode-changed',
+  PARSED_DATA: 'parsed-data',
 } as const;
 
 export function onSerialData(callback: (event: SerialDataEvent) => void): Promise<UnlistenFn> {
@@ -124,6 +130,12 @@ export function onBleScanResult(callback: (device: unknown) => void): Promise<Un
 
 export function onBleModeChanged(callback: (event: BleModeChangedEvent) => void): Promise<UnlistenFn> {
   return listen<BleModeChangedEvent>(TauriEvents.BLE_MODE_CHANGED, (event) => {
+    callback(event.payload);
+  });
+}
+
+export function onParsedData(callback: (event: ParsedDataEvent) => void): Promise<UnlistenFn> {
+  return listen<ParsedDataEvent>(TauriEvents.PARSED_DATA, (event) => {
     callback(event.payload);
   });
 }

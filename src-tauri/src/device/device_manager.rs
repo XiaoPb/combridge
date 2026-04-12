@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
@@ -7,6 +8,10 @@ use tracing::{debug, info, warn};
 use crate::error::{ComBridgeError, Result};
 use super::serial::{SerialManager, SerialManagerRef, SerialPortConfig};
 use super::ble::{BleManager, BleManagerRef, BleConnection, AtConfig};
+
+fn current_timestamp_millis() -> u128 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeviceType {
@@ -122,12 +127,7 @@ impl DeviceManager {
 
         device.bytes_received += bytes_received;
         device.bytes_sent += bytes_sent;
-        device.last_activity = Some(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0),
-        );
+        device.last_activity = Some(current_timestamp_millis() as u64);
 
         Ok(())
     }
@@ -140,12 +140,7 @@ impl DeviceManager {
 
         device.is_connected = connected;
         if connected {
-            device.connected_at = Some(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0),
-            );
+            device.connected_at = Some(current_timestamp_millis() as u64);
         }
 
         Ok(())
@@ -254,7 +249,7 @@ impl DeviceManager {
                 info!("DeviceManager send_direct 蓝牙发送成功: {} bytes", data.len());
             }
             DeviceType::WebSocket => {
-                debug!("WebSocket发送数据到 {}: {} bytes", device_name, data.len());
+                return Err(ComBridgeError::websocket("WebSocket 数据发送尚未实现"));
             }
         }
 
@@ -281,19 +276,18 @@ impl DeviceManager {
                     .await?;
             }
             DeviceType::WebSocket => {
-                debug!("WebSocket发送数据到 {}: {} bytes", device_id, data.len());
+                return Err(ComBridgeError::websocket("WebSocket 数据发送尚未实现"));
             }
         }
 
         Ok(())
     }
 
-    pub fn register_callback<F>(&self, callback: F)
+    pub async fn register_callback<F>(&self, callback: F)
     where
         F: Fn(&str, DeviceType, &[u8]) + Send + Sync + 'static,
     {
-        let rt = tokio::runtime::Handle::current();
-        let mut callbacks = rt.block_on(self.callbacks.write());
+        let mut callbacks = self.callbacks.write().await;
         callbacks.push(Arc::new(callback));
         debug!("已注册设备数据回调，当前共 {} 个回调", callbacks.len());
     }
@@ -327,12 +321,7 @@ impl DeviceManager {
             name: config.port_name.clone(),
             device_type: DeviceType::Serial,
             is_connected: true,
-            connected_at: Some(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0),
-            ),
+            connected_at: Some(current_timestamp_millis() as u64),
             bytes_received: 0,
             bytes_sent: 0,
             last_activity: None,
@@ -370,12 +359,7 @@ impl DeviceManager {
             name: connection.name.clone().unwrap_or_else(|| address.to_string()),
             device_type: DeviceType::Ble,
             is_connected: true,
-            connected_at: Some(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0),
-            ),
+            connected_at: Some(current_timestamp_millis() as u64),
             bytes_received: 0,
             bytes_sent: 0,
             last_activity: None,

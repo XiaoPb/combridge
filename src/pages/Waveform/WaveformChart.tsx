@@ -56,9 +56,6 @@ const WaveformChart: React.FC<WaveformChartProps> = ({
     setContextMenu({ x: e.clientX, y: e.clientY });
   }, []);
 
-  const handleCloseContextMenu = useCallback(() => {
-    setContextMenu(null);
-  }, []);
 
   const handleSaveAsImage = useCallback(() => {
     if (!containerRef.current) return;

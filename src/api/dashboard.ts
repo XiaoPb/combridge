@@ -35,16 +35,18 @@ export const dashboardApi = {
 
   async generateParserFromJson(
     jsonContent: string,
-    scriptName: string
+    scriptName: string,
+    selectedFields: string[]
   ): Promise<string> {
-    return invoke('generate_parser_from_json', { jsonContent, scriptName });
+    return invoke('generate_parser_from_json', { jsonContent, scriptName, selectedFields });
   },
 
   async mergeJsonToParser(
     jsonContent: string,
-    scriptName: string
+    scriptName: string,
+    selectedFields: string[]
   ): Promise<string> {
-    return invoke('merge_json_to_parser', { jsonContent, scriptName });
+    return invoke('merge_json_to_parser', { jsonContent, scriptName, selectedFields });
   },
 
   async analyzeJsonStructure(jsonContent: string): Promise<JsonStructureInfo> {

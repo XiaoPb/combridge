@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useState } from 'react';
 import { Space, Button, Select, Dropdown, message } from 'antd';
 import {
   PlayCircleOutlined,
@@ -15,6 +15,8 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import DataSourceSelector from './DataSourceSelector';
+import ParserSelector from './ParserSelector';
+import ParserScriptManager from './ParserScriptManager';
 import type { DashboardConfig } from '../../types/dashboard';
 
 const DashboardToolbar: React.FC = () => {
@@ -30,6 +32,7 @@ const DashboardToolbar: React.FC = () => {
     isEditMode,
     setIsEditMode,
   } = useDashboardStore();
+  const [showScriptManager, setShowScriptManager] = useState(false);
 
   const handleToggleRun = () => {
     setIsRunning(!isRunning);
@@ -128,6 +131,8 @@ const DashboardToolbar: React.FC = () => {
 
       <DataSourceSelector />
 
+      <ParserSelector onOpenManager={() => setShowScriptManager(true)} />
+
       <Space>
         <Button
           type={isRunning ? 'default' : 'primary'}
@@ -165,6 +170,11 @@ const DashboardToolbar: React.FC = () => {
           <Button icon={<DownloadOutlined />} />
         </Dropdown>
       </Space>
+
+      <ParserScriptManager
+        open={showScriptManager}
+        onClose={() => setShowScriptManager(false)}
+      />
     </div>
   );
 };

@@ -77,14 +77,23 @@ export const useBle = () => {
         setIsConfigured(true);
       }
 
+      if (options?.timeout) {
+        scanTimeoutRef.current = setTimeout(() => {
+          scanTimeoutRef.current = null;
+          setIsScanning(false);
+          bleApi.stopScan().catch(() => {});
+        }, options.timeout);
+      }
+
       const deviceList = await bleApi.scanBleDevices(options);
       setDevices(deviceList);
 
-      if (options?.timeout) {
-        scanTimeoutRef.current = setTimeout(() => {
-          setIsScanning(false);
-        }, options.timeout);
+      if (scanTimeoutRef.current) {
+        clearTimeout(scanTimeoutRef.current);
+        scanTimeoutRef.current = null;
       }
+
+      setIsScanning(false);
 
       if (deviceList.length === 0) {
         message.info('未扫描到BLE设备');
@@ -97,9 +106,11 @@ export const useBle = () => {
       setError(errorMsg);
       addLog('error', 'BleManager', `扫描BLE设备失败: ${errorMsg}`);
       message.error(errorMsg);
+      setIsScanning(false);
     } finally {
-      if (!options?.timeout) {
-        setIsScanning(false);
+      if (scanTimeoutRef.current) {
+        clearTimeout(scanTimeoutRef.current);
+        scanTimeoutRef.current = null;
       }
     }
   }, [setIsScanning, setError, clearDevices, setDevices, setIsConfigured, isConfigured, mode, serialPort, addLog]);
@@ -110,6 +121,9 @@ export const useBle = () => {
       clearTimeout(scanTimeoutRef.current);
       scanTimeoutRef.current = null;
     }
+    try {
+      await bleApi.stopScan();
+    } catch {}
     addLog('info', 'BleManager', '扫描已停止');
     message.info('扫描已停止');
   }, [setIsScanning, addLog]);

@@ -1,130 +1,217 @@
-import React, { useState } from 'react';
-import { Empty, Button, theme } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
-import { useTranslation } from 'react-i18next';
+import React from 'react';
+import { Card, Row, Col, Empty, Statistic, Progress, Tag } from 'antd';
 import { useDashboardStore } from '../../stores/dashboardStore';
-import WidgetRenderer from './widgets/WidgetRenderer';
-import WidgetSelector from './WidgetSelector';
-import type { WidgetType, WidgetConfig } from '../../types/dashboard';
-
-const generateId = () => Math.random().toString(36).substring(2, 11);
+import type { WidgetGroup, DatasetConfig } from '../../types/dashboard';
+import LineChartWidget from './widgets/LineChartWidget';
+import GaugeWidget from './widgets/GaugeWidget';
+import TextWidget from './widgets/TextWidget';
+import LedWidget from './widgets/LedWidget';
+import CompassWidget from './widgets/CompassWidget';
+import AccelerometerWidget from './widgets/AccelerometerWidget';
 
 const DashboardCanvas: React.FC = () => {
-  const { t } = useTranslation('dashboard');
-  const { token } = theme.useToken();
-  const {
-    currentDashboard,
-    isEditMode,
-    selectedWidget,
-    setSelectedWidget,
-    addWidget,
-  } = useDashboardStore();
-  const [showWidgetSelector, setShowWidgetSelector] = useState(false);
+  const { jsonConfig, parsedDataBuffer, selectedJsonFile } = useDashboardStore();
 
-  const handleAddWidget = (type: WidgetType) => {
-    const newWidget: WidgetConfig = {
-      id: generateId(),
-      type,
-      title: t(`widgetTypes.${type}`),
-      x: 0,
-      y: 0,
-      width: 200,
-      height: 150,
-      dataKey: '',
-    };
-    addWidget(newWidget);
+  const getLatestValue = (index: number): number | null => {
+    if (parsedDataBuffer.length === 0) return null;
+    const latest = parsedDataBuffer[parsedDataBuffer.length - 1];
+    const keys = Object.keys(latest.values);
+    if (index < keys.length) {
+      return latest.values[keys[index]];
+    }
+    return null;
   };
 
-  const handleCanvasClick = (e: React.MouseEvent) => {
-    if (!isEditMode) return;
-    if (e.target === e.currentTarget) {
-      setSelectedWidget(null);
-      setShowWidgetSelector(true);
+  const getValuesForIndices = (indices: number[]): number[] => {
+    if (parsedDataBuffer.length === 0) return indices.map(() => 0);
+    const latest = parsedDataBuffer[parsedDataBuffer.length - 1];
+    const keys = Object.keys(latest.values);
+    return indices.map((idx) => {
+      if (idx < keys.length) {
+        return latest.values[keys[idx]] ?? 0;
+      }
+      return 0;
+    });
+  };
+
+  const renderDatasetWidget = (dataset: DatasetConfig, groupIndex: number, datasetIndex: number) => {
+    const value = getLatestValue(dataset.index);
+    const key = `${groupIndex}-${datasetIndex}`;
+
+    const commonProps = {
+      title: dataset.title,
+      value: value ?? 0,
+      unit: dataset.units,
+      min: dataset.min,
+      max: dataset.max,
+      color: dataset.color,
+    };
+
+    switch (dataset.widget) {
+      case 'x':
+      case 'y':
+      case 'z':
+        return (
+          <Card key={key} size="small" style={{ marginBottom: 8 }}>
+            <Statistic
+              title={`${dataset.title} (${dataset.widget.toUpperCase()})`}
+              value={value?.toFixed(2) ?? '--'}
+              suffix={dataset.units}
+            />
+          </Card>
+        );
+      case 'bar':
+        return (
+          <Card key={key} size="small" style={{ marginBottom: 8 }}>
+            <div style={{ marginBottom: 8 }}>{dataset.title}</div>
+            <Progress
+              percent={((value ?? 0 - dataset.min) / (dataset.max - dataset.min)) * 100}
+              format={() => `${value?.toFixed(1) ?? '--'} ${dataset.units}`}
+            />
+          </Card>
+        );
+      case 'gauge':
+        return (
+          <GaugeWidget
+            key={key}
+            {...commonProps}
+          />
+        );
+      case 'text':
+        return (
+          <TextWidget
+            key={key}
+            {...commonProps}
+          />
+        );
+      case 'led':
+        return (
+          <LedWidget
+            key={key}
+            {...commonProps}
+            isOn={(value ?? 0) >= dataset.ledHigh}
+          />
+        );
+      default:
+        return (
+          <Card key={key} size="small" style={{ marginBottom: 8 }}>
+            <Statistic
+              title={dataset.title}
+              value={value?.toFixed(2) ?? '--'}
+              suffix={dataset.units}
+            />
+          </Card>
+        );
     }
   };
 
-  if (!currentDashboard || currentDashboard.widgets.length === 0) {
-    return (
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 16,
-          background: token.colorFillSecondary,
-        }}
-      >
-        <Empty description={t('noWidgets')} />
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => setShowWidgetSelector(true)}
+  const renderGroup = (group: WidgetGroup, groupIndex: number) => {
+    const isAccelerometer = group.widget === 'accelerometer';
+    const isCompass = group.widget === 'compass';
+
+    if (isAccelerometer && group.datasets.length >= 3) {
+      const indices = group.datasets.slice(0, 3).map((d) => d.index);
+      const values = getValuesForIndices(indices);
+      return (
+        <Card
+          key={groupIndex}
+          title={group.title}
+          size="small"
+          style={{ marginBottom: 16 }}
         >
-          {t('addWidget')}
-        </Button>
-        <WidgetSelector
-          open={showWidgetSelector}
-          onClose={() => setShowWidgetSelector(false)}
-          onSelect={handleAddWidget}
+          <AccelerometerWidget
+            title={group.title}
+            values={{ x: values[0], y: values[1], z: values[2] }}
+            min={group.datasets[0]?.min ?? -10}
+            max={group.datasets[0]?.max ?? 10}
+          />
+        </Card>
+      );
+    }
+
+    if (isCompass && group.datasets.length >= 1) {
+      const value = getLatestValue(group.datasets[0].index);
+      return (
+        <Card
+          key={groupIndex}
+          title={group.title}
+          size="small"
+          style={{ marginBottom: 16 }}
+        >
+          <CompassWidget
+            title={group.title}
+            value={value ?? 0}
+          />
+        </Card>
+      );
+    }
+
+    return (
+      <Card
+        key={groupIndex}
+        title={group.title}
+        size="small"
+        style={{ marginBottom: 16 }}
+      >
+        <Row gutter={[8, 8]}>
+          {group.datasets.map((dataset, datasetIndex) => (
+            <Col key={datasetIndex} span={24 / Math.min(group.datasets.length, 4)}>
+              {renderDatasetWidget(dataset, groupIndex, datasetIndex)}
+            </Col>
+          ))}
+        </Row>
+      </Card>
+    );
+  };
+
+  if (!selectedJsonFile) {
+    return (
+      <div style={{ 
+        height: '100%', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        flexDirection: 'column',
+        gap: 16
+      }}>
+        <Empty
+          description="请先在设置面板中选择配置文件"
+        />
+        <Tag color="blue">提示：选择JSON配置文件后，仪表盘将显示配置的组件</Tag>
+      </div>
+    );
+  }
+
+  if (!jsonConfig.groups || jsonConfig.groups.length === 0) {
+    return (
+      <div style={{ 
+        height: '100%', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center' 
+      }}>
+        <Empty
+          description="配置文件中没有组件组，请在JSON编辑器中添加"
         />
       </div>
     );
   }
 
   return (
-    <div
-      style={{
-        flex: 1,
-        padding: 16,
-        overflow: 'auto',
-        background: token.colorFillSecondary,
-      }}
-      onClick={handleCanvasClick}
-    >
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-          gap: 16,
-          minHeight: '100%',
-        }}
-      >
-        {currentDashboard.widgets.map((widget) => (
-          <div
-            key={widget.id}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isEditMode) {
-                setSelectedWidget(widget.id);
-              }
-            }}
-            style={{
-              border:
-                selectedWidget === widget.id
-                  ? `2px solid ${token.colorPrimary}`
-                  : isEditMode
-                    ? '1px dashed transparent'
-                    : '1px solid transparent',
-              borderRadius: 8,
-              cursor: isEditMode ? 'pointer' : 'default',
-              transition: 'border-color 0.2s, box-shadow 0.2s',
-              boxShadow:
-                selectedWidget === widget.id
-                  ? `0 0 0 2px ${token.colorPrimaryBg}`
-                  : 'none',
-            }}
+    <div style={{ height: '100%', overflow: 'auto', padding: 16 }}>
+      <Row gutter={[16, 16]}>
+        {jsonConfig.groups.map((group, groupIndex) => (
+          <Col 
+            key={groupIndex} 
+            xs={24} 
+            sm={12} 
+            md={8} 
+            lg={6}
           >
-            <WidgetRenderer config={widget} />
-          </div>
+            {renderGroup(group, groupIndex)}
+          </Col>
         ))}
-      </div>
-      <WidgetSelector
-        open={showWidgetSelector}
-        onClose={() => setShowWidgetSelector(false)}
-        onSelect={handleAddWidget}
-      />
+      </Row>
     </div>
   );
 };

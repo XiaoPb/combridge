@@ -34,6 +34,7 @@ interface DashboardState {
   activeTabs: TabType[];
   jsonConfig: DashboardJsonConfig;
   jsonFiles: string[];
+  selectedJsonFile: string | null;
   rawDataBuffer: RawDataPoint[];
   parsedDataBuffer: DataPoint[];
   serialConfig: SerialConfig;
@@ -66,6 +67,7 @@ interface DashboardState {
   toggleTab: (tab: TabType) => void;
   setJsonConfig: (config: DashboardJsonConfig) => void;
   setJsonFiles: (files: string[]) => void;
+  setSelectedJsonFile: (file: string | null) => void;
   addRawDataPoint: (point: RawDataPoint) => void;
   clearRawDataBuffer: () => void;
   addParsedDataPoint: (point: DataPoint) => void;
@@ -107,6 +109,7 @@ export const useDashboardStore = create<DashboardState>()(
       activeTabs: ['dashboard'],
       jsonConfig: DEFAULT_JSON_CONFIG,
       jsonFiles: [],
+      selectedJsonFile: null,
       rawDataBuffer: [],
       parsedDataBuffer: [],
       serialConfig: DEFAULT_SERIAL_CONFIG_VALUE,
@@ -291,6 +294,8 @@ export const useDashboardStore = create<DashboardState>()(
       setJsonConfig: (config) => set({ jsonConfig: config }),
 
       setJsonFiles: (files) => set({ jsonFiles: files }),
+
+      setSelectedJsonFile: (file) => set({ selectedJsonFile: file }),
 
       addRawDataPoint: (point) => {
         const { rawDataBuffer, maxBufferSize } = get();

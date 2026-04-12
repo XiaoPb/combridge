@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { Card, Radio, Button, Divider, message, Space, Select } from 'antd';
-import { DownloadOutlined } from '@ant-design/icons';
+import React, { useEffect, useState } from 'react';
+import { Card, Select, Button, Divider, message, Space, Empty } from 'antd';
+import { DownloadOutlined, FileJsonOutlined, PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile } from '@tauri-apps/plugin-fs';
 import { useDashboardStore } from '../../stores/dashboardStore';
+import { dashboardApi } from '../../api/dashboard';
 import type { DataSourceType } from '../../types/dashboard';
 
 const SettingsPanel: React.FC = () => {
@@ -16,7 +17,48 @@ const SettingsPanel: React.FC = () => {
     bleConfig,
     exportToCsv,
     parsedDataBuffer,
+    jsonFiles,
+    setJsonFiles,
+    selectedJsonFile,
+    setSelectedJsonFile,
+    jsonConfig,
+    setJsonConfig,
+    isRunning,
+    setIsRunning,
   } = useDashboardStore();
+
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadJsonFiles();
+  }, []);
+
+  const loadJsonFiles = async () => {
+    setLoading(true);
+    try {
+      const files = await dashboardApi.getJsonFiles();
+      setJsonFiles(files);
+    } catch (error) {
+      console.error('Failed to load JSON files:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleJsonFileSelect = async (fileName: string) => {
+    setLoading(true);
+    try {
+      const config = await dashboardApi.loadJsonFile(fileName);
+      setJsonConfig(config);
+      setSelectedJsonFile(fileName);
+      message.success(t('settings.configLoaded') || `已加载配置: ${fileName}`);
+    } catch (error) {
+      console.error('Failed to load JSON config:', error);
+      message.error(t('settings.configLoadError') || '加载配置失败');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleExportCsv = async () => {
     const csvContent = exportToCsv();
@@ -42,6 +84,20 @@ const SettingsPanel: React.FC = () => {
     }
   };
 
+  const handleToggleRun = () => {
+    if (isRunning) {
+      setIsRunning(false);
+      message.info(t('settings.stopped') || '数据接收已停止');
+    } else {
+      if (!selectedJsonFile) {
+        message.warning(t('settings.selectConfigFirst') || '请先选择配置文件');
+        return;
+      }
+      setIsRunning(true);
+      message.success(t('settings.started') || '数据接收已启动');
+    }
+  };
+
   const dataSourceOptions: { value: DataSourceType; label: string }[] = [
     { value: 'serial', label: t('settings.serial') || '串口' },
     { value: 'ble', label: t('settings.ble') || '蓝牙' },
@@ -53,8 +109,36 @@ const SettingsPanel: React.FC = () => {
     <Card
       title={t('settings.title') || '设置'}
       size="small"
-      style={{ height: '100%' }}
+      style={{ height: '100%', overflow: 'auto' }}
     >
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 8, fontWeight: 500 }}>
+          {t('settings.configFile') || '配置文件'}
+        </div>
+        <Select
+          value={selectedJsonFile}
+          onChange={handleJsonFileSelect}
+          placeholder={t('settings.selectConfig') || '选择配置文件'}
+          loading={loading}
+          style={{ width: '100%' }}
+          suffixIcon={<FileJsonOutlined />}
+        >
+          {jsonFiles.map((file) => (
+            <Select.Option key={file} value={file}>
+              {file}
+            </Select.Option>
+          ))}
+        </Select>
+        {jsonFiles.length === 0 && !loading && (
+          <Empty
+            description={t('settings.noConfigFiles') || '暂无配置文件，请在JSON编辑器中创建'}
+            style={{ marginTop: 8, fontSize: 12 }}
+          />
+        )}
+      </div>
+
+      <Divider style={{ margin: '12px 0' }} />
+
       <div style={{ marginBottom: 16 }}>
         <div style={{ marginBottom: 8, fontWeight: 500 }}>
           {t('settings.dataSource') || '数据源'}
@@ -71,52 +155,30 @@ const SettingsPanel: React.FC = () => {
 
       <div style={{ marginBottom: 16 }}>
         <div style={{ marginBottom: 8, fontWeight: 500 }}>
-          {dataSourceType === 'serial' ? (t('settings.serialConfig') || '串口配置') : 
-           dataSourceType === 'ble' ? (t('settings.bleConfig') || '蓝牙配置') :
-           dataSourceType === 'file' ? (t('settings.fileConfig') || '文件配置') :
-           (t('settings.manualConfig') || '手动输入配置')}
+          {t('settings.connectionStatus') || '连接状态'}
         </div>
-        
-        {dataSourceType === 'serial' && (
-          <div style={{ padding: 12, background: '#fafafa', borderRadius: 4 }}>
-            <p style={{ margin: 0, color: '#666', fontSize: 12 }}>
-              串口配置区域（待实现）
-            </p>
-            <p style={{ margin: '4px 0 0', color: '#999', fontSize: 11 }}>
-              端口: {serialConfig.port || '未选择'} | 
-              波特率: {serialConfig.baudRate}
-            </p>
-          </div>
-        )}
-
-        {dataSourceType === 'ble' && (
-          <div style={{ padding: 12, background: '#fafafa', borderRadius: 4 }}>
-            <p style={{ margin: 0, color: '#666', fontSize: 12 }}>
-              蓝牙配置区域（待实现）
-            </p>
-            {bleConfig && (
-              <p style={{ margin: '4px 0 0', color: '#999', fontSize: 11 }}>
-                设备: {bleConfig.deviceName || '未连接'}
-              </p>
-            )}
-          </div>
-        )}
-
-        {dataSourceType === 'file' && (
-          <div style={{ padding: 12, background: '#fafafa', borderRadius: 4 }}>
-            <p style={{ margin: 0, color: '#666', fontSize: 12 }}>
-              文件回放配置区域（待实现）
-            </p>
-          </div>
-        )}
-
-        {dataSourceType === 'manual' && (
-          <div style={{ padding: 12, background: '#fafafa', borderRadius: 4 }}>
-            <p style={{ margin: 0, color: '#666', fontSize: 12 }}>
-              手动输入配置区域（待实现）
-            </p>
-          </div>
-        )}
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Button
+            type={isRunning ? 'default' : 'primary'}
+            icon={isRunning ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
+            onClick={handleToggleRun}
+            loading={loading}
+            block
+          >
+            {isRunning ? (t('settings.stop') || '停止') : (t('settings.start') || '开始')}
+          </Button>
+          {dataSourceType === 'serial' && (
+            <div style={{ padding: 8, background: '#fafafa', borderRadius: 4, fontSize: 12 }}>
+              <div>端口: {serialConfig.port || '未选择'}</div>
+              <div>波特率: {serialConfig.baudRate}</div>
+            </div>
+          )}
+          {dataSourceType === 'ble' && bleConfig && (
+            <div style={{ padding: 8, background: '#fafafa', borderRadius: 4, fontSize: 12 }}>
+              <div>设备: {bleConfig.deviceName || '未连接'}</div>
+            </div>
+          )}
+        </Space>
       </div>
 
       <Divider style={{ margin: '12px 0' }} />
@@ -130,7 +192,7 @@ const SettingsPanel: React.FC = () => {
             {t('settings.dataPoints') || '数据点'}: {parsedDataBuffer.length}
           </div>
           <Button
-            type="primary"
+            type="default"
             icon={<DownloadOutlined />}
             onClick={handleExportCsv}
             disabled={parsedDataBuffer.length === 0}

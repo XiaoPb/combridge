@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DatasetConfig {
     pub index: usize,
     pub title: String,
@@ -25,6 +26,7 @@ pub struct DatasetConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WidgetGroup {
     pub title: String,
     pub widget: String,
@@ -32,6 +34,7 @@ pub struct WidgetGroup {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DashboardJsonConfig {
     pub title: String,
     pub decoder: i32,

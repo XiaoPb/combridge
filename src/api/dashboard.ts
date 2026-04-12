@@ -56,14 +56,14 @@ export const dashboardApi = {
   },
 
   async saveJsonFile(fileName: string, config: DashboardJsonConfig): Promise<void> {
-    return invoke('save_json_file', { fileName, config });
+    return invoke('save_json_file', { file_name: fileName, config });
   },
 
   async deleteJsonFile(fileName: string): Promise<void> {
-    return invoke('delete_json_file', { fileName });
+    return invoke('delete_json_file', { file_name: fileName });
   },
 
   async loadJsonFile(fileName: string): Promise<DashboardJsonConfig> {
-    return invoke('load_json_file', { fileName });
+    return invoke('load_json_file', { file_name: fileName });
   },
 };

@@ -118,10 +118,10 @@ impl BleBackend for NativeBleBackend {
         let mut connections = Vec::new();
 
         for (address, client) in clients {
-            let is_connected = client.is_connected();
+            let is_connected = client.is_connected()?;
             if is_connected {
                 let name = adapter.get_device_name(&address);
-                let services = client.get_discovered_services();
+                let services = client.get_discovered_services()?;
                 connections.push(BleConnection {
                     address,
                     name,

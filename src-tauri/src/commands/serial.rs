@@ -259,7 +259,7 @@ pub async fn get_open_ports(
     debug!("获取已打开的端口列表");
     
     let manager = manager.inner();
-    let ports = manager.get_open_ports();
+    let ports = manager.get_open_ports()?;
     debug!("当前已打开 {} 个端口", ports.len());
     Ok(ports)
 }
@@ -272,7 +272,7 @@ pub async fn is_port_open(
     debug!("检查端口 {} 是否已打开", port_name);
     
     let manager = manager.inner();
-    let is_open = manager.is_port_open(&port_name);
+    let is_open = manager.is_port_open(&port_name)?;
     debug!("端口 {} 状态: {}", port_name, if is_open { "已打开" } else { "已关闭" });
     Ok(is_open)
 }

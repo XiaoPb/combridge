@@ -28,6 +28,7 @@ interface DashboardState {
   setCurrentDashboard: (dashboard: DashboardConfig | null) => void;
   saveDashboard: (dashboard: DashboardConfig) => void;
   deleteDashboard: (id: string) => void;
+  renameDashboard: (id: string, name: string) => void;
   setDataSourceType: (type: DataSourceType) => void;
   setConnectedDevice: (deviceId: string | null) => void;
   setParserType: (type: ParserType) => void;
@@ -159,9 +160,10 @@ export const useDashboardStore = create<DashboardState>()(
       setParserScripts: (scripts) => set({ parserScripts: scripts }),
 
       createNewDashboard: () => {
+        const { savedDashboards } = get();
         const newDashboard: DashboardConfig = {
           id: generateId(),
-          name: 'New Dashboard',
+          name: `Dashboard ${savedDashboards.length + 1}`,
           dataSource: {
             type: 'serial',
           },
@@ -172,7 +174,24 @@ export const useDashboardStore = create<DashboardState>()(
           widgets: [],
           refreshRate: 100,
         };
-        set({ currentDashboard: newDashboard });
+        set({
+          currentDashboard: newDashboard,
+          savedDashboards: [...savedDashboards, newDashboard],
+        });
+      },
+
+      renameDashboard: (id: string, name: string) => {
+        const { savedDashboards, currentDashboard } = get();
+        const updatedDashboards = savedDashboards.map((d) =>
+          d.id === id ? { ...d, name } : d
+        );
+        set({
+          savedDashboards: updatedDashboards,
+          currentDashboard:
+            currentDashboard?.id === id
+              ? { ...currentDashboard, name }
+              : currentDashboard,
+        });
       },
 
       getSelectedWidget: () => {

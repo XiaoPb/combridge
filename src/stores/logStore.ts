@@ -1,14 +1,8 @@
 import { create } from 'zustand';
+import type { LogEntry } from '../types/system';
 
+export type { LogEntry };
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug';
-
-export interface LogEntry {
-  id: string;
-  timestamp: number;
-  level: LogLevel;
-  source: string;
-  message: string;
-}
 
 interface LogState {
   logs: LogEntry[];

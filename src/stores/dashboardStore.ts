@@ -11,9 +11,9 @@ import type {
   DashboardJsonConfig,
   RawDataPoint,
   SerialConfig,
-  BleConfig,
+  BleConnectionConfig,
 } from '../types/dashboard';
-import { DEFAULT_JSON_CONFIG } from '../types/dashboard';
+import { DEFAULT_JSON_CONFIG, DEFAULT_SERIAL_CONFIG } from '../types/dashboard';
 
 interface DashboardState {
   currentDashboard: DashboardConfig | null;
@@ -38,7 +38,8 @@ interface DashboardState {
   rawDataBuffer: RawDataPoint[];
   parsedDataBuffer: DataPoint[];
   serialConfig: SerialConfig;
-  bleConfig: BleConfig | null;
+  serialPort: string;
+  bleConfig: BleConnectionConfig | null;
 
   setCurrentDashboard: (dashboard: DashboardConfig | null) => void;
   saveDashboard: (dashboard: DashboardConfig) => void;
@@ -73,20 +74,12 @@ interface DashboardState {
   addParsedDataPoint: (point: DataPoint) => void;
   clearParsedDataBuffer: () => void;
   setSerialConfig: (config: SerialConfig) => void;
-  setBleConfig: (config: BleConfig | null) => void;
+  setSerialPort: (port: string) => void;
+  setBleConfig: (config: BleConnectionConfig | null) => void;
   exportToCsv: () => string;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 11);
-
-const DEFAULT_SERIAL_CONFIG_VALUE = {
-  port: '',
-  baudRate: 115200,
-  dataBits: 8 as const,
-  stopBits: 1 as const,
-  parity: 'none' as const,
-  flowControl: 'none' as const,
-};
 
 export const useDashboardStore = create<DashboardState>()(
   persist(
@@ -112,7 +105,8 @@ export const useDashboardStore = create<DashboardState>()(
       selectedJsonFile: null,
       rawDataBuffer: [],
       parsedDataBuffer: [],
-      serialConfig: DEFAULT_SERIAL_CONFIG_VALUE,
+      serialConfig: DEFAULT_SERIAL_CONFIG,
+      serialPort: '',
       bleConfig: null,
 
       setCurrentDashboard: (dashboard) => set({ currentDashboard: dashboard }),
@@ -264,6 +258,8 @@ export const useDashboardStore = create<DashboardState>()(
           activeTabs: ['dashboard'],
           rawDataBuffer: [],
           parsedDataBuffer: [],
+          serialConfig: DEFAULT_SERIAL_CONFIG,
+          serialPort: '',
         });
       },
 
@@ -321,6 +317,8 @@ export const useDashboardStore = create<DashboardState>()(
 
       setSerialConfig: (config) => set({ serialConfig: config }),
 
+      setSerialPort: (port) => set({ serialPort: port }),
+
       setBleConfig: (config) => set({ bleConfig: config }),
 
       exportToCsv: () => {
@@ -352,6 +350,7 @@ export const useDashboardStore = create<DashboardState>()(
         savedDashboards: state.savedDashboards,
         maxBufferSize: state.maxBufferSize,
         serialConfig: state.serialConfig,
+        serialPort: state.serialPort,
         activeTabs: state.activeTabs,
       }),
     }

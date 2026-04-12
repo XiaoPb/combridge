@@ -210,31 +210,17 @@ export const WIDGET_SUPPORT_MATRIX: Record<string, WidgetSupportConfig> = {
   },
 };
 
-export interface SerialConfig {
-  port: string;
-  baudRate: number;
-  dataBits: 5 | 6 | 7 | 8;
-  stopBits: 1 | 2;
-  parity: 'none' | 'odd' | 'even';
-  flowControl: 'none' | 'hardware' | 'software';
-}
+export type { SerialConfig } from './serial';
 
-export interface BleConfig {
+export { DEFAULT_SERIAL_CONFIG } from './serial';
+
+export interface BleConnectionConfig {
   deviceId: string;
   deviceName: string;
   serviceUuid: string;
   characteristicUuid: string;
   enableNotify: boolean;
 }
-
-export const DEFAULT_SERIAL_CONFIG: SerialConfig = {
-  port: '',
-  baudRate: 115200,
-  dataBits: 8,
-  stopBits: 1,
-  parity: 'none',
-  flowControl: 'none',
-};
 
 export const DEFAULT_DATASET_CONFIG: DatasetConfig = {
   index: 0,

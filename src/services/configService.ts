@@ -1,24 +1,16 @@
-export interface AppConfig {
-  theme: 'light' | 'dark' | 'system';
-  language: 'zh-CN' | 'en-US';
-  autoReconnect: boolean;
-  autoReconnectInterval: number;
-  maxLogLines: number;
-  soundEnabled: boolean;
-  soundOnConnect: boolean;
-  soundOnDisconnect: boolean;
-  soundOnData: boolean;
-}
+import { type AppSettings as AppConfig } from '../types/system';
+
+export type { AppConfig };
 
 export interface SerialConfig {
-  baudRate: string;
+  baudRate: number;
   dataBits: number;
   parity: string;
   stopBits: number;
   flowControl: string;
 }
 
-export interface BleConfig {
+export interface BleModeConfig {
   mode: 'native' | 'at';
   atPort?: string;
   atBaudRate?: number;
@@ -110,7 +102,7 @@ class ConfigService {
       console.error('Failed to load serial config:', err);
     }
     return {
-      baudRate: '115200',
+      baudRate: 115200,
       dataBits: 8,
       parity: 'none',
       stopBits: 1,
@@ -126,7 +118,7 @@ class ConfigService {
     }
   }
 
-  getBleConfig(): BleConfig {
+  getBleConfig(): BleModeConfig {
     try {
       const stored = localStorage.getItem(BLE_CONFIG_KEY);
       if (stored) {
@@ -140,7 +132,7 @@ class ConfigService {
     };
   }
 
-  saveBleConfig(config: BleConfig): void {
+  saveBleConfig(config: BleModeConfig): void {
     try {
       localStorage.setItem(BLE_CONFIG_KEY, JSON.stringify(config));
     } catch (err) {

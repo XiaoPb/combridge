@@ -43,8 +43,8 @@ impl AppState {
         }).unwrap()
     }
 
-    pub fn add_ble_device(&mut self, id: String, name: String, mac: String) -> &BleDevice {
-        let device = BleDevice::new(id.clone(), name, mac.clone());
+    pub fn add_ble_device(&mut self, id: String, name: String, mac: String) -> &BleDeviceState {
+        let device = BleDeviceState::new(id.clone(), name, mac.clone());
         self.devices.insert(id.clone(), Device::Ble(device));
         info!("添加蓝牙设备: {} ({})", id, mac);
         self.devices.get(&id).and_then(|d| match d {
@@ -84,14 +84,14 @@ impl AppState {
         })
     }
 
-    pub fn get_ble_device(&self, device_id: &str) -> Option<&BleDevice> {
+    pub fn get_ble_device(&self, device_id: &str) -> Option<&BleDeviceState> {
         self.devices.get(device_id).and_then(|d| match d {
             Device::Ble(bd) => Some(bd),
             _ => None,
         })
     }
 
-    pub fn get_ble_device_mut(&mut self, device_id: &str) -> Option<&mut BleDevice> {
+    pub fn get_ble_device_mut(&mut self, device_id: &str) -> Option<&mut BleDeviceState> {
         self.devices.get_mut(device_id).and_then(|d| match d {
             Device::Ble(bd) => Some(bd),
             _ => None,

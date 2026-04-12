@@ -179,30 +179,12 @@ impl ActionDispatcher {
             _ => BaudRate::B115200,
         };
 
-        let data_bits_enum = match data_bits {
-            DataBits::Five => crate::device::DataBits::Five,
-            DataBits::Six => crate::device::DataBits::Six,
-            DataBits::Seven => crate::device::DataBits::Seven,
-            DataBits::Eight => crate::device::DataBits::Eight,
-        };
-
-        let parity_enum = match parity {
-            Parity::None => crate::device::Parity::None,
-            Parity::Odd => crate::device::Parity::Odd,
-            Parity::Even => crate::device::Parity::Even,
-        };
-
-        let stop_bits_enum = match stop_bits {
-            StopBits::One => crate::device::StopBits::One,
-            StopBits::Two => crate::device::StopBits::Two,
-        };
-
         let port_config = crate::device::SerialPortConfig {
             port_name: port_name.clone(),
             baud_rate: baud_rate_enum,
-            data_bits: data_bits_enum,
-            parity: parity_enum,
-            stop_bits: stop_bits_enum,
+            data_bits,
+            parity,
+            stop_bits,
             flow_control: FlowControl::None,
             timeout_ms: 1000,
             pack_timeout_ms: 50,

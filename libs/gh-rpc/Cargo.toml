@@ -1,0 +1,3 @@
+[workspace]
+members = ["rpc", "gh-rpc"]
+resolver = "2"

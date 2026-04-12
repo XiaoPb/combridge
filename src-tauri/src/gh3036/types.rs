@@ -4,66 +4,47 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 加速度轴数量
-pub const GH_ACC_AXIS_NUM: usize = 3;
+pub use gh_rpc::data_package::{FuncFrame, DataFrame, FuncId, ChannelData, GSensorData, AgcInfo, FrameDataFlag, FrameDecoder};
+pub use gh_rpc::cmd::{
+    CMD_GET_VERSION, CMD_REGS_WRITE, CMD_REGS_READ, CMD_REG_BIT_FIELD_WRITE,
+    CMD_CHIP_CTRL, CMD_SW_FUNCTION, CMD_DOWNLOAD_CONFIG, CMD_REGS_LIST_WRITE,
+    CMD_FW_UPDATE, CMD_GET_CHIP_LINK_STATUS, CMD_TIMESTAMP_SET, CMD_TIME_SET,
+    CMD_SET_WORK_MODE, CMD_LOW_POWER, CMD_REGS_BIT_FIELD_WRITE,
+    VER_TYPE_FW, VER_TYPE_DEMO, VER_TYPE_BOOTLOADER, VER_TYPE_PROTOCOL,
+    VER_TYPE_VIRTUAL_REG, VER_TYPE_DRV, VER_TYPE_CHIP, VER_TYPE_BLE, VER_TYPE_ALGO,
+    CHIP_CTRL_HARD_RESET, CHIP_CTRL_RX_RESET, CHIP_CTRL_SOFT_RESET,
+    CHIP_CTRL_WAKEUP, CHIP_CTRL_SLEEP,
+};
 
-/// 陀螺仪轴数量
+pub use rpc::PackHeader;
+
+pub const GH_ACC_AXIS_NUM: usize = 3;
 pub const GH_GYRO_AXIS_NUM: usize = 3;
 
-/// 功能 ID 枚举
-///
-/// 对应 C 库的 `gh_func_fix_idx_e` 枚举
-/// 用于标识不同的数据功能类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(i32)]
 pub enum GhFuncFixIdx {
-    /// ADT（活动检测）
     Adt = 0,
-    /// HR（心率）
     Hr = 1,
-    /// SPO2（血氧）
     Spo2 = 2,
-    /// HRV（心率变异性）
     Hrv = 3,
-    /// GNADT（通用活动检测）
     Gnadt = 4,
-    /// IRNADT（红外活动检测）
     Irnadt = 5,
-    /// 测试模式 1
     Test1 = 6,
-    /// 测试模式 2
     Test2 = 7,
-    /// PPG 配置 0
     PpgCfg0 = 8,
-    /// PPG 配置 1
     PpgCfg1 = 9,
-    /// PPG 配置 2
     PpgCfg2 = 10,
-    /// PPG 配置 3
     PpgCfg3 = 11,
-    /// PPG 配置 4
     PpgCfg4 = 12,
-    /// PPG 配置 5
     PpgCfg5 = 13,
-    /// PPG 配置 6
     PpgCfg6 = 14,
-    /// PPG 配置 7
     PpgCfg7 = 15,
-    /// 容量配置
     CapCfg = 16,
-    /// 最大值
     Max = 17,
 }
 
 impl GhFuncFixIdx {
-    /// 从 i32 值创建枚举
-    ///
-    /// # 参数
-    /// - `value`: 功能 ID 值
-    ///
-    /// # 返回
-    /// - `Some(GhFuncFixIdx)`: 成功
-    /// - `None`: 无效值
     pub fn from_i32(value: i32) -> Option<Self> {
         match value {
             0 => Some(Self::Adt),
@@ -87,10 +68,6 @@ impl GhFuncFixIdx {
         }
     }
     
-    /// 获取功能名称字符串
-    ///
-    /// # 返回
-    /// 功能名称，用于 CSV 文件命名和显示
     pub fn name(&self) -> &'static str {
         match self {
             Self::Adt => "ADT",
@@ -115,108 +92,78 @@ impl GhFuncFixIdx {
     }
 }
 
-/// GH3036 帧数据结构
-///
-/// # 功能
-/// 存储从 C 库回调返回的帧数据，用于前端显示和 CSV 保存
-///
-/// # 字段说明
-/// - `function_id`: 功能 ID
-/// - `function_name`: 功能名称
-/// - `frame_id`: 帧 ID（0 表示新序列开始）
-/// - `timestamp`: 时间戳（64 位）
-/// - `gs_data`: 加速度/陀螺仪数据
-/// - `rawdata`: 原始数据
-/// - `flags`: 标志位
-/// - `algo_data`: 算法结果
-/// - `agc_info`: AGC 信息
-/// - `phy_value`: 物理值
+impl From<FuncId> for GhFuncFixIdx {
+    fn from(func_id: FuncId) -> Self {
+        match func_id {
+            FuncId::ADT => Self::Adt,
+            FuncId::HR => Self::Hr,
+            FuncId::SPO2 => Self::Spo2,
+            FuncId::HRV => Self::Hrv,
+            FuncId::GNADT => Self::Gnadt,
+            FuncId::IRNADT => Self::Irnadt,
+            _ => Self::Max,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Gh3036FrameData {
-    /// 功能 ID
     pub function_id: i32,
-    /// 功能名称
     pub function_name: String,
-    /// 帧 ID（0 表示新序列开始）
     pub frame_id: i32,
-    /// 时间戳（64 位）
     pub timestamp: u64,
-    /// 加速度/陀螺仪数据（前 3 个为 ACC，后 3 个为 GYRO）
     pub gs_data: Vec<i32>,
-    /// 原始数据
     pub rawdata: Vec<i32>,
-    /// 标志位
     pub flags: Vec<i32>,
-    /// 算法结果
     pub algo_data: Vec<i32>,
-    /// AGC 信息
     pub agc_info: Vec<i32>,
-    /// 物理值
     pub phy_value: Vec<i32>,
 }
 
 impl Gh3036FrameData {
-    /// 从 C 库 DataFrame 创建 Rust 结构
-    ///
-    /// # 参数
-    /// - `frame`: C 库帧数据指针
-    ///
-    /// # 返回
-    /// Rust 帧数据结构
-    ///
-    /// # 安全性
-    /// 需要确保 frame 指针有效
-    pub fn from_c_frame(frame: &super::ffi::DataFrame) -> Self {
-        let func_id = frame.function_id;
-        let func_name = GhFuncFixIdx::from_i32(func_id)
-            .map(|f| f.name().to_string())
-            .unwrap_or_else(|| format!("UNKNOWN_{}", func_id));
+    pub fn from_func_frame(frame: &FuncFrame) -> Self {
+        let func_id = GhFuncFixIdx::from(frame.id);
+        let function_name = func_id.name().to_string();
         
-        let timestamp = ((frame.timestamp_high as u64) << 32) | (frame.timestamp as u64);
+        let gs_data: Vec<i32> = [
+            frame.gsensor_data.acc[0] as i32,
+            frame.gsensor_data.acc[1] as i32,
+            frame.gsensor_data.acc[2] as i32,
+            frame.gsensor_data.gyro[0] as i32,
+            frame.gsensor_data.gyro[1] as i32,
+            frame.gsensor_data.gyro[2] as i32,
+        ].to_vec();
         
-        let gs_data = if !frame.p_gs_data.is_null() && frame.gs_data_size > 0 {
-            unsafe { std::slice::from_raw_parts(frame.p_gs_data, frame.gs_data_size as usize).to_vec() }
-        } else {
-            vec![]
-        };
+        let rawdata: Vec<i32> = frame.p_data.iter().map(|d| d.rawdata).collect();
+        let phy_value: Vec<i32> = frame.p_data.iter().map(|d| d.ipd_pa).collect();
         
-        let rawdata = if !frame.p_rawdata.is_null() && frame.rawdata_size > 0 {
-            unsafe { std::slice::from_raw_parts(frame.p_rawdata, frame.rawdata_size as usize).to_vec() }
-        } else {
-            vec![]
-        };
+        let algo_data: Vec<i32> = frame.p_algo_res.iter().map(|&v| v as i32).collect();
         
-        let flags = if !frame.p_flags.is_null() && frame.flag_data_bits > 0 {
-            let len = ((frame.flag_data_bits + 31) / 32) as usize;
-            unsafe { std::slice::from_raw_parts(frame.p_flags, len).to_vec() }
-        } else {
-            vec![]
-        };
+        let agc_info: Vec<i32> = frame.p_data.iter()
+            .flat_map(|d| {
+                let low = d.agc_info.to_low_u32() as i32;
+                let high = d.agc_info.to_high_u32() as i32;
+                [low, high]
+            })
+            .collect();
         
-        let algo_data = if !frame.p_algo_data.is_null() && frame.algo_data_bits > 0 {
-            let len = ((frame.algo_data_bits + 31) / 32) as usize;
-            unsafe { std::slice::from_raw_parts(frame.p_algo_data, len).to_vec() }
-        } else {
-            vec![]
-        };
-        
-        let agc_info = if !frame.p_agc_info.is_null() && frame.agc_info_size > 0 {
-            unsafe { std::slice::from_raw_parts(frame.p_agc_info, frame.agc_info_size as usize).to_vec() }
-        } else {
-            vec![]
-        };
-        
-        let phy_value = if !frame.p_phy_value.is_null() && frame.phy_value_size > 0 {
-            unsafe { std::slice::from_raw_parts(frame.p_phy_value, frame.phy_value_size as usize).to_vec() }
-        } else {
-            vec![]
-        };
+        let flags: Vec<i32> = frame.p_data.iter()
+            .map(|d| {
+                let mut flag_val = 0i32;
+                if d.flag.led_adj_flag { flag_val |= 1; }
+                if d.flag.sa_flag { flag_val |= 2; }
+                if d.flag.param_change_flag { flag_val |= 4; }
+                if d.flag.dre_update { flag_val |= 8; }
+                if d.flag.skip_ok_flag { flag_val |= 16; }
+                flag_val
+            })
+            .collect();
         
         Self {
-            function_id: func_id,
-            function_name: func_name,
-            frame_id: frame.frame_id,
-            timestamp,
+            function_id: func_id as i32,
+            function_name,
+            frame_id: frame.frame_cnt as i32,
+            timestamp: frame.timestamp,
             gs_data,
             rawdata,
             flags,
@@ -225,52 +172,60 @@ impl Gh3036FrameData {
             phy_value,
         }
     }
+    
+    pub fn from_data_frame(frame: &DataFrame) -> Self {
+        let func_id = GhFuncFixIdx::from_i32(frame.function_id);
+        let function_name = func_id
+            .map(|f| f.name().to_string())
+            .unwrap_or_else(|| format!("UNKNOWN_{}", frame.function_id));
+        
+        let timestamp = ((frame.timestamp_high as u64) << 32) | (frame.timestamp as u64);
+        
+        Self {
+            function_id: frame.function_id,
+            function_name,
+            frame_id: frame.frame_id,
+            timestamp,
+            gs_data: frame.gs_data.iter().copied().collect(),
+            rawdata: frame.rawdata.iter().copied().collect(),
+            flags: frame.flags.iter().map(|&v| v as i32).collect(),
+            algo_data: frame.algo_data.iter().copied().collect(),
+            agc_info: {
+                let mut info = Vec::new();
+                for i in 0..frame.agc_info_size {
+                    if i < frame.agc_info.len() && i < frame.agc_info_high.len() {
+                        info.push(frame.agc_info[i]);
+                        info.push(frame.agc_info_high[i]);
+                    }
+                }
+                info
+            },
+            phy_value: frame.phy_value.iter().copied().collect(),
+        }
+    }
 }
 
-/// RPC 命令定义
-///
-/// # 功能
-/// 定义 RPC 指令的结构，用于前端显示和执行
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RpcCommand {
-    /// 命令键（如 "V" 表示获取版本）
     pub key: String,
-    /// 命令名称
     pub name: String,
-    /// 命令描述
     pub description: String,
-    /// 参数列表
     pub params: Vec<RpcParam>,
 }
 
-/// RPC 参数定义
-///
-/// # 功能
-/// 定义 RPC 指令参数的结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RpcParam {
-    /// 参数名称
     pub name: String,
-    /// 参数类型（如 "u8", "u16[]", "u32"）
     pub param_type: String,
-    /// 参数描述
     pub description: String,
-    /// 默认值
     pub default_value: Option<String>,
 }
 
-/// 获取 RPC 命令列表
-///
-/// # 功能
-/// 返回所有支持的 RPC 命令
-///
-/// # 返回
-/// RPC 命令列表
 pub fn get_rpc_commands() -> Vec<RpcCommand> {
     vec![
         RpcCommand {
             key: "V".to_string(),
-            name: "GH3X_GetVersion".to_string(),
+            name: CMD_GET_VERSION.to_string(),
             description: "获取芯片版本信息".to_string(),
             params: vec![
                 RpcParam {
@@ -283,20 +238,20 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "W".to_string(),
-            name: "GH3X_RegsWriteCmd".to_string(),
+            name: CMD_REGS_WRITE.to_string(),
             description: "寄存器写入命令".to_string(),
             params: vec![
                 RpcParam {
                     name: "regs".to_string(),
                     param_type: "u16[]".to_string(),
-                    description: "寄存器数据数组（地址和值交替，如 [0x1000, 0x1234] 表示写入 0x1234 到地址 0x1000）".to_string(),
+                    description: "寄存器数据数组（地址和值交替）".to_string(),
                     default_value: None,
                 },
             ],
         },
         RpcCommand {
             key: "R".to_string(),
-            name: "GH3X_RegsReadCmd".to_string(),
+            name: CMD_REGS_READ.to_string(),
             description: "寄存器读取命令".to_string(),
             params: vec![
                 RpcParam {
@@ -315,7 +270,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "B".to_string(),
-            name: "GH3X_RegBitFieldWriteCmd".to_string(),
+            name: CMD_REG_BIT_FIELD_WRITE.to_string(),
             description: "寄存器位域写入命令".to_string(),
             params: vec![
                 RpcParam {
@@ -346,33 +301,33 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "C".to_string(),
-            name: "GH3X_ChipCtrl".to_string(),
+            name: CMD_CHIP_CTRL.to_string(),
             description: "芯片控制命令（复位、休眠等）".to_string(),
             params: vec![
                 RpcParam {
                     name: "ctrlType".to_string(),
                     param_type: "u8".to_string(),
-                    description: "控制类型（0: 复位, 1: 休眠, 2: 唤醒）".to_string(),
+                    description: "控制类型（0xC2: 软复位, 0xC3: 唤醒, 0xC4: 睡眠）".to_string(),
                     default_value: None,
                 },
             ],
         },
         RpcCommand {
             key: "D".to_string(),
-            name: "download_config".to_string(),
+            name: CMD_DOWNLOAD_CONFIG.to_string(),
             description: "下载配置到芯片".to_string(),
             params: vec![
                 RpcParam {
                     name: "stage".to_string(),
                     param_type: "u8".to_string(),
-                    description: "下载阶段（多阶段下载时使用）".to_string(),
+                    description: "下载阶段".to_string(),
                     default_value: Some("0".to_string()),
                 },
             ],
         },
         RpcCommand {
             key: "L".to_string(),
-            name: "GH3X_RegsListWriteCmd".to_string(),
+            name: CMD_REGS_LIST_WRITE.to_string(),
             description: "寄存器列表批量写入命令".to_string(),
             params: vec![
                 RpcParam {
@@ -385,7 +340,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "S".to_string(),
-            name: "GH3X_SwFunctionCmd".to_string(),
+            name: CMD_SW_FUNCTION.to_string(),
             description: "软件功能命令".to_string(),
             params: vec![
                 RpcParam {
@@ -404,7 +359,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "P".to_string(),
-            name: "gh_low_power_cmd".to_string(),
+            name: CMD_LOW_POWER.to_string(),
             description: "低功耗命令".to_string(),
             params: vec![
                 RpcParam {
@@ -416,66 +371,27 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
                 RpcParam {
                     name: "ctrlType".to_string(),
                     param_type: "u8".to_string(),
-                    description: "控制类型（0: 进入低功耗, 1: 退出低功耗）".to_string(),
+                    description: "控制类型".to_string(),
                     default_value: Some("0".to_string()),
-                },
-            ],
-        },
-        RpcCommand {
-            key: "FW".to_string(),
-            name: "GH3X_FwUpdateCmd".to_string(),
-            description: "固件更新命令".to_string(),
-            params: vec![
-                RpcParam {
-                    name: "firmwarePath".to_string(),
-                    param_type: "string".to_string(),
-                    description: "固件文件路径".to_string(),
-                    default_value: None,
-                },
-            ],
-        },
-        RpcCommand {
-            key: "BF".to_string(),
-            name: "GH3X_RegsBitFieldWriteCmd".to_string(),
-            description: "寄存器位域批量写入命令".to_string(),
-            params: vec![
-                RpcParam {
-                    name: "regBits".to_string(),
-                    param_type: "u16[]".to_string(),
-                    description: "寄存器位域数据（地址、LSB、MSB、值交替）".to_string(),
-                    default_value: None,
                 },
             ],
         },
         RpcCommand {
             key: "M".to_string(),
-            name: "GHSetWorkModeCmd".to_string(),
+            name: CMD_SET_WORK_MODE.to_string(),
             description: "设置工作模式".to_string(),
             params: vec![
                 RpcParam {
                     name: "workMode".to_string(),
                     param_type: "u8".to_string(),
-                    description: "工作模式（0: 正常, 1: 测试, 2: 校准）".to_string(),
-                    default_value: Some("0".to_string()),
-                },
-            ],
-        },
-        RpcCommand {
-            key: "LS".to_string(),
-            name: "get_chip_link_status".to_string(),
-            description: "获取芯片链路状态".to_string(),
-            params: vec![
-                RpcParam {
-                    name: "type".to_string(),
-                    param_type: "u8".to_string(),
-                    description: "状态类型（0: 连接状态, 1: 通信质量）".to_string(),
+                    description: "工作模式".to_string(),
                     default_value: Some("0".to_string()),
                 },
             ],
         },
         RpcCommand {
             key: "TS".to_string(),
-            name: "gh_timestamp_set".to_string(),
+            name: CMD_TIMESTAMP_SET.to_string(),
             description: "设置时间戳（32 位）".to_string(),
             params: vec![
                 RpcParam {
@@ -488,7 +404,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "TM".to_string(),
-            name: "gh_time_set".to_string(),
+            name: CMD_TIME_SET.to_string(),
             description: "设置时间（带时区）".to_string(),
             params: vec![
                 RpcParam {
@@ -500,7 +416,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
                 RpcParam {
                     name: "hourOffset".to_string(),
                     param_type: "i8".to_string(),
-                    description: "时区偏移（小时，如东八区为 8）".to_string(),
+                    description: "时区偏移（小时）".to_string(),
                     default_value: Some("8".to_string()),
                 },
             ],
@@ -508,22 +424,14 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
     ]
 }
 
-/// GH3036 事件数据
-///
-/// # 功能
-/// 存储从 C 库 event_callback 返回的事件数据
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Gh3036EventData {
-    /// 事件类型
     pub event_type: u8,
-    /// 事件数据
     pub data: Vec<u8>,
-    /// 时间戳
     pub timestamp: u64,
 }
 
 impl Gh3036EventData {
-    /// 创建新的事件数据
     pub fn new(event_type: u8, data: &[u8]) -> Self {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

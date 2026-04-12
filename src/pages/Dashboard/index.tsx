@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useCallback } from 'react';
-import { Layout, message } from 'antd';
+import React, { useEffect, useRef } from 'react';
+import { Layout } from 'antd';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import { dashboardApi } from '../../api/dashboard';
 import { onSerialData, onBleData, onParsedData } from '../../api/events';
@@ -17,8 +17,6 @@ const { Content, Sider } = Layout;
 const DashboardPage: React.FC = () => {
   const {
     activeTabs,
-    jsonConfig,
-    setJsonConfig,
     setJsonFiles,
     isRunning,
     dataSourceType,

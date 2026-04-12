@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Select, Space, Input, Button, Modal, message } from 'antd';
+import { Select, Space, Input, Button, message } from 'antd';
 import { FolderOpenOutlined, PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -20,7 +20,6 @@ const DataSourceSelector: React.FC = () => {
     isRunning,
     setIsRunning,
     addDataPoint,
-    parserScript,
   } = useDashboardStore();
   const { ports } = useSerialStore();
   const { connections } = useBleStore();
@@ -50,13 +49,12 @@ const DataSourceSelector: React.FC = () => {
       ],
     });
 
-    if (selected) {
-      const path = typeof selected === 'string' ? selected : selected.path;
-      setFilePath(path);
+    if (selected && typeof selected === 'string') {
+      setFilePath(selected);
       if (currentDashboard) {
         setCurrentDashboard({
           ...currentDashboard,
-          dataSource: { ...currentDashboard.dataSource, filePath: path },
+          dataSource: { ...currentDashboard.dataSource, filePath: selected },
         });
       }
       message.success(t('fileSelected') || 'File selected');

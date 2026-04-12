@@ -111,7 +111,18 @@ pub async fn save_json_file(
     file_name: String,
     config: DashboardJsonConfig,
 ) -> Result<(), String> {
-    manager.save_json_file(&file_name, &config)
+    use tracing::{info, debug};
+    info!("[save_json_file] Received request to save: {}", file_name);
+    debug!("[save_json_file] Config: {:?}", config);
+    
+    let result = manager.save_json_file(&file_name, &config);
+    
+    match &result {
+        Ok(_) => info!("[save_json_file] Successfully saved: {}", file_name),
+        Err(e) => info!("[save_json_file] Failed to save {}: {}", file_name, e),
+    }
+    
+    result
 }
 
 #[tauri::command]

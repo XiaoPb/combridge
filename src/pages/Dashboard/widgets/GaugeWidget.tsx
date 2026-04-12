@@ -1,16 +1,25 @@
 import React, { useEffect, useRef } from 'react';
 import { theme } from 'antd';
-import type { WidgetConfig } from '../../../types/dashboard';
-import { useDashboardStore } from '../../../stores/dashboardStore';
 
 interface GaugeWidgetProps {
-  config: WidgetConfig;
+  title: string;
+  value: number;
+  unit?: string;
+  min?: number;
+  max?: number;
+  color?: string;
 }
 
-const GaugeWidget: React.FC<GaugeWidgetProps> = ({ config }) => {
+const GaugeWidget: React.FC<GaugeWidgetProps> = ({
+  title,
+  value,
+  unit = '',
+  min = 0,
+  max = 100,
+  color,
+}) => {
   const { token } = theme.useToken();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { dataBuffer } = useDashboardStore();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -35,12 +44,7 @@ const GaugeWidget: React.FC<GaugeWidgetProps> = ({ config }) => {
     ctx.fillStyle = token.colorFillSecondary;
     ctx.fill();
 
-    const min = config.min ?? 0;
-    const max = config.max ?? 100;
     const range = max - min || 1;
-
-    const lastData = dataBuffer[dataBuffer.length - 1];
-    const value = lastData?.values[config.dataKey] ?? min;
     const normalizedValue = Math.max(0, Math.min(1, (value - min) / range));
 
     const startAngle = -Math.PI / 2;
@@ -50,7 +54,7 @@ const GaugeWidget: React.FC<GaugeWidgetProps> = ({ config }) => {
     ctx.moveTo(centerX, centerY);
     ctx.arc(centerX, centerY, radius - 5, startAngle, endAngle);
     ctx.closePath();
-    ctx.fillStyle = config.color || token.colorPrimary;
+    ctx.fillStyle = color || token.colorPrimary;
     ctx.fill();
 
     ctx.fillStyle = token.colorText;
@@ -58,17 +62,20 @@ const GaugeWidget: React.FC<GaugeWidgetProps> = ({ config }) => {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(
-      `${value.toFixed(1)}${config.unit || ''}`,
+      `${value.toFixed(1)}${unit}`,
       centerX,
       centerY
     );
-  }, [dataBuffer, config, token]);
+  }, [value, min, max, color, unit, token]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: '100%', height: '100%', display: 'block' }}
-    />
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ textAlign: 'center', marginBottom: 8, fontWeight: 500 }}>{title}</div>
+      <canvas
+        ref={canvasRef}
+        style={{ flex: 1, width: '100%', display: 'block' }}
+      />
+    </div>
   );
 };
 

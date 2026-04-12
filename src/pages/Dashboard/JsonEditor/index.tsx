@@ -71,14 +71,20 @@ const JsonEditor: React.FC = () => {
     }
 
     try {
-      await import('../../../api/dashboard').then((m) =>
-        m.dashboardApi.saveJsonFile(selectedFile, jsonConfig)
-      );
+      console.debug('[JsonEditor] Saving file:', selectedFile);
+      console.debug('[JsonEditor] Config data:', JSON.stringify(jsonConfig, null, 2));
+      
+      const api = await import('../../../api/dashboard');
+      await api.dashboardApi.saveJsonFile(selectedFile, jsonConfig);
+      
+      console.debug('[JsonEditor] Save successful');
       message.success(t('jsonEditor.saveSuccess') || '保存成功');
       loadJsonFiles();
     } catch (error) {
-      console.error('Failed to save JSON file:', error);
-      message.error(t('jsonEditor.saveError') || '保存失败');
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[JsonEditor] Failed to save JSON file:', errorMessage);
+      console.error('[JsonEditor] Error details:', error);
+      message.error(`${t('jsonEditor.saveError') || '保存失败'}: ${errorMessage}`);
     }
   };
 

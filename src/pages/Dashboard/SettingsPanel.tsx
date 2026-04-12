@@ -21,7 +21,6 @@ const SettingsPanel: React.FC = () => {
     setJsonFiles,
     selectedJsonFile,
     setSelectedJsonFile,
-    jsonConfig,
     setJsonConfig,
     isRunning,
     setIsRunning,

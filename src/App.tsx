@@ -132,12 +132,16 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
+    const isDev = import.meta.env.DEV;
+    
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'F12' || (event.ctrlKey && event.shiftKey && event.key === 'I')) {
         event.preventDefault();
-        invoke('open_devtools').catch((err) => {
-          console.error('Failed to open devtools:', err);
-        });
+        if (isDev) {
+          invoke('open_devtools').catch((err) => {
+            console.error('Failed to open devtools:', err);
+          });
+        }
       }
     };
 
@@ -148,11 +152,23 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
+    const isDev = import.meta.env.DEV;
+    
     const handleContextMenu = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       const isChartArea = target?.closest('.chart-container') !== null;
-      if (!isChartArea) {
-        event.preventDefault();
+      
+      if (isDev) {
+        if (!isChartArea) {
+          event.preventDefault();
+          invoke('open_devtools').catch((err) => {
+            console.error('Failed to open devtools:', err);
+          });
+        }
+      } else {
+        if (!isChartArea) {
+          event.preventDefault();
+        }
       }
     };
 

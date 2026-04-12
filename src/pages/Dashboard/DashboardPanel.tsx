@@ -11,7 +11,7 @@ const { TextArea } = Input;
 
 const DashboardPanel: React.FC = () => {
   const { t } = useTranslation('dashboard');
-  const { dataBuffer, addDataPoint, clearDataBuffer, parserScript } = useDashboardStore();
+  const { dataBuffer, addDataPoint, clearDataBuffer } = useDashboardStore();
   const [manualInput, setManualInput] = useState('');
 
   const columns = [

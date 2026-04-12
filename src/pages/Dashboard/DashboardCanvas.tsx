@@ -2,7 +2,6 @@ import React from 'react';
 import { Card, Row, Col, Empty, Statistic, Progress, Tag } from 'antd';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import type { WidgetGroup, DatasetConfig } from '../../types/dashboard';
-import LineChartWidget from './widgets/LineChartWidget';
 import GaugeWidget from './widgets/GaugeWidget';
 import TextWidget from './widgets/TextWidget';
 import LedWidget from './widgets/LedWidget';
@@ -38,15 +37,6 @@ const DashboardCanvas: React.FC = () => {
     const value = getLatestValue(dataset.index);
     const key = `${groupIndex}-${datasetIndex}`;
 
-    const commonProps = {
-      title: dataset.title,
-      value: value ?? 0,
-      unit: dataset.units,
-      min: dataset.min,
-      max: dataset.max,
-      color: dataset.color,
-    };
-
     switch (dataset.widget) {
       case 'x':
       case 'y':
@@ -72,25 +62,38 @@ const DashboardCanvas: React.FC = () => {
         );
       case 'gauge':
         return (
-          <GaugeWidget
-            key={key}
-            {...commonProps}
-          />
+          <Card key={key} size="small" style={{ marginBottom: 8 }}>
+            <GaugeWidget
+              title={dataset.title}
+              value={value ?? 0}
+              unit={dataset.units}
+              min={dataset.min}
+              max={dataset.max}
+              color={dataset.color}
+            />
+          </Card>
         );
       case 'text':
         return (
-          <TextWidget
-            key={key}
-            {...commonProps}
-          />
+          <Card key={key} size="small" style={{ marginBottom: 8 }}>
+            <TextWidget
+              title={dataset.title}
+              value={value ?? 0}
+              unit={dataset.units}
+              color={dataset.color}
+            />
+          </Card>
         );
       case 'led':
         return (
-          <LedWidget
-            key={key}
-            {...commonProps}
-            isOn={(value ?? 0) >= dataset.ledHigh}
-          />
+          <Card key={key} size="small" style={{ marginBottom: 8 }}>
+            <LedWidget
+              title={dataset.title}
+              value={value ?? 0}
+              threshold={dataset.ledHigh}
+              color={dataset.color}
+            />
+          </Card>
         );
       default:
         return (
@@ -120,10 +123,10 @@ const DashboardCanvas: React.FC = () => {
           style={{ marginBottom: 16 }}
         >
           <AccelerometerWidget
-            title={group.title}
             values={{ x: values[0], y: values[1], z: values[2] }}
             min={group.datasets[0]?.min ?? -10}
             max={group.datasets[0]?.max ?? 10}
+            color={group.datasets[0]?.color}
           />
         </Card>
       );
@@ -139,8 +142,8 @@ const DashboardCanvas: React.FC = () => {
           style={{ marginBottom: 16 }}
         >
           <CompassWidget
-            title={group.title}
             value={value ?? 0}
+            color={group.datasets[0]?.color}
           />
         </Card>
       );

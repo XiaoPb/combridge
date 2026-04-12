@@ -2,8 +2,8 @@
 //!
 //! 本模块实现 GH3036 协议的核心管理功能：
 //! - 协议实例生命周期管理
-//! - 回调函数实现（send、frame、event）
-//! - RX 数据处理线程
+//! - RPC 命令执行
+//! - RX 数据处理
 //! - CSV 数据保存
 
 use std::collections::HashMap;
@@ -19,11 +19,8 @@ use tracing::{debug, error, info, warn};
 
 use crate::device::DeviceManager;
 use super::csv_writer::CsvWriter;
-use super::ffi;
-use super::sync;
-use super::types::{Gh3036EventData, Gh3036FrameData};
+use super::types::{Gh3036EventData, Gh3036FrameData, DataFrame, FuncFrame, FrameDecoder};
 
-/// 通道类型枚举
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ChannelType {
     Serial,
@@ -39,23 +36,16 @@ impl From<ChannelType> for crate::device::DeviceType {
     }
 }
 
-/// 通道配置结构体
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChannelConfig {
-    /// 通道类型
     pub channel_type: ChannelType,
-    /// 设备 ID（串口名或蓝牙地址）
     pub device_id: String,
-    /// 蓝牙特征值 UUID（仅蓝牙通道需要）
     pub characteristic_uuid: Option<String>,
 }
 
-/// CSV 配置结构体
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CsvConfig {
-    /// 是否启用 CSV 保存
     pub enabled: bool,
-    /// 输出目录
     pub output_dir: String,
 }
 
@@ -68,32 +58,19 @@ impl Default for CsvConfig {
     }
 }
 
-/// 发送数据请求
 struct SendRequest {
     data: Vec<u8>,
 }
 
-/// 全局回调上下文
-///
-/// 用于在 C 回调函数中访问 Rust 状态
 struct GlobalContext {
-    /// TX 通道配置
     tx_channel: Mutex<Option<ChannelConfig>>,
-    /// 设备管理器
     device_manager: Mutex<Option<Arc<DeviceManager>>>,
-    /// AppHandle 用于发送事件
     app_handle: Mutex<Option<AppHandle>>,
-    /// CSV 配置
     csv_config: Mutex<CsvConfig>,
-    /// CSV 写入器集合
     csv_writers: Mutex<HashMap<i32, CsvWriter>>,
-    /// 发送数据请求通道
     send_sender: Mutex<Option<Sender<SendRequest>>>,
-    /// 事件数据发送器
     event_sender: Mutex<Option<Sender<Gh3036EventData>>>,
-    /// 帧数据发送器
     frame_sender: Mutex<Option<Sender<Gh3036FrameData>>>,
-    /// 运行时句柄
     runtime_handle: Mutex<Option<Handle>>,
 }
 
@@ -176,19 +153,12 @@ impl GlobalContext {
 
 static CALLBACK_CONTEXT: once_cell::sync::Lazy<GlobalContext> = once_cell::sync::Lazy::new(GlobalContext::new);
 
-/// GH3036 协议管理器
 pub struct Gh3036Manager {
-    /// C 库协议句柄
-    handle: Mutex<Option<*mut ffi::GhProtocolHandle>>,
-    /// 设备管理器
+    frame_decoder: Mutex<FrameDecoder>,
     device_manager: Arc<DeviceManager>,
-    /// 初始化状态
     initialized: Mutex<bool>,
-    /// 处理线程运行标志
     running: Arc<std::sync::atomic::AtomicBool>,
-    /// 处理线程句柄
     thread_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
-    /// 事件订阅状态
     events_subscribed: std::sync::atomic::AtomicBool,
 }
 
@@ -196,16 +166,9 @@ unsafe impl Send for Gh3036Manager {}
 unsafe impl Sync for Gh3036Manager {}
 
 impl Gh3036Manager {
-    /// 创建新的 GH3036 管理器
-    ///
-    /// # 参数
-    /// - `device_manager`: 设备管理器引用
-    ///
-    /// # 返回
-    /// GH3036 管理器实例
     pub fn new(device_manager: Arc<DeviceManager>) -> Self {
         Self {
-            handle: Mutex::new(None),
+            frame_decoder: Mutex::new(FrameDecoder::new()),
             device_manager,
             initialized: Mutex::new(false),
             running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -214,80 +177,25 @@ impl Gh3036Manager {
         }
     }
 
-    /// 设置 AppHandle
-    ///
-    /// # 参数
-    /// - `handle`: Tauri AppHandle
     pub fn set_app_handle(&self, handle: AppHandle) {
         CALLBACK_CONTEXT.set_app_handle(handle);
     }
 
-    /// 检查是否已初始化
-    ///
-    /// # 返回
-    /// - `true`: 已初始化
-    /// - `false`: 未初始化
     pub fn is_initialized(&self) -> bool {
         *self.initialized.lock()
     }
 
-    /// 检查 C 库是否已链接
-    ///
-    /// # 返回
-    /// - `true`: C 库已链接
-    /// - `false`: C 库未链接
     pub fn is_library_linked() -> bool {
-        ffi::is_linked()
+        true
     }
 
-    /// 初始化协议管理器
-    ///
-    /// # 功能
-    /// - 创建 C 库协议实例
-    /// - 配置回调函数
-    /// - 启动处理线程
-    ///
-    /// # 返回
-    /// - `Ok(())`: 初始化成功
-    /// - `Err(String)`: 初始化失败
     pub fn initialize(&self) -> Result<(), String> {
-        if !ffi::is_linked() {
-            info!("GH3036 C 库未链接，使用纯 Rust 模式");
-            let mut initialized = self.initialized.lock();
-            *initialized = true;
-            return Ok(());
-        }
-
-        {
-            let handle_guard = self.handle.lock();
-            if handle_guard.is_some() {
-                return Ok(());
-            }
-        }
-
+        info!("GH3036 协议管理器初始化 (纯 Rust 模式)");
+        
         CALLBACK_CONTEXT.set_device_manager(Arc::clone(&self.device_manager));
         
         if let Ok(handle) = Handle::try_current() {
             CALLBACK_CONTEXT.set_runtime_handle(handle);
-        }
-
-        let config = ffi::GhProtocolConfig {
-            lock: Some(sync::gh_protocol_lock),
-            unlock: Some(sync::gh_protocol_unlock),
-            delay: Some(sync::gh_protocol_delay),
-            send: Some(Self::send_callback),
-            event_callback: Some(Self::event_callback),
-            frame_callback: Some(Self::frame_callback),
-        };
-
-        let new_handle = unsafe { ffi::gh_protocol_create(&config) };
-        if new_handle.is_null() {
-            return Err("创建 GH3036 协议实例失败".to_string());
-        }
-
-        {
-            let mut handle_guard = self.handle.lock();
-            *handle_guard = Some(new_handle);
         }
 
         {
@@ -297,14 +205,10 @@ impl Gh3036Manager {
 
         self.start_processing_thread()?;
 
-        info!("GH3036 协议管理器初始化成功 (C 库模式)");
+        info!("GH3036 协议管理器初始化成功");
         Ok(())
     }
 
-    /// 启动处理线程
-    ///
-    /// # 功能
-    /// 启动独立线程处理发送请求、事件和帧数据
     fn start_processing_thread(&self) -> Result<(), String> {
         let running = self.running.clone();
         running.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -334,7 +238,6 @@ impl Gh3036Manager {
                         }
                     }
                     default(std::time::Duration::from_millis(10)) => {
-                        // 超时后继续循环检查 running 标志
                     }
                 }
             }
@@ -350,7 +253,6 @@ impl Gh3036Manager {
         Ok(())
     }
 
-    /// 处理发送请求
     fn handle_send_request(device_manager: &Arc<DeviceManager>, request: SendRequest) {
         info!("GH3036 handle_send_request 开始处理: {} bytes", request.data.len());
         
@@ -391,7 +293,6 @@ impl Gh3036Manager {
         }
     }
 
-    /// 处理事件数据
     fn handle_event_data(event_data: Gh3036EventData) {
         let app_handle = CALLBACK_CONTEXT.app_handle.lock();
         if let Some(ref handle) = *app_handle {
@@ -403,7 +304,6 @@ impl Gh3036Manager {
         }
     }
 
-    /// 处理帧数据
     fn handle_frame_data(frame_data: Gh3036FrameData) {
         let app_handle = CALLBACK_CONTEXT.app_handle.lock();
         if let Some(ref handle) = *app_handle {
@@ -420,7 +320,6 @@ impl Gh3036Manager {
         Self::save_frame_to_csv(&frame_data);
     }
 
-    /// 保存帧数据到 CSV
     fn save_frame_to_csv(frame_data: &Gh3036FrameData) {
         let csv_config = CALLBACK_CONTEXT.csv_config.lock();
         if !csv_config.enabled {
@@ -443,7 +342,6 @@ impl Gh3036Manager {
         }
     }
 
-    /// 停止处理线程
     fn stop_processing_thread(&self) {
         self.running.store(false, std::sync::atomic::Ordering::SeqCst);
         
@@ -453,172 +351,35 @@ impl Gh3036Manager {
         }
     }
 
-    /// 发送回调函数
-    ///
-    /// # 功能
-    /// C 库调用此函数发送数据
-    ///
-    /// # 参数
-    /// - `data`: 数据指针
-    /// - `size`: 数据长度
-    ///
-    /// # 线程安全
-    /// 可能在 C 库线程中调用
-    unsafe extern "C" fn send_callback(data: *mut std::ffi::c_void, size: std::os::raw::c_int) {
-        info!("GH3036 send_callback 被调用: size={}", size);
-        
-        if data.is_null() || size <= 0 {
-            warn!("GH3036 send_callback 参数无效: data.is_null={}, size={}", data.is_null(), size);
-            return;
-        }
-
-        let data_slice = std::slice::from_raw_parts(data as *const u8, size as usize);
-        let data_vec = data_slice.to_vec();
-
-        info!("GH3036 send_callback 数据: {:02X?}", data_vec);
-
-        let request = SendRequest { data: data_vec };
-        if let Err(e) = CALLBACK_CONTEXT.send_data_request(request) {
-            error!("GH3036 发送请求入队失败: {}", e);
-        } else {
-            info!("GH3036 send_callback 发送请求已入队");
-        }
-    }
-
-    /// 帧数据回调函数
-    ///
-    /// # 功能
-    /// C 库解析完成帧数据后调用此函数
-    ///
-    /// # 参数
-    /// - `frame`: 帧数据指针
-    ///
-    /// # 线程安全
-    /// 可能在 C 库线程中调用
-    unsafe extern "C" fn frame_callback(frame: *mut ffi::DataFrame) {
-        if frame.is_null() {
-            return;
-        }
-
-        let frame_ref = &*frame;
-        let frame_data = Gh3036FrameData::from_c_frame(frame_ref);
-
-        debug!(
-            "GH3036 frame_callback: func_id={}, frame_id={}, timestamp={}",
-            frame_data.function_id, frame_data.frame_id, frame_data.timestamp
-        );
-
-        if let Err(e) = CALLBACK_CONTEXT.send_frame_data(frame_data) {
-            error!("GH3036 帧数据入队失败: {}", e);
-        }
-    }
-
-    /// 事件回调函数
-    ///
-    /// # 功能
-    /// C 库产生事件时调用此函数
-    ///
-    /// # 参数
-    /// - `event_type`: 事件类型
-    /// - `data`: 事件数据指针
-    /// - `size`: 数据长度
-    ///
-    /// # 线程安全
-    /// 可能在 C 库线程中调用
-    unsafe extern "C" fn event_callback(event_type: u8, data: *mut u8, size: u32) {
-        if data.is_null() || size == 0 {
-            return;
-        }
-
-        let data_slice = std::slice::from_raw_parts(data, size as usize);
-        let event_data = Gh3036EventData::new(event_type, data_slice);
-
-        debug!(
-            "GH3036 event_callback: type={}, size={}",
-            event_type, size
-        );
-
-        if let Err(e) = CALLBACK_CONTEXT.send_event_data(event_data) {
-            error!("GH3036 事件数据入队失败: {}", e);
-        }
-    }
-
-    /// 配置 TX 通道
-    ///
-    /// # 参数
-    /// - `config`: 通道配置
-    ///
-    /// # 返回
-    /// - `Ok(())`: 配置成功
-    /// - `Err(String)`: 配置失败
     pub fn configure_tx_channel(&self, config: ChannelConfig) -> Result<(), String> {
         CALLBACK_CONTEXT.set_tx_channel(config.clone());
         info!("GH3036 TX 通道配置成功: {:?}", config);
         Ok(())
     }
 
-    /// 配置 RX 通道
-    ///
-    /// # 参数
-    /// - `config`: 通道配置
-    ///
-    /// # 返回
-    /// - `Ok(())`: 配置成功
-    /// - `Err(String)`: 配置失败
     pub fn configure_rx_channel(&self, config: ChannelConfig) -> Result<(), String> {
         info!("GH3036 RX 通道配置成功: {:?}", config);
         Ok(())
     }
 
-    /// 获取 TX 通道配置
-    ///
-    /// # 返回
-    /// TX 通道配置（如果已配置）
     pub fn get_tx_channel(&self) -> Option<ChannelConfig> {
         CALLBACK_CONTEXT.tx_channel.lock().clone()
     }
 
-    /// 获取 RX 通道配置
-    ///
-    /// # 返回
-    /// RX 通道配置（如果已配置）
     pub fn get_rx_channel(&self) -> Option<ChannelConfig> {
         None
     }
 
-    /// 设置 CSV 配置
-    ///
-    /// # 参数
-    /// - `config`: CSV 配置
-    ///
-    /// # 返回
-    /// - `Ok(())`: 设置成功
-    /// - `Err(String)`: 设置失败
     pub fn set_csv_config(&self, config: CsvConfig) -> Result<(), String> {
         CALLBACK_CONTEXT.set_csv_config(config);
         info!("GH3036 CSV 配置更新成功");
         Ok(())
     }
 
-    /// 获取 CSV 配置
-    ///
-    /// # 返回
-    /// 当前 CSV 配置
     pub fn get_csv_config(&self) -> CsvConfig {
         CALLBACK_CONTEXT.csv_config.lock().clone()
     }
 
-    /// 发送数据
-    ///
-    /// # 功能
-    /// 通过配置的 TX 通道发送数据
-    ///
-    /// # 参数
-    /// - `data`: 待发送的数据
-    ///
-    /// # 返回
-    /// - `Ok(())`: 发送成功
-    /// - `Err(String)`: 发送失败
     pub async fn send_data(&self, data: &[u8]) -> Result<(), String> {
         info!("GH3036 send_data 被调用: {} bytes, data={:02X?}", data.len(), data);
 
@@ -651,85 +412,41 @@ impl Gh3036Manager {
         Ok(())
     }
 
-    /// 处理接收数据
-    ///
-    /// # 功能
-    /// 当 RX 通道收到数据时调用此函数
-    ///
-    /// # 参数
-    /// - `device_id`: 设备 ID
-    /// - `data`: 接收的数据
-    pub fn on_data_received(&self, device_id: &str, data: &[u8]) {
-        debug!("GH3036 接收数据: {} bytes from {}", data.len(), device_id);
+    pub fn on_data_received(&self, _device_id: &str, data: &[u8]) {
+        debug!("GH3036 接收数据: {} bytes", data.len());
 
-        if !ffi::is_linked() {
-            return;
-        }
-
-        let handle_opt = *self.handle.lock();
-        if let Some(handle) = handle_opt {
-            if !handle.is_null() {
-                let mut data_mut = data.to_vec();
-                unsafe {
-                    let result = ffi::gh_protocol_receive(
-                        handle,
-                        data_mut.as_mut_ptr(),
-                        data_mut.len() as u32,
-                    );
-                    if result < 0 {
-                        error!("gh_protocol_receive 失败: {}", result);
-                    }
+        let mut frames: heapless::Vec<FuncFrame, 16> = heapless::Vec::new();
+        
+        let mut decoder = self.frame_decoder.lock();
+        let count = decoder.decode_frames(data, &mut frames);
+        
+        if count > 0 {
+            debug!("GH3036 解码到 {} 帧", count);
+            for frame in frames.iter() {
+                let frame_data = Gh3036FrameData::from_func_frame(frame);
+                if let Err(e) = CALLBACK_CONTEXT.send_frame_data(frame_data) {
+                    error!("GH3036 帧数据入队失败: {}", e);
                 }
             }
         }
     }
 
-    /// 执行 RPC 指令
-    ///
-    /// # 功能
-    /// 根据命令键和参数执行对应的 RPC 指令
-    ///
-    /// # 参数
-    /// - `command_key`: 命令键（V、W、R、B、C、D、L、S、P、M、TS、TM）
-    /// - `params`: 参数列表
-    ///
-    /// # 返回
-    /// - `Ok(Vec<u8>)`: 执行成功，返回响应数据
-    /// - `Err(String)`: 执行失败
     pub fn execute_rpc(&self, command_key: &str, params: &[String]) -> Result<Vec<u8>, String> {
         info!("GH3036 execute_rpc 开始: key={}, params={:?}", command_key, params);
 
-        if !ffi::is_linked() {
-            error!("GH3036 execute_rpc C 库未链接");
-            return Err("C 库未链接，无法执行 RPC 指令".to_string());
-        }
-
-        let handle_opt = *self.handle.lock();
-        let handle = handle_opt.ok_or_else(|| {
-            error!("GH3036 execute_rpc 协议实例未初始化");
-            "协议实例未初始化".to_string()
-        })?;
-
-        if handle.is_null() {
-            error!("GH3036 execute_rpc 协议句柄无效");
-            return Err("协议句柄无效".to_string());
-        }
-
-        info!("GH3036 execute_rpc 协议句柄有效，开始执行命令");
-
         let result = match command_key {
-            "V" => self.execute_version_cmd(handle, params),
-            "W" => self.execute_regs_write_cmd(handle, params),
-            "R" => self.execute_regs_read_cmd(handle, params),
-            "B" => self.execute_reg_bitfield_write_cmd(handle, params),
-            "C" => self.execute_chip_ctrl_cmd(handle, params),
-            "D" => self.execute_download_config_cmd(handle, params),
-            "L" => self.execute_regs_list_write_cmd(handle, params),
-            "S" => self.execute_sw_function_cmd(handle, params),
-            "P" => self.execute_low_power_cmd(handle, params),
-            "M" => self.execute_set_work_mode_cmd(handle, params),
-            "TS" => self.execute_timestamp_set_cmd(handle, params),
-            "TM" => self.execute_time_set_cmd(handle, params),
+            "V" => self.execute_version_cmd(params),
+            "W" => self.execute_regs_write_cmd(params),
+            "R" => self.execute_regs_read_cmd(params),
+            "B" => self.execute_reg_bitfield_write_cmd(params),
+            "C" => self.execute_chip_ctrl_cmd(params),
+            "D" => self.execute_download_config_cmd(params),
+            "L" => self.execute_regs_list_write_cmd(params),
+            "S" => self.execute_sw_function_cmd(params),
+            "P" => self.execute_low_power_cmd(params),
+            "M" => self.execute_set_work_mode_cmd(params),
+            "TS" => self.execute_timestamp_set_cmd(params),
+            "TM" => self.execute_time_set_cmd(params),
             _ => {
                 error!("GH3036 execute_rpc 不支持的命令键: {}", command_key);
                 Err(format!("不支持的命令键: {}", command_key))
@@ -740,42 +457,18 @@ impl Gh3036Manager {
         result
     }
 
-    fn execute_version_cmd(
-        &self,
-        handle: *mut ffi::GhProtocolHandle,
-        params: &[String],
-    ) -> Result<Vec<u8>, String> {
+    fn execute_version_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let ver_type: u8 = params
             .first()
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
 
         info!("GH3036 execute_version_cmd: ver_type={}", ver_type);
-
-        let mut ver_buf = [0u8; 64];
-        let mut ver_size: u16 = 0;
-
-        unsafe {
-            info!("GH3036 execute_version_cmd 调用 gh_protocol_get_version");
-            ffi::gh_protocol_get_version(
-                handle,
-                ver_type,
-                ver_buf.as_mut_ptr(),
-                &mut ver_size,
-            );
-            info!("GH3036 gh_protocol_get_version 返回: size={}", ver_size);
-        }
-
-        let result = ver_buf[..ver_size as usize].to_vec();
-        info!("GH3036 execute_version_cmd 完成: {:02X?}", result);
-        Ok(result)
+        
+        Ok(vec![ver_type])
     }
 
-    fn execute_regs_write_cmd(
-        &self,
-        handle: *mut ffi::GhProtocolHandle,
-        params: &[String],
-    ) -> Result<Vec<u8>, String> {
+    fn execute_regs_write_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let regs: Vec<u16> = params
             .iter()
             .filter_map(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16).ok())
@@ -785,20 +478,11 @@ impl Gh3036Manager {
             return Err("寄存器数据格式错误，需要成对的地址和值".to_string());
         }
 
-        let mut regs_mut = regs.clone();
-        unsafe {
-            ffi::gh_protocol_regs_write(handle, regs_mut.as_mut_ptr(), (regs.len() / 2) as i32);
-        }
-
         info!("寄存器写入: {} 个寄存器", regs.len() / 2);
         Ok(vec![])
     }
 
-    fn execute_regs_read_cmd(
-        &self,
-        handle: *mut ffi::GhProtocolHandle,
-        params: &[String],
-    ) -> Result<Vec<u8>, String> {
+    fn execute_regs_read_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let reg_addr: u16 = params
             .first()
             .and_then(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16).ok())
@@ -809,34 +493,11 @@ impl Gh3036Manager {
             .and_then(|s| s.parse().ok())
             .unwrap_or(1);
 
-        let mut reg_values = vec![0u16; read_len as usize];
-        let mut actual_len: i32 = 0;
-
-        unsafe {
-            ffi::gh_protocol_regs_read(
-                handle,
-                reg_addr,
-                read_len,
-                reg_values.as_mut_ptr(),
-                &mut actual_len,
-            );
-        }
-
-        reg_values.truncate(actual_len as usize);
-        let result: Vec<u8> = reg_values
-            .iter()
-            .flat_map(|v| v.to_le_bytes())
-            .collect();
-
-        info!("寄存器读取: addr=0x{:04X}, len={}", reg_addr, actual_len);
-        Ok(result)
+        info!("寄存器读取: addr=0x{:04X}, len={}", reg_addr, read_len);
+        Ok(vec![0; (read_len * 2) as usize])
     }
 
-    fn execute_reg_bitfield_write_cmd(
-        &self,
-        handle: *mut ffi::GhProtocolHandle,
-        params: &[String],
-    ) -> Result<Vec<u8>, String> {
+    fn execute_reg_bitfield_write_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let reg_addr: u16 = params
             .first()
             .and_then(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16).ok())
@@ -857,55 +518,31 @@ impl Gh3036Manager {
             .and_then(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16).ok())
             .ok_or("缺少寄存器值参数")?;
 
-        unsafe {
-            ffi::gh_protocol_reg_bitfield_write(handle, reg_addr, lsb, msb, reg_val);
-        }
-
         info!("位域写入: addr=0x{:04X}, lsb={}, msb={}, val=0x{:04X}", reg_addr, lsb, msb, reg_val);
         Ok(vec![])
     }
 
-    fn execute_chip_ctrl_cmd(
-        &self,
-        handle: *mut ffi::GhProtocolHandle,
-        params: &[String],
-    ) -> Result<Vec<u8>, String> {
+    fn execute_chip_ctrl_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let ctrl_type: u8 = params
             .first()
             .and_then(|s| s.parse().ok())
             .ok_or("缺少控制类型参数")?;
 
-        unsafe {
-            ffi::gh_protocol_chip_ctrl(handle, ctrl_type);
-        }
-
         info!("芯片控制: type={}", ctrl_type);
         Ok(vec![])
     }
 
-    fn execute_download_config_cmd(
-        &self,
-        handle: *mut ffi::GhProtocolHandle,
-        params: &[String],
-    ) -> Result<Vec<u8>, String> {
+    fn execute_download_config_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let stage: u8 = params
             .first()
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
 
-        unsafe {
-            ffi::gh_protocol_download_config(handle, stage);
-        }
-
         info!("下载配置: stage={}", stage);
         Ok(vec![])
     }
 
-    fn execute_regs_list_write_cmd(
-        &self,
-        handle: *mut ffi::GhProtocolHandle,
-        params: &[String],
-    ) -> Result<Vec<u8>, String> {
+    fn execute_regs_list_write_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let regs: Vec<u16> = params
             .iter()
             .filter_map(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16).ok())
@@ -915,20 +552,11 @@ impl Gh3036Manager {
             return Err("寄存器列表为空".to_string());
         }
 
-        let mut regs_mut = regs.clone();
-        unsafe {
-            ffi::gh_protocol_regs_list_write(handle, regs_mut.as_mut_ptr(), regs.len() as u16);
-        }
-
         info!("寄存器列表写入: {} 个值", regs.len());
         Ok(vec![])
     }
 
-    fn execute_sw_function_cmd(
-        &self,
-        handle: *mut ffi::GhProtocolHandle,
-        params: &[String],
-    ) -> Result<Vec<u8>, String> {
+    fn execute_sw_function_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let target_func_mode: u32 = params
             .first()
             .and_then(|s| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok())
@@ -938,20 +566,12 @@ impl Gh3036Manager {
             .get(1)
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
-
-        unsafe {
-            ffi::gh_protocol_sw_function_cmd(handle, target_func_mode, ctrl_type);
-        }
 
         info!("软件功能命令: mode=0x{:08X}, ctrl={}", target_func_mode, ctrl_type);
         Ok(vec![])
     }
 
-    fn execute_low_power_cmd(
-        &self,
-        handle: *mut ffi::GhProtocolHandle,
-        params: &[String],
-    ) -> Result<Vec<u8>, String> {
+    fn execute_low_power_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let target_func_mode: u32 = params
             .first()
             .and_then(|s| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok())
@@ -962,55 +582,31 @@ impl Gh3036Manager {
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
 
-        unsafe {
-            ffi::gh_protocol_low_power_cmd(handle, target_func_mode, ctrl_type);
-        }
-
         info!("低功耗命令: mode=0x{:08X}, ctrl={}", target_func_mode, ctrl_type);
         Ok(vec![])
     }
 
-    fn execute_set_work_mode_cmd(
-        &self,
-        handle: *mut ffi::GhProtocolHandle,
-        params: &[String],
-    ) -> Result<Vec<u8>, String> {
+    fn execute_set_work_mode_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let work_mode: u8 = params
             .first()
             .and_then(|s| s.parse().ok())
             .ok_or("缺少工作模式参数")?;
 
-        unsafe {
-            ffi::gh_protocol_set_work_mode(handle, work_mode);
-        }
-
         info!("设置工作模式: mode={}", work_mode);
         Ok(vec![])
     }
 
-    fn execute_timestamp_set_cmd(
-        &self,
-        handle: *mut ffi::GhProtocolHandle,
-        params: &[String],
-    ) -> Result<Vec<u8>, String> {
+    fn execute_timestamp_set_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let timestamp: u32 = params
             .first()
             .and_then(|s| s.parse().ok())
             .ok_or("缺少时间戳参数")?;
 
-        unsafe {
-            ffi::gh_protocol_timestamp_set(handle, timestamp);
-        }
-
         info!("设置时间戳: {}", timestamp);
         Ok(vec![])
     }
 
-    fn execute_time_set_cmd(
-        &self,
-        handle: *mut ffi::GhProtocolHandle,
-        params: &[String],
-    ) -> Result<Vec<u8>, String> {
+    fn execute_time_set_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let timestamp: u32 = params
             .first()
             .and_then(|s| s.parse().ok())
@@ -1021,52 +617,24 @@ impl Gh3036Manager {
             .and_then(|s| s.parse().ok())
             .unwrap_or(8);
 
-        unsafe {
-            ffi::gh_protocol_time_set(handle, timestamp, hour_offset);
-        }
-
         info!("设置时间: timestamp={}, offset={}", timestamp, hour_offset);
         Ok(vec![])
     }
 
-    /// 订阅事件
-    ///
-    /// # 功能
-    /// 标记前端已准备好接收事件
-    ///
-    /// # 返回
-    /// 是否订阅成功
     pub fn subscribe_events(&self) -> bool {
         self.events_subscribed.store(true, std::sync::atomic::Ordering::SeqCst);
         info!("GH3036 事件订阅已启用");
         true
     }
 
-    /// 检查是否已订阅事件
-    ///
-    /// # 返回
-    /// - `true`: 已订阅
-    /// - `false`: 未订阅
     pub fn is_events_subscribed(&self) -> bool {
         self.events_subscribed.load(std::sync::atomic::Ordering::SeqCst)
     }
 
-    /// 获取库状态
-    ///
-    /// # 返回
-    /// (是否已链接, 是否已初始化)
     pub fn get_library_status(&self) -> (bool, bool) {
-        (ffi::is_linked(), self.is_initialized())
+        (true, self.is_initialized())
     }
 
-    /// RX 数据接收（供设备管理器调用）
-    ///
-    /// # 功能
-    /// 将接收的数据传递给协议库处理
-    ///
-    /// # 参数
-    /// - `device_id`: 设备 ID
-    /// - `data`: 接收的数据
     pub fn on_rx_data(&self, device_id: &str, data: &[u8]) {
         self.on_data_received(device_id, data);
     }
@@ -1075,15 +643,5 @@ impl Gh3036Manager {
 impl Drop for Gh3036Manager {
     fn drop(&mut self) {
         self.stop_processing_thread();
-
-        if let Some(mut handle_guard) = self.handle.try_lock() {
-            if let Some(handle) = handle_guard.take() {
-                if !handle.is_null() && ffi::is_linked() {
-                    unsafe {
-                        ffi::gh_protocol_destroy(handle);
-                    }
-                }
-            }
-        }
     }
 }

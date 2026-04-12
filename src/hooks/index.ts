@@ -7,3 +7,4 @@ export * from './useAppState';
 export * from './useAppDispatch';
 export * from './useLog';
 export * from './useTheme';
+export * from './useProtocol';

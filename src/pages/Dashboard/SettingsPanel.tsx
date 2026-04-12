@@ -14,6 +14,7 @@ const SettingsPanel: React.FC = () => {
     dataSourceType,
     setDataSourceType,
     serialConfig,
+    serialPort,
     bleConfig,
     exportToCsv,
     parsedDataBuffer,
@@ -168,7 +169,7 @@ const SettingsPanel: React.FC = () => {
           </Button>
           {dataSourceType === 'serial' && (
             <div style={{ padding: 8, background: '#fafafa', borderRadius: 4, fontSize: 12 }}>
-              <div>端口: {serialConfig.port || '未选择'}</div>
+              <div>端口: {serialPort || '未选择'}</div>
               <div>波特率: {serialConfig.baudRate}</div>
             </div>
           )}

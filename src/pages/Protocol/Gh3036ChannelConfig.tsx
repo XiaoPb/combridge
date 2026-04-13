@@ -3,8 +3,7 @@ import { Select, Switch, Input, Button, Space, Typography, message, Row, Col, th
 import { FolderOpenOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
-import { useSerialStore } from '../../stores/serialStore';
-import { useBleStore } from '../../stores/bleStore';
+import { useConnectedDevices } from '../../hooks/useConnectedDevices';
 import { open } from '@tauri-apps/plugin-dialog';
 
 const { Text } = Typography;
@@ -20,8 +19,7 @@ const Gh3036ChannelConfig: React.FC = () => {
     configureRxChannel,
     updateCsvConfig,
   } = useGh3036Store();
-  const { ports } = useSerialStore();
-  const { connections } = useBleStore();
+  const connectedDevices = useConnectedDevices();
 
   const [txType, setTxType] = useState<'serial' | 'ble'>(txChannel?.channel_type === 'Ble' ? 'ble' : 'serial');
   const [txDevice, setTxDevice] = useState(txChannel?.device_id || '');
@@ -55,15 +53,13 @@ const Gh3036ChannelConfig: React.FC = () => {
     setCsvDir(csvConfig.output_dir);
   }, [csvConfig]);
 
-  const serialOptions = ports.map((p) => ({
-    label: p.name,
-    value: p.name,
-  }));
+  const serialOptions = connectedDevices
+    .filter((d) => d.type === 'serial')
+    .map((d) => ({ label: d.name, value: d.id }));
 
-  const bleOptions = connections.map((c) => ({
-    label: c.name || c.address,
-    value: c.address,
-  }));
+  const bleOptions = connectedDevices
+    .filter((d) => d.type === 'ble')
+    .map((d) => ({ label: d.name, value: d.id }));
 
   const handleSaveTxChannel = async () => {
     if (!txDevice) {

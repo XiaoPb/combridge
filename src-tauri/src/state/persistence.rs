@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
+use crate::error::ComBridgeError;
 use super::app_state::AppState;
 use super::types::Preferences;
 
@@ -34,25 +35,25 @@ impl StatePersistence {
         }
     }
 
-    pub async fn save(&self, state: &AppState) -> Result<(), String> {
+    pub async fn save(&self, state: &AppState) -> Result<(), ComBridgeError> {
         let json = serde_json::to_string_pretty(state)
-            .map_err(|e| format!("序列化状态失败: {}", e))?;
+            .map_err(|e| ComBridgeError::config(format!("序列化状态失败: {}", e)))?;
         
         if let Some(parent) = self.state_path.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
-                .map_err(|e| format!("创建目录失败: {}", e))?;
+                .map_err(|e| ComBridgeError::io(format!("创建目录失败: {}", e)))?;
         }
         
         tokio::fs::write(&self.state_path, json)
             .await
-            .map_err(|e| format!("写入状态文件失败: {}", e))?;
+            .map_err(|e| ComBridgeError::io(format!("写入状态文件失败: {}", e)))?;
         
         debug!("状态已保存到: {:?}", self.state_path);
         Ok(())
     }
 
-    pub async fn load(&self) -> Result<AppState, String> {
+    pub async fn load(&self) -> Result<AppState, ComBridgeError> {
         if !self.state_path.exists() {
             info!("状态文件不存在，使用默认状态");
             return Ok(AppState::default());
@@ -60,10 +61,10 @@ impl StatePersistence {
         
         let content = tokio::fs::read_to_string(&self.state_path)
             .await
-            .map_err(|e| format!("读取状态文件失败: {}", e))?;
+            .map_err(|e| ComBridgeError::io(format!("读取状态文件失败: {}", e)))?;
         
         let state: AppState = serde_json::from_str(&content)
-            .map_err(|e| format!("解析状态文件失败: {}", e))?;
+            .map_err(|e| ComBridgeError::parse(format!("解析状态文件失败: {}", e)))?;
         
         info!("状态已从 {:?} 加载", self.state_path);
         Ok(state)
@@ -103,19 +104,19 @@ impl StatePersistence {
         }
     }
 
-    pub async fn save_preferences(&self, prefs: &Preferences) -> Result<(), String> {
+    pub async fn save_preferences(&self, prefs: &Preferences) -> Result<(), ComBridgeError> {
         let yaml = serde_yaml::to_string(prefs)
-            .map_err(|e| format!("序列化偏好设置失败: {}", e))?;
+            .map_err(|e| ComBridgeError::config(format!("序列化偏好设置失败: {}", e)))?;
         
         if let Some(parent) = self.preferences_path.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
-                .map_err(|e| format!("创建目录失败: {}", e))?;
+                .map_err(|e| ComBridgeError::io(format!("创建目录失败: {}", e)))?;
         }
         
         tokio::fs::write(&self.preferences_path, yaml)
             .await
-            .map_err(|e| format!("写入偏好设置文件失败: {}", e))?;
+            .map_err(|e| ComBridgeError::io(format!("写入偏好设置文件失败: {}", e)))?;
         
         let mut prefs_guard = self.preferences.write().await;
         *prefs_guard = Some(prefs.clone());
@@ -124,7 +125,7 @@ impl StatePersistence {
         Ok(())
     }
 
-    pub async fn load_preferences(&self) -> Result<Preferences, String> {
+    pub async fn load_preferences(&self) -> Result<Preferences, ComBridgeError> {
         if !self.preferences_path.exists() {
             info!("偏好设置文件不存在，创建默认配置文件");
             let default_prefs = Preferences::default();
@@ -134,7 +135,7 @@ impl StatePersistence {
         
         let content = tokio::fs::read_to_string(&self.preferences_path)
             .await
-            .map_err(|e| format!("读取偏好设置文件失败: {}", e))?;
+            .map_err(|e| ComBridgeError::io(format!("读取偏好设置文件失败: {}", e)))?;
         
         let prefs: Preferences = match serde_yaml::from_str(&content) {
             Ok(p) => p,

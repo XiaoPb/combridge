@@ -13,7 +13,7 @@ pub async fn get_preferences(
     let persistence = persistence.inner().read().await;
     let prefs = persistence.load_preferences().await.map_err(|e| {
         error!("加载偏好设置失败: {}", e);
-        crate::error::ComBridgeError::config(e)
+        e
     })?;
     
     Ok(prefs)
@@ -29,7 +29,7 @@ pub async fn save_preferences(
     let persistence = persistence.inner().read().await;
     persistence.save_preferences(&prefs).await.map_err(|e| {
         error!("保存偏好设置失败: {}", e);
-        crate::error::ComBridgeError::config(e)
+        e
     })?;
     
     debug!("偏好设置保存完成");
@@ -62,7 +62,7 @@ pub async fn update_serial_preferences(
     
     persistence.save_preferences(&prefs).await.map_err(|e| {
         error!("保存偏好设置失败: {}", e);
-        crate::error::ComBridgeError::config(e)
+        e
     })?;
     
     Ok(())
@@ -96,7 +96,7 @@ pub async fn update_ble_preferences(
     
     persistence.save_preferences(&prefs).await.map_err(|e| {
         error!("保存偏好设置失败: {}", e);
-        crate::error::ComBridgeError::config(e)
+        e
     })?;
     
     Ok(())

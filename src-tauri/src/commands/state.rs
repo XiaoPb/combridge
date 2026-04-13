@@ -40,10 +40,10 @@ pub async fn get_channel_data(
     
     match state.get_channel(&device_id, &channel_id) {
         Some(channel) => {
-            let entries = if let Some(limit) = limit {
-                channel.buffer.entries.iter().rev().take(limit).rev().cloned().collect::<Vec<_>>()
+            let entries: Vec<_> = if let Some(limit) = limit {
+                channel.buffer.entries.iter().rev().take(limit).rev().cloned().collect()
             } else {
-                channel.buffer.entries.clone()
+                channel.buffer.entries.iter().cloned().collect()
             };
             
             Ok(serde_json::json!({
@@ -73,7 +73,7 @@ pub async fn restore_state(
     let persistence = persistence.inner().read().await;
     let loaded_state = persistence.load().await.map_err(|e| {
         error!("加载状态失败: {}", e);
-        crate::error::ComBridgeError::config(e)
+        e
     })?;
     
     let mut current_state = state.inner().write().await;
@@ -95,7 +95,7 @@ pub async fn save_state(
     
     persistence.save(&current_state).await.map_err(|e| {
         error!("保存状态失败: {}", e);
-        crate::error::ComBridgeError::config(e)
+        e
     })?;
     
     debug!("状态保存完成");

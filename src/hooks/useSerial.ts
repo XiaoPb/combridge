@@ -34,7 +34,7 @@ export const useSerial = () => {
     setIsScanning(true);
     setError(null);
     try {
-      const portList = await serialApi.scanPorts();
+      const portList = await serialApi.listPorts();
       setPorts(portList);
       if (portList.length === 0) {
         message.warning('未找到可用串口');

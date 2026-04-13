@@ -81,7 +81,7 @@ export const useBle = () => {
         scanTimeoutRef.current = setTimeout(() => {
           scanTimeoutRef.current = null;
           setIsScanning(false);
-          bleApi.stopScan().catch(() => {});
+          bleApi.stopBleScan().catch(() => {});
         }, options.timeout);
       }
 
@@ -122,7 +122,7 @@ export const useBle = () => {
       scanTimeoutRef.current = null;
     }
     try {
-      await bleApi.stopScan();
+      await bleApi.stopBleScan();
     } catch {}
     addLog('info', 'BleManager', '扫描已停止');
     message.info('扫描已停止');

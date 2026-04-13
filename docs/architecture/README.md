@@ -10,13 +10,23 @@ ComBridge 是一个基于 Tauri 2.0 构建的跨平台桌面应用，用于串�
 |------|--------|------|
 | **前端框架** | React 18 + TypeScript | UI 构建 |
 | **状态管理** | Zustand | 轻量级状态管理 |
-| **UI 组件库** | Ant Design v6.3.5 | UI 组件 |
+| **UI 组件库** | Ant Design v6.3.5 | UI 组件（唯一指定组件库） |
 | **构建工具** | Vite | 快速开发构建 |
 | **后端框架** | Tauri 2.0 (Rust) | 跨平台桌面应用 |
 | **异步运行时** | Tokio | Rust 异步运行时 |
 | **序列化** | Serde + Serde JSON | Rust 数据序列化 |
 | **串口通信** | serialport-rs | 跨平台串口库 |
 | **脚本引擎** | mlua | Lua 脚本支持 |
+
+## Tauri 插件注册
+
+应用在启动时注册以下 Tauri 官方插件：
+
+| 插件 | 说明 |
+|------|------|
+| `tauri_plugin_opener` | 文件/URL 打开功能 |
+| `tauri_plugin_fs` | 文件系统访问 |
+| `tauri_plugin_dialog` | 原生对话框 |
 
 ## 架构总览
 
@@ -28,12 +38,12 @@ graph TB
         API[API 层]
         Hooks[自定义 Hooks]
     end
-    
+
     subgraph Tauri [Tauri Bridge]
         Commands[Tauri Commands]
         Events[Tauri Events]
     end
-    
+
     subgraph Backend [后端 Rust]
         DeviceMgr[设备管理器]
         SerialMgr[串口管理器]
@@ -41,17 +51,19 @@ graph TB
         ProtocolMgr[协议管理器]
         StateMgr[状态管理器]
         ServiceLayer[服务层]
+        Dashboard[Dashboard 模块]
     end
-    
+
     subgraph Hardware [硬件层]
         SerialPort[串口设备]
         BleDevice[BLE 设备]
     end
-    
+
     UI --> Store
     Store --> API
     API --> Commands
     Commands --> DeviceMgr
+    Commands --> Dashboard
     DeviceMgr --> SerialMgr
     DeviceMgr --> BleMgr
     SerialMgr --> SerialPort
@@ -71,6 +83,7 @@ graph TB
 | BLE 模块 | [ble-module.md](./backend/ble-module.md) | BLE 双模式架构（原生/AT指令） |
 | 协议插件 | [protocol-module.md](./backend/protocol-module.md) | Lua 脚本协议解析 |
 | GH3036 协议 | [gh3036-module.md](./backend/gh3036-module.md) | GH3036 芯片协议支持 |
+| Dashboard | [dashboard-module.md](./backend/dashboard-module.md) | Dashboard 数据解析与配置 |
 | 状态管理 | [state-module.md](./backend/state-module.md) | 应用状态持久化 |
 | 服务层 | [service-module.md](./backend/service-module.md) | 日志、配置、事件总线等 |
 | WebSocket | [websocket-module.md](./backend/websocket-module.md) | WebSocket 客户端 |
@@ -100,7 +113,7 @@ flowchart LR
         CMD_S --> Mgr_S[设备管理器]
         Mgr_S --> HW_S[硬件设备]
     end
-    
+
     subgraph 接收路径
         HW_R[硬件设备] --> Mgr_R[设备管理器]
         Mgr_R --> Event_R[Tauri Event]
@@ -116,8 +129,13 @@ combridge-rust/
 ├── src-tauri/                    # Tauri 后端 (Rust)
 │   ├── src/
 │   │   ├── main.rs               # 应用入口
-│   │   ├── lib.rs                # 模块导出
+│   │   ├── lib.rs                # 模块导出与 Tauri Builder 配置
+│   │   ├── compat.rs             # 系统兼容性检测（WebView2、透明窗口）
 │   │   ├── commands/             # Tauri 命令
+│   │   ├── dashboard/            # Dashboard 模块
+│   │   │   ├── commands.rs       # Dashboard Tauri 命令
+│   │   │   ├── json_config.rs    # JSON 配置管理
+│   │   │   └── parser_scripts.rs # 解析脚本管理
 │   │   ├── device/               # 设备管理
 │   │   ├── gh3036/               # GH3036 协议
 │   │   ├── protocol/             # 协议插件
@@ -125,13 +143,33 @@ combridge-rust/
 │   │   ├── state/                # 状态管理
 │   │   ├── waveform/             # 波形模块
 │   │   └── websocket/            # WebSocket
+│   ├── parser_scripts/           # 预置 Lua 解析脚本
+│   │   ├── csv_parser.lua
+│   │   ├── custom_example.lua
+│   │   ├── imu_parser.lua
+│   │   ├── json.lua              # JSON 库
+│   │   ├── json_parser.lua
+│   │   └── nmea_parser.lua
+│   ├── libs/
+│   │   └── gh-rpc/               # GH3036 RPC 通信库
 │   └── Cargo.toml
 │
 ├── src/                          # 前端源码 (React + TS)
 │   ├── api/                      # API 层
 │   ├── components/               # 公共组件
 │   ├── hooks/                    # 自定义 Hooks
+│   ├── i18n/                     # 国际化配置
+│   ├── locales/                  # 多语言资源
+│   │   ├── en-US/
+│   │   └── zh-CN/
 │   ├── pages/                    # 页面组件
+│   │   ├── Ble/                  # BLE 页面
+│   │   ├── Dashboard/            # Dashboard 页面
+│   │   ├── Home/                 # 首页
+│   │   ├── Protocol/             # 协议页面
+│   │   ├── Serial/               # 串口页面
+│   │   ├── System/               # 系统页面
+│   │   └── Waveform/             # 波形页面
 │   ├── services/                 # 服务层
 │   ├── stores/                   # Zustand Store
 │   ├── types/                    # 类型定义
@@ -150,3 +188,4 @@ combridge-rust/
 3. **事件驱动**：后端通过 Tauri Events 推送数据到前端
 4. **状态持久化**：关键状态自动保存和恢复
 5. **错误处理**：统一错误类型和错误码体系
+6. **脚本化解析**：Dashboard 模块通过 Lua 脚本实现可扩展的数据解析

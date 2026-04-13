@@ -2,191 +2,390 @@
 
 ## 概述
 
-API 层封装了所有 Tauri 命令调用，提供类型安全的接口供上层使用。
+API 层封装了所有 Tauri 命令调用和事件监听，提供类型安全的接口供上层使用。所有 API 函数通过 `invoke` 调用后端 Tauri 命令，命令名称与后端 Rust 代码中注册的命令名称保持一致（蛇形命名）。
 
 ## 模块位置
 
 - 源码路径：`src/api/`
 - 主要文件：
-  - `index.ts` - 统一导出
-  - `tauri.ts` - Tauri 命令封装
-  - `events.ts` - 事件监听封装
-  - `stateApi.ts` - 状态 API
-  - `types.ts` - API 类型定义
 
-## 核心组件
+| 文件 | 说明 |
+|------|------|
+| `index.ts` | 统一导出所有 API 模块 |
+| `tauri.ts` | Tauri 命令封装（serial/ble/websocket/system/protocol/preferences） |
+| `events.ts` | 事件监听封装与事件类型定义 |
+| `stateApi.ts` | 状态 API（dispatch/getState/restore/save） |
+| `dashboard.ts` | 仪表盘 API（解析器脚本/JSON 配置管理） |
+| `gh3036.ts` | GH3036 API（初始化/通道/CSV/RPC/事件订阅） |
+| `waveform.ts` | 波形 API（缓冲区/解析器/数据读写） |
+| `types.ts` | API 类型定义（参数/结果/错误） |
 
-### Tauri 命令封装
+## 核心 API 模块
+
+### SerialApi
+
+串口相关 API，源码位于 [tauri.ts](file:///e:/Code/CPP/combridge-rust/src/api/tauri.ts)：
+
+| 方法 | 后端命令 | 说明 |
+|------|----------|------|
+| `listPorts()` | `scan_serial_ports` | 扫描可用串口列表 |
+| `open(portName, config)` | `open_serial_port` | 打开串口 |
+| `close(portName)` | `close_serial_port` | 关闭串口 |
+| `write(portName, data)` | `send_serial_data` | 发送数据 |
+| `getOpenPorts()` | `get_open_ports` | 获取已打开的端口列表 |
+| `isConnected(portName)` | `is_port_open` | 检查端口是否已打开 |
+| `exportData(portName, allData, rxData)` | `export_serial_data` | 导出串口数据 |
+| `getCache(portName)` | `get_serial_cache` | 获取串口缓存数据 |
+
+别名方法：`scanPorts()` → `listPorts()`、`openPort()` → `open()`、`closePort()` → `close()`、`sendData()` → `write()`
+
+### BleApi
+
+BLE 相关 API，源码位于 [tauri.ts](file:///e:/Code/CPP/combridge-rust/src/api/tauri.ts)：
+
+| 方法 | 后端命令 | 说明 |
+|------|----------|------|
+| `configure(params)` | `configure_ble` | 配置 BLE 模式（native/at） |
+| `scan(options?)` | `scan_ble_devices` | 扫描 BLE 设备 |
+| `stopScan()` | `stop_ble_scan` | 停止扫描 |
+| `connect(params)` | `connect_ble` | 连接 BLE 设备 |
+| `disconnect(deviceId)` | `disconnect_ble` | 断开 BLE 连接 |
+| `getConnections()` | `get_ble_connections` | 获取连接列表 |
+| `discoverServices(params)` | `discover_ble_services` | 发现服务 |
+| `discoverCharacteristics(params)` | `discover_ble_characteristics` | 发现特征 |
+| `read(params)` | `read_ble_characteristic` | 读取特征值 |
+| `write(params)` | `write_ble_characteristic` | 写入特征值 |
+| `writeWithoutResponse(deviceId, charUuid, data)` | `write_ble_without_response` | 无响应写入 |
+| `subscribe(params)` | `subscribe_ble_notify` | 订阅通知 |
+| `unsubscribe(deviceId, charUuid)` | `unsubscribe_ble_notify` | 取消订阅 |
+| `getRssi(deviceId)` | `get_ble_rssi` | 获取 RSSI |
+| `setMtu(deviceId, mtu)` | `set_ble_mtu` | 设置 MTU |
+| `getMode()` | `get_ble_mode` | 获取 BLE 模式 |
+| `isConfigured()` | `is_ble_configured` | 检查是否已配置 |
+| `getCache(charUuid)` | `get_ble_cache` | 获取 BLE 缓存 |
+| `getSubscriptions(deviceId)` | `get_ble_subscriptions` | 获取订阅列表 |
+
+### WebSocketApi
+
+WebSocket 相关 API：
+
+| 方法 | 后端命令 | 说明 |
+|------|----------|------|
+| `connect(id, url, reconnect?)` | `connect_websocket` | 连接 WebSocket |
+| `send(id, message)` | `send_websocket_message` | 发送消息 |
+| `disconnect(id)` | `disconnect_websocket` | 断开连接 |
+| `getStatus(id)` | `get_websocket_status` | 获取连接状态 |
+| `getAllConnections()` | `get_all_websocket_connections` | 获取所有连接 ID |
+| `getAllStatus()` | `get_all_websocket_status` | 获取所有连接状态 |
+
+### SystemApi
+
+系统相关 API：
+
+| 方法 | 后端命令 | 说明 |
+|------|----------|------|
+| `getSystemInfo()` | `get_system_info` | 获取系统信息 |
+| `getSystemStatus()` | `get_system_status` | 获取系统状态 |
+| `getAppVersion()` | `get_app_version` | 获取应用版本 |
+| `getPlatform()` | `get_platform` | 获取平台信息 |
+| `openUrl(url)` | `open_url` | 打开 URL |
+| `showInFolder(path)` | `show_in_folder` | 在文件管理器中显示 |
+| `configureLog(level, filePath?)` | `configure_log` | 配置日志 |
+| `getLogConfig()` | `get_log_config` | 获取日志配置 |
+
+### ProtocolApi
+
+协议相关 API：
+
+| 方法 | 后端命令 | 说明 |
+|------|----------|------|
+| `load(params)` | `load_protocol` | 加载协议 |
+| `unload(pluginId)` | `unload_protocol` | 卸载协议 |
+| `enable(pluginId)` | `enable_protocol` | 启用协议 |
+| `disable(pluginId)` | `disable_protocol` | 禁用协议 |
+| `bind(params)` | `bind_protocol` | 绑定协议到设备 |
+| `unbind(params)` | `unbind_protocol` | 解绑协议 |
+| `list()` | `list_protocols` | 获取协议列表 |
+| `get(pluginId)` | `get_protocol` | 获取单个协议信息 |
+| `getBound(deviceId)` | `get_bound_protocols` | 获取设备绑定的协议 |
+
+### PreferencesApi
+
+偏好设置 API，源码位于 [tauri.ts](file:///e:/Code/CPP/combridge-rust/src/api/tauri.ts)：
+
+| 方法 | 后端命令 | 说明 |
+|------|----------|------|
+| `get()` | `get_preferences` | 获取所有偏好设置 |
+| `save(prefs)` | `save_preferences` | 保存所有偏好设置 |
+| `updateSerial(prefs)` | `update_serial_preferences` | 更新串口偏好 |
+| `updateBle(prefs)` | `update_ble_preferences` | 更新 BLE 偏好 |
+
+### DashboardApi
+
+仪表盘 API，源码位于 [dashboard.ts](file:///e:/Code/CPP/combridge-rust/src/api/dashboard.ts)：
+
+| 方法 | 后端命令 | 说明 |
+|------|----------|------|
+| `getParserScripts()` | `get_parser_scripts` | 获取解析器脚本列表 |
+| `getParserScriptContent(name)` | `get_parser_script_content` | 获取脚本内容 |
+| `saveParserScript(name, content)` | `save_parser_script` | 保存脚本 |
+| `deleteParserScript(name)` | `delete_parser_script` | 删除脚本 |
+| `executeParserScript(name, data)` | `execute_parser_script` | 执行脚本测试 |
+| `initDefaultParserScripts()` | `init_default_parser_scripts` | 初始化默认脚本 |
+| `generateParserFromJson(jsonContent, name, fields)` | `generate_parser_from_json` | 从 JSON 生成解析器 |
+| `mergeJsonToParser(jsonContent, scriptName, fields)` | `merge_json_to_parser` | 合并 JSON 字段到解析器 |
+| `analyzeJsonStructure(jsonContent)` | `analyze_json_structure` | 分析 JSON 结构 |
+| `getParserDefinedFields(scriptName)` | `get_parser_defined_fields` | 获取脚本定义的字段 |
+| `getJsonFiles()` | `get_json_files` | 获取 JSON 配置文件列表 |
+| `saveJsonFile(fileName, config)` | `save_json_file` | 保存 JSON 配置文件 |
+| `deleteJsonFile(fileName)` | `delete_json_file` | 删除 JSON 配置文件 |
+| `loadJsonFile(fileName)` | `load_json_file` | 加载 JSON 配置文件 |
+
+### Gh3036Api
+
+GH3036 协议 API，源码位于 [gh3036.ts](file:///e:/Code/CPP/combridge-rust/src/api/gh3036.ts)：
+
+| 方法 | 后端命令 | 说明 |
+|------|----------|------|
+| `init()` | `gh3036_init` | 初始化 GH3036 |
+| `isInitialized()` | `gh3036_is_initialized` | 检查是否已初始化 |
+| `configureTxChannel(type, deviceId, charUuid?)` | `gh3036_configure_tx_channel` | 配置发送通道 |
+| `configureRxChannel(type, deviceId, charUuid?)` | `gh3036_configure_rx_channel` | 配置接收通道 |
+| `getChannels()` | `gh3036_get_channels` | 获取通道配置 |
+| `sendData(data)` | `gh3036_send_data` | 发送数据 |
+| `setCsvConfig(enabled, outputDir)` | `gh3036_set_csv_config` | 设置 CSV 配置 |
+| `getCsvConfig()` | `gh3036_get_csv_config` | 获取 CSV 配置 |
+| `getRpcCommands()` | `gh3036_get_rpc_commands` | 获取 RPC 命令列表 |
+| `executeRpc(commandKey, params)` | `gh3036_execute_rpc` | 执行 RPC 命令 |
+| `subscribeEvents()` | `gh3036_subscribe_events` | 订阅 GH3036 事件 |
+| `getLibraryStatus()` | `gh3036_get_library_status` | 获取库链接/初始化状态 |
+| `onRxData(deviceId, data)` | `gh3036_on_rx_data` | 接收数据回调 |
+
+### WaveformApi
+
+波形 API，源码位于 [waveform.ts](file:///e:/Code/CPP/combridge-rust/src/api/waveform.ts)：
+
+| 方法 | 后端命令 | 说明 |
+|------|----------|------|
+| `createBuffer(bufferId, config)` | `waveform_create_buffer` | 创建波形缓冲区 |
+| `removeBuffer(bufferId)` | `waveform_remove_buffer` | 移除缓冲区 |
+| `configureParser(bufferId, config)` | `waveform_configure_parser` | 配置解析器 |
+| `parseAndStore(bufferId, data)` | `waveform_parse_and_store` | 解析并存储数据 |
+| `readData(bufferId, rows)` | `waveform_read_data` | 读取波形数据 |
+| `getStatus(bufferId)` | `waveform_get_status` | 获取缓冲区状态 |
+| `clearBuffer(bufferId)` | `waveform_clear_buffer` | 清空缓冲区 |
+| `listBuffers()` | `waveform_list_buffers` | 列出所有缓冲区 |
+
+### StateApi
+
+状态管理 API，源码位于 [stateApi.ts](file:///e:/Code/CPP/combridge-rust/src/api/stateApi.ts)：
+
+| 方法 | 后端命令 | 说明 |
+|------|----------|------|
+| `dispatchAction(action)` | `dispatch_action` | 分发状态动作 |
+| `getState()` | `get_state` | 获取应用状态 |
+| `getChannelData(deviceId, channelId, limit?)` | `get_channel_data` | 获取通道数据 |
+| `restoreState()` | `restore_state` | 恢复状态 |
+| `saveState()` | `save_state` | 保存状态 |
+| `getConnectedDevices()` | `get_connected_devices` | 获取已连接设备 |
+| `getWindowState()` | `get_window_state` | 获取窗口状态 |
+| `subscribeToStateChanges(callback)` | 事件 `state-change` | 订阅状态变更 |
+
+## 事件类型定义
+
+源码位于 [events.ts](file:///e:/Code/CPP/combridge-rust/src/api/events.ts)，所有事件类型定义如下：
+
+### 事件常量
 
 ```typescript
-// src/api/tauri.ts
-import { invoke } from '@tauri-apps/api/core';
+export const TauriEvents = {
+  SERIAL_DATA: 'serial-data',
+  SERIAL_ERROR: 'serial-error',
+  SERIAL_CONNECTED: 'serial-connected',
+  SERIAL_DISCONNECTED: 'serial-disconnected',
+  BLE_DATA: 'ble-notify',
+  BLE_CONNECTED: 'ble-connected',
+  BLE_DISCONNECTED: 'ble-disconnected',
+  BLE_ERROR: 'ble-error',
+  BLE_SCAN_RESULT: 'ble-scan-result',
+  BLE_MODE_CHANGED: 'ble-mode-changed',
+  PARSED_DATA: 'parsed-data',
+} as const;
+```
 
-// 串口 API
-export const serialApi = {
-    scanPorts: () => invoke<PortInfo[]>('scan_serial_ports'),
-    openPort: (config: SerialPortConfig) => invoke<void>('open_serial_port', { config }),
-    closePort: (portName: string) => invoke<void>('close_serial_port', { portName }),
-    sendData: (portName: string, data: number[]) => invoke<number>('send_serial_data', { portName, data }),
+### 串口事件类型
+
+| 类型名 | 事件名 | 字段 | 说明 |
+|--------|--------|------|------|
+| `SerialDataEvent` | `serial-data` | `port_name: string`, `data: number[]`, `timestamp?: number` | 串口数据接收 |
+| `SerialErrorEvent` | `serial-error` | `portName: string`, `error: string` | 串口错误 |
+| — | `serial-connected` | payload: `string`（端口名） | 串口连接成功 |
+| — | `serial-disconnected` | payload: `string`（端口名） | 串口断开连接 |
+
+### BLE 事件类型
+
+| 类型名 | 事件名 | 字段 | 说明 |
+|--------|--------|------|------|
+| `BleDataEvent` | `ble-notify` | `deviceId: string`, `characteristicUuid: string`, `data: number[]`, `timestamp: number` | BLE 数据通知 |
+| `BleConnectionEvent` | `ble-connected` / `ble-disconnected` | `deviceId: string`, `address: string`, `name?: string`, `connected: boolean` | BLE 连接状态变更 |
+| `BleErrorEvent` | `ble-error` | `deviceId?: string`, `error: string` | BLE 错误 |
+| `BleScanResultEvent` | `ble-scan-result` | `device: { address, name?, rssi?, isConnectable, services?, manufacturerData? }`, `timestamp: number` | BLE 扫描结果 |
+| `BleModeChangedEvent` | `ble-mode-changed` | `mode: 'native' \| 'at'`, `serialPort?: string` | BLE 模式变更 |
+
+### 解析数据事件
+
+| 类型名 | 事件名 | 字段 | 说明 |
+|--------|--------|------|------|
+| `ParsedDataEvent` | `parsed-data` | `timestamp: number`, `values: Record<string, number>` | 协议解析后的数据 |
+
+### 事件监听函数
+
+| 函数 | 说明 |
+|------|------|
+| `onSerialData(callback)` | 监听串口数据 |
+| `onSerialError(callback)` | 监听串口错误 |
+| `onSerialConnected(callback)` | 监听串口连接 |
+| `onSerialDisconnected(callback)` | 监听串口断开 |
+| `onBleData(callback)` | 监听 BLE 数据通知 |
+| `onBleConnected(callback)` | 监听 BLE 连接 |
+| `onBleDisconnected(callback)` | 监听 BLE 断开 |
+| `onBleError(callback)` | 监听 BLE 错误 |
+| `onBleScanResult(callback)` | 监听 BLE 扫描结果 |
+| `onBleModeChanged(callback)` | 监听 BLE 模式变更 |
+| `onParsedData(callback)` | 监听解析数据 |
+
+### 事件聚合对象
+
+```typescript
+export const serialEvents = {
+  onData: onSerialData,
+  onError: onSerialError,
+  onConnected: onSerialConnected,
+  onDisconnected: onSerialDisconnected,
 };
 
-// BLE API
-export const bleApi = {
-    configure: (mode: BleMode, config?: AtConfig) => invoke<void>('configure_ble', { mode, config }),
-    scan: (durationMs: number) => invoke<BleDevice[]>('scan_ble_devices', { durationMs }),
-    connect: (address: string) => invoke<BleConnection>('connect_ble', { address }),
-    disconnect: (address: string) => invoke<void>('disconnect_ble', { address }),
-    // ...
-};
-
-// WebSocket API
-export const websocketApi = {
-    connect: (id: string, url: string) => invoke<void>('connect_websocket', { id, url }),
-    send: (id: string, message: string) => invoke<void>('send_websocket_message', { id, message }),
-    disconnect: (id: string) => invoke<void>('disconnect_websocket', { id }),
+export const bleEvents = {
+  onData: onBleData,
+  onConnected: onBleConnected,
+  onDisconnected: onBleDisconnected,
+  onError: onBleError,
+  onScanResult: onBleScanResult,
+  onModeChanged: onBleModeChanged,
 };
 ```
 
-### 事件监听封装
+### 事件清理
 
 ```typescript
-// src/api/events.ts
-import { listen, UnlistenFn } from '@tauri-apps/api/event';
-
-export interface SerialDataEvent {
-    port_name: string;
-    data: number[];
+interface EventListeners {
+  serialData?: UnlistenFn;
+  serialError?: UnlistenFn;
+  serialConnected?: UnlistenFn;
+  serialDisconnected?: UnlistenFn;
+  bleData?: UnlistenFn;
+  bleConnected?: UnlistenFn;
+  bleDisconnected?: UnlistenFn;
+  bleError?: UnlistenFn;
+  bleScanResult?: UnlistenFn;
+  bleModeChanged?: UnlistenFn;
 }
 
-export interface BleNotificationEvent {
-    address: string;
-    characteristic_uuid: string;
-    data: number[];
-}
-
-export const eventApi = {
-    // 监听串口数据
-    onSerialData: (callback: (event: SerialDataEvent) => void): Promise<UnlistenFn> => {
-        return listen<SerialDataEvent>('serial-data', (event) => callback(event.payload));
-    },
-    
-    // 监听 BLE 通知
-    onBleNotification: (callback: (event: BleNotificationEvent) => void): Promise<UnlistenFn> => {
-        return listen<BleNotificationEvent>('ble-notification', (event) => callback(event.payload));
-    },
-    
-    // 监听 WebSocket 消息
-    onWebSocketMessage: (callback: (event: unknown) => void): Promise<UnlistenFn> => {
-        return listen('websocket-message', (event) => callback(event.payload));
-    },
-};
-```
-
-### 状态 API
-
-```typescript
-// src/api/stateApi.ts
-export const stateApi = {
-    dispatch: (action: Action) => invoke<ActionResult>('dispatch_action', { action }),
-    getState: () => invoke<AppState>('get_state'),
-    saveState: () => invoke<void>('save_state'),
-    restoreState: () => invoke<AppState>('restore_state'),
-};
+async function cleanupListeners(listeners: EventListeners): Promise<void>
 ```
 
 ## 类型定义
 
-```typescript
-// src/api/types.ts
+源码位于 [types.ts](file:///e:/Code/CPP/combridge-rust/src/api/types.ts)，主要类型：
 
-// 串口类型
-export interface PortInfo {
-    name: string;
-    port_type: string;
-    manufacturer?: string;
-    product?: string;
-}
+### 通用类型
 
-export interface SerialPortConfig {
-    port_name: string;
-    baud_rate: number;
-    data_bits: number;
-    stop_bits: number;
-    parity: string;
-    flow_control: string;
-}
+| 类型 | 说明 |
+|------|------|
+| `InvokeResult` | 调用结果 `{ success, error? }` |
+| `ApiError` | API 错误 `{ code, message, details? }` |
+| `CacheData` | 缓存数据 `{ tx: CacheEntry[], rx: CacheEntry[] }` |
+| `CacheEntry` | 缓存条目 `{ timestamp, data, direction }` |
 
-// BLE 类型
-export interface BleDevice {
-    address: string;
-    name?: string;
-    rssi: number;
-    is_connectable: boolean;
-}
+### BLE 参数类型
 
-export interface BleConnection {
-    address: string;
-    name?: string;
-    is_connected: boolean;
-    mtu: number;
-}
+| 类型 | 说明 |
+|------|------|
+| `BleConfigureParams` | BLE 配置参数 `{ mode, serialPort? }` |
+| `BleConnectParams` | BLE 连接参数 `{ address, timeout? }` |
+| `BleDiscoverServicesParams` | 服务发现参数 `{ deviceId }` |
+| `BleDiscoverCharacteristicsParams` | 特征发现参数 `{ deviceId, serviceUuid }` |
+| `BleReadParams` | 读取参数 `{ deviceId, characteristicUuid }` |
+| `BleWriteParams` | 写入参数 `{ deviceId, characteristicUuid, data, withoutResponse? }` |
+| `BleSubscribeParams` | 订阅参数 `{ deviceId, characteristicUuid }` |
 
-export interface BleService {
-    uuid: string;
-    primary: boolean;
-    characteristics: BleCharacteristic[];
-}
+### 协议类型
 
-export interface BleCharacteristic {
-    uuid: string;
-    properties: {
-        read: boolean;
-        write: boolean;
-        notify: boolean;
-    };
-    value?: number[];
-    subscribed: boolean;
-}
+| 类型 | 说明 |
+|------|------|
+| `PluginState` | 插件状态 `'Unloaded' \| 'Loaded' \| 'Enabled' \| 'Disabled' \| 'Error'` |
+| `PluginInfo` | 插件信息 `{ id, name, version, description, author, path, state, hooks, bound_devices, error_message }` |
+| `ProtocolLoadParams` | 协议加载参数 `{ plugin_id, path }` |
+| `ProtocolBindParams` | 协议绑定参数 `{ plugin_id, device_id }` |
 
-// 错误响应
-export interface ErrorResponse {
-    code: number;
-    error_code: string;
-    message: string;
-}
-```
+### GH3036 类型
+
+| 类型 | 说明 |
+|------|------|
+| `Gh3036ChannelConfig` | 通道配置 `{ channel_type, device_id, characteristic_uuid }` |
+| `Gh3036CsvConfig` | CSV 配置 `{ enabled, output_dir }` |
+| `Gh3036FrameData` | 帧数据 `{ function_id, function_name, frame_id, timestamp, gs_data, rawdata, flags, algo_data, agc_info, phy_value }` |
+| `Gh3036RpcCommand` | RPC 命令 `{ key, name, description, params }` |
+| `Gh3036RpcParam` | RPC 参数 `{ name, param_type, description, default_value }` |
+
+### 波形类型
+
+| 类型 | 说明 |
+|------|------|
+| `ParserType` | 解析器类型 `'delimiter' \| 'regex'` |
+| `ParserConfig` | 解析器配置 `{ parser_type, delimiter, pattern, column_names, trim_whitespace }` |
+| `WaveformBufferConfig` | 缓冲区配置 `{ capacity, column_names }` |
+| `WaveformData` | 波形数据 `{ columns, rows, timestamp }` |
+| `WaveformStatus` | 缓冲区状态 `{ buffer_id, row_count, column_count, column_names, capacity, parser_type }` |
 
 ## 架构图
 
 ```mermaid
 graph TB
     subgraph API Layer
-        TauriAPI[tauri.ts]
-        EventsAPI[events.ts]
-        StateAPI[stateApi.ts]
-        Types[types.ts]
+        TauriAPI[tauri.ts<br/>serial/ble/websocket/system/protocol/preferences]
+        EventsAPI[events.ts<br/>事件类型与监听]
+        StateAPI[stateApi.ts<br/>状态分发与查询]
+        DashboardAPI[dashboard.ts<br/>解析器/JSON管理]
+        Gh3036API[gh3036.ts<br/>GH3036协议]
+        WaveformAPI[waveform.ts<br/>波形缓冲区]
+        Types[types.ts<br/>类型定义]
     end
-    
+
     subgraph Tauri
         Invoke[invoke]
         Listen[listen]
     end
-    
+
     subgraph Backend
         Commands[Tauri Commands]
         Events[Tauri Events]
     end
-    
+
     TauriAPI --> Invoke
     EventsAPI --> Listen
     StateAPI --> Invoke
-    
+    DashboardAPI --> Invoke
+    Gh3036API --> Invoke
+    WaveformAPI --> Invoke
+
     Invoke --> Commands
     Events --> Listen
-    
+
     Types --> TauriAPI
     Types --> EventsAPI
     Types --> StateAPI
+    Types --> Gh3036API
+    Types --> WaveformAPI
 ```
 
 ## 使用示例
@@ -196,47 +395,74 @@ graph TB
 ```typescript
 import { serialApi } from '@/api';
 
-// 扫描端口
-const ports = await serialApi.scanPorts();
+const ports = await serialApi.listPorts();
 
-// 打开端口
-await serialApi.openPort({
-    port_name: 'COM3',
-    baud_rate: 115200,
-    data_bits: 8,
-    stop_bits: 1,
-    parity: 'none',
-    flow_control: 'none',
+await serialApi.open('COM3', {
+  baudRate: 115200,
+  dataBits: 8,
+  stopBits: 1,
+  parity: 'none',
+  flowControl: 'none',
 });
 
-// 发送数据
-await serialApi.sendData('COM3', [0x01, 0x02, 0x03]);
+await serialApi.write('COM3', [0x01, 0x02, 0x03]);
 ```
 
 ### 监听事件
 
 ```typescript
-import { eventApi } from '@/api';
+import { onSerialData, onBleData, onParsedData } from '@/api';
 
-// 监听串口数据
-const unlisten = await eventApi.onSerialData((event) => {
-    console.log(`端口 ${event.port_name} 收到数据:`, event.data);
+const unlisten = await onSerialData((event) => {
+  console.log(`端口 ${event.port_name} 收到数据:`, event.data);
 });
 
-// 取消监听
+const unlistenBle = await onBleData((event) => {
+  console.log(`设备 ${event.deviceId} 特征 ${event.characteristicUuid}:`, event.data);
+});
+
 unlisten();
+unlistenBle();
+```
+
+### 分发状态动作
+
+```typescript
+import { dispatchAction } from '@/api/stateApi';
+
+await dispatchAction({
+  type: 'DEVICE_ADD_SERIAL',
+  id: 'serial-1',
+  name: 'COM3',
+  baudRate: 115200,
+});
+```
+
+### 仪表盘 API
+
+```typescript
+import { dashboardApi } from '@/api';
+
+const scripts = await dashboardApi.getParserScripts();
+const structure = await dashboardApi.analyzeJsonStructure(jsonContent);
+const generatedScript = await dashboardApi.generateParserFromJson(
+  jsonContent, 'my_parser', ['temperature', 'humidity']
+);
+await dashboardApi.saveJsonFile('config.json', dashboardConfig);
 ```
 
 ### 错误处理
 
 ```typescript
 import { serialApi } from '@/api';
+import { isApiError } from '@/api/types';
 
 try {
-    await serialApi.openPort(config);
+  await serialApi.open('COM3', config);
 } catch (error) {
-    const err = error as ErrorResponse;
-    console.error(`错误 [${err.error_code}]: ${err.message}`);
+  if (isApiError(error)) {
+    console.error(`错误 [${error.code}]: ${error.message}`);
+  }
 }
 ```
 

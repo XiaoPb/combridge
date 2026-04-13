@@ -83,7 +83,7 @@ impl SerialManager {
                 error!("写入接收缓存失败: {}", e);
             }
             callback_clone(name, data);
-        });
+        })?;
 
         let port = Arc::new(Mutex::new(port));
 

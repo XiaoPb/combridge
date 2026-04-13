@@ -7,7 +7,9 @@ import type { BleScanOptions, BleConnection } from '../types';
 
 const handleBleError = (operation: string, params: Record<string, unknown>, error: unknown): string => {
   const errorMsg = error instanceof Error ? error.message : String(error);
-  console.error(`[useBle] ${operation} 失败:`, { params, error: errorMsg });
+  if (import.meta.env.DEV) {
+    console.error(`[useBle] ${operation} 失败:`, { params, error: errorMsg });
+  }
   return errorMsg;
 };
 
@@ -338,7 +340,9 @@ export const useBle = () => {
       return connectionList;
     } catch (err) {
       const errorMsg = handleBleError('restoreConnections', {}, err);
-      console.error('[useBle] 恢复连接状态失败:', errorMsg);
+      if (import.meta.env.DEV) {
+        console.error('[useBle] 恢复连接状态失败:', errorMsg);
+      }
       return [];
     }
   }, [addConnection]);
@@ -354,13 +358,17 @@ export const useBle = () => {
       try {
         await bleApi.subscribeBleNotify(deviceId, charUuid);
         restoredUuids.push(charUuid);
-        console.debug('[useBle] 恢复订阅成功:', { deviceId, charUuid });
+        if (import.meta.env.DEV) {
+          console.debug('[useBle] 恢复订阅成功:', { deviceId, charUuid });
+        }
       } catch (err) {
-        console.error('[useBle] 恢复订阅失败:', { deviceId, charUuid, error: err });
+        if (import.meta.env.DEV) {
+          console.error('[useBle] 恢复订阅失败:', { deviceId, charUuid, error: err });
+        }
       }
     }
 
-    if (restoredUuids.length > 0) {
+    if (restoredUuids.length > 0 && import.meta.env.DEV) {
       console.info('[useBle] 恢复订阅完成:', { deviceId, count: restoredUuids.length });
     }
     return restoredUuids;

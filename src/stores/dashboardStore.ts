@@ -149,10 +149,7 @@ export const useDashboardStore = create<DashboardState>()(
       addDataPoint: (point) => {
         const { dataBuffer, maxBufferSize } = get();
         const newBuffer = [...dataBuffer, point];
-        if (newBuffer.length > maxBufferSize) {
-          newBuffer.shift();
-        }
-        set({ dataBuffer: newBuffer });
+        set({ dataBuffer: newBuffer.length > maxBufferSize ? newBuffer.slice(newBuffer.length - maxBufferSize) : newBuffer });
       },
 
       clearDataBuffer: () => set({ dataBuffer: [] }),
@@ -296,10 +293,7 @@ export const useDashboardStore = create<DashboardState>()(
       addRawDataPoint: (point) => {
         const { rawDataBuffer, maxBufferSize } = get();
         const newBuffer = [...rawDataBuffer, point];
-        if (newBuffer.length > maxBufferSize) {
-          newBuffer.shift();
-        }
-        set({ rawDataBuffer: newBuffer });
+        set({ rawDataBuffer: newBuffer.length > maxBufferSize ? newBuffer.slice(newBuffer.length - maxBufferSize) : newBuffer });
       },
 
       clearRawDataBuffer: () => set({ rawDataBuffer: [] }),
@@ -307,10 +301,7 @@ export const useDashboardStore = create<DashboardState>()(
       addParsedDataPoint: (point) => {
         const { parsedDataBuffer, maxBufferSize } = get();
         const newBuffer = [...parsedDataBuffer, point];
-        if (newBuffer.length > maxBufferSize) {
-          newBuffer.shift();
-        }
-        set({ parsedDataBuffer: newBuffer });
+        set({ parsedDataBuffer: newBuffer.length > maxBufferSize ? newBuffer.slice(newBuffer.length - maxBufferSize) : newBuffer });
       },
 
       clearParsedDataBuffer: () => set({ parsedDataBuffer: [] }),

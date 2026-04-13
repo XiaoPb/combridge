@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
-use crate::error::{ComBridgeError, Result};
+use crate::error::{ComBridgeError, LockResultExt, Result};
 use super::super::ble_traits::{
     BleBackend, BleDevice, BleConnection, BleService, BleCharacteristic,
     BleCharacteristicProperties, NotifyCallback,
@@ -88,7 +88,7 @@ impl AtBleBackend {
     }
 
     fn send_command_and_wait(&self, command: &AtCommand, timeout_ms: u64) -> Result<Vec<String>> {
-        let mut transport_guard = self.transport.lock().unwrap();
+        let mut transport_guard = self.transport.lock().lock_err("AT传输层")?;
         let transport = transport_guard.as_mut().ok_or_else(|| {
             ComBridgeError::ble("AT传输层未初始化")
         })?;
@@ -102,7 +102,7 @@ impl AtBleBackend {
             return Err(ComBridgeError::ble("未收到响应"));
         }
 
-        let last = responses.last().unwrap();
+        let last = responses.last().ok_or_else(|| ComBridgeError::ble("响应为空"))?;
         if last == "OK" {
             Ok(())
         } else if last.starts_with("ERROR") {
@@ -133,7 +133,7 @@ impl AtBleBackend {
     }
 
     fn build_virtual_service(&self, address: &str) -> BleService {
-        let connections = self.connections.lock().unwrap();
+        let connections = self.connections.lock().unwrap_or_else(|e| e.into_inner());
         let conn_info = connections.get(address);
         
         let tx_uuid = conn_info
@@ -178,21 +178,22 @@ impl AtBleBackend {
         }
     }
 
-    fn setup_transparent_callback(&self, address: String) {
+    fn setup_transparent_callback(&self, address: String) -> Result<()> {
         let callbacks = self.notify_callbacks.clone();
         let address_clone = address.clone();
         
         let callback: DataCallback = Arc::new(move |data: &[u8]| {
             debug!("透传接收数据: {} 字节", data.len());
-            if let Some(cb) = callbacks.lock().unwrap().get(&address_clone) {
+            if let Some(cb) = callbacks.lock().unwrap_or_else(|e| e.into_inner()).get(&address_clone) {
                 cb(&address_clone, "", data);
             }
         });
 
-        let mut transport_guard = self.transport.lock().unwrap();
+        let mut transport_guard = self.transport.lock().lock_err("AT传输层")?;
         if let Some(ref mut transport) = *transport_guard {
             transport.set_data_callback(callback);
         }
+        Ok(())
     }
 
     fn scan_device_to_ble_device(device: &ScanDevice) -> BleDevice {
@@ -213,7 +214,7 @@ impl Default for AtBleBackend {
 
 impl Drop for AtBleBackend {
     fn drop(&mut self) {
-        let mut transport_guard = self.transport.lock().unwrap();
+        let mut transport_guard = self.transport.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(ref mut transport) = *transport_guard {
             let _ = transport.close();
         }
@@ -223,7 +224,7 @@ impl Drop for AtBleBackend {
 #[async_trait]
 impl BleBackend for AtBleBackend {
     async fn configure(&mut self) -> Result<()> {
-        let mut transport_guard = self.transport.lock().unwrap();
+        let mut transport_guard = self.transport.lock().lock_err("AT传输层")?;
         let transport = transport_guard.as_mut().ok_or_else(|| {
             ComBridgeError::ble("AT传输层未初始化")
         })?;
@@ -306,14 +307,14 @@ impl BleBackend for AtBleBackend {
             .unwrap_or_default()
             .as_millis() as u64);
 
-        self.connections.lock().unwrap().insert(connected_address.clone(), conn_info);
+        self.connections.lock().lock_err("AT连接")?.insert(connected_address.clone(), conn_info);
 
-        let mut transport_guard = self.transport.lock().unwrap();
+        let mut transport_guard = self.transport.lock().lock_err("AT传输层")?;
         if let Some(ref mut transport) = *transport_guard {
             transport.enter_transparent_mode()?;
         }
 
-        self.setup_transparent_callback(connected_address.clone());
+        self.setup_transparent_callback(connected_address.clone())?;
 
         info!("已连接到设备: {}", connected_address);
         
@@ -327,7 +328,7 @@ impl BleBackend for AtBleBackend {
     }
 
     async fn disconnect(&self, address: &str) -> Result<()> {
-        let mut transport_guard = self.transport.lock().unwrap();
+        let mut transport_guard = self.transport.lock().lock_err("AT传输层")?;
         if let Some(ref mut transport) = *transport_guard {
             let _ = transport.exit_transparent_mode();
         }
@@ -338,8 +339,8 @@ impl BleBackend for AtBleBackend {
             5000
         )?;
 
-        self.connections.lock().unwrap().remove(address);
-        self.notify_callbacks.lock().unwrap().remove(address);
+        self.connections.lock().lock_err("AT连接")?.remove(address);
+        self.notify_callbacks.lock().lock_err("AT回调")?.remove(address);
 
         Self::parse_ok_response(&responses)?;
         info!("已断开设备: {}", address);
@@ -347,7 +348,7 @@ impl BleBackend for AtBleBackend {
     }
 
     async fn get_connections(&self) -> Result<Vec<BleConnection>> {
-        let connections = self.connections.lock().unwrap();
+        let connections = self.connections.lock().lock_err("AT连接")?;
         let result: Vec<BleConnection> = connections
             .iter()
             .map(|(addr, info)| {
@@ -380,7 +381,7 @@ impl BleBackend for AtBleBackend {
     }
 
     async fn write_characteristic(&self, _address: &str, _char_uuid: &str, data: &[u8]) -> Result<()> {
-        let mut transport_guard = self.transport.lock().unwrap();
+        let mut transport_guard = self.transport.lock().lock_err("AT传输层")?;
         let transport = transport_guard.as_mut().ok_or_else(|| {
             ComBridgeError::ble("AT传输层未初始化")
         })?;
@@ -403,7 +404,7 @@ impl BleBackend for AtBleBackend {
 
     async fn subscribe_notify(&self, address: &str, _char_uuid: &str, callback: NotifyCallback) -> Result<()> {
         let key = Self::make_callback_key(address);
-        self.notify_callbacks.lock().unwrap().insert(key, callback);
+        self.notify_callbacks.lock().lock_err("AT回调")?.insert(key, callback);
         
         info!("已设置透传数据回调: {}", address);
         Ok(())
@@ -411,7 +412,7 @@ impl BleBackend for AtBleBackend {
 
     async fn unsubscribe_notify(&self, address: &str, _char_uuid: &str) -> Result<()> {
         let key = Self::make_callback_key(address);
-        self.notify_callbacks.lock().unwrap().remove(&key);
+        self.notify_callbacks.lock().lock_err("AT回调")?.remove(&key);
         
         info!("已移除透传数据回调: {}", address);
         Ok(())

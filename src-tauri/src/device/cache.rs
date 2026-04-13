@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 
@@ -23,7 +24,7 @@ pub struct RingBuffer {
     capacity: usize,
     head: usize,
     tail: usize,
-    entries: Vec<CacheEntry>,
+    entries: VecDeque<CacheEntry>,
 }
 
 impl RingBuffer {
@@ -37,7 +38,7 @@ impl RingBuffer {
             capacity,
             head: 0,
             tail: 0,
-            entries: Vec::new(),
+            entries: VecDeque::new(),
         }
     }
 
@@ -79,13 +80,13 @@ impl RingBuffer {
             }
         }
 
-        self.entries.push(CacheEntry {
+        self.entries.push_back(CacheEntry {
             timestamp,
             data: data.to_vec(),
         });
 
         while self.calculate_total_bytes() > self.capacity {
-            self.entries.remove(0);
+            self.entries.pop_front();
         }
     }
 
@@ -108,13 +109,13 @@ impl RingBuffer {
         }
     }
 
-    pub fn get_entries(&self) -> &[CacheEntry] {
-        &self.entries
+    pub fn get_entries(&self) -> Vec<&CacheEntry> {
+        self.entries.iter().collect()
     }
 
     pub fn get_cache_data(&self) -> CacheData {
         CacheData {
-            entries: self.entries.clone(),
+            entries: self.entries.iter().cloned().collect(),
             total_bytes: self.calculate_total_bytes(),
             entry_count: self.entries.len(),
         }

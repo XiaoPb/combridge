@@ -45,7 +45,7 @@ impl LoggerService {
         LOGGER
             .set(service)
             .map_err(|_| "Logger already initialized")?;
-        Ok(LOGGER.get().unwrap())
+        Ok(LOGGER.get().expect("LOGGER must be initialized after set"))
     }
 
     pub fn init_default() -> Result<&'static LoggerService, Box<dyn std::error::Error>> {

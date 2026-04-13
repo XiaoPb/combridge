@@ -40,7 +40,7 @@ impl AppState {
         self.devices.get(&id).and_then(|d| match d {
             Device::Serial(sd) => Some(sd),
             _ => None,
-        }).unwrap()
+        }).expect("刚插入的设备必须存在且类型匹配")
     }
 
     pub fn add_ble_device(&mut self, id: String, name: String, mac: String) -> &BleDeviceState {
@@ -50,7 +50,7 @@ impl AppState {
         self.devices.get(&id).and_then(|d| match d {
             Device::Ble(bd) => Some(bd),
             _ => None,
-        }).unwrap()
+        }).expect("刚插入的设备必须存在且类型匹配")
     }
 
     pub fn remove_device(&mut self, device_id: &str) -> Option<Device> {

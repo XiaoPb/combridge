@@ -7,7 +7,7 @@ use std::time::Duration;
 use serialport::{SerialPort as SerialPortTrait, SerialPortType};
 use tracing::{debug, info, warn};
 
-use crate::error::{ComBridgeError, Result};
+use crate::error::{ComBridgeError, LockResultExt, Result};
 use super::serial_config::{DataBits, FlowControl, Parity, PortInfo, SerialPortConfig, StopBits};
 
 const READ_TIMEOUT_MS: u64 = 100;
@@ -67,11 +67,11 @@ impl SerialPort {
     }
 
     pub fn port_name(&self) -> String {
-        self.config.read().unwrap().port_name.clone()
+        self.config.read().unwrap_or_else(|e| e.into_inner()).port_name.clone()
     }
 
     pub fn config(&self) -> SerialPortConfig {
-        self.config.read().unwrap().clone()
+        self.config.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     pub fn write(&self, data: &[u8]) -> Result<usize> {
@@ -86,7 +86,7 @@ impl SerialPort {
 
         let port_name = self.port_name();
         
-        let mut port = self.write_port.lock().unwrap();
+        let mut port = self.write_port.lock().lock_err("串口写入")?;
         port.write_all(data)
             .map_err(|e| ComBridgeError::serial(format!("写入数据失败: {}", e)))?;
 
@@ -97,19 +97,18 @@ impl SerialPort {
         Ok(data.len())
     }
 
-    pub fn start_read_loop<F>(&self, mut callback: F)
+    pub fn start_read_loop<F>(&self, mut callback: F) -> Result<()>
     where
         F: FnMut(&str, &[u8]) + Send + 'static,
     {
         let is_open = Arc::clone(&self.is_open);
         let port_name = self.port_name();
-        let pack_timeout_ms = self.config.read().unwrap().pack_timeout_ms;
+        let pack_timeout_ms = self.config.read().unwrap_or_else(|e| e.into_inner()).pack_timeout_ms;
 
         let read_port = {
-            let port = self.write_port.lock().unwrap();
+            let port = self.write_port.lock().lock_err("串口克隆")?;
             port.try_clone()
-                .map_err(|e| ComBridgeError::serial(format!("克隆串口句柄失败: {}", e)))
-                .expect("克隆串口句柄失败")
+                .map_err(|e| ComBridgeError::serial(format!("克隆串口句柄失败: {}", e)))?
         };
         
         info!("[RECV] 串口 {} 已克隆读取句柄", port_name);
@@ -171,8 +170,9 @@ impl SerialPort {
             info!("[RECV] 串口 {} 读取线程已退出", port_name);
         });
 
-        let mut read_thread = self.read_thread.lock().unwrap();
+        let mut read_thread = self.read_thread.lock().lock_err("串口读取线程")?;
         *read_thread = Some(handle);
+        Ok(())
     }
 
     pub fn close(&self) -> Result<()> {
@@ -185,7 +185,7 @@ impl SerialPort {
         info!("{} 正在关闭...", port_name);
 
         let handle = {
-            let mut read_thread = self.read_thread.lock().unwrap();
+            let mut read_thread = self.read_thread.lock().lock_err("串口读取线程")?;
             read_thread.take()
         };
         
@@ -202,7 +202,7 @@ impl SerialPort {
             return Err(ComBridgeError::serial("串口未打开"));
         }
 
-        let port = self.write_port.lock().unwrap();
+        let port = self.write_port.lock().lock_err("串口清除")?;
         port.clear(serialport::ClearBuffer::All)
             .map_err(|e| ComBridgeError::serial(format!("清除缓冲区失败: {}", e)))?;
 
@@ -215,11 +215,11 @@ impl SerialPort {
             return Err(ComBridgeError::serial("串口未打开"));
         }
 
-        let mut port = self.write_port.lock().unwrap();
+        let mut port = self.write_port.lock().lock_err("串口超时")?;
         port.set_timeout(Duration::from_millis(timeout_ms))
             .map_err(|e| ComBridgeError::serial(format!("设置超时失败: {}", e)))?;
 
-        self.config.write().unwrap().timeout_ms = timeout_ms;
+        self.config.write().lock_err("串口配置")?.timeout_ms = timeout_ms;
         Ok(())
     }
 }

@@ -28,7 +28,7 @@ impl AtCache {
     }
 
     pub fn update_device(&self, address: &str, name: Option<String>, rssi: i16) {
-        let mut devices = self.devices.write().unwrap();
+        let mut devices = self.devices.write().unwrap_or_else(|e| e.into_inner());
         let device = devices.entry(address.to_string()).or_default();
         if let Some(n) = name {
             device.name = Some(n);
@@ -37,22 +37,22 @@ impl AtCache {
     }
 
     pub fn get_device(&self, address: &str) -> Option<DeviceCache> {
-        let devices = self.devices.read().unwrap();
+        let devices = self.devices.read().unwrap_or_else(|e| e.into_inner());
         devices.get(address).cloned()
     }
 
     pub fn remove_device(&self, address: &str) {
-        let mut devices = self.devices.write().unwrap();
+        let mut devices = self.devices.write().unwrap_or_else(|e| e.into_inner());
         devices.remove(address);
     }
 
     pub fn clear(&self) {
-        let mut devices = self.devices.write().unwrap();
+        let mut devices = self.devices.write().unwrap_or_else(|e| e.into_inner());
         devices.clear();
     }
 
     pub fn get_all_devices(&self) -> Vec<(String, DeviceCache)> {
-        let devices = self.devices.read().unwrap();
+        let devices = self.devices.read().unwrap_or_else(|e| e.into_inner());
         devices.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
     }
 }

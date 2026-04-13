@@ -69,11 +69,11 @@ impl AtTransport {
     }
 
     pub fn set_data_callback(&self, callback: DataCallback) {
-        *self.data_callback.lock().unwrap() = Some(callback);
+        *self.data_callback.lock().unwrap_or_else(|e| e.into_inner()) = Some(callback);
     }
 
     pub fn clear_data_callback(&self) {
-        *self.data_callback.lock().unwrap() = None;
+        *self.data_callback.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     pub fn send_command(&mut self, command: &AtCommand) -> Result<()> {
@@ -134,7 +134,7 @@ impl AtTransport {
             }
 
             if !responses.is_empty() {
-                let last = responses.last().unwrap();
+                let last = responses.last().ok_or_else(|| ComBridgeError::ble("AT响应为空"))?;
                 if last == "OK" || last.starts_with("ERROR") || last.starts_with("+") {
                     if last == "OK" || last.starts_with("ERROR") {
                         break;
@@ -230,7 +230,7 @@ impl AtTransport {
                     Ok(n) => {
                         if n > 0 {
                             debug!("透传接收: {} 字节", n);
-                            if let Some(callback) = data_callback.lock().unwrap().as_ref() {
+                            if let Some(callback) = data_callback.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
                                 callback(&buffer[..n]);
                             }
                         }
@@ -248,13 +248,13 @@ impl AtTransport {
             info!("透传数据接收线程已停止: {}", port_name);
         });
 
-        *self.receive_thread_handle.lock().unwrap() = Some(handle);
+        *self.receive_thread_handle.lock().unwrap_or_else(|e| e.into_inner()) = Some(handle);
     }
 
     fn stop_receive_thread(&self) {
         self.receive_thread_running.store(false, Ordering::SeqCst);
 
-        if let Some(handle) = self.receive_thread_handle.lock().unwrap().take() {
+        if let Some(handle) = self.receive_thread_handle.lock().unwrap_or_else(|e| e.into_inner()).take() {
             let _ = handle.join();
         }
     }

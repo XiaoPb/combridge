@@ -54,6 +54,8 @@ impl<T, const N: usize> SlabMemory<T, N> {
     /// 创建新的 Slab 内存分配器
     pub const fn new() -> Self {
         Self {
+            // SAFETY: MaybeUninit 不需要初始化，仅声明内存布局
+            #[allow(unsafe_code)]
             buffer: unsafe { MaybeUninit::uninit().assume_init() },
             free_list: [0; N],
             next_free: N,
@@ -79,10 +81,14 @@ impl<T, const N: usize> SlabMemory<T, N> {
         }
 
         self.allocated_count += 1;
+        // SAFETY: idx 已验证在有效范围内，buffer 内存已分配
+        #[allow(unsafe_code)]
         unsafe {
             self.buffer[idx].as_mut_ptr().write(MaybeUninit::uninit().assume_init());
         }
 
+        // SAFETY: idx 已验证在有效范围内
+        #[allow(unsafe_code)]
         Some(unsafe { &mut *self.buffer[idx].as_mut_ptr() })
     }
 
@@ -101,6 +107,8 @@ impl<T, const N: usize> SlabMemory<T, N> {
         }
 
         let base = self.buffer.as_ptr() as *const T;
+        // SAFETY: base 来自 self.buffer 起始地址，ptr 由 alloc 返回
+        #[allow(unsafe_code)]
         let offset = unsafe { ptr.offset_from(base) };
 
         if offset < 0 || offset as usize >= N {
@@ -109,6 +117,8 @@ impl<T, const N: usize> SlabMemory<T, N> {
 
         let idx = offset as usize;
 
+        // SAFETY: idx 已验证在有效范围内，ptr 由 alloc 返回
+        #[allow(unsafe_code)]
         unsafe {
             ptr.drop_in_place();
             self.buffer[idx] = MaybeUninit::uninit();
@@ -161,6 +171,8 @@ impl<T, const N: usize> Drop for SlabMemory<T, N> {
 
         for (i, &is_freed) in freed.iter().enumerate() {
             if !is_freed {
+                // SAFETY: 仅 drop 未释放的元素，索引在有效范围内
+                #[allow(unsafe_code)]
                 unsafe {
                     self.buffer[i].as_mut_ptr().drop_in_place();
                 }
@@ -169,7 +181,11 @@ impl<T, const N: usize> Drop for SlabMemory<T, N> {
     }
 }
 
+// SAFETY: SlabMemory 内部通过指针管理内存，T: Send 保证元素可安全跨线程传递
+#[allow(unsafe_code)]
 unsafe impl<T: Send, const N: usize> Send for SlabMemory<T, N> {}
+// SAFETY: SlabMemory 内部通过指针管理内存，T: Sync 保证元素可安全跨线程共享
+#[allow(unsafe_code)]
 unsafe impl<T: Sync, const N: usize> Sync for SlabMemory<T, N> {}
 
 /// 缓冲区索引信息

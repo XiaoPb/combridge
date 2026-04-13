@@ -51,28 +51,41 @@ use crate::package::{FrameParser, ParseResult};
 use crate::types::{RpcError, TypeKey, FRAME_HEADER, GHRPC_FRAME_SIZE, MAX_SUPPORT_KEY_SIZE};
 use heapless::{String, Vec as HeaplessVec};
 
+#[allow(dead_code)]
 const MAX_STATIC_NODES: usize = 16;
 const MAX_DYNAMIC_NODES: usize = 3;
 const COMM_RETRY_TIME: usize = 500;
 const COMM_RETRY_ROUND: usize = 100;
 
+/// 默认最大 payload 大小
 pub const DEFAULT_MAX_PAYLOAD_SIZE: usize = 200;
+/// 多帧缓冲区大小
 pub const MULTI_FRAME_BUFFER_SIZE: usize = 4096;
 const MAX_FRAME_BUFFERS: usize = 8;
 
+/// 安全帧回调类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecureCallbackType {
+    /// 接收帧确认
     ReceiveFrame = 0,
+    /// 调用返回
     Return = 1,
+    /// 函数不存在
     NoSuchFunction = 2,
+    /// 错误
     Error = 3,
 }
 
+/// 安全帧返回数据
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SecureReturn {
+    /// 回调类型
     pub callback_type: SecureCallbackType,
+    /// 通信 ID
     pub com_id: u8,
+    /// 数据 1（帧索引等）
     pub data1: u8,
+    /// 数据 2
     pub data2: u8,
 }
 
@@ -87,10 +100,14 @@ impl Default for SecureReturn {
     }
 }
 
+/// 帧缓冲区，用于安全帧模式的多帧传输
 #[derive(Debug, Clone)]
 pub struct FrameBuffer {
+    /// 帧索引
     pub frame_idx: u8,
+    /// 帧数据
     pub data: HeaplessVec<u8, GHRPC_FRAME_SIZE>,
+    /// 链表下一个节点索引
     pub next: Option<usize>,
 }
 
@@ -105,30 +122,49 @@ impl Default for FrameBuffer {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// 动态节点状态
 pub enum DynamicNodeState {
+    /// 等待响应
     Waiting,
+    /// 已完成
     Completed,
+    /// 超时
     Timeout,
 }
 
+/// 动态节点类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DynamicNodeType {
+    /// 普通帧模式
     Normal,
+    /// 安全帧模式
     Secure,
 }
 
+/// 动态节点，用于管理安全帧模式的请求-响应生命周期
 #[derive(Debug, Clone)]
 pub struct DynamicNode {
+    /// 命令键字节数据
     pub key: [u8; MAX_SUPPORT_KEY_SIZE],
+    /// 命令键有效长度
     pub key_len: usize,
+    /// 通信 ID
     pub com_id: u8,
+    /// 调用索引
     pub invoke_idx: u8,
+    /// 节点当前状态
     pub state: DynamicNodeState,
+    /// 节点类型（普通/安全）
     pub node_type: DynamicNodeType,
+    /// 返回数据缓冲区
     pub ret_data: HeaplessVec<u8, GHRPC_FRAME_SIZE>,
+    /// 帧缓冲区数组
     pub frame_buffers: [Option<FrameBuffer>; MAX_FRAME_BUFFERS],
+    /// 帧缓冲区链表头索引
     pub frame_buffer_head: Option<usize>,
+    /// 帧缓冲区链表尾索引
     pub frame_buffer_tail: Option<usize>,
+    /// 帧缓冲区计数
     pub frame_buffer_count: usize,
 }
 
@@ -151,6 +187,7 @@ impl Default for DynamicNode {
 }
 
 impl DynamicNode {
+    /// 创建新的动态节点
     pub fn new(key: &str, node_type: DynamicNodeType) -> Self {
         let mut node = Self::default();
         node.key_len = key.len().min(MAX_SUPPORT_KEY_SIZE);
@@ -159,10 +196,12 @@ impl DynamicNode {
         node
     }
 
+    /// 获取命令键的字符串表示
     pub fn key_str(&self) -> &str {
         core::str::from_utf8(&self.key[..self.key_len]).unwrap_or("")
     }
 
+    /// 添加帧缓冲区到链表
     pub fn add_frame_buffer(&mut self, frame_idx: u8, frame_data: HeaplessVec<u8, GHRPC_FRAME_SIZE>) -> Result<(), RpcError> {
         if self.frame_buffer_count >= MAX_FRAME_BUFFERS {
             return Err(RpcError::MemoryNotEnough);
@@ -194,6 +233,7 @@ impl DynamicNode {
         Ok(())
     }
 
+    /// 从链表中移除指定帧索引的缓冲区
     pub fn remove_frame_buffer(&mut self, frame_idx: u8) -> bool {
         let mut prev_idx: Option<usize> = None;
         let mut current_idx = self.frame_buffer_head;
@@ -228,6 +268,7 @@ impl DynamicNode {
         false
     }
 
+    /// 移除所有帧缓冲区
     pub fn remove_all_frame_buffers(&mut self) {
         for i in 0..MAX_FRAME_BUFFERS {
             self.frame_buffers[i] = None;
@@ -237,10 +278,12 @@ impl DynamicNode {
         self.frame_buffer_count = 0;
     }
 
+    /// 检查是否有待重传的帧
     pub fn has_pending_frames(&self) -> bool {
         self.frame_buffer_count > 0
     }
 
+    /// 获取所有待重传的帧缓冲区
     pub fn get_frame_buffers_for_retry(&self) -> HeaplessVec<(usize, HeaplessVec<u8, GHRPC_FRAME_SIZE>), MAX_FRAME_BUFFERS> {
         let mut result = HeaplessVec::new();
         let mut current_idx = self.frame_buffer_head;
@@ -1461,7 +1504,7 @@ where
     pub fn call(&mut self, key: &str, data: &[u8], _ret: &mut [u8]) -> Result<HeaplessVec<u8, GHRPC_FRAME_SIZE>, RpcError> {
         log::info!("[RPC] call() 开始: key={}", key);
         
-        let mut node = DynamicNode::new(key, DynamicNodeType::Normal);
+        let node = DynamicNode::new(key, DynamicNodeType::Normal);
         
         let frame = self.build_frame(key, data, false, true)?;
         log::debug!("[RPC] call() 构建帧完成, 长度={}", frame.len());
@@ -1955,6 +1998,7 @@ where
         false
     }
 
+    /// 处理普通帧回调，更新动态节点的返回数据
     pub fn handle_normal_callback(&mut self, key: &str, data: &[u8]) {
         log::debug!("[RPC] handle_normal_callback() 处理普通回调: key={}, data_len={}", key, data.len());
         if let Some(node) = self.find_dynamic_node_mut(key) {
@@ -1967,6 +2011,7 @@ where
         }
     }
 
+    /// 处理安全帧回调，根据回调类型更新动态节点状态
     pub fn handle_secure_callback(&mut self, secure_return: &SecureReturn) {
         log::debug!("[RPC] handle_secure_callback() 处理安全帧回调: com_id={}, callback_type={:?}", 
             secure_return.com_id, secure_return.callback_type);
@@ -1998,6 +2043,7 @@ where
         }
     }
 
+    /// 发送 ACK 确认帧
     pub fn send_ack(&mut self, com_id: u8, frame_idx: u8) -> Result<(), RpcError> {
         log::debug!("[RPC] send_ack() 发送ACK: com_id={}, frame_idx={}", com_id, frame_idx);
         let ack_data = [com_id, frame_idx];
@@ -2043,6 +2089,7 @@ where
         Ok(frame)
     }
 
+    /// 处理接收到的 ACK 帧
     pub fn process_ack_frame(&mut self, result: &ParseResult) -> bool {
         let key_str = result.key_str();
         if key_str != "ACK" {
@@ -2394,6 +2441,7 @@ impl<'a> UnpackReader<'a> {
     }
 
     /// 读取指定长度的字节
+    #[allow(dead_code)]
     fn read_bytes(&mut self, len: usize) -> Option<&'a [u8]> {
         if self.pos + len > self.data.len() {
             return None;
@@ -2416,7 +2464,7 @@ impl<'a> UnpackReader<'a> {
                         chars.next();
                         break;
                     }
-                    token_str.push(chars.next()?);
+                    let _ = token_str.push(chars.next()?);
                 }
 
                 let token = FormatToken::parse(&token_str)?;

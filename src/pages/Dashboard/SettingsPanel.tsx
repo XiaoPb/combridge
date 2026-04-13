@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Select, Button, Divider, message, Space, Empty, theme } from 'antd';
+import { Card, Select, Button, Divider, message, Space, Empty, theme, Tag } from 'antd';
 import { DownloadOutlined, FileOutlined, PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile } from '@tauri-apps/plugin-fs';
 import { useDashboardStore } from '../../stores/dashboardStore';
+import { useConnectedDevices } from '../../hooks/useConnectedDevices';
 import { dashboardApi } from '../../api/dashboard';
 import type { DataSourceType } from '../../types/dashboard';
 
@@ -17,6 +18,8 @@ const SettingsPanel: React.FC = () => {
     serialConfig,
     serialPort,
     bleConfig,
+    connectedDevice,
+    setConnectedDevice,
     exportToCsv,
     parsedDataBuffer,
     jsonFiles,
@@ -27,6 +30,8 @@ const SettingsPanel: React.FC = () => {
     isRunning,
     setIsRunning,
   } = useDashboardStore();
+
+  const connectedDevices = useConnectedDevices();
 
   const [loading, setLoading] = useState(false);
 
@@ -150,6 +155,28 @@ const SettingsPanel: React.FC = () => {
           options={dataSourceOptions}
           style={{ width: '100%' }}
         />
+        <div style={{ marginTop: 8 }}>
+          <Select
+            value={connectedDevice}
+            onChange={setConnectedDevice}
+            placeholder={t('settings.selectDevice') || '选择设备'}
+            style={{ width: '100%' }}
+            disabled={isRunning}
+          >
+            {connectedDevices
+              .filter((d) => dataSourceType === 'serial' ? d.type === 'serial' : d.type === 'ble')
+              .map((d) => (
+                <Select.Option key={d.id} value={d.id}>
+                  <Space>
+                    <Tag color={d.type === 'serial' ? 'blue' : 'green'} style={{ fontSize: 10, padding: '0 4px' }}>
+                      {d.type === 'serial' ? '串口' : 'BLE'}
+                    </Tag>
+                    <span>{d.name}</span>
+                  </Space>
+                </Select.Option>
+              ))}
+          </Select>
+        </div>
       </div>
 
       <Divider style={{ margin: '12px 0' }} />
@@ -170,7 +197,7 @@ const SettingsPanel: React.FC = () => {
           </Button>
           {dataSourceType === 'serial' && (
             <div style={{ padding: 8, background: token.colorBgLayout, borderRadius: 4, fontSize: 12 }}>
-              <div>{t('settings.port') || '端口'}: {serialPort || (t('settings.notSelected') || '未选择')}</div>
+              <div>{t('settings.port') || '端口'}: {connectedDevice || serialPort || (t('settings.notSelected') || '未选择')}</div>
               <div>{t('settings.baudRate') || '波特率'}: {serialConfig.baudRate}</div>
             </div>
           )}

@@ -4,8 +4,7 @@ import { FolderOpenOutlined, PlayCircleOutlined, PauseCircleOutlined } from '@an
 import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useDashboardStore } from '../../stores/dashboardStore';
-import { useSerialStore } from '../../stores/serialStore';
-import { useBleStore } from '../../stores/bleStore';
+import { useConnectedDevices } from '../../hooks/useConnectedDevices';
 import type { DataSourceType } from '../../types/dashboard';
 
 const DataSourceSelector: React.FC = () => {
@@ -21,8 +20,7 @@ const DataSourceSelector: React.FC = () => {
     setIsRunning,
     addDataPoint,
   } = useDashboardStore();
-  const { ports } = useSerialStore();
-  const { connections } = useBleStore();
+  const connectedDevices = useConnectedDevices();
 
   const [filePath, setFilePath] = useState<string>('');
   const [fileContent, setFileContent] = useState<string[]>([]);
@@ -36,10 +34,9 @@ const DataSourceSelector: React.FC = () => {
     { label: t('dataSource.manual'), value: 'manual' as DataSourceType },
   ];
 
-  const deviceOptions =
-    dataSourceType === 'serial'
-      ? ports.map((p) => ({ label: p.name, value: p.name }))
-      : connections.map((c) => ({ label: c.name || c.address, value: c.address }));
+  const deviceOptions = connectedDevices
+    .filter((d) => dataSourceType === 'serial' ? d.type === 'serial' : d.type === 'ble')
+    .map((d) => ({ label: d.name, value: d.id }));
 
   const handleSelectFile = async () => {
     const selected = await open({

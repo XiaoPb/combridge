@@ -1,4 +1,6 @@
 use std::sync::Arc;
+use std::sync::Mutex;
+use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 use tracing::{error, info};
 
@@ -10,12 +12,20 @@ use super::persistence::StatePersistenceRef;
 use super::types::*;
 
 const STATE_CHANGE_EVENT: &str = "state-change";
+const SAVE_DEBOUNCE_MS: u64 = 500;
+
+enum SaveStrategy {
+    Skip,
+    Immediate,
+    Debounced,
+}
 
 pub struct ActionDispatcher {
     state: AppStateRef,
     persistence: StatePersistenceRef,
     serial_manager: SerialManagerRef,
     ble_manager: BleManagerRef,
+    last_save: Mutex<Option<Instant>>,
 }
 
 impl ActionDispatcher {
@@ -30,11 +40,14 @@ impl ActionDispatcher {
             persistence,
             serial_manager,
             ble_manager,
+            last_save: Mutex::new(None),
         }
     }
 
     pub async fn dispatch(&self, action: Action, app: &AppHandle) -> ActionResult {
         info!("处理 Action: {}", action);
+
+        let save_strategy = Self::get_save_strategy(&action);
         
         let result = match action {
             Action::DeviceAddSerial { id, name, baud_rate } => {
@@ -92,7 +105,7 @@ impl ActionDispatcher {
 
         if result.success {
             self.broadcast_state_change(app).await;
-            self.save_state().await;
+            self.save_with_strategy(save_strategy).await;
         }
         
         result
@@ -532,6 +545,50 @@ impl ActionDispatcher {
         let persistence = self.persistence.read().await;
         if let Err(e) = persistence.save(&state).await {
             error!("保存状态失败: {}", e);
+        }
+    }
+
+    fn get_save_strategy(action: &Action) -> SaveStrategy {
+        match action {
+            Action::DataSend { .. } | Action::DataReceive { .. } => SaveStrategy::Skip,
+            Action::DeviceConnect { .. }
+            | Action::DeviceDisconnect { .. }
+            | Action::DeviceAddSerial { .. }
+            | Action::DeviceAddBle { .. }
+            | Action::DeviceRemove { .. }
+            | Action::DeviceUpdateConfig { .. }
+            | Action::SettingsUpdate { .. }
+            | Action::StateRestore { .. } => SaveStrategy::Immediate,
+            _ => SaveStrategy::Debounced,
+        }
+    }
+
+    async fn save_with_strategy(&self, strategy: SaveStrategy) {
+        match strategy {
+            SaveStrategy::Skip => {}
+            SaveStrategy::Immediate => {
+                self.save_state().await;
+                if let Ok(mut last) = self.last_save.lock() {
+                    *last = Some(Instant::now());
+                }
+            }
+            SaveStrategy::Debounced => {
+                let should_save = if let Ok(last) = self.last_save.lock() {
+                    match *last {
+                        Some(instant) => instant.elapsed().as_millis() as u64 >= SAVE_DEBOUNCE_MS,
+                        None => true,
+                    }
+                } else {
+                    true
+                };
+
+                if should_save {
+                    self.save_state().await;
+                    if let Ok(mut last) = self.last_save.lock() {
+                        *last = Some(Instant::now());
+                    }
+                }
+            }
         }
     }
 }

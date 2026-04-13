@@ -13,7 +13,7 @@ import {
 import { useSerialStore, generateId } from '../stores/serialStore';
 import { useBleStore, generateBleId } from '../stores/bleStore';
 import { useLogStore } from '../stores/logStore';
-import { message } from 'antd';
+import { useNotificationStore } from '../stores/notificationStore';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 
 let serialListeners: {
@@ -62,12 +62,12 @@ export async function initSerialEventListeners(): Promise<void> {
       const store = useSerialStore.getState();
       store.setError(event.error);
       useLogStore.getState().addLog('error', 'SerialManager', `串口错误: ${event.error}`);
-      message.error(`串口错误: ${event.error}`);
+      useNotificationStore.getState().addNotification('error', `串口错误: ${event.error}`);
     });
 
     serialListeners.connected = await onSerialConnected((portName) => {
       useLogStore.getState().addLog('info', 'SerialManager', `串口 ${portName} 已连接`);
-      message.success(`串口 ${portName} 已连接`);
+      useNotificationStore.getState().addNotification('success', `串口 ${portName} 已连接`);
     });
 
     serialListeners.disconnected = await onSerialDisconnected((portName) => {
@@ -77,7 +77,7 @@ export async function initSerialEventListeners(): Promise<void> {
         store.updateTab(tab.key, { isConnected: false });
       }
       useLogStore.getState().addLog('info', 'SerialManager', `串口 ${portName} 已断开`);
-      message.info(`串口 ${portName} 已断开`);
+      useNotificationStore.getState().addNotification('info', `串口 ${portName} 已断开`);
     });
 
     serialInitialized = true;
@@ -144,7 +144,7 @@ export async function initBleEventListeners(): Promise<void> {
       });
       store.setIsConnecting(false);
       useLogStore.getState().addLog('info', 'BleManager', `设备 ${event.name || event.address} 已连接`);
-      message.success(`设备 ${event.name || event.address} 已连接`);
+      useNotificationStore.getState().addNotification('success', `设备 ${event.name || event.address} 已连接`);
     });
 
     bleListeners.disconnected = await onBleDisconnected((event) => {
@@ -156,7 +156,7 @@ export async function initBleEventListeners(): Promise<void> {
         store.clearCharacteristics();
       }
       useLogStore.getState().addLog('info', 'BleManager', `设备 ${event.address} 已断开`);
-      message.info(`设备 ${event.address} 已断开`);
+      useNotificationStore.getState().addNotification('info', `设备 ${event.address} 已断开`);
     });
 
     bleListeners.error = await onBleError((event) => {
@@ -166,7 +166,7 @@ export async function initBleEventListeners(): Promise<void> {
       store.setIsConnecting(false);
       store.setIsScanning(false);
       useLogStore.getState().addLog('error', 'BleManager', `BLE错误: ${errorMsg}`);
-      message.error(`BLE错误: ${errorMsg}`);
+      useNotificationStore.getState().addNotification('error', `BLE错误: ${errorMsg}`);
     });
 
     bleListeners.scanResult = await onBleScanResult((device: unknown) => {
@@ -193,7 +193,7 @@ export async function initBleEventListeners(): Promise<void> {
       store.setMode(event.mode);
       store.setSerialPort(event.serialPort || null);
       useLogStore.getState().addLog('info', 'BleManager', `BLE模式已切换为 ${event.mode}`);
-      message.info(`BLE模式已切换为 ${event.mode}`);
+      useNotificationStore.getState().addNotification('info', `BLE模式已切换为 ${event.mode}`);
     });
 
     bleInitialized = true;

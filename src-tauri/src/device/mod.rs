@@ -16,5 +16,5 @@ pub use serial::{
     SerialPortConfig, StopBits,
 };
 pub use device_manager::{
-    DataFilter, DataRoute, DeviceInfo, DeviceManager, DeviceManagerRef, DeviceType,
+    DeviceManager, DeviceManagerRef, DeviceType,
 };

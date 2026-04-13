@@ -9,7 +9,7 @@ import {
   MoonOutlined,
   SunOutlined,
 } from '@ant-design/icons';
-import configService from '../../services/configService';
+import { useConfigStore } from '../../stores/configStore';
 import SerialTitleTabs from './SerialTitleTabs';
 import BleTitleTabs from './BleTitleTabs';
 import ProtocolTitleTabs from './ProtocolTitleTabs';
@@ -70,13 +70,14 @@ const TitleBar: React.FC = () => {
   useTranslation();
 
   useEffect(() => {
-    const config = configService.getConfig();
+    const config = useConfigStore.getState().getConfig();
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const isDark = config.theme === 'dark' || (config.theme === 'system' && prefersDark);
     setIsDarkMode(isDark);
     setLanguage(config.language);
 
-    const unsubscribe = configService.subscribe((newConfig) => {
+    const unsubscribe = useConfigStore.subscribe((state) => {
+      const newConfig = state.settings;
       const newPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       const newIsDark = newConfig.theme === 'dark' || (newConfig.theme === 'system' && newPrefersDark);
       setIsDarkMode(newIsDark);
@@ -97,7 +98,7 @@ const TitleBar: React.FC = () => {
 
   const toggleTheme = (checked: boolean) => {
     const newTheme = checked ? 'dark' : 'light';
-    configService.updateConfig({ theme: newTheme });
+    useConfigStore.getState().updateConfig({ theme: newTheme });
     setIsDarkMode(checked);
     document.documentElement.setAttribute('data-theme', newTheme);
   };

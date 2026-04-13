@@ -61,16 +61,6 @@ export function useDevice(deviceId: string | null): Device | null {
   return state.devices[deviceId] || null;
 }
 
-export function useConnectedDevices(): Device[] {
-  const state = useAppState();
-  
-  if (!state) {
-    return [];
-  }
-  
-  return Object.values(state.devices).filter(d => d.connected);
-}
-
 export function useDevicesByType(type: 'serial' | 'ble'): Device[] {
   const state = useAppState();
   

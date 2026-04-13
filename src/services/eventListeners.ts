@@ -66,6 +66,8 @@ export async function initSerialEventListeners(): Promise<void> {
     });
 
     serialListeners.connected = await onSerialConnected((portName) => {
+      const store = useSerialStore.getState();
+      store.addPortTab(portName);
       useLogStore.getState().addLog('info', 'SerialManager', `串口 ${portName} 已连接`);
       useNotificationStore.getState().addNotification('success', `串口 ${portName} 已连接`);
     });

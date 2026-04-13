@@ -172,6 +172,19 @@ impl fmt::Display for ErrorResponse {
 
 pub type Result<T> = std::result::Result<T, ComBridgeError>;
 
+pub trait LockResultExt<T> {
+    fn lock_err(self, context: &str) -> Result<T>;
+}
+
+impl<T> LockResultExt<T> for std::result::Result<T, std::sync::PoisonError<T>> {
+    fn lock_err(self, context: &str) -> Result<T> {
+        self.map_err(|e| ComBridgeError::DeviceError {
+            code: ErrorCode::DeviceError,
+            message: format!("{}锁获取失败: {}", context, e),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

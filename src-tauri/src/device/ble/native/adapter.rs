@@ -5,7 +5,7 @@ use bluest::{Adapter, Device, DeviceId};
 use futures::StreamExt;
 use tracing::info;
 
-use crate::error::{ComBridgeError, Result};
+use crate::error::{ComBridgeError, LockResultExt, Result};
 use super::super::ble_traits::BleDevice;
 use super::gatt_client::GattClient;
 
@@ -50,7 +50,7 @@ impl BleAdapter {
     pub async fn start_scan(&self) -> Result<()> {
         info!("开始扫描BLE设备");
 
-        self.scanned_devices.write().unwrap().clear();
+        self.scanned_devices.write().unwrap_or_else(|e| e.into_inner()).clear();
         self.scan_cancelled.store(false, Ordering::SeqCst);
 
         let adapter = self.adapter.clone();
@@ -75,7 +75,7 @@ impl BleAdapter {
 
                         info!("发现BLE设备: {:?} RSSI: {:?}", name, rssi);
 
-                        let mut devices_guard = scanned_devices.write().unwrap();
+                        let mut devices_guard = scanned_devices.write().unwrap_or_else(|e| e.into_inner());
                         devices_guard.insert(device_id, (Arc::new(device), rssi));
                     }
                     info!("BLE扫描任务结束");
@@ -100,7 +100,7 @@ impl BleAdapter {
     }
 
     pub async fn get_scanned_devices(&self) -> Result<Vec<BleDevice>> {
-        let devices = self.scanned_devices.read().unwrap();
+        let devices = self.scanned_devices.read().lock_err("BLE扫描设备")?;
         let result: Vec<BleDevice> = devices
             .iter()
             .map(|(id, (device, rssi))| BleDevice {
@@ -116,7 +116,7 @@ impl BleAdapter {
     }
 
     fn get_device(&self, device_id: &str) -> Option<Arc<Device>> {
-        let devices = self.scanned_devices.read().unwrap();
+        let devices = self.scanned_devices.read().unwrap_or_else(|e| e.into_inner());
         devices
             .iter()
             .find(|(id, _)| id.to_string() == device_id)
@@ -128,7 +128,7 @@ impl BleAdapter {
     }
 
     pub fn get_or_create_client(&self, address: &str) -> Arc<GattClient> {
-        let mut clients = self.clients.write().unwrap();
+        let mut clients = self.clients.write().unwrap_or_else(|e| e.into_inner());
         clients
             .entry(address.to_string())
             .or_insert_with(|| Arc::new(GattClient::new(address)))
@@ -136,17 +136,17 @@ impl BleAdapter {
     }
 
     pub fn get_client(&self, address: &str) -> Option<Arc<GattClient>> {
-        let clients = self.clients.read().unwrap();
+        let clients = self.clients.read().unwrap_or_else(|e| e.into_inner());
         clients.get(address).cloned()
     }
 
     pub fn remove_client(&self, address: &str) {
-        let mut clients = self.clients.write().unwrap();
+        let mut clients = self.clients.write().unwrap_or_else(|e| e.into_inner());
         clients.remove(address);
     }
 
     pub fn list_clients(&self) -> Vec<(String, Arc<GattClient>)> {
-        let clients = self.clients.read().unwrap();
+        let clients = self.clients.read().unwrap_or_else(|e| e.into_inner());
         clients
             .iter()
             .map(|(addr, client)| (addr.clone(), client.clone()))
@@ -154,7 +154,7 @@ impl BleAdapter {
     }
 
     pub fn clear_scanned_device(&self, address: &str) {
-        let mut devices = self.scanned_devices.write().unwrap();
+        let mut devices = self.scanned_devices.write().unwrap_or_else(|e| e.into_inner());
         devices.retain(|id, _| id.to_string() != address);
         info!("已清理扫描缓存: {}", address);
     }

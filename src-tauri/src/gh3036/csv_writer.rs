@@ -28,13 +28,13 @@ impl CsvWriter {
     }
 
     pub fn write_frame(&mut self, frame: &Gh3036FrameData) -> std::io::Result<()> {
-        let should_create_new_file = frame.frame_id == 0 || self.file.lock().unwrap().is_none();
+        let should_create_new_file = frame.frame_id == 0 || self.file.lock().unwrap_or_else(|e| e.into_inner()).is_none();
         
         if should_create_new_file {
             self.create_new_file()?;
         }
 
-        let mut file_guard = self.file.lock().unwrap();
+        let mut file_guard = self.file.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(ref mut file) = *file_guard {
             self.write_row(file, frame)?;
             self.last_frame_id = frame.frame_id;
@@ -64,7 +64,7 @@ impl CsvWriter {
         
         info!("创建新的 CSV 文件: {:?}", filepath);
         
-        let mut file_guard = self.file.lock().unwrap();
+        let mut file_guard = self.file.lock().unwrap_or_else(|e| e.into_inner());
         *file_guard = Some(file);
         self.current_file_index += 1;
         

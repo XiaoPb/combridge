@@ -1,5 +1,7 @@
 # Dashboard 调用流程文档
 
+> **注意**: 本文档已整合到模块化架构文档体系中。详细的后端架构请参阅 [Dashboard 模块文档](./architecture/backend/dashboard-module.md)，前端页面架构请参阅 [前端页面层文档](./architecture/frontend/pages-layer.md)。
+
 ## 一、概述
 
 本文档描述了 ComBridge Dashboard 模块的数据流和调用流程，包括前端组件交互、后端服务处理、以及数据解析流程。

@@ -15,7 +15,7 @@
 | ------------- | ------------------------------------- | --------------- |
 | **前端框架**      | React 18 + TypeScript                 | UI 构建           |
 | **状态管理**      | Zustand                               | 轻量级状态管理         |
-| **UI 组件库**    | Ant Design / shadcn/ui                | 可选的组件库          |
+| **UI 组件库**    | Ant Design v6.3.5                     | React 组件库     |
 | **构建工具**      | Vite                                  | 快速开发构建          |
 | **后端框架**      | Tauri 2.0 (Rust)                      | 跨平台桌面应用         |
 | **异步运行时**     | Tokio                                 | Rust 异步运行时      |
@@ -50,11 +50,15 @@ combridge/
 │   │   │
 │   │   ├── commands/                   # Tauri 命令模块（前端调用入口）
 │   │   │   ├── mod.rs                  # 命令模块聚合导出
-│   │   │   ├── serial.rs               # 串口命令：扫描、打开、关闭、发送
-│   │   │   ├── ble.rs                  # BLE 命令：配置、扫描、连接、读写、订阅
+│   │   │   ├── serial.rs               # 串口命令：扫描、打开、关闭、发送、导出
+│   │   │   ├── ble.rs                  # BLE 命令：配置、扫描、连接、读写、订阅、AT透传
 │   │   │   ├── protocol.rs             # 协议命令：加载、卸载、绑定、列表
-│   │   │   ├── system.rs               # 系统命令：信息、状态、日志配置
-│   │   │   └── websocket.rs            # WebSocket 命令：连接、发送、断开
+│   │   │   ├── system.rs               # 系统命令：信息、状态、日志配置、窗口管理
+│   │   │   ├── websocket.rs            # WebSocket 命令：连接、发送、断开
+│   │   │   ├── gh3036.rs               # GH3036 命令：初始化、通道配置、RPC、CSV导出
+│   │   │   ├── waveform.rs             # 波形命令：缓冲区管理、解析器、数据读写
+│   │   │   ├── state.rs                # 状态命令：动作分发、状态读写、设备查询
+│   │   │   └── preferences.rs          # 偏好设置命令：获取、保存、串口/BLE偏好
 │   │   │
 │   │   ├── device/                     # 设备管理层
 │   │   │   ├── mod.rs                  # 设备模块导出
@@ -107,6 +111,24 @@ combridge/
 │   │   │   ├── connection_pool.rs      # 连接池管理：多连接支持
 │   │   │   └── reconnection.rs         # 重连机制：断线自动重连
 │   │   │
+│   │   ├── dashboard/                  # Dashboard 模块
+│   │   │   ├── mod.rs
+│   │   │   ├── commands.rs             # Dashboard 命令：解析脚本、JSON配置管理
+│   │   │   ├── parser_scripts.rs       # 解析脚本管理：脚本CRUD、执行、JSON分析
+│   │   │   └── json_config.rs          # JSON 配置管理：Dashboard配置文件读写
+│   │   │
+│   │   ├── gh3036/                     # GH3036 模块
+│   │   │   ├── mod.rs
+│   │   │   └── ...                     # GH3036 协议处理、RPC命令、CSV导出
+│   │   │
+│   │   ├── waveform/                   # 波形模块
+│   │   │   ├── mod.rs
+│   │   │   └── ...                     # 波形缓冲区、解析器、数据存储
+│   │   │
+│   │   ├── state/                      # 状态管理模块
+│   │   │   ├── mod.rs
+│   │   │   └── ...                     # 应用状态、动作分发、持久化
+│   │   │
 │   │   └── error.rs                    # 错误类型定义：统一错误码、错误转换
 │   │
 │   ├── Cargo.toml                      # Rust 依赖配置
@@ -122,7 +144,11 @@ combridge/
 │   │   ├── index.ts                    # API 统一导出
 │   │   ├── tauri.ts                    # Tauri 命令封装：invoke 调用封装
 │   │   ├── events.ts                   # Tauri 事件监听封装
-│   │   └── types.ts                    # API 类型定义：请求/响应类型
+│   │   ├── types.ts                    # API 类型定义：请求/响应类型
+│   │   ├── dashboard.ts                # Dashboard API：解析脚本、JSON配置
+│   │   ├── gh3036.ts                   # GH3036 API：通道配置、RPC、CSV
+│   │   ├── waveform.ts                 # 波形 API：缓冲区、解析器、数据
+│   │   └── stateApi.ts                 # 状态 API：动作分发、状态查询
 │   │
 │   ├── stores/                         # Zustand 状态管理
 │   │   ├── index.ts                    # Store 统一导出
@@ -131,7 +157,13 @@ combridge/
 │   │   ├── bleStore.ts                 # BLE 状态：设备列表、连接管理、GATT 缓存
 │   │   ├── protocolStore.ts            # 协议状态：插件列表、绑定关系
 │   │   ├── systemStore.ts              # 系统状态：系统信息、运行状态、日志
-│   │   └── uiConfigStore.ts            # UI 配置：主题、布局、偏好设置
+│   │   ├── uiConfigStore.ts            # UI 配置：主题、布局、偏好设置
+│   │   ├── dashboardStore.ts           # Dashboard 状态：解析脚本、数据缓冲、Widget配置
+│   │   ├── gh3036Store.ts              # GH3036 状态：通道配置、RPC命令、CSV配置
+│   │   ├── csvChartStore.ts            # CSV 图表状态：CSV数据、图表渲染配置
+│   │   ├── waveformStore.ts            # 波形状态：缓冲区管理、实时数据
+│   │   ├── logStore.ts                 # 日志状态：日志条目、过滤条件
+│   │   └── pageTabsStore.ts            # 页面标签状态：标签页管理
 │   │
 │   ├── pages/                          # 页面组件
 │   │   ├── Serial/                     # 串口页面
@@ -322,10 +354,14 @@ graph TB
 | **入口**            | `main.rs`                             | 应用启动、插件注册、状态初始化、数据回调设置     |
 | **模块导出**          | `lib.rs`                              | 公开模块声明，供 main.rs 引用        |
 | **串口命令**          | `commands/serial.rs`                  | 扫描端口、打开/关闭串口、发送数据          |
-| **BLE 命令**        | `commands/ble.rs`                     | 配置、扫描、连接、断开、GATT 操作、参数配置   |
+| **BLE 命令**        | `commands/ble.rs`                     | 配置、扫描、连接、断开、GATT 操作、AT透传、UUID配置 |
 | **协议命令**          | `commands/protocol.rs`                | 加载/卸载协议、启用/禁用、绑定设备         |
-| **系统命令**          | `commands/system.rs`                  | 获取系统信息、运行状态、配置日志           |
+| **系统命令**          | `commands/system.rs`                  | 获取系统信息、运行状态、配置日志、窗口管理   |
 | **WebSocket 命令**  | `commands/websocket.rs`               | 连接/断开远程服务器、发送消息            |
+| **GH3036 命令**     | `commands/gh3036.rs`                  | GH3036 初始化、通道配置、RPC、CSV导出    |
+| **波形命令**          | `commands/waveform.rs`                | 波形缓冲区管理、解析器配置、数据读写       |
+| **状态命令**          | `commands/state.rs`                   | 动作分发、状态读写、设备查询、窗口状态      |
+| **偏好设置命令**       | `commands/preferences.rs`             | 偏好设置获取/保存、串口/BLE偏好更新       |
 | **设备管理器**         | `device/device_manager.rs`            | 统一管理串口/BLE 设备，数据路由分发       |
 | **串口管理器**         | `device/serial/serial_manager.rs`     | 串口生命周期管理，多端口并发             |
 | **串口端口**          | `device/serial/serial_port.rs`        | 单个串口的读写操作、异步读取循环           |
@@ -353,6 +389,12 @@ graph TB
 | **消息处理器**         | `websocket/message_handler.rs`        | JSON 请求/响应处理               |
 | **连接池**           | `websocket/connection_pool.rs`        | 多 WebSocket 连接管理           |
 | **重连机制**          | `websocket/reconnection.rs`           | 断线自动重连、指数退避                |
+| **Dashboard 命令**  | `dashboard/commands.rs`               | 解析脚本CRUD、JSON结构分析、配置文件管理  |
+| **解析脚本管理**       | `dashboard/parser_scripts.rs`         | 脚本加载/保存/执行、JSON分析、字段提取    |
+| **JSON 配置管理**    | `dashboard/json_config.rs`            | Dashboard JSON配置文件读写           |
+| **GH3036 管理器**    | `gh3036/`                             | GH3036协议处理、通道管理、RPC命令执行    |
+| **波形管理器**         | `waveform/`                           | 波形缓冲区、解析器、数据读写             |
+| **状态管理**          | `state/`                              | 应用状态、动作分发、持久化              |
 | **错误定义**          | `error.rs`                            | 统一错误类型、错误码、错误转换            |
 
 ### 4.2 前端模块
@@ -372,6 +414,12 @@ graph TB
 | **协议状态**           | `stores/protocolStore.ts`              | 插件列表、绑定关系              |
 | **系统状态**           | `stores/systemStore.ts`                | 系统信息、运行状态、日志           |
 | **UI 配置**          | `stores/uiConfigStore.ts`              | 主题、布局、偏好设置             |
+| **Dashboard 状态**   | `stores/dashboardStore.ts`             | 解析脚本、数据缓冲、Widget配置     |
+| **GH3036 状态**      | `stores/gh3036Store.ts`                | 通道配置、RPC命令、CSV配置       |
+| **CSV 图表状态**      | `stores/csvChartStore.ts`              | CSV数据、图表渲染配置           |
+| **波形状态**           | `stores/waveformStore.ts`              | 缓冲区管理、实时数据             |
+| **日志状态**           | `stores/logStore.ts`                   | 日志条目、过滤条件              |
+| **页面标签状态**        | `stores/pageTabsStore.ts`              | 标签页管理                  |
 | **串口页面**           | `pages/Serial/index.tsx`               | 串口功能主页面布局              |
 | **串口工具栏**          | `pages/Serial/SerialToolbar.tsx`       | 端口选择、开关控制              |
 | **数据视图**           | `pages/Serial/SerialDataView.tsx`      | 收发数据展示                 |
@@ -603,6 +651,11 @@ flowchart LR
         ProtocolCmd[protocol.rs]
         SystemCmd[system.rs]
         WsCmd[websocket.rs]
+        Gh3036Cmd[gh3036.rs]
+        WaveformCmd[waveform.rs]
+        StateCmd[state.rs]
+        PreferencesCmd[preferences.rs]
+        DashboardCmd[dashboard/commands.rs]
     end
     
     subgraph 设备层
@@ -634,6 +687,11 @@ flowchart LR
     Main --> ProtocolCmd
     Main --> SystemCmd
     Main --> WsCmd
+    Main --> Gh3036Cmd
+    Main --> WaveformCmd
+    Main --> StateCmd
+    Main --> PreferencesCmd
+    Main --> DashboardCmd
     
     SerialCmd --> SerialMgr
     BleCmd --> BleMgr
@@ -682,6 +740,12 @@ flowchart TB
         SystemStore[System Store]
         ConnectionStore[Connection Store]
         UIConfigStore[UI Config Store]
+        DashboardStore[Dashboard Store]
+        Gh3036Store[GH3036 Store]
+        CsvChartStore[CSV Chart Store]
+        WaveformStore[Waveform Store]
+        LogStore[Log Store]
+        PageTabsStore[Page Tabs Store]
     end
     
     subgraph Hook层
@@ -697,6 +761,10 @@ flowchart TB
         ProtocolAPI[Protocol API]
         SystemAPI[System API]
         WsAPI[WebSocket API]
+        DashboardAPI[Dashboard API]
+        Gh3036API[GH3036 API]
+        WaveformAPI[Waveform API]
+        StateAPI[State API]
     end
     
     subgraph 服务层
@@ -749,22 +817,29 @@ flowchart TB
 | ------------------------------ | ------ | ------------------- |
 | `configure_ble`                | invoke | 配置 BLE 传输层（AT 模式需要） |
 | `scan_ble_devices`             | invoke | 扫描 BLE 设备           |
+| `stop_ble_scan`                | invoke | 停止 BLE 扫描           |
 | `connect_ble`                  | invoke | 连接 BLE 设备           |
 | `disconnect_ble`               | invoke | 断开 BLE 连接           |
 | `get_ble_connections`          | invoke | 获取所有连接              |
 | `discover_ble_services`        | invoke | 发现 GATT 服务          |
 | `discover_ble_characteristics` | invoke | 发现 GATT 特征          |
 | `read_ble_characteristic`      | invoke | 读取特征值               |
-| `write_ble_characteristic`     | invoke | 写入特征值               |
+| `write_ble_characteristic`     | invoke | 写入特征值（等待响应）         |
+| `write_ble_without_response`   | invoke | 无响应写入特征值            |
 | `subscribe_ble_notify`         | invoke | 订阅通知                |
 | `unsubscribe_ble_notify`       | invoke | 取消订阅                |
-| `get_ble_conn_params`          | invoke | 获取连接参数              |
-| `update_ble_conn_params`       | invoke | 更新连接参数              |
 | `get_ble_rssi`                 | invoke | 获取信号强度              |
-| `get_ble_mtu`                  | invoke | 获取 MTU（原生模式）        |
+| `get_ble_mode`                 | invoke | 获取当前 BLE 模式         |
+| `is_ble_configured`            | invoke | 检查 BLE 是否已配置        |
 | `set_ble_mtu`                  | invoke | 设置 MTU（原生模式）        |
-| `get_ble_phy`                  | invoke | 获取 PHY（原生模式）        |
-| `set_ble_phy`                  | invoke | 设置 PHY（原生模式）        |
+| `get_ble_subscriptions`        | invoke | 获取已订阅特征列表           |
+| `get_at_config`                | invoke | 获取 AT 模式配置          |
+| `update_at_uuid_config`        | invoke | 更新 AT UUID 配置       |
+| `get_at_tabs`                  | invoke | 获取 AT 连接标签页列表       |
+| `get_at_tab`                   | invoke | 获取指定 AT 连接标签页       |
+| `clear_at_tab_data`            | invoke | 清空 AT 标签页数据         |
+| `remove_at_tab`                | invoke | 移除 AT 标签页           |
+| `send_at_data`                 | invoke | AT 透传模式发送数据         |
 
 ### 7.3 协议 API
 
@@ -791,14 +866,88 @@ flowchart TB
 | `connect_websocket`      | invoke | 连接 WebSocket 服务器 |
 | `send_websocket_message` | invoke | 发送消息             |
 | `disconnect_websocket`   | invoke | 断开连接             |
+| `get_websocket_status`   | invoke | 获取连接状态           |
+| `get_all_websocket_connections` | invoke | 获取所有连接 ID   |
+| `get_all_websocket_status` | invoke | 获取所有连接状态      |
 
-### 7.6 事件（前端监听）
+### 7.6 Dashboard API
+
+| 命令                          | 方法     | 说明                |
+| --------------------------- | ------ | ----------------- |
+| `get_parser_scripts`        | invoke | 获取解析脚本列表          |
+| `get_parser_script_content` | invoke | 获取解析脚本内容          |
+| `save_parser_script`        | invoke | 保存解析脚本            |
+| `delete_parser_script`      | invoke | 删除解析脚本            |
+| `execute_parser_script`     | invoke | 执行解析脚本            |
+| `init_default_parser_scripts` | invoke | 初始化默认解析脚本       |
+| `analyze_json_structure`    | invoke | 分析 JSON 结构        |
+| `generate_parser_from_json` | invoke | 从 JSON 生成解析脚本     |
+| `get_parser_defined_fields` | invoke | 获取脚本定义的字段         |
+| `merge_json_to_parser`      | invoke | 合并 JSON 到已有脚本     |
+| `get_json_files`            | invoke | 获取 JSON 配置文件列表    |
+| `save_json_file`            | invoke | 保存 JSON 配置文件      |
+| `delete_json_file`          | invoke | 删除 JSON 配置文件      |
+| `load_json_file`            | invoke | 加载 JSON 配置文件      |
+
+### 7.7 GH3036 API
+
+| 命令                          | 方法     | 说明                |
+| --------------------------- | ------ | ----------------- |
+| `gh3036_init`               | invoke | 初始化 GH3036 管理器    |
+| `gh3036_is_initialized`     | invoke | 检查是否已初始化          |
+| `gh3036_configure_tx_channel` | invoke | 配置 TX 通道        |
+| `gh3036_configure_rx_channel` | invoke | 配置 RX 通道        |
+| `gh3036_get_channels`       | invoke | 获取通道配置            |
+| `gh3036_send_data`          | invoke | 发送数据              |
+| `gh3036_set_csv_config`     | invoke | 设置 CSV 导出配置       |
+| `gh3036_get_csv_config`     | invoke | 获取 CSV 导出配置       |
+| `gh3036_get_rpc_commands`   | invoke | 获取 RPC 命令列表       |
+| `gh3036_execute_rpc`        | invoke | 执行 RPC 命令         |
+| `gh3036_subscribe_events`   | invoke | 订阅 GH3036 事件      |
+| `gh3036_get_library_status` | invoke | 获取库状态             |
+| `gh3036_on_rx_data`         | invoke | RX 数据回调           |
+
+### 7.8 Waveform API
+
+| 命令                          | 方法     | 说明                |
+| --------------------------- | ------ | ----------------- |
+| `waveform_create_buffer`    | invoke | 创建波形缓冲区           |
+| `waveform_remove_buffer`    | invoke | 移除波形缓冲区           |
+| `waveform_configure_parser` | invoke | 配置波形解析器           |
+| `waveform_parse_and_store`  | invoke | 解析并存储数据           |
+| `waveform_read_data`        | invoke | 读取波形数据            |
+| `waveform_get_status`       | invoke | 获取缓冲区状态           |
+| `waveform_clear_buffer`     | invoke | 清空缓冲区             |
+| `waveform_list_buffers`     | invoke | 列出所有缓冲区           |
+
+### 7.9 State API
+
+| 命令                       | 方法     | 说明             |
+| ------------------------ | ------ | -------------- |
+| `dispatch_action`        | invoke | 分发状态变更动作       |
+| `get_state`              | invoke | 获取完整应用状态       |
+| `get_channel_data`       | invoke | 获取通道数据         |
+| `restore_state`          | invoke | 从持久化存储恢复状态     |
+| `save_state`             | invoke | 保存状态到持久化存储     |
+| `get_connected_devices`  | invoke | 获取已连接设备列表      |
+| `get_window_state`       | invoke | 获取窗口状态         |
+
+### 7.10 Preferences API
+
+| 命令                        | 方法     | 说明             |
+| ------------------------- | ------ | -------------- |
+| `get_preferences`         | invoke | 获取偏好设置         |
+| `save_preferences`        | invoke | 保存偏好设置         |
+| `update_serial_preferences` | invoke | 更新串口偏好设置    |
+| `update_ble_preferences`  | invoke | 更新 BLE 偏好设置   |
+
+### 7.11 事件（前端监听）
 
 | 事件名                 | 数据格式         | 说明           |
 | ------------------- | ------------ | ------------ |
-| `device-data`       | JSON/MsgPack | 设备接收数据通知     |
-| `ble-notification`  | JSON         | BLE 通知数据     |
-| `websocket-message` | JSON         | WebSocket 消息 |
+| `serial-data`       | `{ port_name, data }` | 串口接收数据通知     |
+| `ble-notify`        | `{ deviceId, characteristicUuid, data, timestamp }` | BLE 数据通知     |
+| `websocket-status`  | `{ id, status }` | WebSocket 连接状态变化 |
 
 ***
 

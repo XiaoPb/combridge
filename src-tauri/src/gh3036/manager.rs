@@ -19,7 +19,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::device::DeviceManager;
 use super::csv_writer::CsvWriter;
-use super::types::{Gh3036EventData, Gh3036FrameData, DataFrame, FuncFrame, FrameDecoder};
+use super::types::{Gh3036EventData, Gh3036FrameData, FuncFrame, FrameDecoder};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ChannelType {
@@ -126,6 +126,7 @@ impl GlobalContext {
         *runtime_handle = Some(handle);
     }
 
+    #[allow(dead_code)]
     fn send_data_request(&self, request: SendRequest) -> Result<(), crossbeam_channel::SendError<SendRequest>> {
         if let Some(ref sender) = *self.send_sender.lock() {
             sender.send(request)
@@ -134,6 +135,7 @@ impl GlobalContext {
         }
     }
 
+    #[allow(dead_code)]
     fn send_event_data(&self, event_data: Gh3036EventData) -> Result<(), crossbeam_channel::SendError<Gh3036EventData>> {
         if let Some(ref sender) = *self.event_sender.lock() {
             sender.send(event_data)

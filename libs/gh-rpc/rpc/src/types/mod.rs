@@ -687,6 +687,8 @@ impl RpcPoint {
         if self.point.is_null() || self.size == 0 {
             &[]
         } else {
+            // SAFETY: 已验证指针非空且 size > 0，调用者需确保指针有效
+            #[allow(unsafe_code)]
             unsafe { core::slice::from_raw_parts(self.point, self.size) }
         }
     }
@@ -701,6 +703,8 @@ impl RpcPoint {
         if self.point.is_null() || self.size == 0 {
             &mut []
         } else {
+            // SAFETY: 已验证指针非空且 size > 0，调用者需确保指针有效
+            #[allow(unsafe_code)]
             unsafe { core::slice::from_raw_parts_mut(self.point, self.size) }
         }
     }
@@ -712,7 +716,11 @@ impl Default for RpcPoint {
     }
 }
 
+// SAFETY: RpcPoint 仅用于数据传递，不涉及跨线程共享可变状态
+#[allow(unsafe_code)]
 unsafe impl Send for RpcPoint {}
+// SAFETY: RpcPoint 仅用于数据传递，不涉及跨线程共享可变状态
+#[allow(unsafe_code)]
 unsafe impl Sync for RpcPoint {}
 
 /// 帧数据结构

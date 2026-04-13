@@ -78,16 +78,24 @@ pub fn varint_decode(buffer: &[u8]) -> Result<(u32, usize), FrameError> {
 /// AGC (Automatic Gain Control) information.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AgcInfo {
+    /// 增益编码
     pub gain_code: u8,
+    /// 背景消除范围
     pub bg_cancel_range: u8,
+    /// 直流消除范围
     pub dc_cancel_range: u8,
+    /// 直流消除编码
     pub dc_cancel_code: u8,
+    /// LED 驱动满量程
     pub led_drv_fs: u8,
+    /// LED 驱动 0
     pub led_drv0: u8,
+    /// LED 驱动 1
     pub led_drv1: u8,
 }
 
 impl AgcInfo {
+    /// 将低 32 位打包
     pub fn to_low_u32(&self) -> u32 {
         let mut value: u32 = 0;
         value |= (self.gain_code as u32) & 0x0F;
@@ -99,10 +107,12 @@ impl AgcInfo {
         value
     }
 
+    /// 将高 32 位打包
     pub fn to_high_u32(&self) -> u32 {
         (self.led_drv1 as u32) & 0xFF
     }
 
+    /// 从低 32 位和高 32 位解包
     pub fn from_low_high(low: u32, high: u32) -> Self {
         Self {
             gain_code: (low & 0x0F) as u8,
@@ -119,14 +129,20 @@ impl AgcInfo {
 /// Frame data flag
 #[derive(Debug, Clone, Copy, Default)]
 pub struct FrameDataFlag {
+    /// LED 调整标志
     pub led_adj_flag: bool,
+    /// SA 标志
     pub sa_flag: bool,
+    /// 参数变更标志
     pub param_change_flag: bool,
+    /// DRE 更新标志
     pub dre_update: bool,
+    /// 跳过 OK 标志
     pub skip_ok_flag: bool,
 }
 
 impl FrameDataFlag {
+    /// 从 u32 值解析标志位
     pub fn from_u32(value: u32) -> Self {
         Self {
             led_adj_flag: (value & 0x01) != 0,
@@ -141,16 +157,22 @@ impl FrameDataFlag {
 /// Channel data for a single frame
 #[derive(Debug, Clone, Default)]
 pub struct ChannelData {
+    /// IPD/PA 值
     pub ipd_pa: i32,
+    /// 原始数据
     pub rawdata: i32,
+    /// 帧数据标志
     pub flag: FrameDataFlag,
+    /// AGC 信息
     pub agc_info: AgcInfo,
 }
 
 /// GSensor data (accelerometer and optional gyroscope)
 #[derive(Debug, Clone, Copy, Default)]
 pub struct GSensorData {
+    /// 加速度计数据 [x, y, z]
     pub acc: [i16; 3],
+    /// 陀螺仪数据 [x, y, z]
     pub gyro: [i16; 3],
 }
 
@@ -158,13 +180,20 @@ pub struct GSensorData {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[repr(u8)]
 pub enum FuncId {
+    /// ADT 模式
     #[default]
     ADT = 0,
+    /// 心率模式
     HR = 1,
+    /// 血氧模式
     SPO2 = 2,
+    /// 心率变异性模式
     HRV = 3,
+    /// GNADT 模式
     GNADT = 4,
+    /// IRNADT 模式
     IRNADT = 5,
+    /// 未知模式
     Unknown = 255,
 }
 
@@ -185,37 +214,64 @@ impl From<u32> for FuncId {
 /// Decoded function frame (gh_func_frame_t equivalent)
 #[derive(Debug, Clone, Default)]
 pub struct FuncFrame {
+    /// 帧计数
     pub frame_cnt: u32,
+    /// 时间戳
     pub timestamp: u64,
+    /// 功能 ID
     pub id: FuncId,
+    /// 通道数
     pub ch_num: u8,
+    /// 通道数据列表
     pub p_data: Vec<ChannelData, MAX_CHANNELS>,
+    /// GSensor 数据
     pub gsensor_data: GSensorData,
+    /// LED 驱动满量程
     pub led_drv_fs: [u8; 2],
+    /// 算法结果数据
     pub p_algo_res: Vec<i32, MAX_ALGO_DATA>,
 }
 
 /// Data frame containing raw decoded data (data_frame_t equivalent)
 #[derive(Debug, Clone, Default)]
 pub struct DataFrame {
+    /// 包头标志
     pub pack_header: PackHeader,
+    /// 原始数据
     pub rawdata: Vec<i32, MAX_CHANNELS>,
+    /// 原始数据大小
     pub rawdata_size: usize,
+    /// 物理值
     pub phy_value: Vec<i32, MAX_CHANNELS>,
+    /// 物理值大小
     pub phy_value_size: usize,
+    /// GS 数据
     pub gs_data: Vec<i32, MAX_GS_DATA>,
+    /// GS 数据大小
     pub gs_data_size: usize,
+    /// 标志位数据
     pub flags: Vec<u32, MAX_CHANNELS>,
+    /// 标志位数据位数
     pub flag_data_bits: usize,
+    /// 算法数据
     pub algo_data: Vec<i32, MAX_ALGO_DATA>,
+    /// 算法数据位数
     pub algo_data_bits: usize,
+    /// AGC 信息（低 32 位）
     pub agc_info: Vec<i32, MAX_CHANNELS>,
+    /// AGC 信息（高 32 位）
     pub agc_info_high: Vec<i32, MAX_CHANNELS>,
+    /// AGC 信息大小
     pub agc_info_size: usize,
+    /// 时间戳（低 32 位）
     pub timestamp: i32,
+    /// 时间戳（高 32 位）
     pub timestamp_high: i32,
+    /// 帧 ID
     pub frame_id: i32,
+    /// 功能 ID
     pub function_id: i32,
+    /// 时隙配置
     pub slot_cfg: i32,
 }
 
@@ -243,6 +299,7 @@ pub struct FrameDecoder {
 }
 
 impl FrameDecoder {
+    /// 创建新的帧解码器
     pub fn new() -> Self {
         Self {
             pos: 0,
@@ -279,7 +336,7 @@ impl FrameDecoder {
         Ok(())
     }
 
-    fn decode_single_frame(&mut self, buffer: &[u8], len: usize) -> Result<DataFrame, FrameError> {
+    fn decode_single_frame(&mut self, buffer: &[u8], _len: usize) -> Result<DataFrame, FrameError> {
         let mut frame = DataFrame::default();
 
         let zigzag_val = self.read_varint(buffer)?;
@@ -641,6 +698,7 @@ pub struct FrameEncoder {
 }
 
 impl FrameEncoder {
+    /// 创建新的帧编码器
     pub fn new() -> Self {
         Self {
             buffer: [0u8; BYTES_BUFFER_SIZE],

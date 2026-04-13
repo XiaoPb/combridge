@@ -3,7 +3,7 @@ import { Card, Table, Button, Space, Select, Tag, Empty, Typography, Popconfirm,
 import { LinkOutlined, DisconnectOutlined, PlusOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { PluginInfo } from '../../api/types';
-import { useSerialStore } from '../../stores/serialStore';
+import { useConnectedDevices } from '../../hooks/useConnectedDevices';
 
 const { Text } = Typography;
 
@@ -32,8 +32,6 @@ const BindConfig: React.FC<BindConfigProps> = ({
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [isBinding, setIsBinding] = useState(false);
 
-  const { ports, tabs } = useSerialStore();
-
   useEffect(() => {
     const items: BindingItem[] = [];
     protocols.forEach((protocol) => {
@@ -51,11 +49,19 @@ const BindConfig: React.FC<BindConfigProps> = ({
     setBindings(items);
   }, [protocols]);
 
-  const connectedPorts = tabs.filter((t) => t.isConnected).map((t) => t.portName);
-  
-  const availableDevices = connectedPorts.length > 0
-    ? connectedPorts.map((name) => ({ value: name, label: name }))
-    : ports.map((p) => ({ value: p.name, label: p.name }));
+  const connectedDevices = useConnectedDevices();
+
+  const availableDevices = connectedDevices.map((d) => ({
+    value: d.id,
+    label: (
+      <Space>
+        <Tag color={d.type === 'serial' ? 'blue' : 'green'} style={{ fontSize: 10, padding: '0 4px' }}>
+          {d.type === 'serial' ? '串口' : 'BLE'}
+        </Tag>
+        <span>{d.name}</span>
+      </Space>
+    ),
+  }));
 
   const availablePlugins = protocols
     .filter((p) => p.state === 'Enabled')

@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { message } from 'antd';
 import { serialApi } from '../api/tauri';
 import { useSerialStore, generateId } from '../stores/serialStore';
@@ -29,6 +29,8 @@ export const useSerial = () => {
   } = useSerialStore();
 
   const addLog = useLogStore((state) => state.addLog);
+
+  const autoScanRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const scanPorts = useCallback(async () => {
     setIsScanning(true);
@@ -196,6 +198,56 @@ export const useSerial = () => {
     }
   }, [tabs, updateTab]);
 
+  const restoreConnectedPorts = useCallback(async () => {
+    try {
+      const openPorts: string[] = await serialApi.getOpenPorts();
+      for (const portName of openPorts) {
+        if (!hasPortTab(portName)) {
+          addPortTab(portName);
+          updateTab(useSerialStore.getState().tabs.find(t => t.portName === portName && t.tabType === 'port')?.key || '', { isConnected: true, openedAt: Date.now() });
+        } else {
+          const tab = getPortTab(portName);
+          if (tab && !tab.isConnected) {
+            updateTab(tab.key, { isConnected: true, openedAt: Date.now() });
+          }
+        }
+      }
+      addLog('info', 'SerialManager', `已恢复 ${openPorts.length} 个已连接串口`);
+    } catch (err) {
+      addLog('error', 'SerialManager', `恢复已连接串口失败: ${err instanceof Error ? err.message : '未知错误'}`);
+    }
+  }, [addPortTab, updateTab, hasPortTab, getPortTab, addLog]);
+
+  const startAutoScan = useCallback((intervalMs: number = 3000) => {
+    if (autoScanRef.current) return;
+    autoScanRef.current = setInterval(async () => {
+      try {
+        const portList = await serialApi.listPorts();
+        const currentPorts = useSerialStore.getState().ports;
+        const currentNames = new Set(currentPorts.map(p => p.name));
+        const newPorts = portList.filter(p => !currentNames.has(p.name));
+        if (newPorts.length > 0) {
+          setPorts(portList);
+          addLog('info', 'SerialManager', `检测到新串口: ${newPorts.map(p => p.name).join(', ')}`);
+        } else {
+          const removedNames = [...currentNames].filter(name => !portList.some(p => p.name === name));
+          if (removedNames.length > 0) {
+            setPorts(portList);
+          }
+        }
+      } catch {
+        // 静默处理扫描错误
+      }
+    }, intervalMs);
+  }, [setPorts, addLog]);
+
+  const stopAutoScan = useCallback(() => {
+    if (autoScanRef.current) {
+      clearInterval(autoScanRef.current);
+      autoScanRef.current = null;
+    }
+  }, []);
+
   const activeTab = tabs.find((t) => t.key === activeTabKey);
 
   return {
@@ -218,5 +270,8 @@ export const useSerial = () => {
     hasPortTab,
     preferences,
     updatePreferences,
+    restoreConnectedPorts,
+    startAutoScan,
+    stopAutoScan,
   };
 };

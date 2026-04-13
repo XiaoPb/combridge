@@ -34,6 +34,9 @@ const SerialPage: React.FC = () => {
     hasPortTab,
     preferences,
     updatePreferences,
+    restoreConnectedPorts,
+    startAutoScan,
+    stopAutoScan,
   } = useSerial();
 
   const [inputData, setInputData] = useState('');
@@ -61,6 +64,11 @@ const SerialPage: React.FC = () => {
 
   useEffect(() => {
     scanPorts();
+    restoreConnectedPorts();
+    startAutoScan(3000);
+    return () => {
+      stopAutoScan();
+    };
   }, []);
 
   const connectedPorts = tabs.filter((t) => t.isConnected && t.tabType === 'port').map((t) => t.portName);

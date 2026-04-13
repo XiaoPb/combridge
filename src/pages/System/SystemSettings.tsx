@@ -2,28 +2,25 @@ import React, { useEffect } from 'react';
 import { Card, Form, InputNumber, Switch, Divider, Button, Space, message, Typography, Row, Col } from 'antd';
 import { LinkOutlined, SoundOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import configService, { AppConfig } from '../../services/configService';
+import { useConfigStore, type AppConfig } from '../../stores/configStore';
 
 const { Text } = Typography;
 
 const SystemSettings: React.FC = () => {
   const { t } = useTranslation('system');
   const [form] = Form.useForm<AppConfig>();
+  const settings = useConfigStore((s) => s.settings);
+  const updateConfig = useConfigStore((s) => s.updateConfig);
+  const resetConfig = useConfigStore((s) => s.resetConfig);
+  const getConfig = useConfigStore((s) => s.getConfig);
 
   useEffect(() => {
-    const config = configService.getConfig();
-    form.setFieldsValue(config);
-
-    const unsubscribe = configService.subscribe((newConfig) => {
-      form.setFieldsValue(newConfig);
-    });
-
-    return unsubscribe;
-  }, [form]);
+    form.setFieldsValue(settings);
+  }, [settings, form]);
 
   const handleValuesChange = async (changedValues: Partial<AppConfig>) => {
     try {
-      configService.updateConfig(changedValues);
+      updateConfig(changedValues);
       message.success(t('message.settingsSaved'));
     } catch (err) {
       console.error('Failed to save settings:', err);
@@ -32,8 +29,8 @@ const SystemSettings: React.FC = () => {
   };
 
   const handleReset = () => {
-    configService.resetConfig();
-    form.setFieldsValue(configService.getConfig());
+    resetConfig();
+    form.setFieldsValue(getConfig());
     message.info(t('message.settingsReset'));
   };
 

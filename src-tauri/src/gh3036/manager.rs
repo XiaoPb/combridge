@@ -381,34 +381,26 @@ impl Gh3036Manager {
     }
 
     pub async fn send_data(&self, data: &[u8]) -> Result<(), String> {
-        info!("GH3036 send_data 被调用: {} bytes, data={:02X?}", data.len(), data);
-
-        let (route_id, device_id) = {
+        let (device_type, device_id, char_uuid) = {
             let tx_channel = CALLBACK_CONTEXT.tx_channel.lock();
             let channel = tx_channel.as_ref().ok_or("TX 通道未配置")?;
             
-            let route_id = match channel.channel_type {
-                ChannelType::Serial => format!("serial-{}", channel.device_id),
-                ChannelType::Ble => {
-                    let _char_uuid = channel.characteristic_uuid.as_ref()
-                        .ok_or("蓝牙 TX 通道缺少特征 UUID")?;
-                    format!("ble-{}", channel.device_id)
-                }
+            let device_type = match channel.channel_type {
+                ChannelType::Serial => crate::device::DeviceType::Serial,
+                ChannelType::Ble => crate::device::DeviceType::Ble,
             };
-            info!("GH3036 send_data 路由ID: {}, 设备ID: {}", route_id, channel.device_id);
-            (route_id, channel.device_id.clone())
+            let char_uuid = channel.characteristic_uuid.clone();
+            (device_type, channel.device_id.clone(), char_uuid)
         };
 
-        info!("GH3036 send_data 调用 device_manager.route_data");
         self.device_manager
-            .route_data(&route_id, data)
+            .send_direct(device_type, &device_id, char_uuid.as_deref(), data)
             .await
             .map_err(|e| {
                 error!("GH3036 send_data 失败: {}", e);
                 e.to_string()
             })?;
 
-        info!("GH3036 发送数据成功: {} bytes to {}", data.len(), device_id);
         Ok(())
     }
 

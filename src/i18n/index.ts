@@ -1,6 +1,6 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import configService from '../services/configService';
+import { useConfigStore } from '../stores/configStore';
 
 import zhCNCommon from '../locales/zh-CN/common.json';
 import zhCNSidebar from '../locales/zh-CN/sidebar.json';
@@ -47,7 +47,7 @@ const resources = {
   },
 };
 
-const savedLanguage = configService.getConfig().language || 'zh-CN';
+const savedLanguage = useConfigStore.getState().getConfig().language || 'zh-CN';
 
 i18n.use(initReactI18next).init({
   resources,
@@ -63,7 +63,7 @@ export default i18n;
 
 export const changeLanguage = (lng: 'zh-CN' | 'en-US') => {
   i18n.changeLanguage(lng);
-  configService.updateConfig({ language: lng });
+  useConfigStore.getState().updateConfig({ language: lng });
 };
 
 export const getCurrentLanguage = () => i18n.language as 'zh-CN' | 'en-US';

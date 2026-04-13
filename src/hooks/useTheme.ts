@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { configService, AppConfig } from '../services/configService';
+import { useEffect, useCallback } from 'react';
+import { useConfigStore, type AppConfig } from '../stores/configStore';
 
 type ThemeMode = AppConfig['theme'];
 
@@ -24,21 +24,10 @@ function applyThemeToDom(isDark: boolean): void {
 }
 
 export function useTheme() {
-  const [theme, setTheme] = useState<ThemeMode>(() => configService.getConfig().theme);
-  const [isDark, setIsDark] = useState<boolean>(() => {
-    const config = configService.getConfig();
-    return resolveActualTheme(config.theme) === 'dark';
-  });
-
-  useEffect(() => {
-    const unsubscribe = configService.subscribe((config) => {
-      setTheme(config.theme);
-      const actualTheme = resolveActualTheme(config.theme);
-      setIsDark(actualTheme === 'dark');
-    });
-
-    return unsubscribe;
-  }, []);
+  const settings = useConfigStore((s) => s.settings);
+  const updateConfig = useConfigStore((s) => s.updateConfig);
+  const theme = settings.theme;
+  const isDark = resolveActualTheme(theme) === 'dark';
 
   useEffect(() => {
     applyThemeToDom(isDark);
@@ -49,7 +38,7 @@ export function useTheme() {
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (e: MediaQueryListEvent) => {
-      setIsDark(e.matches);
+      applyThemeToDom(e.matches);
     };
 
     mediaQuery.addEventListener('change', handleChange);
@@ -57,8 +46,8 @@ export function useTheme() {
   }, [theme]);
 
   const setThemeMode = useCallback((newTheme: ThemeMode) => {
-    configService.updateConfig({ theme: newTheme });
-  }, []);
+    updateConfig({ theme: newTheme });
+  }, [updateConfig]);
 
   const toggleTheme = useCallback(() => {
     const newTheme: ThemeMode = isDark ? 'light' : 'dark';

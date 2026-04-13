@@ -7,3 +7,5 @@ export * from './dashboardStore';
 export * from './gh3036Store';
 export * from './waveformStore';
 export * from './csvChartStore';
+export * from './configStore';
+export * from './notificationStore';

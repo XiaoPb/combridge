@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { ConfigProvider, theme, Spin, Result, Button } from 'antd';
+import { ConfigProvider, theme, Spin, Result, Button, message } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import enUS from 'antd/locale/en_US';
 import { lazy, Suspense, useEffect, useState, useCallback } from 'react';
@@ -7,7 +7,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { MainLayout, ErrorBoundary } from './components';
 import { useTheme } from './hooks';
-import configService from './services/configService';
+import { useConfigStore } from './stores/configStore';
+import { useNotificationStore } from './stores/notificationStore';
 import { initAllEventListeners, cleanupAllEventListeners } from './services/eventListeners';
 import './styles/global.css';
 
@@ -82,15 +83,15 @@ function AppContent() {
   const [antdLocale, setAntdLocale] = useState(zhCN);
 
   useEffect(() => {
-    const config = configService.getConfig();
+    const config = useConfigStore.getState().getConfig();
     const savedLanguage = config.language || 'zh-CN';
     if (i18n.language !== savedLanguage) {
       i18n.changeLanguage(savedLanguage);
     }
     setAntdLocale(savedLanguage === 'zh-CN' ? zhCN : enUS);
 
-    const unsubscribe = configService.subscribe((newConfig) => {
-      const newLang = newConfig.language || 'zh-CN';
+    const unsubscribe = useConfigStore.subscribe((state) => {
+      const newLang = state.settings.language || 'zh-CN';
       if (i18n.language !== newLang) {
         i18n.changeLanguage(newLang);
       }
@@ -103,6 +104,16 @@ function AppContent() {
 
     return unsubscribe;
   }, [i18n]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const notifications = useNotificationStore.getState().consumeNotifications();
+      for (const n of notifications) {
+        message[n.type](n.content);
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     initAllEventListeners().catch((err) => {

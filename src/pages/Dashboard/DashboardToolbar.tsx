@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Space, Button, Select, Dropdown, message, Popconfirm } from 'antd';
+import { Space, Button, Select, Dropdown, message, Popconfirm, theme } from 'antd';
 import {
   PlayCircleOutlined,
   PauseCircleOutlined,
@@ -22,6 +22,7 @@ import type { DashboardConfig } from '../../types/dashboard';
 
 const DashboardToolbar: React.FC = () => {
   const { t } = useTranslation('dashboard');
+  const { token } = theme.useToken();
   const {
     isRunning,
     setIsRunning,
@@ -31,12 +32,10 @@ const DashboardToolbar: React.FC = () => {
     savedDashboards,
     setCurrentDashboard,
     deleteDashboard,
-    renameDashboard,
     isEditMode,
     setIsEditMode,
   } = useDashboardStore();
   const [showScriptManager, setShowScriptManager] = useState(false);
-  const [newName, setNewName] = useState('');
 
   const handleToggleRun = () => {
     setIsRunning(!isRunning);
@@ -111,11 +110,11 @@ const DashboardToolbar: React.FC = () => {
     <div
       style={{
         padding: '8px 16px',
-        borderBottom: '1px solid #f0f0f0',
+        borderBottom: `1px solid ${token.colorBorderSecondary}`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        background: '#fff',
+        background: token.colorBgContainer,
       }}
     >
       <Space>
@@ -140,8 +139,7 @@ const DashboardToolbar: React.FC = () => {
         <Button
           icon={<EditOutlined />}
           onClick={() => {
-            setNewName(currentDashboard?.name || '');
-            setEditingName(true);
+            setIsEditMode(!isEditMode);
           }}
         >
           {t('rename')}

@@ -1,10 +1,11 @@
 import React from 'react';
-import { Form, Input, Select, Card } from 'antd';
+import { Form, Input, Select, Card, theme } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useDashboardStore } from '../../../stores/dashboardStore';
 
 const FrameConfigEditor: React.FC = () => {
   const { t } = useTranslation('dashboard');
+  const { token } = theme.useToken();
   const { jsonConfig, setJsonConfig } = useDashboardStore();
 
   const handleFieldChange = (field: string, value: unknown) => {
@@ -18,7 +19,7 @@ const FrameConfigEditor: React.FC = () => {
     <div style={{ maxWidth: 800 }}>
       <Card title={t('jsonEditor.basicConfig') || '基本配置'} size="small" style={{ marginBottom: 16 }}>
         <Form layout="vertical" size="small">
-          <Form.Item label={t('jsonEditor.title') || '仪表盘标题'}>
+          <Form.Item label={t('jsonEditor.dashboardTitle') || '仪表盘标题'}>
             <Input
               value={jsonConfig.title}
               onChange={(e) => handleFieldChange('title', e.target.value)}
@@ -80,7 +81,7 @@ const FrameConfigEditor: React.FC = () => {
         <Form layout="vertical" size="small">
           <Form.Item 
             label={
-              <span style={{ color: '#666', fontSize: 12 }}>
+              <span style={{ color: token.colorTextTertiary, fontSize: 12 }}>
                 {t('jsonEditor.parserFunctionHint') || 'JavaScript函数，接收帧数据字符串，返回解析后的数组'}
               </span>
             }

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { Layout } from 'antd';
+import { Layout, theme } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { useDashboardStore } from '../../stores/dashboardStore';
+import { useTheme } from '../../hooks';
 import { dashboardApi } from '../../api/dashboard';
 import { onSerialData, onBleData, onParsedData } from '../../api/events';
 import { useLogStore } from '../../stores/logStore';
@@ -15,6 +17,9 @@ import type { SerialDataEvent, BleDataEvent, ParsedDataEvent } from '../../api/e
 const { Content, Sider } = Layout;
 
 const DashboardPage: React.FC = () => {
+  const { t } = useTranslation('dashboard');
+  const { token } = theme.useToken();
+  const { isDark } = useTheme();
   const {
     activeTabs,
     setJsonFiles,
@@ -154,19 +159,19 @@ const DashboardPage: React.FC = () => {
               <Content style={{ flex: 1 }}>
                 <DashboardCanvas />
               </Content>
-              <Sider width={400} theme="light" style={{ borderLeft: '1px solid #f0f0f0' }}>
+              <Sider width={400} theme={isDark ? 'dark' : 'light'} style={{ borderLeft: `1px solid ${token.colorBorderSecondary}` }}>
                 <ConsolePanel />
               </Sider>
             </Layout>
           )}
           {!showDashboard && !showConsole && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#999' }}>
-              请选择要显示的TAB
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: token.colorTextQuaternary }}>
+              {t('selectTabHint') || '请选择要显示的标签页'}
             </div>
           )}
         </Content>
         {showSettings && (
-          <Sider width={320} theme="light" style={{ borderLeft: '1px solid #f0f0f0' }}>
+          <Sider width={320} theme={isDark ? 'dark' : 'light'} style={{ borderLeft: `1px solid ${token.colorBorderSecondary}` }}>
             <SettingsPanel />
           </Sider>
         )}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Space, Checkbox, Tag } from 'antd';
+import { Space, Checkbox, Tag, theme } from 'antd';
 import {
   DashboardOutlined,
   CodeOutlined,
@@ -27,6 +27,7 @@ const tabColors: Record<TabType, string> = {
 const DashboardTabs: React.FC = () => {
   const { t } = useTranslation('dashboard');
   const { activeTabs, toggleTab } = useDashboardStore();
+  const { token } = theme.useToken();
 
   const tabs: { key: TabType; label: string }[] = [
     { key: 'dashboard', label: t('tabs.dashboard') || '仪表盘' },
@@ -41,8 +42,8 @@ const DashboardTabs: React.FC = () => {
     <div
       style={{
         padding: '8px 16px',
-        borderBottom: '1px solid #f0f0f0',
-        background: '#fff',
+        borderBottom: `1px solid ${token.colorBorderSecondary}`,
+        background: token.colorBgContainer,
         display: 'flex',
         alignItems: 'center',
       }}
@@ -91,7 +92,7 @@ const DashboardTabs: React.FC = () => {
 
       {isJsonEditorActive && (
         <Tag color="warning" style={{ marginLeft: 16 }}>
-          JSON编辑模式
+          {t('jsonEditMode') || 'JSON编辑模式'}
         </Tag>
       )}
     </div>

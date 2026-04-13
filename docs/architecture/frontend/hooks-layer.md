@@ -2,152 +2,220 @@
 
 ## 概述
 
-Hooks 层封装了常用的业务逻辑，提供可复用的 React Hooks。每个 Hook 负责特定功能的封装，包括状态管理、API 调用和事件监听。
+Hooks 层封装了可复用的业务逻辑，将 API 调用、状态管理和事件监听组合为 React Hook 接口。组件通过 Hook 访问业务逻辑，实现关注点分离。每个 Hook 负责特定的功能领域，自动管理事件监听器的生命周期。
 
 ## 模块位置
 
 - 源码路径：`src/hooks/`
-- 主要文件：
-  - `index.ts` - 统一导出
-  - `useSerial.ts` - 串口 Hook
-  - `useBle.ts` - BLE Hook
-  - `useWebSocket.ts` - WebSocket Hook
-  - `useAppState.ts` - 状态 Hook
-  - `useAppDispatch.ts` - 动作分发 Hook
-  - `useLog.ts` - 日志 Hook
-  - `useTheme.ts` - 主题 Hook
-  - `useNotification.ts` - 通知 Hook
-  - `useDataParser.ts` - 数据解析 Hook
-  - `useDebounce.ts` - 防抖 Hook
+- 统一导出：`index.ts`
 
-## 核心 Hooks
+| 文件 | 说明 |
+|------|------|
+| `useSerial.ts` | 串口 Hook |
+| `useBle.ts` | BLE Hook |
+| `useWebSocket.ts` | WebSocket Hook |
+| `useAppState.ts` | 应用状态 Hook |
+| `useAppDispatch.ts` | 动作分发 Hook |
+| `useProtocol.ts` | 协议 Hook |
+| `useWaveform.ts` | 波形 Hook |
+| `useLog.ts` | 日志 Hook |
+| `useTheme.ts` | 主题 Hook |
+| `useNotification.ts` | 通知 Hook |
+| `useDataParser.ts` | 数据解析 Hook |
+| `useDebounce.ts` | 防抖 Hook |
+
+## 核心 Hook
 
 ### useSerial
 
-串口操作 Hook：
+串口操作 Hook，封装串口扫描、连接、数据收发和事件监听：
 
 ```typescript
-export function useSerial() {
-    const { ports, tabs, activeTabKey, setPorts, addPortTab, updateTab } = useSerialStore();
-    const [isScanning, setIsScanning] = useState(false);
-    
-    // 扫描端口
-    const scanPorts = useCallback(async () => {
-        setIsScanning(true);
-        try {
-            const result = await serialApi.scanPorts();
-            setPorts(result);
-        } finally {
-            setIsScanning(false);
-        }
-    }, [setPorts]);
-    
-    // 打开端口
-    const openPort = useCallback(async (config: SerialPortConfig) => {
-        await serialApi.openPort(config);
-        const tabKey = addPortTab(config.port_name, config);
-        updateTab(tabKey, { isConnected: true });
-    }, [addPortTab, updateTab]);
-    
-    // 关闭端口
-    const closePort = useCallback(async (portName: string) => {
-        await serialApi.closePort(portName);
-        // 更新状态...
-    }, []);
-    
-    // 发送数据
-    const sendData = useCallback(async (portName: string, data: number[]) => {
-        return serialApi.sendData(portName, data);
-    }, []);
-    
-    return {
-        ports,
-        tabs,
-        activeTabKey,
-        isScanning,
-        scanPorts,
-        openPort,
-        closePort,
-        sendData,
-    };
+interface UseSerialReturn {
+  ports: SerialPortInfo[];
+  isScanning: boolean;
+  scanPorts: () => Promise<void>;
+  openPort: (portName: string, config?: SerialConfig) => Promise<void>;
+  closePort: (portName: string) => Promise<void>;
+  sendData: (portName: string, data: number[]) => Promise<void>;
+  isConnected: (portName: string) => boolean;
+  getCache: (portName: string) => Promise<CacheData>;
 }
 ```
 
+**核心功能**：
+- 组件挂载时自动扫描端口
+- 组件卸载时自动清理事件监听器
+- 串口数据通过 `serialStore` 管理
+
 ### useBle
 
-BLE 操作 Hook：
+BLE 操作 Hook，封装 BLE 配置、扫描、连接和事件监听：
 
 ```typescript
-export function useBle() {
-    const store = useBleStore();
-    
-    // 配置 BLE
-    const configure = useCallback(async (mode: BleMode, config?: AtConfig) => {
-        await bleApi.configure(mode, config);
-        store.setMode(mode);
-        store.setIsConfigured(true);
-    }, [store]);
-    
-    // 扫描设备
-    const scan = useCallback(async (durationMs: number) => {
-        store.setIsScanning(true);
-        try {
-            const devices = await bleApi.scan(durationMs);
-            store.setDevices(devices);
-            return devices;
-        } finally {
-            store.setIsScanning(false);
-        }
-    }, [store]);
-    
-    // 连接设备
-    const connect = useCallback(async (address: string) => {
-        store.setIsConnecting(true);
-        try {
-            const connection = await bleApi.connect(address);
-            store.addConnection(connection);
-            store.setCurrentDevice(address);
-            return connection;
-        } finally {
-            store.setIsConnecting(false);
-        }
-    }, [store]);
-    
-    // 发现服务
-    const discoverServices = useCallback(async (address: string) => {
-        const services = await bleApi.discoverServices(address);
-        store.setServices(services);
-        return services;
-    }, [store]);
-    
-    // 订阅通知
-    const subscribeNotify = useCallback(async (
-        address: string,
-        charUuid: string,
-        callback: (data: number[]) => void
-    ) => {
-        await bleApi.subscribeNotify(address, charUuid);
-        // 注册回调...
-    }, []);
-    
-    return {
-        mode: store.mode,
-        devices: store.devices,
-        connections: store.connections,
-        services: store.services,
-        isScanning: store.isScanning,
-        isConnecting: store.isConnecting,
-        isConfigured: store.isConfigured,
-        configure,
-        scan,
-        connect,
-        disconnect,
-        discoverServices,
-        readCharacteristic,
-        writeCharacteristic,
-        subscribeNotify,
-    };
+interface UseBleReturn {
+  mode: BleMode;
+  devices: BleDeviceInfo[];
+  connections: BleConnection[];
+  isScanning: boolean;
+  configure: (params: BleConfigureParams) => Promise<void>;
+  scan: (options?: BleScanOptions) => Promise<void>;
+  stopScan: () => Promise<void>;
+  connect: (params: BleConnectParams) => Promise<void>;
+  disconnect: (deviceId: string) => Promise<void>;
+  discoverServices: (deviceId: string) => Promise<void>;
+  subscribe: (deviceId: string, charUuid: string) => Promise<void>;
+  unsubscribe: (deviceId: string, charUuid: string) => Promise<void>;
+  read: (deviceId: string, charUuid: string) => Promise<number[]>;
+  write: (deviceId: string, charUuid: string, data: number[]) => Promise<void>;
 }
+```
+
+### useProtocol
+
+协议操作 Hook，源码位于 [useProtocol.ts](file:///e:/Code/CPP/combridge-rust/src/hooks/useProtocol.ts)，封装协议的加载/卸载/启用/禁用/绑定/解绑操作：
+
+```typescript
+interface UseProtocolReturn {
+  protocols: PluginInfo[];
+  isLoading: boolean;
+  error: string | null;
+  loadProtocol: (params: ProtocolLoadParams) => Promise<void>;
+  unloadProtocol: (pluginId: string) => Promise<void>;
+  enableProtocol: (pluginId: string) => Promise<void>;
+  disableProtocol: (pluginId: string) => Promise<void>;
+  bindProtocol: (params: ProtocolBindParams) => Promise<void>;
+  unbindProtocol: (params: ProtocolBindParams) => Promise<void>;
+  refreshProtocols: () => Promise<void>;
+}
+```
+
+**核心功能**：
+
+| 操作 | API 调用 | Store 更新 | 说明 |
+|------|----------|------------|------|
+| `loadProtocol` | `protocolApi.load()` | `addProtocol()` | 加载协议插件到内存 |
+| `unloadProtocol` | `protocolApi.unload()` | `removeProtocol()` | 从内存卸载协议插件 |
+| `enableProtocol` | `protocolApi.enable()` | `updateProtocol()` | 启用已加载的协议 |
+| `disableProtocol` | `protocolApi.disable()` | `updateProtocol()` | 禁用已启用的协议 |
+| `bindProtocol` | `protocolApi.bind()` | `addBinding()` | 绑定协议到设备 |
+| `unbindProtocol` | `protocolApi.unbind()` | `removeBinding()` | 解绑协议与设备 |
+| `refreshProtocols` | `protocolApi.list()` | `setProtocols()` | 刷新协议列表 |
+
+**错误处理**：所有操作失败时设置 `error` 状态，并使用 `console.error` 记录错误上下文。
+
+### useWaveform
+
+波形操作 Hook，源码位于 [useWaveform.ts](file:///e:/Code/CPP/combridge-rust/src/hooks/useWaveform.ts)，封装波形缓冲区管理、解析器配置和数据自动刷新：
+
+```typescript
+interface UseWaveformReturn {
+  buffers: string[];
+  currentBuffer: string | null;
+  status: WaveformStatus | null;
+  data: WaveformData | null;
+  isLoading: boolean;
+  isRunning: boolean;
+  createBuffer: (bufferId: string, config?: WaveformBufferConfig) => Promise<void>;
+  removeBuffer: (bufferId: string) => Promise<void>;
+  setCurrentBuffer: (bufferId: string) => void;
+  configureParser: (bufferId: string, config: ParserConfig) => Promise<void>;
+  startRefresh: () => void;
+  stopRefresh: () => void;
+  clearBuffer: (bufferId: string) => Promise<void>;
+  refreshData: () => Promise<void>;
+}
+```
+
+**核心功能**：
+
+| 功能 | 说明 |
+|------|------|
+| 缓冲区创建 | `createBuffer()` 创建波形缓冲区，自动配置默认解析器（delimiter + 5 通道） |
+| 解析器配置 | `configureParser()` 设置分隔符或正则解析器 |
+| 自动刷新 | `startRefresh()`/`stopRefresh()` 控制定时数据刷新（默认 33ms/30fps） |
+| 数据读取 | `refreshData()` 读取当前缓冲区的最新数据（默认 500 行） |
+| 状态查询 | 自动获取缓冲区状态（行数、列数、容量） |
+| 串口数据转发 | 组件挂载时监听 `serial-data` 事件，自动调用 `parseAndStore()` 将数据写入缓冲区 |
+| 事件清理 | 组件卸载时自动停止刷新并清理事件监听器 |
+
+**数据流**：
+
+```mermaid
+sequenceDiagram
+    participant Serial as 串口事件
+    participant Hook as useWaveform
+    participant Store as waveformStore
+    participant API as waveformApi
+
+    Serial->>Hook: serial-data 事件
+    Hook->>API: parseAndStore(bufferId, data)
+    API-->>Hook: 解析完成
+
+    loop 定时刷新 (33ms)
+        Hook->>API: readData(bufferId, 500)
+        API-->>Hook: 返回波形数据
+        Hook->>Store: 更新 data 状态
+    end
+```
+
+### useAppDispatch
+
+动作分发 Hook，源码位于 [useAppDispatch.ts](file:///e:/Code/CPP/combridge-rust/src/hooks/useAppDispatch.ts)，封装状态机动作的分发逻辑：
+
+```typescript
+interface UseAppDispatchReturn {
+  dispatchDeviceAction: (action: DeviceAction) => Promise<void>;
+  dispatchChannelAction: (action: ChannelAction) => Promise<void>;
+  dispatchTabAction: (action: TabAction) => Promise<void>;
+  getConnectedDevices: () => Promise<ConnectedDevice[]>;
+  getChannelData: (deviceId: string, channelId: string, limit?: number) => Promise<ChannelData[]>;
+}
+```
+
+**核心功能**：
+
+| 功能 | 说明 |
+|------|------|
+| `dispatchDeviceAction` | 分发设备动作（添加/移除串口设备、BLE 设备） |
+| `dispatchChannelAction` | 分发通道动作（添加/移除数据通道、更新通道配置） |
+| `dispatchTabAction` | 分发标签动作（添加/移除/切换标签页） |
+| `getConnectedDevices` | 获取当前已连接的设备列表 |
+| `getChannelData` | 获取指定通道的数据 |
+
+**动作类型**：
+
+```typescript
+type DeviceAction =
+  | { type: 'DEVICE_ADD_SERIAL'; id: string; name: string; baudRate: number }
+  | { type: 'DEVICE_ADD_BLE'; id: string; name: string; address: string }
+  | { type: 'DEVICE_REMOVE'; id: string };
+
+type ChannelAction =
+  | { type: 'CHANNEL_ADD'; deviceId: string; channelId: string; name: string }
+  | { type: 'CHANNEL_REMOVE'; deviceId: string; channelId: string }
+  | { type: 'CHANNEL_UPDATE_CONFIG'; deviceId: string; channelId: string; config: Record<string, unknown> };
+
+type TabAction =
+  | { type: 'TAB_ADD'; page: string; tabId: string; label: string }
+  | { type: 'TAB_REMOVE'; page: string; tabId: string }
+  | { type: 'TAB_SWITCH'; page: string; tabId: string };
+```
+
+**分发流程**：
+
+```mermaid
+sequenceDiagram
+    participant UI as 组件
+    participant Hook as useAppDispatch
+    participant StateApi as stateApi
+    participant Backend as 后端状态机
+
+    UI->>Hook: dispatchDeviceAction(action)
+    Hook->>StateApi: dispatchAction(action)
+    StateApi->>Backend: invoke('dispatch_action', action)
+    Backend->>Backend: 状态机处理
+    Backend-->>UI: emit('state-change', newState)
 ```
 
 ### useWebSocket
@@ -155,42 +223,12 @@ export function useBle() {
 WebSocket 操作 Hook：
 
 ```typescript
-export function useWebSocket(id: string) {
-    const [status, setStatus] = useState<ConnectionStatus>('disconnected');
-    const [lastMessage, setLastMessage] = useState<string | null>(null);
-    
-    // 连接
-    const connect = useCallback(async (url: string) => {
-        setStatus('connecting');
-        try {
-            await websocketApi.connect(id, url);
-            setStatus('connected');
-        } catch (error) {
-            setStatus('error');
-            throw error;
-        }
-    }, [id]);
-    
-    // 发送消息
-    const send = useCallback(async (message: string) => {
-        await websocketApi.send(id, message);
-    }, [id]);
-    
-    // 断开连接
-    const disconnect = useCallback(async () => {
-        await websocketApi.disconnect(id);
-        setStatus('disconnected');
-    }, [id]);
-    
-    // 监听消息
-    useEffect(() => {
-        const unlisten = eventApi.onWebSocketMessage((msg) => {
-            setLastMessage(msg as string);
-        });
-        return () => { unlisten.then(fn => fn()); };
-    }, []);
-    
-    return { status, lastMessage, connect, send, disconnect };
+interface UseWebSocketReturn {
+  connections: string[];
+  status: Record<string, WebSocketStatus>;
+  connect: (id: string, url: string, reconnect?: boolean) => Promise<void>;
+  send: (id: string, message: string) => Promise<void>;
+  disconnect: (id: string) => Promise<void>;
 }
 ```
 
@@ -199,35 +237,26 @@ export function useWebSocket(id: string) {
 应用状态 Hook：
 
 ```typescript
-export function useAppState() {
-    const [state, setState] = useState<AppState | null>(null);
-    const [loading, setLoading] = useState(false);
-    
-    // 获取状态
-    const getState = useCallback(async () => {
-        setLoading(true);
-        try {
-            const result = await stateApi.getState();
-            setState(result);
-            return result;
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-    
-    // 保存状态
-    const saveState = useCallback(async () => {
-        await stateApi.saveState();
-    }, []);
-    
-    // 恢复状态
-    const restoreState = useCallback(async () => {
-        const result = await stateApi.restoreState();
-        setState(result);
-        return result;
-    }, []);
-    
-    return { state, loading, getState, saveState, restoreState };
+interface UseAppStateReturn {
+  state: AppState | null;
+  isLoading: boolean;
+  refreshState: () => Promise<void>;
+  restoreState: () => Promise<void>;
+  saveState: () => Promise<void>;
+}
+```
+
+### useLog
+
+日志 Hook：
+
+```typescript
+interface UseLogReturn {
+  entries: LogEntry[];
+  filter: LogFilter;
+  addLog: (level: string, source: string, message: string) => void;
+  clearEntries: () => void;
+  setFilter: (filter: Partial<LogFilter>) => void;
 }
 ```
 
@@ -236,24 +265,10 @@ export function useAppState() {
 主题 Hook：
 
 ```typescript
-export function useTheme() {
-    const [isDark, setIsDark] = useState(() => {
-        return localStorage.getItem('theme') === 'dark';
-    });
-    
-    const toggleTheme = useCallback(() => {
-        setIsDark(prev => {
-            const newValue = !prev;
-            localStorage.setItem('theme', newValue ? 'dark' : 'light');
-            return newValue;
-        });
-    }, []);
-    
-    useEffect(() => {
-        document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-    }, [isDark]);
-    
-    return { isDark, toggleTheme };
+interface UseThemeReturn {
+  isDark: boolean;
+  toggleTheme: () => void;
+  setTheme: (dark: boolean) => void;
 }
 ```
 
@@ -262,28 +277,33 @@ export function useTheme() {
 通知 Hook：
 
 ```typescript
-export function useNotification() {
-    const [notification, contextHolder] = notification.useNotification();
-    
-    const showSuccess = useCallback((message: string) => {
-        notification.success({ message });
-    }, [notification]);
-    
-    const showError = useCallback((message: string) => {
-        notification.error({ message });
-    }, [notification]);
-    
-    const showWarning = useCallback((message: string) => {
-        notification.warning({ message });
-    }, [notification]);
-    
-    return {
-        contextHolder,
-        showSuccess,
-        showError,
-        showWarning,
-    };
+interface UseNotificationReturn {
+  success: (message: string, description?: string) => void;
+  error: (message: string, description?: string) => void;
+  warning: (message: string, description?: string) => void;
+  info: (message: string, description?: string) => void;
 }
+```
+
+### useDataParser
+
+数据解析 Hook：
+
+```typescript
+interface UseDataParserReturn {
+  parse: (data: number[], format: ParseFormat) => ParsedResult;
+  parseHex: (hex: string) => number[];
+  formatHex: (data: number[]) => string;
+  formatAscii: (data: number[]) => string;
+}
+```
+
+### useDebounce
+
+防抖 Hook：
+
+```typescript
+function useDebounce<T>(value: T, delay: number): T;
 ```
 
 ## 架构图
@@ -294,98 +314,235 @@ graph TB
         useSerial
         useBle
         useWebSocket
+        useProtocol
+        useWaveform
+        useAppDispatch
         useAppState
+        useLog
         useTheme
         useNotification
+        useDataParser
+        useDebounce
     end
-    
-    subgraph Store
+
+    subgraph Stores
         serialStore
         bleStore
+        protocolStore
+        waveformStore
+        logStore
         connectionStore
+        pageTabsStore
+        dashboardStore
+        gh3036Store
+        csvChartStore
     end
-    
+
     subgraph API
         serialApi
         bleApi
         websocketApi
-        eventApi
+        protocolApi
+        waveformApi
+        stateApi
+        dashboardApi
+        gh3036Api
+        events
     end
-    
+
     useSerial --> serialStore
     useSerial --> serialApi
+    useSerial --> events
+
     useBle --> bleStore
     useBle --> bleApi
-    useWebSocket --> connectionStore
-    useWebSocket --> websocketApi
-    useWebSocket --> eventApi
+    useBle --> events
+
+    useProtocol --> protocolStore
+    useProtocol --> protocolApi
+
+    useWaveform --> waveformStore
+    useWaveform --> waveformApi
+    useWaveform --> events
+
+    useAppDispatch --> stateApi
+    useAppDispatch --> connectionStore
+
     useAppState --> stateApi
+    useLog --> logStore
+    useTheme --> serialStore
+    useNotification --> AntDesign[Ant Design notification]
 ```
 
-## 使用示例
+## 事件监听生命周期
 
-### 在页面中使用 Hook
+所有涉及事件监听的 Hook 遵循统一的生命周期管理模式：
 
 ```typescript
-import { useSerial } from '@/hooks';
+function useSerial() {
+  useEffect(() => {
+    const listeners: EventListeners = {};
 
-function SerialPage() {
-    const {
-        ports,
-        isScanning,
-        scanPorts,
-        openPort,
-        sendData,
-    } = useSerial();
-    
-    useEffect(() => {
-        scanPorts();
-    }, [scanPorts]);
-    
-    return (
-        <div>
-            <Button loading={isScanning} onClick={scanPorts}>
-                扫描端口
-            </Button>
-            <PortList ports={ports} onSelect={openPort} />
-        </div>
-    );
+    const setup = async () => {
+      listeners.serialData = await onSerialData((event) => {
+        serialStore.addReceivedData(event.port_name, {
+          timestamp: event.timestamp || Date.now(),
+          data: event.data,
+          direction: 'rx',
+        });
+      });
+
+      listeners.serialError = await onSerialError((event) => {
+        console.error(`串口错误 [${event.portName}]: ${event.error}`);
+      });
+    };
+
+    setup();
+
+    return () => {
+      Object.values(listeners).forEach(unlisten => unlisten?.());
+    };
+  }, []);
 }
 ```
 
-### 组合多个 Hooks
+**关键模式**：
+1. 组件挂载时注册事件监听器
+2. 事件回调中更新 Store 状态
+3. 组件卸载时清理所有监听器（`UnlistenFn`）
+4. 使用 `listeners` 对象统一管理，避免遗漏清理
+
+## 使用示例
+
+### 在组件中使用 useProtocol
 
 ```typescript
-import { useBle, useNotification } from '@/hooks';
+import { useProtocol } from '@/hooks';
 
-function BleScanner() {
-    const { devices, scan, connect } = useBle();
-    const { showSuccess, showError } = useNotification();
-    
-    const handleConnect = async (address: string) => {
-        try {
-            await connect(address);
-            showSuccess('连接成功');
-        } catch (error) {
-            showError(`连接失败: ${error.message}`);
-        }
-    };
-    
-    return (
-        <DeviceList devices={devices} onConnect={handleConnect} />
-    );
+function ProtocolManager() {
+  const {
+    protocols,
+    isLoading,
+    error,
+    loadProtocol,
+    unloadProtocol,
+    enableProtocol,
+    disableProtocol,
+    bindProtocol,
+    unbindProtocol,
+    refreshProtocols,
+  } = useProtocol();
+
+  const handleLoad = async () => {
+    await loadProtocol({ plugin_id: 'my-protocol', path: '/path/to/plugin' });
+  };
+
+  const handleEnable = async (id: string) => {
+    await enableProtocol(id);
+  };
+
+  const handleBind = async (pluginId: string, deviceId: string) => {
+    await bindProtocol({ plugin_id: pluginId, device_id: deviceId });
+  };
+
+  return (
+    <div>
+      <Button onClick={handleLoad} loading={isLoading}>加载协议</Button>
+      <Button onClick={refreshProtocols}>刷新列表</Button>
+      {error && <Alert type="error" message={error} />}
+      {protocols.map(p => (
+        <div key={p.id}>
+          {p.name} ({p.state})
+          <Button onClick={() => enableProtocol(p.id)}>启用</Button>
+          <Button onClick={() => disableProtocol(p.id)}>禁用</Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### 在组件中使用 useWaveform
+
+```typescript
+import { useWaveform } from '@/hooks';
+
+function WaveformPanel() {
+  const {
+    data,
+    status,
+    isRunning,
+    createBuffer,
+    configureParser,
+    startRefresh,
+    stopRefresh,
+  } = useWaveform();
+
+  useEffect(() => {
+    createBuffer('wave-1', {
+      capacity: 1000,
+      column_names: ['CH0', 'CH1', 'CH2', 'CH3', 'CH4'],
+    });
+
+    return () => stopRefresh();
+  }, []);
+
+  const handleStart = () => {
+    startRefresh();
+  };
+
+  return (
+    <div>
+      <Button onClick={handleStart}>开始采集</Button>
+      <Button onClick={stopRefresh}>停止</Button>
+      {status && <span>行数: {status.row_count}</span>}
+    </div>
+  );
+}
+```
+
+### 在组件中使用 useAppDispatch
+
+```typescript
+import { useAppDispatch } from '@/hooks';
+
+function DeviceManager() {
+  const { dispatchDeviceAction, getConnectedDevices } = useAppDispatch();
+
+  const handleAddSerial = async () => {
+    await dispatchDeviceAction({
+      type: 'DEVICE_ADD_SERIAL',
+      id: 'serial-1',
+      name: 'COM3',
+      baudRate: 115200,
+    });
+  };
+
+  const handleRemove = async (id: string) => {
+    await dispatchDeviceAction({
+      type: 'DEVICE_REMOVE',
+      id,
+    });
+  };
+
+  return (
+    <div>
+      <Button onClick={handleAddSerial}>添加串口设备</Button>
+    </div>
+  );
 }
 ```
 
 ## 设计原则
 
-1. **单一职责**：每个 Hook 只负责一个功能领域
-2. **状态封装**：内部管理必要的状态
-3. **副作用隔离**：使用 useCallback 和 useEffect 管理副作用
-4. **类型安全**：提供完整的类型定义
+1. **单一职责**：每个 Hook 只封装一个领域的业务逻辑
+2. **自动清理**：事件监听器在组件卸载时自动清理
+3. **错误处理**：所有异步操作捕获错误，设置 `error` 状态
+4. **Store 集成**：Hook 通过 Store 管理状态，不直接修改 DOM
+5. **返回值稳定**：使用 `useCallback`/`useMemo` 避免不必要的重渲染
 
 ## 相关模块
 
-- [API 层](./api-layer.md) - Hook 调用 API
-- [状态管理层](./store-layer.md) - Hook 更新 Store
-- [页面层](./pages-layer.md) - 页面使用 Hook
+- [API 层](./api-layer.md) - Hook 调用的 API
+- [状态管理层](./store-layer.md) - Hook 更新的 Store
+- [页面层](./pages-layer.md) - 使用 Hook 的页面

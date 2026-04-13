@@ -2,7 +2,7 @@
 
 ## 概述
 
-命令层模块定义了所有 Tauri 命令，作为前端调用后端的入口点。每个命令模块对应特定的功能领域。
+命令层模块定义了所有 Tauri 命令，作为前端调用后端的入口点。每个命令模块对应特定的功能领域。所有命令在 `lib.rs` 中通过 `invoke_handler` 统一注册。
 
 ## 模块位置
 
@@ -10,7 +10,7 @@
 - 主要文件：
   - `mod.rs` - 模块导出
   - `serial.rs` - 串口命令
-  - `ble.rs` - BLE 命令
+  - `ble.rs` - BLE 命令（含 AT 专用命令）
   - `protocol.rs` - 协议命令
   - `system.rs` - 系统命令
   - `websocket.rs` - WebSocket 命令
@@ -21,11 +21,11 @@
 
 ## 命令注册
 
-在 `lib.rs` 中注册所有命令：
+在 `lib.rs` 中注册所有命令（完整列表）：
 
 ```rust
 .invoke_handler(tauri::generate_handler![
-    // 串口命令
+    // 串口命令 (7)
     commands::serial::scan_serial_ports,
     commands::serial::open_serial_port,
     commands::serial::close_serial_port,
@@ -33,8 +33,8 @@
     commands::serial::get_open_ports,
     commands::serial::is_port_open,
     commands::serial::export_serial_data,
-    
-    // BLE 命令
+
+    // BLE 通用命令 (18)
     commands::ble::configure_ble,
     commands::ble::scan_ble_devices,
     commands::ble::stop_ble_scan,
@@ -53,16 +53,25 @@
     commands::ble::is_ble_configured,
     commands::ble::set_ble_mtu,
     commands::ble::get_ble_subscriptions,
-    
-    // WebSocket 命令
+
+    // AT 专用 BLE 命令 (7)
+    commands::ble::get_at_config,
+    commands::ble::update_at_uuid_config,
+    commands::ble::get_at_tabs,
+    commands::ble::get_at_tab,
+    commands::ble::clear_at_tab_data,
+    commands::ble::remove_at_tab,
+    commands::ble::send_at_data,
+
+    // WebSocket 命令 (6)
     commands::websocket::connect_websocket,
     commands::websocket::send_websocket_message,
     commands::websocket::disconnect_websocket,
     commands::websocket::get_websocket_status,
     commands::websocket::get_all_websocket_connections,
     commands::websocket::get_all_websocket_status,
-    
-    // 协议命令
+
+    // 协议命令 (9)
     commands::protocol::load_protocol,
     commands::protocol::unload_protocol,
     commands::protocol::enable_protocol,
@@ -72,8 +81,8 @@
     commands::protocol::list_protocols,
     commands::protocol::get_protocol,
     commands::protocol::get_bound_protocols,
-    
-    // 系统命令
+
+    // 系统命令 (10 + 2 feature-gated)
     commands::system::get_system_info,
     commands::system::get_system_status,
     commands::system::configure_log,
@@ -84,8 +93,13 @@
     commands::system::open_url,
     commands::system::show_in_folder,
     commands::system::show_main_window,
-    
-    // 状态命令
+    commands::system::get_window_status,
+    #[cfg(feature = "devtools")]
+    commands::system::open_devtools,
+    #[cfg(feature = "devtools")]
+    commands::system::close_devtools,
+
+    // 状态命令 (7)
     commands::state::dispatch_action,
     commands::state::get_state,
     commands::state::get_channel_data,
@@ -93,14 +107,14 @@
     commands::state::save_state,
     commands::state::get_connected_devices,
     commands::state::get_window_state,
-    
-    // 偏好设置命令
+
+    // 偏好设置命令 (4)
     commands::preferences::get_preferences,
     commands::preferences::save_preferences,
     commands::preferences::update_serial_preferences,
     commands::preferences::update_ble_preferences,
-    
-    // GH3036 命令
+
+    // GH3036 命令 (13)
     commands::gh3036::gh3036_init,
     commands::gh3036::gh3036_is_initialized,
     commands::gh3036::gh3036_configure_tx_channel,
@@ -114,8 +128,8 @@
     commands::gh3036::gh3036_subscribe_events,
     commands::gh3036::gh3036_get_library_status,
     commands::gh3036::gh3036_on_rx_data,
-    
-    // 波形命令
+
+    // 波形命令 (8)
     commands::waveform::waveform_create_buffer,
     commands::waveform::waveform_remove_buffer,
     commands::waveform::waveform_configure_parser,
@@ -124,6 +138,22 @@
     commands::waveform::waveform_get_status,
     commands::waveform::waveform_clear_buffer,
     commands::waveform::waveform_list_buffers,
+
+    // Dashboard 命令 (14)
+    dashboard::get_parser_scripts,
+    dashboard::get_parser_script_content,
+    dashboard::save_parser_script,
+    dashboard::delete_parser_script,
+    dashboard::execute_parser_script,
+    dashboard::init_default_parser_scripts,
+    dashboard::analyze_json_structure,
+    dashboard::generate_parser_from_json,
+    dashboard::get_parser_defined_fields,
+    dashboard::merge_json_to_parser,
+    dashboard::get_json_files,
+    dashboard::save_json_file,
+    dashboard::delete_json_file,
+    dashboard::load_json_file,
 ])
 ```
 
@@ -139,28 +169,40 @@
 | `is_port_open` | `port_name: String` | `bool` | 检查端口状态 |
 | `export_serial_data` | `port_name: String, path: String` | `()` | 导出数据 |
 
-## BLE 命令
+## BLE 通用命令
 
 | 命令 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `configure_ble` | `mode: BleMode, config: Option<AtConfig>` | `()` | 配置 BLE 模式 |
+| `configure_ble` | `config: BleConfigDto` | `()` | 配置 BLE 模式（native/at） |
 | `scan_ble_devices` | `duration_ms: u64` | `Vec<BleDevice>` | 扫描设备 |
 | `stop_ble_scan` | 无 | `Vec<BleDevice>` | 停止扫描 |
-| `connect_ble` | `address: String` | `BleConnection` | 连接设备 |
-| `disconnect_ble` | `address: String` | `()` | 断开连接 |
+| `connect_ble` | `device_id: String` | `BleConnection` | 连接设备 |
+| `disconnect_ble` | `device_id: String` | `()` | 断开连接 |
 | `get_ble_connections` | 无 | `Vec<BleConnection>` | 获取连接列表 |
-| `discover_ble_services` | `address: String` | `Vec<BleService>` | 发现服务 |
-| `discover_ble_characteristics` | `address: String, service_uuid: String` | `Vec<BleCharacteristic>` | 发现特征 |
-| `read_ble_characteristic` | `address: String, char_uuid: String` | `Vec<u8>` | 读取特征 |
-| `write_ble_characteristic` | `address: String, char_uuid: String, data: Vec<u8>` | `()` | 写入特征 |
-| `write_ble_without_response` | `address: String, char_uuid: String, data: Vec<u8>` | `()` | 无响应写入 |
-| `subscribe_ble_notify` | `address: String, char_uuid: String` | `()` | 订阅通知 |
-| `unsubscribe_ble_notify` | `address: String, char_uuid: String` | `()` | 取消订阅 |
+| `discover_ble_services` | `device_id: String` | `Vec<BleService>` | 发现服务 |
+| `discover_ble_characteristics` | `device_id: String, service_uuid: String` | `Vec<BleCharacteristic>` | 发现特征 |
+| `read_ble_characteristic` | `device_id: String, characteristic_uuid: String` | `Vec<u8>` | 读取特征 |
+| `write_ble_characteristic` | `device_id: String, characteristic_uuid: String, data: Vec<u8>` | `()` | 写入特征 |
+| `write_ble_without_response` | `device_id: String, characteristic_uuid: String, data: Vec<u8>` | `()` | 无响应写入 |
+| `subscribe_ble_notify` | `device_id: String, characteristic_uuid: String` | `()` | 订阅通知 |
+| `unsubscribe_ble_notify` | `device_id: String, characteristic_uuid: String` | `()` | 取消订阅 |
 | `get_ble_rssi` | `address: String` | `i16` | 获取 RSSI |
-| `get_ble_mode` | 无 | `BleMode` | 获取当前模式 |
+| `get_ble_mode` | 无 | `String` | 获取当前模式 |
 | `is_ble_configured` | 无 | `bool` | 检查配置状态 |
-| `set_ble_mtu` | `address: String, mtu: u16` | `u16` | 设置 MTU |
-| `get_ble_subscriptions` | `address: String` | `Vec<String>` | 获取订阅列表 |
+| `set_ble_mtu` | `device_id: String, mtu: u16` | `u16` | 设置 MTU |
+| `get_ble_subscriptions` | `device_id: String` | `Vec<String>` | 获取订阅列表 |
+
+## AT 专用 BLE 命令
+
+| 命令 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `get_at_config` | 无 | `AtConfig` | 获取 AT 模式配置 |
+| `update_at_uuid_config` | `tx_uuid: Option<String>, rx_uuid: Option<String>, srv_uuid: Option<String>` | `()` | 更新 AT UUID 配置 |
+| `get_at_tabs` | 无 | `Vec<AtConnectionTab>` | 获取 AT 连接 TAB 列表 |
+| `get_at_tab` | `tab_id: String` | `Option<AtConnectionTab>` | 获取指定 AT 连接 TAB |
+| `clear_at_tab_data` | `tab_id: String` | `()` | 清空 AT TAB 收发数据 |
+| `remove_at_tab` | `tab_id: String` | `()` | 移除 AT 连接 TAB |
+| `send_at_data` | `device_id: String, data: Vec<u8>` | `()` | AT 透传数据发送 |
 
 ## WebSocket 命令
 
@@ -193,7 +235,7 @@
 |------|------|--------|------|
 | `get_system_info` | 无 | `SystemInfo` | 获取系统信息 |
 | `get_system_status` | 无 | `SystemStatus` | 获取运行状态 |
-| `configure_log` | `level: String` | `()` | 配置日志 |
+| `configure_log` | `config: LogConfig` | `()` | 配置日志 |
 | `get_log_config` | 无 | `LogConfig` | 获取日志配置 |
 | `get_runtime_status` | 无 | `RuntimeStatus` | 获取运行时状态 |
 | `get_app_version` | 无 | `String` | 获取版本 |
@@ -201,6 +243,68 @@
 | `open_url` | `url: String` | `()` | 打开 URL |
 | `show_in_folder` | `path: String` | `()` | 在文件夹显示 |
 | `show_main_window` | 无 | `()` | 显示主窗口 |
+| `get_window_status` | 无 | `WindowStatus` | 获取窗口状态 |
+| `open_devtools` | 无 | `()` | 打开开发者工具（需 `devtools` feature） |
+| `close_devtools` | 无 | `()` | 关闭开发者工具（需 `devtools` feature） |
+
+## 状态命令
+
+| 命令 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `dispatch_action` | `action: Action` | `ActionResult` | 分发状态变更动作 |
+| `get_state` | 无 | `AppState` | 获取应用状态 |
+| `get_channel_data` | `device_id: String, channel_id: String` | `Option<ChannelData>` | 获取通道数据 |
+| `restore_state` | 无 | `AppState` | 恢复状态 |
+| `save_state` | 无 | `()` | 保存状态 |
+| `get_connected_devices` | 无 | `Vec<DeviceInfo>` | 获取连接设备 |
+| `get_window_state` | 无 | `WindowState` | 获取窗口状态 |
+
+## 偏好设置命令
+
+| 命令 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `get_preferences` | 无 | `Preferences` | 获取偏好设置 |
+| `save_preferences` | `prefs: Preferences` | `()` | 保存偏好设置 |
+| `update_serial_preferences` | `display_format, display_mode, send_format, append_newline, newline_type, auto_scroll` | `()` | 更新串口偏好 |
+| `update_ble_preferences` | `display_format, auto_scroll, input_format, without_response, config_collapsed, gatt_collapsed, panel_collapsed` | `()` | 更新 BLE 偏好 |
+
+## Dashboard 命令
+
+详见 [Dashboard 模块文档](./dashboard-module.md)
+
+| 命令 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `get_parser_scripts` | 无 | `Vec<ParserScriptInfo>` | 获取解析脚本列表 |
+| `get_parser_script_content` | `name: String` | `String` | 获取脚本内容 |
+| `save_parser_script` | `name: String, content: String` | `()` | 保存脚本 |
+| `delete_parser_script` | `name: String` | `()` | 删除脚本 |
+| `execute_parser_script` | `name: String, data: String` | `HashMap<String, f64>` | 执行脚本 |
+| `init_default_parser_scripts` | 无 | `()` | 初始化默认脚本 |
+| `analyze_json_structure` | `json_content: String` | `JsonStructureInfo` | 分析 JSON 结构 |
+| `generate_parser_from_json` | `json_content, script_name, selected_fields` | `String` | 生成解析脚本 |
+| `get_parser_defined_fields` | `script_name: String` | `Vec<FieldDefinition>` | 获取脚本字段定义 |
+| `merge_json_to_parser` | `json_content, script_name, selected_fields` | `String` | 合并 JSON 到脚本 |
+| `get_json_files` | 无 | `Vec<String>` | 获取 JSON 配置文件列表 |
+| `save_json_file` | `file_name: String, config: DashboardJsonConfig` | `()` | 保存 JSON 配置 |
+| `delete_json_file` | `file_name: String` | `()` | 删除 JSON 配置 |
+| `load_json_file` | `file_name: String` | `DashboardJsonConfig` | 加载 JSON 配置 |
+
+## 命令统计
+
+| 模块 | 数量 | 说明 |
+|------|------|------|
+| 串口 | 7 | 基础串口操作 |
+| BLE 通用 | 18 | 原生/AT 通用 BLE 操作 |
+| AT 专用 | 7 | AT 模式特有命令 |
+| WebSocket | 6 | WebSocket 客户端 |
+| 协议 | 9 | Lua 协议插件管理 |
+| 系统 | 12 | 系统信息与窗口管理（含 2 个 feature-gated） |
+| 状态 | 7 | 应用状态管理 |
+| 偏好设置 | 4 | 用户偏好配置 |
+| GH3036 | 13 | GH3036 芯片操作 |
+| 波形 | 8 | 波形数据缓冲 |
+| Dashboard | 14 | 数据仪表盘 |
+| **总计** | **105** | - |
 
 ## 命令实现示例
 
@@ -221,7 +325,7 @@ pub async fn open_serial_port(
     app_handle: tauri::AppHandle,
 ) -> Result<(), ErrorResponse> {
     let app_handle_clone = app_handle.clone();
-    
+
     serial_manager
         .open_port(config, move |port_name, data| {
             let _ = app_handle_clone.emit("serial-data", serde_json::json!({
@@ -238,3 +342,4 @@ pub async fn open_serial_port(
 - [错误处理](./error-handling.md) - 错误响应格式
 - [设备管理](./device-manager.md) - 设备操作
 - [状态管理](./state-module.md) - 状态命令
+- [Dashboard](./dashboard-module.md) - Dashboard 命令详情

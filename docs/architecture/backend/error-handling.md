@@ -2,58 +2,104 @@
 
 ## 概述
 
-错误处理模块定义了统一的错误类型和错误码体系，提供一致的错误处理和响应格式。
+错误处理模块定义了统一的错误类型和错误码体系，提供一致的错误处理和响应格式。当前实现采用**手动实现 `std::error::Error` trait**，未使用 `thiserror` 库。
 
 ## 模块位置
 
 - 源码路径：`src-tauri/src/error.rs`
 
+## 重要说明
+
+> **当前实现未使用 `thiserror` 库**。`ComBridgeError` 的 `Display` 和 `Error` trait 均为手动实现。未来如有需要，可考虑迁移至 `thiserror` 以减少样板代码。
+
 ## 核心组件
 
 ### ErrorCode
 
-错误码枚举：
+错误码枚举，每个变体对应一个数值范围：
 
 ```rust
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorCode {
-    SerialError = 1000,     // 串口错误
-    BleError = 2000,        // BLE 错误
-    ProtocolError = 3000,   // 协议错误
-    WebSocketError = 4000,  // WebSocket 错误
-    ConfigError = 5000,     // 配置错误
-    IoError = 6000,         // IO 错误
-    ParseError = 7000,      // 解析错误
+    SerialError = 1000,     // 串口错误 (1000-1999)
+    BleError = 2000,        // BLE 错误 (2000-2999)
+    ProtocolError = 3000,   // 协议错误 (3000-3999)
+    WebSocketError = 4000,  // WebSocket 错误 (4000-4999)
+    ConfigError = 5000,     // 配置错误 (5000-5999)
+    IoError = 6000,         // IO 错误 (6000-6999)
+    ParseError = 7000,      // 解析错误 (7000-7999)
+}
+```
+
+`Display` 实现输出格式为 `E1000`~`E7000`：
+
+```rust
+impl fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ErrorCode::SerialError => write!(f, "E1000"),
+            ErrorCode::BleError => write!(f, "E2000"),
+            ErrorCode::ProtocolError => write!(f, "E3000"),
+            ErrorCode::WebSocketError => write!(f, "E4000"),
+            ErrorCode::ConfigError => write!(f, "E5000"),
+            ErrorCode::IoError => write!(f, "E6000"),
+            ErrorCode::ParseError => write!(f, "E7000"),
+        }
+    }
 }
 ```
 
 ### ComBridgeError
 
-统一错误类型：
+统一错误类型，手动实现 `Display` 和 `Error` trait：
 
 ```rust
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum ComBridgeError {
-    SerialError(String),      // 串口错误
-    BleError(String),         // BLE 错误
-    ProtocolError(String),    // 协议错误
-    WebSocketError(String),   // WebSocket 错误
-    ConfigError(String),      // 配置错误
-    IoError(String),          // IO 错误
-    ParseError(String),       // 解析错误
+    SerialError(String),
+    BleError(String),
+    ProtocolError(String),
+    WebSocketError(String),
+    ConfigError(String),
+    IoError(String),
+    ParseError(String),
 }
+```
+
+`Display` 实现输出格式为 `[Exxxx] 错误消息`：
+
+```rust
+impl fmt::Display for ComBridgeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let code = self.error_code();
+        let msg = self.message();
+        write!(f, "[{}] {}", code, msg)
+    }
+}
+
+impl Error for ComBridgeError {}
 ```
 
 ### ErrorResponse
 
-错误响应结构：
+错误响应结构，用于 Tauri 命令返回给前端：
 
 ```rust
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ErrorResponse {
     pub code: i32,            // 错误码数值
-    pub error_code: String,   // 错误码字符串
+    pub error_code: String,   // 错误码字符串（如 "E1000"）
     pub message: String,      // 错误消息
+}
+```
+
+`Display` 实现输出格式为 `[Exxxx] 错误消息`：
+
+```rust
+impl fmt::Display for ErrorResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[{}] {}", self.error_code, self.message)
+    }
 }
 ```
 
@@ -67,8 +113,8 @@ pub type Result<T> = std::result::Result<T, ComBridgeError>;
 
 ## 错误码体系
 
-| 错误码 | 名称 | 范围 | 说明 |
-|--------|------|------|------|
+| 错误码 | 名称 | 数值范围 | 说明 |
+|--------|------|----------|------|
 | E1000 | SerialError | 1000-1999 | 串口相关错误 |
 | E2000 | BleError | 2000-2999 | BLE 相关错误 |
 | E3000 | ProtocolError | 3000-3999 | 协议相关错误 |
@@ -79,44 +125,17 @@ pub type Result<T> = std::result::Result<T, ComBridgeError>;
 
 ## 核心功能
 
-### 错误创建
+### 错误创建便捷方法
 
 ```rust
 impl ComBridgeError {
-    // 创建串口错误
-    pub fn serial<T: Into<String>>(msg: T) -> Self {
-        ComBridgeError::SerialError(msg.into())
-    }
-    
-    // 创建 BLE 错误
-    pub fn ble<T: Into<String>>(msg: T) -> Self {
-        ComBridgeError::BleError(msg.into())
-    }
-    
-    // 创建协议错误
-    pub fn protocol<T: Into<String>>(msg: T) -> Self {
-        ComBridgeError::ProtocolError(msg.into())
-    }
-    
-    // 创建 WebSocket 错误
-    pub fn websocket<T: Into<String>>(msg: T) -> Self {
-        ComBridgeError::WebSocketError(msg.into())
-    }
-    
-    // 创建配置错误
-    pub fn config<T: Into<String>>(msg: T) -> Self {
-        ComBridgeError::ConfigError(msg.into())
-    }
-    
-    // 创建 IO 错误
-    pub fn io<T: Into<String>>(msg: T) -> Self {
-        ComBridgeError::IoError(msg.into())
-    }
-    
-    // 创建解析错误
-    pub fn parse<T: Into<String>>(msg: T) -> Self {
-        ComBridgeError::ParseError(msg.into())
-    }
+    pub fn serial<T: Into<String>>(msg: T) -> Self { ComBridgeError::SerialError(msg.into()) }
+    pub fn ble<T: Into<String>>(msg: T) -> Self { ComBridgeError::BleError(msg.into()) }
+    pub fn protocol<T: Into<String>>(msg: T) -> Self { ComBridgeError::ProtocolError(msg.into()) }
+    pub fn websocket<T: Into<String>>(msg: T) -> Self { ComBridgeError::WebSocketError(msg.into()) }
+    pub fn config<T: Into<String>>(msg: T) -> Self { ComBridgeError::ConfigError(msg.into()) }
+    pub fn io<T: Into<String>>(msg: T) -> Self { ComBridgeError::IoError(msg.into()) }
+    pub fn parse<T: Into<String>>(msg: T) -> Self { ComBridgeError::ParseError(msg.into()) }
 }
 ```
 
@@ -124,13 +143,8 @@ impl ComBridgeError {
 
 ```rust
 impl ComBridgeError {
-    // 获取错误码
     pub fn error_code(&self) -> ErrorCode
-    
-    // 获取错误消息
     pub fn message(&self) -> &str
-    
-    // 转换为错误响应
     pub fn to_error_response(&self) -> ErrorResponse
 }
 ```
@@ -140,21 +154,18 @@ impl ComBridgeError {
 ### From 实现
 
 ```rust
-// 从 std::io::Error 转换
 impl From<io::Error> for ComBridgeError {
     fn from(err: io::Error) -> Self {
         ComBridgeError::IoError(err.to_string())
     }
 }
 
-// 从 serde_json::Error 转换
 impl From<serde_json::Error> for ComBridgeError {
     fn from(err: serde_json::Error) -> Self {
         ComBridgeError::ParseError(err.to_string())
     }
 }
 
-// 从 Box<dyn Error> 转换
 impl From<Box<dyn Error>> for ComBridgeError {
     fn from(err: Box<dyn Error>) -> Self {
         ComBridgeError::ParseError(err.to_string())
@@ -162,15 +173,83 @@ impl From<Box<dyn Error>> for ComBridgeError {
 }
 ```
 
+## Dashboard 模块错误
+
+Dashboard 模块（`src-tauri/src/dashboard/`）当前使用 `Result<T, String>` 作为错误类型，未集成 `ComBridgeError`。这意味着 Dashboard 命令的错误响应格式与使用 `ComBridgeError` 的命令不同。
+
+### 当前 Dashboard 错误处理
+
+```rust
+#[tauri::command]
+pub async fn save_parser_script(
+    manager: State<'_, ParserScriptManagerRef>,
+    name: String,
+    content: String,
+) -> Result<(), String> {
+    manager.save_script(&name, &content)
+}
+```
+
+### 未来改进方向
+
+Dashboard 模块应迁移至使用 `ComBridgeError`，以保持统一的错误响应格式：
+
+```rust
+#[tauri::command]
+pub async fn save_parser_script(
+    manager: State<'_, ParserScriptManagerRef>,
+    name: String,
+    content: String,
+) -> Result<(), ComBridgeError> {
+    manager.save_script(&name, &content)
+        .map_err(|e| ComBridgeError::config(format!("保存解析脚本失败: {}", e)))
+}
+```
+
+## DeviceError 变体规划
+
+当前 `ComBridgeError` 中设备相关错误分散在 `SerialError` 和 `BleError` 中。未来可考虑新增 `DeviceError` 变体，用于统一设备管理层面的错误：
+
+```rust
+pub enum ComBridgeError {
+    // ... 现有变体 ...
+    DeviceError(String),  // 设备管理错误 (8000-8999)
+}
+```
+
+适用场景：
+- 设备不存在
+- 设备已连接/已断开
+- 设备类型不匹配
+- 通道不存在
+
+## 错误响应格式
+
+### JSON 格式
+
+```json
+{
+    "code": 1001,
+    "error_code": "E1000",
+    "message": "串口 COM3 不存在"
+}
+```
+
+### 显示格式
+
+```
+[E1000] 串口 COM3 不存在
+```
+
 ## 使用示例
 
 ### 创建错误
 
 ```rust
-// 使用便捷方法创建错误
 return Err(ComBridgeError::serial("串口打开失败"));
 return Err(ComBridgeError::ble("设备连接超时"));
 return Err(ComBridgeError::protocol("脚本解析错误"));
+return Err(ComBridgeError::config("保存解析脚本失败: 权限不足"));
 ```
 
 ### 错误处理
@@ -179,7 +258,7 @@ return Err(ComBridgeError::protocol("脚本解析错误"));
 fn open_port(config: SerialPortConfig) -> Result<()> {
     let port = serialport::open(&config.port_name)
         .map_err(|e| ComBridgeError::serial(format!("无法打开串口: {}", e)))?;
-    
+
     Ok(())
 }
 ```
@@ -211,34 +290,30 @@ match device.connect(&address).await {
 }
 ```
 
-## 错误响应格式
+## 单元测试
 
-### JSON 格式
+错误处理模块包含以下单元测试：
 
-```json
-{
-    "code": 1001,
-    "error_code": "E1000",
-    "message": "串口 COM3 不存在"
-}
-```
-
-### 显示格式
-
-```
-[E1000] 串口 COM3 不存在
-```
+| 测试 | 说明 |
+|------|------|
+| `test_error_code_display` | 验证 ErrorCode 的 Display 输出格式 |
+| `test_combridge_error_display` | 验证 ComBridgeError 的 Display 输出格式 |
+| `test_error_response` | 验证 ErrorResponse 的字段值 |
+| `test_from_io_error` | 验证 io::Error 到 ComBridgeError 的转换 |
+| `test_from_serde_json_error` | 验证 serde_json::Error 到 ComBridgeError 的转换 |
 
 ## 最佳实践
 
 1. **使用便捷方法**：优先使用 `ComBridgeError::serial()` 等便捷方法创建错误
-2. **包含上下文**：错误消息应包含足够的上下文信息，如设备名称、操作类型等
+2. **包含上下文**：错误消息应包含足够的上下文信息，如设备名称、端口名、操作类型等
 3. **错误转换**：使用 `?` 运算符自动转换底层错误
-4. **日志记录**：在错误处理路径中记录错误日志
+4. **日志记录**：在错误处理路径中记录 `error` 级别日志，包含错误上下文
 5. **用户友好**：错误消息应对用户友好，避免暴露技术细节
+6. **统一格式**：新模块应使用 `ComBridgeError` 而非 `String` 作为错误类型
 
 ## 相关模块
 
 - [命令层](./commands-module.md) - 命令错误响应
 - [设备管理](./device-manager.md) - 设备错误处理
 - [服务层](./service-module.md) - 服务错误处理
+- [Dashboard](./dashboard-module.md) - Dashboard 错误处理（当前使用 String）

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 pub use crate::device::serial::serial_config::{DataBits, Parity, StopBits};
 
@@ -31,14 +31,14 @@ pub struct BufferEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChannelBuffer {
-    pub entries: Vec<BufferEntry>,
+    pub entries: VecDeque<BufferEntry>,
     pub total_bytes: usize,
 }
 
 impl Default for ChannelBuffer {
     fn default() -> Self {
         Self {
-            entries: Vec::new(),
+            entries: VecDeque::new(),
             total_bytes: 0,
         }
     }
@@ -47,16 +47,15 @@ impl Default for ChannelBuffer {
 impl ChannelBuffer {
     pub fn add_entry(&mut self, data: &[u8], max_size: usize) {
         let timestamp = current_timestamp();
-        self.entries.push(BufferEntry {
+        self.entries.push_back(BufferEntry {
             timestamp,
             data: data.to_vec(),
         });
         self.total_bytes += data.len();
         
         while self.total_bytes > max_size {
-            if let Some(removed) = self.entries.first() {
+            if let Some(removed) = self.entries.pop_front() {
                 self.total_bytes -= removed.data.len();
-                self.entries.remove(0);
             } else {
                 break;
             }

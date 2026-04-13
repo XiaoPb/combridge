@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Select, Button, Divider, message, Space, Empty } from 'antd';
+import { Card, Select, Button, Divider, message, Space, Empty, theme } from 'antd';
 import { DownloadOutlined, FileOutlined, PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { save } from '@tauri-apps/plugin-dialog';
@@ -10,6 +10,7 @@ import type { DataSourceType } from '../../types/dashboard';
 
 const SettingsPanel: React.FC = () => {
   const { t } = useTranslation('dashboard');
+  const { token } = theme.useToken();
   const {
     dataSourceType,
     setDataSourceType,
@@ -168,14 +169,14 @@ const SettingsPanel: React.FC = () => {
             {isRunning ? (t('settings.stop') || '停止') : (t('settings.start') || '开始')}
           </Button>
           {dataSourceType === 'serial' && (
-            <div style={{ padding: 8, background: '#fafafa', borderRadius: 4, fontSize: 12 }}>
-              <div>端口: {serialPort || '未选择'}</div>
-              <div>波特率: {serialConfig.baudRate}</div>
+            <div style={{ padding: 8, background: token.colorBgLayout, borderRadius: 4, fontSize: 12 }}>
+              <div>{t('settings.port') || '端口'}: {serialPort || (t('settings.notSelected') || '未选择')}</div>
+              <div>{t('settings.baudRate') || '波特率'}: {serialConfig.baudRate}</div>
             </div>
           )}
           {dataSourceType === 'ble' && bleConfig && (
-            <div style={{ padding: 8, background: '#fafafa', borderRadius: 4, fontSize: 12 }}>
-              <div>设备: {bleConfig.deviceName || '未连接'}</div>
+            <div style={{ padding: 8, background: token.colorBgLayout, borderRadius: 4, fontSize: 12 }}>
+              <div>{t('settings.device') || '设备'}: {bleConfig.deviceName || (t('settings.notConnected') || '未连接')}</div>
             </div>
           )}
         </Space>
@@ -188,7 +189,7 @@ const SettingsPanel: React.FC = () => {
           {t('settings.dataExport') || '数据导出'}
         </div>
         <Space direction="vertical" style={{ width: '100%' }}>
-          <div style={{ fontSize: 12, color: '#666' }}>
+          <div style={{ fontSize: 12, color: token.colorTextTertiary }}>
             {t('settings.dataPoints') || '数据点'}: {parsedDataBuffer.length}
           </div>
           <Button

@@ -10,13 +10,14 @@ import {
   SunOutlined,
 } from '@ant-design/icons';
 import { useConfigStore } from '../../stores/configStore';
+import { useTheme } from '../../hooks';
+import { changeLanguage } from '../../i18n';
 import SerialTitleTabs from './SerialTitleTabs';
 import BleTitleTabs from './BleTitleTabs';
 import ProtocolTitleTabs from './ProtocolTitleTabs';
 import SystemTitleTabs from './SystemTitleTabs';
 import WaveformTitleTabs from './WaveformTitleTabs';
 import { useTranslation } from 'react-i18next';
-import { changeLanguage } from '../../i18n';
 
 interface ThemeSwitchProps {
   checked: boolean;
@@ -64,24 +65,17 @@ const ThemeSwitch: React.FC<ThemeSwitchProps> = ({ checked, onChange }) => (
 const TitleBar: React.FC = () => {
   const location = useLocation();
   const win = getCurrentWindow();
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const { isDark, toggleTheme } = useTheme();
   const [language, setLanguage] = useState<'zh-CN' | 'en-US'>('zh-CN');
   const [isMaximized, setIsMaximized] = useState(false);
   useTranslation();
 
   useEffect(() => {
     const config = useConfigStore.getState().getConfig();
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const isDark = config.theme === 'dark' || (config.theme === 'system' && prefersDark);
-    setIsDarkMode(isDark);
     setLanguage(config.language);
 
     const unsubscribe = useConfigStore.subscribe((state) => {
-      const newConfig = state.settings;
-      const newPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const newIsDark = newConfig.theme === 'dark' || (newConfig.theme === 'system' && newPrefersDark);
-      setIsDarkMode(newIsDark);
-      setLanguage(newConfig.language);
+      setLanguage(state.settings.language);
     });
 
     win.isMaximized().then(setIsMaximized);
@@ -96,11 +90,8 @@ const TitleBar: React.FC = () => {
   };
   const handleClose = async () => await win.close();
 
-  const toggleTheme = (checked: boolean) => {
-    const newTheme = checked ? 'dark' : 'light';
-    useConfigStore.getState().updateConfig({ theme: newTheme });
-    setIsDarkMode(checked);
-    document.documentElement.setAttribute('data-theme', newTheme);
+  const handleToggleTheme = (_checked: boolean) => {
+    toggleTheme();
   };
 
   const toggleLanguage = () => {
@@ -140,7 +131,7 @@ const TitleBar: React.FC = () => {
       </div>
 
       <div className="title-bar-right">
-        <ThemeSwitch checked={isDarkMode} onChange={toggleTheme} />
+        <ThemeSwitch checked={isDark} onChange={handleToggleTheme} />
         <div className="lang-btn" onClick={toggleLanguage}>
           <img src="/languages.svg" alt="Language" />
         </div>

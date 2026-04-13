@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Card, Tabs, Button, Space, message, Modal, Input } from 'antd';
+import { Layout, Card, Tabs, Button, Space, message, Modal, Input, theme } from 'antd';
 import { PlusOutlined, DeleteOutlined, SaveOutlined, FileOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useDashboardStore } from '../../../stores/dashboardStore';
+import { useTheme } from '../../../hooks';
 import type { DashboardJsonConfig } from '../../../types/dashboard';
 import FrameConfigEditor from './FrameConfigEditor';
 import GroupEditor from './GroupEditor';
@@ -12,6 +13,8 @@ const { Sider, Content } = Layout;
 
 const JsonEditor: React.FC = () => {
   const { t } = useTranslation('dashboard');
+  const { token } = theme.useToken();
+  const { isDark } = useTheme();
   const {
     jsonConfig,
     setJsonConfig,
@@ -142,11 +145,11 @@ const JsonEditor: React.FC = () => {
   ];
 
   return (
-    <Layout style={{ height: '100%', background: '#fff' }}>
+    <Layout style={{ height: '100%', background: token.colorBgContainer }}>
       <Sider
         width={200}
-        theme="light"
-        style={{ borderRight: '1px solid #f0f0f0' }}
+        theme={isDark ? 'dark' : 'light'}
+        style={{ borderRight: `1px solid ${token.colorBorderSecondary}` }}
       >
         <div style={{ padding: 12 }}>
           <Space direction="vertical" style={{ width: '100%' }}>
@@ -191,7 +194,7 @@ const JsonEditor: React.FC = () => {
                   padding: '8px 12px',
                   cursor: 'pointer',
                   borderRadius: 4,
-                  background: selectedFile === file ? '#e6f7ff' : 'transparent',
+                  background: selectedFile === file ? token.colorPrimaryBg : 'transparent',
                   marginBottom: 4,
                   display: 'flex',
                   alignItems: 'center',
@@ -203,7 +206,7 @@ const JsonEditor: React.FC = () => {
               </div>
             ))}
             {jsonFiles.length === 0 && (
-              <div style={{ color: '#999', fontSize: 12, textAlign: 'center', padding: 20 }}>
+              <div style={{ color: token.colorTextQuaternary, fontSize: 12, textAlign: 'center', padding: 20 }}>
                 {t('jsonEditor.noFiles') || '暂无文件'}
               </div>
             )}
@@ -217,7 +220,7 @@ const JsonEditor: React.FC = () => {
             <Space>
               <span>{jsonConfig.title || t('jsonEditor.untitled') || '未命名'}</span>
               {selectedFile && (
-                <span style={{ fontSize: 12, color: '#999' }}>({selectedFile})</span>
+                <span style={{ fontSize: 12, color: token.colorTextQuaternary }}>({selectedFile})</span>
               )}
             </Space>
           }

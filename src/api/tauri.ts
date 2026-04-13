@@ -212,27 +212,27 @@ export const systemApi = {
 
 export const protocolApi = {
   async loadProtocol(pluginId: string, path: string): Promise<PluginInfo> {
-    return invoke<PluginInfo>('load_protocol', { plugin_id: pluginId, path });
+    return invoke<PluginInfo>('load_protocol', { pluginId, path });
   },
 
   async unloadProtocol(pluginId: string): Promise<void> {
-    await invoke<void>('unload_protocol', { plugin_id: pluginId });
+    await invoke<void>('unload_protocol', { pluginId });
   },
 
   async enableProtocol(pluginId: string): Promise<void> {
-    await invoke<void>('enable_protocol', { plugin_id: pluginId });
+    await invoke<void>('enable_protocol', { pluginId });
   },
 
   async disableProtocol(pluginId: string): Promise<void> {
-    await invoke<void>('disable_protocol', { plugin_id: pluginId });
+    await invoke<void>('disable_protocol', { pluginId });
   },
 
   async bindProtocol(pluginId: string, deviceId: string): Promise<void> {
-    await invoke<void>('bind_protocol', { plugin_id: pluginId, device_id: deviceId });
+    await invoke<void>('bind_protocol', { pluginId, deviceId });
   },
 
   async unbindProtocol(pluginId: string, deviceId: string): Promise<void> {
-    await invoke<void>('unbind_protocol', { plugin_id: pluginId, device_id: deviceId });
+    await invoke<void>('unbind_protocol', { pluginId, deviceId });
   },
 
   async listProtocols(): Promise<PluginInfo[]> {
@@ -240,11 +240,11 @@ export const protocolApi = {
   },
 
   async getProtocol(pluginId: string): Promise<PluginInfo> {
-    return invoke<PluginInfo>('get_protocol', { plugin_id: pluginId });
+    return invoke<PluginInfo>('get_protocol', { pluginId });
   },
 
   async getBoundProtocols(deviceId: string): Promise<PluginInfo[]> {
-    return invoke<PluginInfo[]>('get_bound_protocols', { device_id: deviceId });
+    return invoke<PluginInfo[]>('get_bound_protocols', { deviceId });
   },
 };
 

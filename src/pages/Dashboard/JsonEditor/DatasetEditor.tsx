@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Form, Input, InputNumber, Select, Switch, ColorPicker, Button, Row, Col } from 'antd';
+import { Card, Form, Input, InputNumber, Select, Switch, ColorPicker, Button, Row, Col, theme } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { DatasetConfig } from '../../../types/dashboard';
@@ -13,6 +13,7 @@ interface DatasetEditorProps {
 
 const DatasetEditor: React.FC<DatasetEditorProps> = ({ dataset, onChange, onRemove }) => {
   const { t } = useTranslation('dashboard');
+  const { token } = theme.useToken();
 
   const widgetOptions = [
     { value: 'x', label: 'X轴' },
@@ -33,7 +34,7 @@ const DatasetEditor: React.FC<DatasetEditorProps> = ({ dataset, onChange, onRemo
   return (
     <Card
       size="small"
-      style={{ marginBottom: 8, background: '#fafafa' }}
+      style={{ marginBottom: 8, background: token.colorBgLayout }}
       extra={
         <Button
           type="text"
@@ -57,7 +58,7 @@ const DatasetEditor: React.FC<DatasetEditorProps> = ({ dataset, onChange, onRemo
             </Form.Item>
           </Col>
           <Col span={6}>
-            <Form.Item label={t('jsonEditor.title') || '标题'}>
+            <Form.Item label={t('jsonEditor.datasetTitle') || '标题'}>
               <Input
                 value={dataset.title}
                 onChange={(e) => onChange({ title: e.target.value })}

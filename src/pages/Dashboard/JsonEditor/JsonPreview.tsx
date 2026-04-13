@@ -4,6 +4,9 @@ import { CopyOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useDashboardStore } from '../../../stores/dashboardStore';
 
+const terminalBg = '#1e1e1e';
+const terminalText = '#d4d4d4';
+
 const JsonPreview: React.FC = () => {
   const { t } = useTranslation('dashboard');
   const { jsonConfig } = useDashboardStore();
@@ -46,8 +49,8 @@ const JsonPreview: React.FC = () => {
 
       <pre
         style={{
-          background: '#1e1e1e',
-          color: '#d4d4d4',
+          background: terminalBg,
+          color: terminalText,
           padding: 16,
           borderRadius: 4,
           overflow: 'auto',

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Button, Space, Input, Select, List, Empty, Tag } from 'antd';
+import { Card, Button, Space, Input, Select, List, Empty, Tag, theme } from 'antd';
 import { PlusOutlined, DeleteOutlined, DragOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useDashboardStore } from '../../../stores/dashboardStore';
@@ -9,6 +9,7 @@ import DatasetEditor from './DatasetEditor';
 
 const GroupEditor: React.FC = () => {
   const { t } = useTranslation('dashboard');
+  const { token } = theme.useToken();
   const { jsonConfig, setJsonConfig } = useDashboardStore();
 
   const handleAddGroup = () => {
@@ -112,7 +113,7 @@ const GroupEditor: React.FC = () => {
               style={{ marginBottom: 12 }}
               title={
                 <Space>
-                  <DragOutlined style={{ cursor: 'move', color: '#999' }} />
+                  <DragOutlined style={{ cursor: 'move', color: token.colorTextQuaternary }} />
                   <Input
                     value={group.title}
                     onChange={(e) => handleUpdateGroup(groupIndex, { title: e.target.value })}

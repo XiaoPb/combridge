@@ -37,6 +37,8 @@
   "manualInputPlaceholder": "输入 JSON 数据进行测试...",
   "selectDevice": "选择设备",
   "selectFile": "选择文件",
+  "selectTabHint": "请选择要显示的标签页",
+  "jsonEditMode": "JSON编辑模式",
 
   "tabs": {
     "dashboard": "仪表盘",
@@ -73,7 +75,23 @@
     "exportError": "导出失败",
     "noData": "暂无数据可导出",
     "dataExport": "数据导出",
-    "dataPoints": "数据点"
+    "dataPoints": "数据点",
+    "configFile": "配置文件",
+    "selectConfig": "选择配置文件",
+    "noConfigFiles": "暂无配置文件，请在JSON编辑器中创建",
+    "configLoaded": "已加载配置",
+    "configLoadError": "加载配置失败",
+    "connectionStatus": "连接状态",
+    "selectConfigFirst": "请先选择配置文件",
+    "started": "数据接收已启动",
+    "stopped": "数据接收已停止",
+    "start": "开始",
+    "stop": "停止",
+    "port": "端口",
+    "notSelected": "未选择",
+    "baudRate": "波特率",
+    "device": "设备",
+    "notConnected": "未连接"
   },
 
   "jsonEditor": {
@@ -97,7 +115,7 @@
     "fileNamePlaceholder": "请输入文件名",
     "basicConfig": "基本配置",
     "frameConfig": "帧配置",
-    "title": "仪表盘标题",
+    "dashboardTitle": "仪表盘标题",
     "titlePlaceholder": "请输入标题",
     "decoder": "解码器类型",
     "decoderRaw": "原始数据",
@@ -115,7 +133,7 @@
     "datasets": "数据集",
     "addDataset": "添加数据集",
     "index": "索引",
-    "title": "标题",
+    "datasetTitle": "标题",
     "units": "单位",
     "widget": "组件",
     "color": "颜色",

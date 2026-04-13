@@ -7,7 +7,6 @@ import type {
   Gh3036RpcCommand 
 } from '../api/types';
 import { gh3036Api } from '../api/gh3036';
-import { gh3036Api as gh3036NewApi } from '../api/gh3036Api';
 
 export type Gh3036EventData = {
   event_type: string;
@@ -257,7 +256,7 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   executeRpc: async (commandKey, params) => {
     set({ isLoading: true, error: null });
     try {
-      await gh3036NewApi.executeRpc(commandKey, params);
+      await gh3036Api.executeRpc(commandKey, params);
       return true;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '执行RPC指令失败';
@@ -276,7 +275,7 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     }
     
     try {
-      await gh3036NewApi.subscribeEvents();
+      await gh3036Api.subscribeEvents();
       
       const eventUnlisten = await listen<Gh3036EventData>('gh3036-event', (event) => {
         get().addEventData(event.payload);
@@ -312,7 +311,7 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   
   loadLibraryStatus: async () => {
     try {
-      const status = await gh3036NewApi.getLibraryStatus();
+      const status = await gh3036Api.getLibraryStatus();
       set({ 
         isLinked: status.isLinked, 
         isInitialized: status.isInitialized 

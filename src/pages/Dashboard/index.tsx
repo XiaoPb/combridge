@@ -28,6 +28,7 @@ const DashboardPage: React.FC = () => {
     addRawDataPoint,
     addParsedDataPoint,
     setLastError,
+    connectedDevice,
   } = useDashboardStore();
 
   const listenersRef = useRef<{
@@ -76,6 +77,7 @@ const DashboardPage: React.FC = () => {
       if (dataSourceType === 'serial') {
         try {
           listenersRef.current.serialData = await onSerialData((event: SerialDataEvent) => {
+            if (connectedDevice && event.port_name !== connectedDevice) return;
             addRawDataPoint({
               timestamp: event.timestamp ?? Date.now(),
               data: event.data,
@@ -91,6 +93,7 @@ const DashboardPage: React.FC = () => {
       } else if (dataSourceType === 'ble') {
         try {
           listenersRef.current.bleData = await onBleData((event: BleDataEvent) => {
+            if (connectedDevice && event.deviceId !== connectedDevice) return;
             addRawDataPoint({
               timestamp: event.timestamp ?? Date.now(),
               data: event.data,
@@ -130,7 +133,7 @@ const DashboardPage: React.FC = () => {
         listenersRef.current.parsedData();
       }
     };
-  }, [isRunning, dataSourceType, addRawDataPoint, addParsedDataPoint, setLastError]);
+  }, [isRunning, dataSourceType, connectedDevice, addRawDataPoint, addParsedDataPoint, setLastError]);
 
   const isJsonEditorActive = activeTabs.includes('jsonEditor');
 

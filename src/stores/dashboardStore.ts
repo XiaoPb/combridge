@@ -343,6 +343,7 @@ export const useDashboardStore = create<DashboardState>()(
         serialConfig: state.serialConfig,
         serialPort: state.serialPort,
         activeTabs: state.activeTabs,
+        connectedDevice: state.connectedDevice,
       }),
     }
   )

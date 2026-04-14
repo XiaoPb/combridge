@@ -1,8 +1,25 @@
 event_bus:
   description: "ComBridge 事件总线配置文档"
-  version: "1.0.0"
+  version: "2.0.0"
   last_updated: "2026-04-14"
+  features:
+    - "通配符订阅 (支持 + 和 #)"
+    - "设备级细粒度订阅"
+    - "请求-响应模式"
+    - "设备状态查询"
+    - "操作命令发布"
 
+# ==================== 通配符规则 ====================
+wildcard_rules:
+  "+": "单级通配符，匹配任意一个层级"
+  "#": "多级通配符，匹配剩余所有层级"
+  examples:
+    - "serial:+/data"        # 匹配 serial:COM1/data, serial:COM2/data
+    - "serial:#"             # 匹配所有 serial 开头的主题
+    - "ble:+/+/data"         # 匹配 ble:AA:BB:CC:DD:EE:FF/characteristic_uuid/data
+    - "+:connected"          # 匹配所有模块的 connected 事件
+
+# ==================== Tauri 事件通道 ====================
 tauri_events:
   - name: "event-bus"
     description: "统一事件总线通道，所有后端事件通过此通道转发到前端"
@@ -10,413 +27,2518 @@ tauri_events:
     payload_schema:
       topic:
         type: "string"
-        description: "事件主题，格式：{模块}:{动作}"
+        description: "事件主题，支持通配符订阅"
       payload:
-        type: "string"
-        description: "事件载荷，JSON格式字符串"
+        type: "object"
+        description: "事件载荷"
       timestamp:
         type: "number"
         description: "时间戳（毫秒）"
 
-  - name: "gh3036-event"
-    description: "GH3036设备事件"
+  - name: "event-bus-request"
+    description: "前端请求通道，用于向前端发送操作结果"
     direction: "backend_to_frontend"
-    deprecated: true
-    note: "建议使用 event-bus 统一通道"
 
-  - name: "gh3036-frame"
-    description: "GH3036帧数据事件"
-    direction: "backend_to_frontend"
-    deprecated: true
-    note: "建议使用 event-bus 统一通道"
+  - name: "event-bus-response"
+    description: "前端响应通道，用于后端请求的响应"
+    direction: "frontend_to_backend"
 
-  - name: "ble-notify"
-    description: "BLE通知数据事件"
-    direction: "backend_to_frontend"
-    deprecated: true
-    note: "建议使用 event-bus 统一通道"
-
-topics:
+# ==================== 串口相关主题 ====================
+serial_topics:
+  # ----- 事件类（设备 -> 系统）-----
   serial_data:
-    name: "serial:data"
-    description: "串口接收数据事件"
-    event_type: "SerialDataEvent"
-    publisher: "SerialManager"
-    subscribers:
-      - "Gh3036Manager"
-      - "ProtocolManager"
-      - "Frontend"
+    name: "serial/{port_name}/data"
+    description: "串口接收原始数据事件，支持按端口名订阅"
+    qos: 1
+    retain: false
     payload:
-      device_id:
+      port_name:
         type: "string"
-        description: "设备ID（端口名）"
+        description: "端口名称"
         example: "COM1"
       data:
         type: "array<number>"
         description: "接收数据（字节数组）"
-        example: [1, 2, 3, 4, 5]
       timestamp:
         type: "number"
-        description: "时间戳（毫秒）"
-        example: 1713072000000
+
+  serial_data_hex:
+    name: "serial/{port_name}/data/hex"
+    description: "串口接收数据（十六进制字符串格式）"
+    payload:
+      port_name:
+        type: "string"
+      data_hex:
+        type: "string"
+        description: "十六进制数据字符串"
+        example: "01 02 03 04 05"
+      timestamp:
+        type: "number"
 
   serial_connected:
-    name: "serial:connected"
+    name: "serial/{port_name}/connected"
     description: "串口连接成功事件"
-    event_type: "SerialConnectedEvent"
-    publisher: "SerialManager"
-    subscribers:
-      - "Frontend"
+    retain: true
     payload:
       port_name:
         type: "string"
-        description: "端口名称"
-        example: "COM1"
+      config:
+        type: "object"
+        description: "串口配置"
+        properties:
+          baud_rate: { type: "number" }
+          data_bits: { type: "number" }
+          parity: { type: "string" }
+          stop_bits: { type: "number" }
       timestamp:
         type: "number"
-        description: "时间戳（毫秒）"
-        example: 1713072000000
 
   serial_disconnected:
-    name: "serial:disconnected"
+    name: "serial/{port_name}/disconnected"
     description: "串口断开连接事件"
-    event_type: "SerialDisconnectedEvent"
-    publisher: "SerialManager"
-    subscribers:
-      - "Frontend"
+    retain: true
     payload:
       port_name:
         type: "string"
-        description: "端口名称"
-        example: "COM1"
+      reason:
+        type: "string"
+        description: "断开原因"
       timestamp:
         type: "number"
-        description: "时间戳（毫秒）"
-        example: 1713072000000
 
-  ble_data:
-    name: "ble:data"
-    description: "BLE接收数据事件"
-    event_type: "BleDataEvent"
-    publisher: "BleManager"
-    subscribers:
-      - "Gh3036Manager"
-      - "ProtocolManager"
-      - "Frontend"
+  serial_error:
+    name: "serial/{port_name}/error"
+    description: "串口错误事件"
     payload:
-      device_id:
+      port_name:
         type: "string"
-        description: "设备ID"
-        example: "ble-device-1"
-      address:
+      error_code:
         type: "string"
-        description: "设备地址"
-        example: "00:11:22:33:44:55"
-      characteristic_uuid:
+      error_message:
         type: "string"
-        description: "特征UUID"
-        example: "00002a37-0000-1000-8000-00805f9b34fb"
+      timestamp:
+        type: "number"
+
+  # ----- 状态类（查询响应）-----
+  serial_list_response:
+    name: "serial/list/response"
+    description: "串口列表查询响应"
+    response_to: "serial/list/request"
+    payload:
+      request_id:
+        type: "string"
+      ports:
+        type: "array"
+        items:
+          port_name: { type: "string" }
+          description: { type: "string" }
+          manufacturer: { type: "string" }
+          serial_number: { type: "string" }
+          product_id: { type: "string" }
+          vendor_id: { type: "string" }
+          available: { type: "boolean" }
+      timestamp:
+        type: "number"
+
+  serial_status_response:
+    name: "serial/{port_name}/status/response"
+    description: "串口状态查询响应"
+    response_to: "serial/{port_name}/status/request"
+    payload:
+      request_id:
+        type: "string"
+      port_name:
+        type: "string"
+      connected:
+        type: "boolean"
+      config:
+        type: "object"
+      stats:
+        type: "object"
+        properties:
+          bytes_sent: { type: "number" }
+          bytes_received: { type: "number" }
+          last_activity: { type: "number" }
+      timestamp:
+        type: "number"
+
+  # ----- 命令类（系统 -> 设备）-----
+  serial_write_request:
+    name: "serial/{port_name}/write/request"
+    description: "串口写入请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+        description: "请求ID，用于匹配响应"
+      port_name:
+        type: "string"
       data:
         type: "array<number>"
-        description: "接收数据（字节数组）"
-        example: [1, 2, 3, 4, 5]
+      hex_string:
+        type: "string"
+        description: "十六进制字符串，与 data 二选一"
+      timeout_ms:
+        type: "number"
+        default: 5000
+
+  serial_write_response:
+    name: "serial/{port_name}/write/response"
+    description: "串口写入响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      port_name:
+        type: "string"
+      success:
+        type: "boolean"
+      bytes_written:
+        type: "number"
+      error:
+        type: "string"
+        optional: true
       timestamp:
         type: "number"
-        description: "时间戳（毫秒）"
-        example: 1713072000000
+
+  serial_open_request:
+    name: "serial/open/request"
+    description: "串口打开请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      port_name:
+        type: "string"
+      baud_rate:
+        type: "number"
+        default: 115200
+      data_bits:
+        type: "number"
+        default: 8
+      parity:
+        type: "string"
+        enum: ["none", "even", "odd"]
+        default: "none"
+      stop_bits:
+        type: "number"
+        enum: [1, 2]
+        default: 1
+      timeout:
+        type: "number"
+        default: 1000
+
+  serial_open_response:
+    name: "serial/open/response"
+    description: "串口打开响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      port_name:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  serial_close_request:
+    name: "serial/{port_name}/close/request"
+    description: "串口关闭请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      port_name:
+        type: "string"
+
+  serial_close_response:
+    name: "serial/{port_name}/close/response"
+    description: "串口关闭响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      port_name:
+        type: "string"
+      success:
+        type: "boolean"
+
+  serial_config_update_request:
+    name: "serial/{port_name}/config/request"
+    description: "串口配置更新请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      port_name:
+        type: "string"
+      baud_rate:
+        type: "number"
+        optional: true
+      data_bits:
+        type: "number"
+        optional: true
+      parity:
+        type: "string"
+        optional: true
+      stop_bits:
+        type: "number"
+        optional: true
+
+# ==================== BLE 相关主题 ====================
+ble_topics:
+  # ----- 事件类（设备 -> 系统）-----
+  ble_data:
+    name: "ble/{address}/{characteristic_uuid}/data"
+    description: "BLE特征值数据事件，支持按设备地址和特征UUID订阅"
+    qos: 1
+    payload:
+      address:
+        type: "string"
+        description: "设备地址"
+      name:
+        type: "string"
+        optional: true
+      characteristic_uuid:
+        type: "string"
+      data:
+        type: "array<number>"
+      data_hex:
+        type: "string"
+      timestamp:
+        type: "number"
+
+  ble_data_notify:
+    name: "ble/{address}/{characteristic_uuid}/notify"
+    description: "BLE特征值通知事件"
+    payload:
+      address:
+        type: "string"
+      characteristic_uuid:
+        type: "string"
+      data:
+        type: "array<number>"
+      timestamp:
+        type: "number"
+
+  ble_data_indicate:
+    name: "ble/{address}/{characteristic_uuid}/indicate"
+    description: "BLE特征值指示事件"
+    payload:
+      address:
+        type: "string"
+      characteristic_uuid:
+        type: "string"
+      data:
+        type: "array<number>"
+      timestamp:
+        type: "number"
 
   ble_connected:
-    name: "ble:connected"
-    description: "BLE连接成功事件"
-    event_type: "BleConnectionEvent"
-    publisher: "BleManager"
-    subscribers:
-      - "Frontend"
+    name: "ble/{address}/connected"
+    description: "BLE设备连接成功事件"
+    retain: true
     payload:
       address:
         type: "string"
-        description: "设备地址"
-        example: "00:11:22:33:44:55"
       name:
-        type: "string | null"
-        description: "设备名称（可选）"
-        example: "GH3036 Device"
+        type: "string"
+      rssi:
+        type: "number"
+        description: "信号强度"
+      services:
+        type: "array<string>"
+        description: "可用服务UUID列表"
       timestamp:
         type: "number"
-        description: "时间戳（毫秒）"
-        example: 1713072000000
 
   ble_disconnected:
-    name: "ble:disconnected"
-    description: "BLE断开连接事件"
-    event_type: "BleConnectionEvent"
-    publisher: "BleManager"
-    subscribers:
-      - "Frontend"
+    name: "ble/{address}/disconnected"
+    description: "BLE设备断开连接事件"
+    retain: true
     payload:
       address:
         type: "string"
-        description: "设备地址"
-        example: "00:11:22:33:44:55"
       name:
-        type: "string | null"
-        description: "设备名称（可选）"
-        example: "GH3036 Device"
+        type: "string"
+      reason:
+        type: "string"
       timestamp:
         type: "number"
-        description: "时间戳（毫秒）"
-        example: 1713072000000
 
+  ble_discovered:
+    name: "ble/discovered"
+    description: "BLE设备发现事件（扫描期间）"
+    payload:
+      address:
+        type: "string"
+      name:
+        type: "string"
+      rssi:
+        type: "number"
+      advertised_data:
+        type: "object"
+      timestamp:
+        type: "number"
+
+  ble_scan_started:
+    name: "ble/scan/started"
+    description: "BLE扫描开始事件"
+    retain: true
+    payload:
+      duration_ms:
+        type: "number"
+      timestamp:
+        type: "number"
+
+  ble_scan_stopped:
+    name: "ble/scan/stopped"
+    description: "BLE扫描停止事件"
+    retain: true
+    payload:
+      devices_found:
+        type: "number"
+      timestamp:
+        type: "number"
+
+  ble_error:
+    name: "ble/{address}/error"
+    description: "BLE错误事件"
+    payload:
+      address:
+        type: "string"
+        optional: true
+      operation:
+        type: "string"
+        description: "发生错误的操作"
+      error_code:
+        type: "string"
+      error_message:
+        type: "string"
+      timestamp:
+        type: "number"
+
+  # ----- 状态类 -----
+  ble_device_status_response:
+    name: "ble/{address}/status/response"
+    description: "BLE设备状态查询响应"
+    response_to: "ble/{address}/status/request"
+    payload:
+      request_id:
+        type: "string"
+      address:
+        type: "string"
+      connected:
+        type: "boolean"
+      name:
+        type: "string"
+      rssi:
+        type: "number"
+      mtu:
+        type: "number"
+      services:
+        type: "array"
+      timestamp:
+        type: "number"
+
+  ble_services_response:
+    name: "ble/{address}/services/response"
+    description: "BLE服务发现响应"
+    response_to: "ble/{address}/services/request"
+    payload:
+      request_id:
+        type: "string"
+      address:
+        type: "string"
+      services:
+        type: "array"
+        items:
+          uuid: { type: "string" }
+          primary: { type: "boolean" }
+          characteristics:
+            type: "array"
+            items:
+              uuid: { type: "string" }
+              properties:
+                type: "array"
+                items: { type: "string", enum: ["read", "write", "notify", "indicate"] }
+      timestamp:
+        type: "number"
+
+  ble_scan_response:
+    name: "ble/scan/response"
+    description: "BLE扫描结果响应（批量）"
+    response_to: "ble/scan/request"
+    payload:
+      request_id:
+        type: "string"
+      devices:
+        type: "array"
+        items:
+          address: { type: "string" }
+          name: { type: "string" }
+          rssi: { type: "number" }
+          connectable: { type: "boolean" }
+      timestamp:
+        type: "number"
+
+  # ----- 命令类 -----
+  ble_connect_request:
+    name: "ble/connect/request"
+    description: "BLE设备连接请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      address:
+        type: "string"
+      timeout_ms:
+        type: "number"
+        default: 10000
+
+  ble_connect_response:
+    name: "ble/connect/response"
+    description: "BLE连接响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      address:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  ble_disconnect_request:
+    name: "ble/{address}/disconnect/request"
+    description: "BLE设备断开请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      address:
+        type: "string"
+
+  ble_disconnect_response:
+    name: "ble/{address}/disconnect/response"
+    description: "BLE断开响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      address:
+        type: "string"
+      success:
+        type: "boolean"
+
+  ble_scan_request:
+    name: "ble/scan/request"
+    description: "BLE扫描请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      duration_ms:
+        type: "number"
+        default: 5000
+      allow_duplicates:
+        type: "boolean"
+        default: false
+      service_uuids:
+        type: "array<string>"
+        description: "过滤服务UUID"
+        optional: true
+
+  ble_read_request:
+    name: "ble/{address}/{characteristic_uuid}/read/request"
+    description: "BLE特征值读取请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      address:
+        type: "string"
+      service_uuid:
+        type: "string"
+      characteristic_uuid:
+        type: "string"
+
+  ble_read_response:
+    name: "ble/{address}/{characteristic_uuid}/read/response"
+    description: "BLE特征值读取响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      address:
+        type: "string"
+      characteristic_uuid:
+        type: "string"
+      success:
+        type: "boolean"
+      data:
+        type: "array<number>"
+        optional: true
+      error:
+        type: "string"
+        optional: true
+
+  ble_write_request:
+    name: "ble/{address}/{characteristic_uuid}/write/request"
+    description: "BLE特征值写入请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      address:
+        type: "string"
+      service_uuid:
+        type: "string"
+      characteristic_uuid:
+        type: "string"
+      data:
+        type: "array<number>"
+      write_type:
+        type: "string"
+        enum: ["with_response", "without_response"]
+        default: "with_response"
+
+  ble_write_response:
+    name: "ble/{address}/{characteristic_uuid}/write/response"
+    description: "BLE特征值写入响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      address:
+        type: "string"
+      characteristic_uuid:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  ble_subscribe_request:
+    name: "ble/{address}/{characteristic_uuid}/subscribe/request"
+    description: "订阅BLE特征值通知/指示请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      address:
+        type: "string"
+      service_uuid:
+        type: "string"
+      characteristic_uuid:
+        type: "string"
+      subscribe_type:
+        type: "string"
+        enum: ["notify", "indicate", "both"]
+
+  ble_subscribe_response:
+    name: "ble/{address}/{characteristic_uuid}/subscribe/response"
+    description: "订阅BLE特征值响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      address:
+        type: "string"
+      characteristic_uuid:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  ble_unsubscribe_request:
+    name: "ble/{address}/{characteristic_uuid}/unsubscribe/request"
+    description: "取消订阅BLE特征值请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      address:
+        type: "string"
+      service_uuid:
+        type: "string"
+      characteristic_uuid:
+        type: "string"
+
+  ble_unsubscribe_response:
+    name: "ble/{address}/{characteristic_uuid}/unsubscribe/response"
+    description: "取消订阅BLE特征值响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      address:
+        type: "string"
+      characteristic_uuid:
+        type: "string"
+      success:
+        type: "boolean"
+
+  ble_rssi_read_request:
+    name: "ble/{address}/rssi/request"
+    description: "读取BLE设备RSSI请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      address:
+        type: "string"
+
+  ble_rssi_read_response:
+    name: "ble/{address}/rssi/response"
+    description: "RSSI读取响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      address:
+        type: "string"
+      rssi:
+        type: "number"
+      success:
+        type: "boolean"
+
+# ==================== 通用系统主题 ====================
+system_topics:
+  device_list_request:
+    name: "device/list/request"
+    description: "获取所有设备列表请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      device_types:
+        type: "array<string>"
+        description: "过滤设备类型: serial, ble, all"
+        optional: true
+
+  device_list_response:
+    name: "device/list/response"
+    description: "设备列表响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      serial_ports:
+        type: "array"
+      ble_devices:
+        type: "array"
+      timestamp:
+        type: "number"
+
+  device_status_request:
+    name: "device/{device_type}/{device_id}/status/request"
+    description: "设备状态查询请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+
+  health_check:
+    name: "system/health"
+    description: "系统健康检查事件"
+    retain: true
+    payload:
+      status:
+        type: "string"
+        enum: ["healthy", "degraded", "unhealthy"]
+      uptime_ms:
+        type: "number"
+      timestamp:
+        type: "number"
+
+# ==================== GH3036 相关主题 ====================
+gh3036_topics:
   gh3036_frame:
-    name: "gh3036:frame"
+    name: "gh3036/frame"
     description: "GH3036帧数据事件"
-    event_type: "Gh3036FrameEvent"
-    publisher: "Gh3036Manager"
-    subscribers:
-      - "Frontend"
     payload:
       function_id:
         type: "number"
-        description: "功能ID"
-        example: 1
       function_name:
         type: "string"
-        description: "功能名称"
-        example: "ECG"
       frame_id:
         type: "number"
-        description: "帧ID"
-        example: 100
-      timestamp:
-        type: "number"
-        description: "时间戳（毫秒）"
-        example: 1713072000000
       channel_count:
         type: "number"
-        description: "通道数"
-        example: 4
       channels:
         type: "array<number>"
-        description: "通道数据"
-        example: [1.0, 2.0, 3.0, 4.0]
+      timestamp:
+        type: "number"
 
+  gh3036_event:
+    name: "gh3036/event"
+    description: "GH3036通用事件"
+    payload:
+      event_type:
+        type: "string"
+        enum: ["initialized", "started", "stopped", "error"]
+      data:
+        type: "object"
+      timestamp:
+        type: "number"
+
+  gh3036_rpc_result:
+    name: "gh3036/rpc/result"
+    description: "RPC命令执行结果事件"
+    payload:
+      command_key:
+        type: "string"
+      success:
+        type: "boolean"
+      result:
+        type: "array<number>"
+        optional: true
+      error:
+        type: "string"
+        optional: true
+      timestamp:
+        type: "number"
+
+  gh3036_channel_changed:
+    name: "gh3036/channel/changed"
+    description: "TX/RX通道变更事件"
+    payload:
+      channel_type:
+        type: "string"
+        enum: ["tx", "rx"]
+      device_id:
+        type: "string"
+      channel_config:
+        type: "object"
+        properties:
+          channel_type: { type: "string" }
+          device_id: { type: "string" }
+          characteristic_uuid: { type: "string", optional: true }
+      timestamp:
+        type: "number"
+
+  gh3036_channel_tx_config_request:
+    name: "gh3036/channel/tx/config/request"
+    description: "配置TX通道请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      channel_type:
+        type: "string"
+        enum: ["Serial", "Ble"]
+      device_id:
+        type: "string"
+      characteristic_uuid:
+        type: "string"
+        optional: true
+
+  gh3036_channel_tx_config_response:
+    name: "gh3036/channel/tx/config/response"
+    description: "TX通道配置响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  gh3036_channel_rx_config_request:
+    name: "gh3036/channel/rx/config/request"
+    description: "配置RX通道请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      channel_type:
+        type: "string"
+        enum: ["Serial", "Ble"]
+      device_id:
+        type: "string"
+      characteristic_uuid:
+        type: "string"
+        optional: true
+
+  gh3036_channel_rx_config_response:
+    name: "gh3036/channel/rx/config/response"
+    description: "RX通道配置响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  gh3036_csv_config_request:
+    name: "gh3036/csv/config/request"
+    description: "配置CSV保存请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      enabled:
+        type: "boolean"
+      output_dir:
+        type: "string"
+
+  gh3036_csv_config_response:
+    name: "gh3036/csv/config/response"
+    description: "CSV配置响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  gh3036_rpc_execute_request:
+    name: "gh3036/rpc/execute/request"
+    description: "执行RPC命令请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      command_key:
+        type: "string"
+        description: "命令键: V(版本), W(写寄存器), R(读寄存器), B(位域写), C(芯片控制), D(下载配置), L(寄存器列表写), S(软件功能), P(低功耗), M(工作模式), TS(时间戳), TM(时间)"
+      params:
+        type: "array<string>"
+        description: "命令参数列表"
+
+  gh3036_rpc_execute_response:
+    name: "gh3036/rpc/execute/response"
+    description: "RPC执行响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      command_key:
+        type: "string"
+      success:
+        type: "boolean"
+      result:
+        type: "array<number>"
+        optional: true
+      error:
+        type: "string"
+        optional: true
+      timestamp:
+        type: "number"
+
+  gh3036_status_request:
+    name: "gh3036/status/request"
+    description: "查询GH3036状态请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+
+  gh3036_status_response:
+    name: "gh3036/status/response"
+    description: "GH3036状态响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      initialized:
+        type: "boolean"
+      library_linked:
+        type: "boolean"
+      tx_channel:
+        type: "object"
+        optional: true
+        properties:
+          channel_type: { type: "string" }
+          device_id: { type: "string" }
+          characteristic_uuid: { type: "string", optional: true }
+      csv_config:
+        type: "object"
+        properties:
+          enabled: { type: "boolean" }
+          output_dir: { type: "string" }
+      timestamp:
+        type: "number"
+
+# ==================== 协议插件相关主题 ====================
+protocol_topics:
   protocol_parsed:
-    name: "protocol:parsed"
+    name: "protocol/{plugin_id}/parsed"
     description: "协议解析结果事件"
-    event_type: "ProtocolParsedEvent"
-    publisher: "ProtocolManager"
-    subscribers:
-      - "Frontend"
     payload:
       plugin_id:
         type: "string"
-        description: "插件ID"
-        example: "plugin-1"
       device_id:
         type: "string"
-        description: "设备ID"
-        example: "device-1"
       original_data:
         type: "array<number>"
-        description: "原始数据"
-        example: [1, 2, 3, 4, 5]
       parsed_data:
         type: "object"
-        description: "解析后数据（JSON对象）"
-        example:
-          value: 42
-          unit: "mV"
       timestamp:
         type: "number"
-        description: "时间戳（毫秒）"
-        example: 1713072000000
 
+  protocol_error:
+    name: "protocol/{plugin_id}/error"
+    description: "协议解析错误事件"
+    payload:
+      plugin_id:
+        type: "string"
+      device_id:
+        type: "string"
+        optional: true
+      error_code:
+        type: "string"
+      error_message:
+        type: "string"
+      timestamp:
+        type: "number"
+
+  protocol_plugin_load_request:
+    name: "protocol/plugin/load/request"
+    description: "加载协议插件请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      plugin_id:
+        type: "string"
+      path:
+        type: "string"
+        description: "Lua脚本文件路径"
+
+  protocol_plugin_load_response:
+    name: "protocol/plugin/load/response"
+    description: "插件加载响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      plugin_id:
+        type: "string"
+      success:
+        type: "boolean"
+      plugin_info:
+        type: "object"
+        optional: true
+        properties:
+          id: { type: "string" }
+          name: { type: "string" }
+          version: { type: "string" }
+          description: { type: "string", optional: true }
+          author: { type: "string", optional: true }
+          hooks: { type: "array<string>" }
+      error:
+        type: "string"
+        optional: true
+
+  protocol_plugin_unload_request:
+    name: "protocol/plugin/{plugin_id}/unload/request"
+    description: "卸载插件请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      plugin_id:
+        type: "string"
+
+  protocol_plugin_unload_response:
+    name: "protocol/plugin/{plugin_id}/unload/response"
+    description: "卸载插件响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      plugin_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  protocol_plugin_enable_request:
+    name: "protocol/plugin/{plugin_id}/enable/request"
+    description: "启用插件请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      plugin_id:
+        type: "string"
+
+  protocol_plugin_enable_response:
+    name: "protocol/plugin/{plugin_id}/enable/response"
+    description: "启用插件响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      plugin_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  protocol_plugin_disable_request:
+    name: "protocol/plugin/{plugin_id}/disable/request"
+    description: "禁用插件请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      plugin_id:
+        type: "string"
+
+  protocol_plugin_disable_response:
+    name: "protocol/plugin/{plugin_id}/disable/response"
+    description: "禁用插件响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      plugin_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  protocol_plugin_bind_request:
+    name: "protocol/plugin/{plugin_id}/bind/request"
+    description: "绑定设备到插件请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      plugin_id:
+        type: "string"
+      device_id:
+        type: "string"
+
+  protocol_plugin_bind_response:
+    name: "protocol/plugin/{plugin_id}/bind/response"
+    description: "绑定设备响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      plugin_id:
+        type: "string"
+      device_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  protocol_plugin_unbind_request:
+    name: "protocol/plugin/{plugin_id}/unbind/request"
+    description: "解绑设备请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      plugin_id:
+        type: "string"
+      device_id:
+        type: "string"
+
+  protocol_plugin_unbind_response:
+    name: "protocol/plugin/{plugin_id}/unbind/response"
+    description: "解绑设备响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      plugin_id:
+        type: "string"
+      device_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  protocol_plugin_list_request:
+    name: "protocol/plugin/list/request"
+    description: "列出所有插件请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+
+  protocol_plugin_list_response:
+    name: "protocol/plugin/list/response"
+    description: "插件列表响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      plugins:
+        type: "array"
+        items:
+          id: { type: "string" }
+          name: { type: "string" }
+          version: { type: "string" }
+          state:
+            type: "string"
+            enum: ["Unloaded", "Loaded", "Enabled", "Disabled", "Error"]
+          bound_devices: { type: "array<string>" }
+          error_message: { type: "string", optional: true }
+      timestamp:
+        type: "number"
+
+  protocol_plugin_status_request:
+    name: "protocol/plugin/{plugin_id}/status/request"
+    description: "查询插件状态请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      plugin_id:
+        type: "string"
+
+  protocol_plugin_status_response:
+    name: "protocol/plugin/{plugin_id}/status/response"
+    description: "插件状态响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      plugin_info:
+        type: "object"
+        properties:
+          id: { type: "string" }
+          name: { type: "string" }
+          version: { type: "string" }
+          state: { type: "string" }
+          bound_devices: { type: "array<string>" }
+          error_message: { type: "string", optional: true }
+      timestamp:
+        type: "number"
+
+# ==================== WebSocket 相关主题 ====================
+websocket_topics:
+  websocket_connected:
+    name: "websocket/{connection_id}/connected"
+    description: "WebSocket连接成功事件"
+    payload:
+      connection_id:
+        type: "string"
+      url:
+        type: "string"
+      timestamp:
+        type: "number"
+
+  websocket_disconnected:
+    name: "websocket/{connection_id}/disconnected"
+    description: "WebSocket断开连接事件"
+    payload:
+      connection_id:
+        type: "string"
+      reason:
+        type: "string"
+      timestamp:
+        type: "number"
+
+  websocket_message:
+    name: "websocket/{connection_id}/message"
+    description: "收到WebSocket消息事件"
+    payload:
+      connection_id:
+        type: "string"
+      message:
+        type: "string"
+      timestamp:
+        type: "number"
+
+  websocket_error:
+    name: "websocket/{connection_id}/error"
+    description: "WebSocket连接错误事件"
+    payload:
+      connection_id:
+        type: "string"
+      error_code:
+        type: "string"
+      error_message:
+        type: "string"
+      timestamp:
+        type: "number"
+
+  websocket_reconnecting:
+    name: "websocket/{connection_id}/reconnecting"
+    description: "WebSocket重连中事件"
+    payload:
+      connection_id:
+        type: "string"
+      attempt:
+        type: "number"
+      max_attempts:
+        type: "number"
+      next_delay_ms:
+        type: "number"
+      timestamp:
+        type: "number"
+
+  websocket_connect_request:
+    name: "websocket/connect/request"
+    description: "建立WebSocket连接请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      connection_id:
+        type: "string"
+      url:
+        type: "string"
+      config:
+        type: "object"
+        properties:
+          reconnect: { type: "boolean", default: true }
+          reconnect_interval_ms: { type: "number", default: 5000 }
+          max_reconnect_attempts: { type: "number", default: 10 }
+          heartbeat_interval_ms: { type: "number", default: 30000 }
+          connection_timeout_ms: { type: "number", default: 10000 }
+
+  websocket_connect_response:
+    name: "websocket/connect/response"
+    description: "连接响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      connection_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  websocket_disconnect_request:
+    name: "websocket/{connection_id}/disconnect/request"
+    description: "断开连接请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      connection_id:
+        type: "string"
+
+  websocket_disconnect_response:
+    name: "websocket/{connection_id}/disconnect/response"
+    description: "断开连接响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      connection_id:
+        type: "string"
+      success:
+        type: "boolean"
+
+  websocket_send_request:
+    name: "websocket/{connection_id}/send/request"
+    description: "发送消息请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      connection_id:
+        type: "string"
+      message:
+        type: "string"
+
+  websocket_send_response:
+    name: "websocket/{connection_id}/send/response"
+    description: "发送消息响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      connection_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  websocket_status_request:
+    name: "websocket/{connection_id}/status/request"
+    description: "查询连接状态请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      connection_id:
+        type: "string"
+
+  websocket_status_response:
+    name: "websocket/{connection_id}/status/response"
+    description: "连接状态响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      connection_id:
+        type: "string"
+      state:
+        type: "string"
+        enum: ["Disconnected", "Connecting", "Connected", "Reconnecting"]
+      url:
+        type: "string"
+      timestamp:
+        type: "number"
+
+  websocket_list_request:
+    name: "websocket/list/request"
+    description: "列出所有连接请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+
+  websocket_list_response:
+    name: "websocket/list/response"
+    description: "连接列表响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      connections:
+        type: "array"
+        items:
+          connection_id: { type: "string" }
+          url: { type: "string" }
+          state: { type: "string" }
+      timestamp:
+        type: "number"
+
+# ==================== 波形相关主题 ====================
+waveform_topics:
+  waveform_data:
+    name: "waveform/{buffer_id}/data"
+    description: "波形数据更新事件"
+    payload:
+      buffer_id:
+        type: "string"
+      columns:
+        type: "array<string>"
+      rows:
+        type: "array<array<number>>"
+      timestamp:
+        type: "number"
+
+  waveform_status:
+    name: "waveform/{buffer_id}/status"
+    description: "缓冲区状态变化事件"
+    payload:
+      buffer_id:
+        type: "string"
+      row_count:
+        type: "number"
+      column_count:
+        type: "number"
+      capacity:
+        type: "number"
+      parser_type:
+        type: "string"
+        optional: true
+      timestamp:
+        type: "number"
+
+  waveform_buffer_create_request:
+    name: "waveform/buffer/create/request"
+    description: "创建缓冲区请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      buffer_id:
+        type: "string"
+      config:
+        type: "object"
+        properties:
+          capacity: { type: "number", default: 10000 }
+          column_count: { type: "number" }
+          column_names: { type: "array<string>" }
+
+  waveform_buffer_create_response:
+    name: "waveform/buffer/create/response"
+    description: "创建缓冲区响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      buffer_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  waveform_buffer_clear_request:
+    name: "waveform/{buffer_id}/clear/request"
+    description: "清空缓冲区请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      buffer_id:
+        type: "string"
+
+  waveform_buffer_clear_response:
+    name: "waveform/{buffer_id}/clear/response"
+    description: "清空缓冲区响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      buffer_id:
+        type: "string"
+      success:
+        type: "boolean"
+
+  waveform_buffer_config_request:
+    name: "waveform/{buffer_id}/config/request"
+    description: "配置缓冲区请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      buffer_id:
+        type: "string"
+      capacity:
+        type: "number"
+        optional: true
+      column_names:
+        type: "array<string>"
+        optional: true
+
+  waveform_buffer_config_response:
+    name: "waveform/{buffer_id}/config/response"
+    description: "配置缓冲区响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      buffer_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  waveform_parser_create_request:
+    name: "waveform/parser/create/request"
+    description: "创建解析器请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      buffer_id:
+        type: "string"
+      parser_type:
+        type: "string"
+        enum: ["csv", "json", "binary", "custom"]
+      parser_config:
+        type: "object"
+
+  waveform_parser_create_response:
+    name: "waveform/parser/create/response"
+    description: "创建解析器响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      buffer_id:
+        type: "string"
+      parser_type:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  waveform_buffer_status_request:
+    name: "waveform/{buffer_id}/status/request"
+    description: "查询缓冲区状态请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      buffer_id:
+        type: "string"
+
+  waveform_buffer_status_response:
+    name: "waveform/{buffer_id}/status/response"
+    description: "缓冲区状态响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      buffer_id:
+        type: "string"
+      row_count:
+        type: "number"
+      column_count:
+        type: "number"
+      column_names:
+        type: "array<string>"
+      capacity:
+        type: "number"
+      parser_type:
+        type: "string"
+        optional: true
+      timestamp:
+        type: "number"
+
+# ==================== 仪表盘相关主题 ====================
+dashboard_topics:
+  dashboard_parser_updated:
+    name: "dashboard/parser/{script_id}/updated"
+    description: "解析脚本更新事件"
+    payload:
+      script_id:
+        type: "string"
+      content:
+        type: "string"
+      timestamp:
+        type: "number"
+
+  dashboard_json_updated:
+    name: "dashboard/json/{config_id}/updated"
+    description: "JSON配置更新事件"
+    payload:
+      config_id:
+        type: "string"
+      content:
+        type: "object"
+      timestamp:
+        type: "number"
+
+  dashboard_parser_list_request:
+    name: "dashboard/parser/list/request"
+    description: "列出解析脚本请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+
+  dashboard_parser_list_response:
+    name: "dashboard/parser/list/response"
+    description: "解析脚本列表响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      scripts:
+        type: "array"
+        items:
+          id: { type: "string" }
+          name: { type: "string" }
+          description: { type: "string", optional: true }
+          created_at: { type: "number" }
+          updated_at: { type: "number" }
+      timestamp:
+        type: "number"
+
+  dashboard_parser_get_request:
+    name: "dashboard/parser/{script_id}/get/request"
+    description: "获取脚本内容请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      script_id:
+        type: "string"
+
+  dashboard_parser_get_response:
+    name: "dashboard/parser/{script_id}/get/response"
+    description: "脚本内容响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      script_id:
+        type: "string"
+      content:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  dashboard_parser_save_request:
+    name: "dashboard/parser/save/request"
+    description: "保存解析脚本请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      script_id:
+        type: "string"
+      name:
+        type: "string"
+      description:
+        type: "string"
+        optional: true
+      content:
+        type: "string"
+
+  dashboard_parser_save_response:
+    name: "dashboard/parser/save/response"
+    description: "保存解析脚本响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      script_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  dashboard_parser_delete_request:
+    name: "dashboard/parser/{script_id}/delete/request"
+    description: "删除脚本请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      script_id:
+        type: "string"
+
+  dashboard_parser_delete_response:
+    name: "dashboard/parser/{script_id}/delete/response"
+    description: "删除脚本响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      script_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  dashboard_parser_execute_request:
+    name: "dashboard/parser/execute/request"
+    description: "执行解析脚本请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      script_id:
+        type: "string"
+      input_data:
+        type: "string"
+        description: "输入数据（JSON字符串或原始数据）"
+
+  dashboard_parser_execute_response:
+    name: "dashboard/parser/execute/response"
+    description: "执行解析脚本响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      script_id:
+        type: "string"
+      success:
+        type: "boolean"
+      result:
+        type: "object"
+        optional: true
+      error:
+        type: "string"
+        optional: true
+
+  dashboard_json_list_request:
+    name: "dashboard/json/list/request"
+    description: "列出JSON配置请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+
+  dashboard_json_list_response:
+    name: "dashboard/json/list/response"
+    description: "JSON配置列表响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      configs:
+        type: "array"
+        items:
+          id: { type: "string" }
+          name: { type: "string" }
+          description: { type: "string", optional: true }
+          created_at: { type: "number" }
+          updated_at: { type: "number" }
+      timestamp:
+        type: "number"
+
+  dashboard_json_get_request:
+    name: "dashboard/json/{config_id}/get/request"
+    description: "获取JSON配置请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      config_id:
+        type: "string"
+
+  dashboard_json_get_response:
+    name: "dashboard/json/{config_id}/get/response"
+    description: "JSON配置内容响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      config_id:
+        type: "string"
+      content:
+        type: "object"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  dashboard_json_save_request:
+    name: "dashboard/json/save/request"
+    description: "保存JSON配置请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      config_id:
+        type: "string"
+      name:
+        type: "string"
+      description:
+        type: "string"
+        optional: true
+      content:
+        type: "object"
+
+  dashboard_json_save_response:
+    name: "dashboard/json/save/response"
+    description: "保存JSON配置响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      config_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  dashboard_json_delete_request:
+    name: "dashboard/json/{config_id}/delete/request"
+    description: "删除JSON配置请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      config_id:
+        type: "string"
+
+  dashboard_json_delete_response:
+    name: "dashboard/json/{config_id}/delete/response"
+    description: "删除JSON配置响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      config_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+# ==================== 扩展系统主题 ====================
+extended_system_topics:
+  system_started:
+    name: "system/started"
+    description: "应用启动完成事件"
+    retain: true
+    payload:
+      version:
+        type: "string"
+      startup_time_ms:
+        type: "number"
+      timestamp:
+        type: "number"
+
+  system_shutdown:
+    name: "system/shutdown"
+    description: "应用关闭事件"
+    retain: true
+    payload:
+      reason:
+        type: "string"
+        enum: ["user_request", "error", "update", "system"]
+      grace_period_ms:
+        type: "number"
+      timestamp:
+        type: "number"
+
+  system_config_changed:
+    name: "system/config/changed"
+    description: "配置变更事件"
+    payload:
+      config_key:
+        type: "string"
+      old_value:
+        type: "object"
+        optional: true
+      new_value:
+        type: "object"
+        optional: true
+      timestamp:
+        type: "number"
+
+  system_log:
+    name: "system/log"
+    description: "系统日志事件"
+    payload:
+      level:
+        type: "string"
+        enum: ["trace", "debug", "info", "warn", "error"]
+      message:
+        type: "string"
+      module:
+        type: "string"
+      timestamp:
+        type: "number"
+
+  system_error:
+    name: "system/error"
+    description: "系统错误事件"
+    payload:
+      error_code:
+        type: "string"
+      error_message:
+        type: "string"
+      context:
+        type: "object"
+        optional: true
+      timestamp:
+        type: "number"
+
+  system_health_request:
+    name: "system/health/request"
+    description: "请求健康检查"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+
+  system_health_response:
+    name: "system/health/response"
+    description: "健康检查响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      status:
+        type: "string"
+        enum: ["healthy", "degraded", "unhealthy"]
+      uptime_ms:
+        type: "number"
+      cpu_usage:
+        type: "number"
+        optional: true
+      memory_usage:
+        type: "number"
+        optional: true
+      active_connections:
+        type: "object"
+        properties:
+          serial: { type: "number" }
+          ble: { type: "number" }
+          websocket: { type: "number" }
+      timestamp:
+        type: "number"
+
+  system_config_get_request:
+    name: "system/config/get/request"
+    description: "获取配置请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      config_key:
+        type: "string"
+        optional: true
+        description: "不指定则返回所有配置"
+
+  system_config_get_response:
+    name: "system/config/get/response"
+    description: "配置响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      config:
+        type: "object"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  system_config_set_request:
+    name: "system/config/set/request"
+    description: "设置配置请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      config_key:
+        type: "string"
+      config_value:
+        type: "object"
+
+  system_config_set_response:
+    name: "system/config/set/response"
+    description: "设置配置响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      config_key:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  system_shutdown_request:
+    name: "system/shutdown/request"
+    description: "请求关闭应用"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      reason:
+        type: "string"
+        default: "user_request"
+
+  system_shutdown_response:
+    name: "system/shutdown/response"
+    description: "关闭应用响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      accepted:
+        type: "boolean"
+
+# ==================== 应用状态相关主题 ====================
+state_topics:
+  state_device_changed:
+    name: "state/device/{device_id}/changed"
+    description: "设备状态变更事件"
+    payload:
+      device_id:
+        type: "string"
+      property:
+        type: "string"
+        description: "变更的属性名"
+      old_value:
+        type: "object"
+        optional: true
+      new_value:
+        type: "object"
+        optional: true
+      timestamp:
+        type: "number"
+
+  state_device_connected:
+    name: "state/device/{device_id}/connected"
+    description: "设备连接事件"
+    payload:
+      device_id:
+        type: "string"
+      device_type:
+        type: "string"
+        enum: ["serial", "ble"]
+      timestamp:
+        type: "number"
+
+  state_device_disconnected:
+    name: "state/device/{device_id}/disconnected"
+    description: "设备断开事件"
+    payload:
+      device_id:
+        type: "string"
+      reason:
+        type: "string"
+      timestamp:
+        type: "number"
+
+  state_tab_created:
+    name: "state/tab/created"
+    description: "TAB创建事件"
+    payload:
+      tab_key:
+        type: "string"
+      device_id:
+        type: "string"
+      channel_id:
+        type: "string"
+        optional: true
+      label:
+        type: "string"
+      timestamp:
+        type: "number"
+
+  state_tab_removed:
+    name: "state/tab/removed"
+    description: "TAB移除事件"
+    payload:
+      tab_key:
+        type: "string"
+      timestamp:
+        type: "number"
+
+  state_tab_switched:
+    name: "state/tab/switched"
+    description: "TAB切换事件"
+    payload:
+      tab_key:
+        type: "string"
+      previous_tab_key:
+        type: "string"
+        optional: true
+      timestamp:
+        type: "number"
+
+  state_settings_changed:
+    name: "state/settings/changed"
+    description: "设置变更事件"
+    payload:
+      setting_key:
+        type: "string"
+      old_value:
+        type: "object"
+        optional: true
+      new_value:
+        type: "object"
+        optional: true
+      timestamp:
+        type: "number"
+
+  state_device_list_request:
+    name: "state/device/list/request"
+    description: "获取设备列表请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+
+  state_device_list_response:
+    name: "state/device/list/response"
+    description: "设备列表响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      devices:
+        type: "array"
+        items:
+          device_id: { type: "string" }
+          device_type: { type: "string" }
+          name: { type: "string" }
+          connected: { type: "boolean" }
+      timestamp:
+        type: "number"
+
+  state_device_get_request:
+    name: "state/device/{device_id}/get/request"
+    description: "获取设备状态请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      device_id:
+        type: "string"
+
+  state_device_get_response:
+    name: "state/device/{device_id}/get/response"
+    description: "设备状态响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      device_id:
+        type: "string"
+      device:
+        type: "object"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+  state_tab_list_request:
+    name: "state/tab/list/request"
+    description: "获取TAB列表请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+
+  state_tab_list_response:
+    name: "state/tab/list/response"
+    description: "TAB列表响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      tabs:
+        type: "array"
+        items:
+          key: { type: "string" }
+          device_id: { type: "string" }
+          channel_id: { type: "string", optional: true }
+          label: { type: "string" }
+          is_active: { type: "boolean" }
+      active_tab_key:
+        type: "string"
+        optional: true
+      timestamp:
+        type: "number"
+
+  state_settings_get_request:
+    name: "state/settings/get/request"
+    description: "获取设置请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      setting_key:
+        type: "string"
+        optional: true
+
+  state_settings_get_response:
+    name: "state/settings/get/response"
+    description: "设置响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      settings:
+        type: "object"
+      success:
+        type: "boolean"
+
+  state_settings_set_request:
+    name: "state/settings/set/request"
+    description: "设置设置请求"
+    direction: "frontend_to_backend"
+    payload:
+      request_id:
+        type: "string"
+      settings:
+        type: "object"
+
+  state_settings_set_response:
+    name: "state/settings/set/response"
+    description: "设置设置响应"
+    direction: "backend_to_frontend"
+    payload:
+      request_id:
+        type: "string"
+      success:
+        type: "boolean"
+      error:
+        type: "string"
+        optional: true
+
+# ==================== 发布者配置 ====================
 publishers:
   SerialManager:
     module: "device::serial::serial_manager"
-    description: "串口设备管理器"
     publishes:
-      - topic: "serial:data"
-        method: "event_bus.publish_typed()"
-        trigger: "串口接收到数据时"
-      - topic: "serial:connected"
-        method: "event_bus.publish_typed()"
-        trigger: "串口连接成功时"
-      - topic: "serial:disconnected"
-        method: "event_bus.publish_typed()"
-        trigger: "串口断开连接时"
-    source_file: "src-tauri/src/device/serial/serial_manager.rs"
+      - topic: "serial/{port_name}/data"
+      - topic: "serial/{port_name}/data/hex"
+      - topic: "serial/{port_name}/connected"
+      - topic: "serial/{port_name}/disconnected"
+      - topic: "serial/{port_name}/error"
+      - topic: "serial/list/response"
+      - topic: "serial/{port_name}/status/response"
+      - topic: "serial/{port_name}/write/response"
+      - topic: "serial/open/response"
+      - topic: "serial/{port_name}/close/response"
+      - topic: "serial/{port_name}/config/response"
 
   BleManager:
     module: "device::ble::ble_manager"
-    description: "BLE设备管理器"
     publishes:
-      - topic: "ble:data"
-        method: "event_bus.publish_typed()"
-        trigger: "BLE特征值通知时"
-      - topic: "ble:connected"
-        method: "event_bus.publish_typed()"
-        trigger: "BLE连接成功时"
-      - topic: "ble:disconnected"
-        method: "event_bus.publish_typed()"
-        trigger: "BLE断开连接时"
-    source_file: "src-tauri/src/device/ble/ble_manager.rs"
+      - topic: "ble/{address}/{characteristic_uuid}/data"
+      - topic: "ble/{address}/{characteristic_uuid}/notify"
+      - topic: "ble/{address}/{characteristic_uuid}/indicate"
+      - topic: "ble/{address}/connected"
+      - topic: "ble/{address}/disconnected"
+      - topic: "ble/discovered"
+      - topic: "ble/scan/started"
+      - topic: "ble/scan/stopped"
+      - topic: "ble/{address}/error"
+      - topic: "ble/{address}/status/response"
+      - topic: "ble/{address}/services/response"
+      - topic: "ble/scan/response"
+      - topic: "ble/connect/response"
+      - topic: "ble/{address}/disconnect/response"
+      - topic: "ble/{address}/{characteristic_uuid}/read/response"
+      - topic: "ble/{address}/{characteristic_uuid}/write/response"
+      - topic: "ble/{address}/{characteristic_uuid}/subscribe/response"
+      - topic: "ble/{address}/{characteristic_uuid}/unsubscribe/response"
+      - topic: "ble/{address}/rssi/response"
 
   Gh3036Manager:
     module: "gh3036::manager"
-    description: "GH3036协议处理器"
     publishes:
-      - topic: "gh3036:frame"
-        method: "event_bus.publish_typed()"
-        trigger: "解析到完整帧数据时"
-    source_file: "src-tauri/src/gh3036/manager.rs"
+      - topic: "gh3036/frame"
+      - topic: "gh3036/event"
+      - topic: "gh3036/rpc/result"
+      - topic: "gh3036/channel/changed"
+      - topic: "gh3036/channel/tx/config/response"
+      - topic: "gh3036/channel/rx/config/response"
+      - topic: "gh3036/csv/config/response"
+      - topic: "gh3036/rpc/execute/response"
+      - topic: "gh3036/status/response"
 
-  ProtocolManager:
+  PluginManager:
     module: "protocol::plugin_manager"
-    description: "协议插件管理器"
     publishes:
-      - topic: "protocol:parsed"
-        method: "event_bus.publish_typed()"
-        trigger: "协议解析完成时"
-    source_file: "src-tauri/src/protocol/plugin_manager.rs"
+      - topic: "protocol/{plugin_id}/parsed"
+      - topic: "protocol/{plugin_id}/error"
+      - topic: "protocol/plugin/load/response"
+      - topic: "protocol/plugin/{plugin_id}/unload/response"
+      - topic: "protocol/plugin/{plugin_id}/enable/response"
+      - topic: "protocol/plugin/{plugin_id}/disable/response"
+      - topic: "protocol/plugin/{plugin_id}/bind/response"
+      - topic: "protocol/plugin/{plugin_id}/unbind/response"
+      - topic: "protocol/plugin/list/response"
+      - topic: "protocol/plugin/{plugin_id}/status/response"
 
+  WebSocketManager:
+    module: "websocket::connection_pool"
+    publishes:
+      - topic: "websocket/{connection_id}/connected"
+      - topic: "websocket/{connection_id}/disconnected"
+      - topic: "websocket/{connection_id}/message"
+      - topic: "websocket/{connection_id}/error"
+      - topic: "websocket/{connection_id}/reconnecting"
+      - topic: "websocket/connect/response"
+      - topic: "websocket/{connection_id}/disconnect/response"
+      - topic: "websocket/{connection_id}/send/response"
+      - topic: "websocket/{connection_id}/status/response"
+      - topic: "websocket/list/response"
+
+  WaveformManager:
+    module: "waveform::buffer"
+    publishes:
+      - topic: "waveform/{buffer_id}/data"
+      - topic: "waveform/{buffer_id}/status"
+      - topic: "waveform/buffer/create/response"
+      - topic: "waveform/{buffer_id}/clear/response"
+      - topic: "waveform/{buffer_id}/config/response"
+      - topic: "waveform/parser/create/response"
+      - topic: "waveform/{buffer_id}/status/response"
+
+  DashboardManager:
+    module: "dashboard::mod"
+    publishes:
+      - topic: "dashboard/parser/{script_id}/updated"
+      - topic: "dashboard/json/{config_id}/updated"
+      - topic: "dashboard/parser/list/response"
+      - topic: "dashboard/parser/{script_id}/get/response"
+      - topic: "dashboard/parser/save/response"
+      - topic: "dashboard/parser/{script_id}/delete/response"
+      - topic: "dashboard/parser/execute/response"
+      - topic: "dashboard/json/list/response"
+      - topic: "dashboard/json/{config_id}/get/response"
+      - topic: "dashboard/json/save/response"
+      - topic: "dashboard/json/{config_id}/delete/response"
+
+  SystemManager:
+    module: "service::system"
+    publishes:
+      - topic: "system/health"
+      - topic: "system/started"
+      - topic: "system/shutdown"
+      - topic: "system/config/changed"
+      - topic: "system/log"
+      - topic: "system/error"
+      - topic: "system/health/response"
+      - topic: "system/config/get/response"
+      - topic: "system/config/set/response"
+      - topic: "system/shutdown/response"
+
+  AppStateManager:
+    module: "state::dispatcher"
+    publishes:
+      - topic: "state/device/{device_id}/changed"
+      - topic: "state/device/{device_id}/connected"
+      - topic: "state/device/{device_id}/disconnected"
+      - topic: "state/tab/created"
+      - topic: "state/tab/removed"
+      - topic: "state/tab/switched"
+      - topic: "state/settings/changed"
+      - topic: "state/device/list/response"
+      - topic: "state/device/{device_id}/get/response"
+      - topic: "state/tab/list/response"
+      - topic: "state/settings/get/response"
+      - topic: "state/settings/set/response"
+
+# ==================== 订阅者配置 ====================
 subscribers:
+  SerialManager:
+    module: "device::serial::serial_manager"
+    subscribes:
+      - topic: "serial/list/request"
+      - topic: "serial/{port_name}/status/request"
+      - topic: "serial/{port_name}/write/request"
+      - topic: "serial/open/request"
+      - topic: "serial/{port_name}/close/request"
+      - topic: "serial/{port_name}/config/request"
+
+  BleManager:
+    module: "device::ble::ble_manager"
+    subscribes:
+      - topic: "ble/scan/request"
+      - topic: "ble/connect/request"
+      - topic: "ble/{address}/disconnect/request"
+      - topic: "ble/{address}/status/request"
+      - topic: "ble/{address}/services/request"
+      - topic: "ble/{address}/{characteristic_uuid}/read/request"
+      - topic: "ble/{address}/{characteristic_uuid}/write/request"
+      - topic: "ble/{address}/{characteristic_uuid}/subscribe/request"
+      - topic: "ble/{address}/{characteristic_uuid}/unsubscribe/request"
+      - topic: "ble/{address}/rssi/request"
+
   Gh3036Manager:
     module: "gh3036::manager"
-    description: "GH3036协议处理器"
     subscribes:
-      - topic: "serial:data"
-        method: "event_bus.subscribe_sync()"
-        handler: "处理串口数据，解析GH3036帧"
-      - topic: "ble:data"
-        method: "event_bus.subscribe_sync()"
-        handler: "处理BLE数据，解析GH3036帧"
-    source_file: "src-tauri/src/gh3036/manager.rs"
+      - topic: "serial/+/data"
+        description: "订阅所有串口数据"
+      - topic: "ble/+/+/data"
+        description: "订阅所有BLE数据"
+      - topic: "gh3036/channel/tx/config/request"
+      - topic: "gh3036/channel/rx/config/request"
+      - topic: "gh3036/csv/config/request"
+      - topic: "gh3036/rpc/execute/request"
+      - topic: "gh3036/status/request"
 
-  ProtocolManager:
+  PluginManager:
     module: "protocol::plugin_manager"
-    description: "协议插件管理器"
     subscribes:
-      - topic: "serial:data"
-        method: "event_bus.subscribe_sync()"
-        handler: "处理串口数据，调用协议插件解析"
-      - topic: "ble:data"
-        method: "event_bus.subscribe_sync()"
-        handler: "处理BLE数据，调用协议插件解析"
-    source_file: "src-tauri/src/protocol/plugin_manager.rs"
+      - topic: "serial/+/data"
+        description: "订阅所有串口数据进行协议解析"
+      - topic: "ble/+/+/data"
+        description: "订阅所有BLE数据进行协议解析"
+      - topic: "protocol/plugin/load/request"
+      - topic: "protocol/plugin/{plugin_id}/unload/request"
+      - topic: "protocol/plugin/{plugin_id}/enable/request"
+      - topic: "protocol/plugin/{plugin_id}/disable/request"
+      - topic: "protocol/plugin/{plugin_id}/bind/request"
+      - topic: "protocol/plugin/{plugin_id}/unbind/request"
+      - topic: "protocol/plugin/list/request"
+      - topic: "protocol/plugin/{plugin_id}/status/request"
 
-  EventBridge:
-    module: "service::event_bridge"
-    description: "事件桥接服务，将EventBus事件转发到前端"
+  WebSocketManager:
+    module: "websocket::connection_pool"
     subscribes:
-      - topic: "all"
-        method: "event_bus.subscribe_channel()"
-        handler: "将所有事件转发到前端 Tauri Event 系统"
-    source_file: "src-tauri/src/service/event_bridge.rs"
+      - topic: "websocket/connect/request"
+      - topic: "websocket/{connection_id}/disconnect/request"
+      - topic: "websocket/{connection_id}/send/request"
+      - topic: "websocket/{connection_id}/status/request"
+      - topic: "websocket/list/request"
 
-frontend_api:
-  events_module: "src/api/events.ts"
-  description: "前端事件API模块"
+  WaveformManager:
+    module: "waveform::buffer"
+    subscribes:
+      - topic: "protocol/+/parsed"
+        description: "订阅协议解析结果用于波形显示"
+      - topic: "gh3036/frame"
+        description: "订阅GH3036帧数据"
+      - topic: "waveform/buffer/create/request"
+      - topic: "waveform/{buffer_id}/clear/request"
+      - topic: "waveform/{buffer_id}/config/request"
+      - topic: "waveform/parser/create/request"
+      - topic: "waveform/{buffer_id}/status/request"
 
-  helper_functions:
-    onEventBus:
-      description: "订阅所有事件总线事件"
-      signature: "onEventBus(callback: (event: EventBusEvent) => void): Promise<UnlistenFn>"
-    onTopic:
-      description: "订阅特定主题事件"
-      signature: "onTopic<T>(topic: string, callback: (payload: T) => void): Promise<UnlistenFn>"
-    onSerialData:
-      description: "订阅串口数据事件"
-      signature: "onSerialData(callback: (event: SerialDataEvent) => void): Promise<UnlistenFn>"
-    onBleData:
-      description: "订阅BLE数据事件"
-      signature: "onBleData(callback: (event: BleDataEvent) => void): Promise<UnlistenFn>"
-    onParsedData:
-      description: "订阅协议解析事件"
-      signature: "onParsedData(callback: (event: ParsedDataEvent) => void): Promise<UnlistenFn>"
+  DashboardManager:
+    module: "dashboard::mod"
+    subscribes:
+      - topic: "dashboard/parser/list/request"
+      - topic: "dashboard/parser/{script_id}/get/request"
+      - topic: "dashboard/parser/save/request"
+      - topic: "dashboard/parser/{script_id}/delete/request"
+      - topic: "dashboard/parser/execute/request"
+      - topic: "dashboard/json/list/request"
+      - topic: "dashboard/json/{config_id}/get/request"
+      - topic: "dashboard/json/save/request"
+      - topic: "dashboard/json/{config_id}/delete/request"
 
-  hooks:
-    useModuleSubscribe:
-      description: "React Hook，用于订阅模块事件"
-      source_file: "src/hooks/useModuleSubscribe.ts"
-      usage_example: |
-        const { subscribe, unsubscribe, isSubscribed } = useModuleSubscribe('gh3036:frame');
-        useEffect(() => {
-          subscribe((event) => {
-            setFrameData(event.payload);
-          });
-          return () => unsubscribe();
-        }, []);
+  SystemManager:
+    module: "service::system"
+    subscribes:
+      - topic: "system/health/request"
+      - topic: "system/config/get/request"
+      - topic: "system/config/set/request"
+      - topic: "system/shutdown/request"
 
-  store_integration:
-    gh3036Store:
-      source_file: "src/stores/gh3036Store.ts"
-      subscribes:
-        - "gh3036:frame"
-        - "gh3036:event"
-
-  page_listeners:
-    Dashboard:
-      source_file: "src/pages/Dashboard/index.tsx"
-      subscribes:
-        - "serial:data"
-        - "ble:data"
-        - "protocol:parsed"
-    Gh3036Panel:
-      source_file: "src/pages/Protocol/Gh3036Panel.tsx"
-      subscribes:
-        - "gh3036:frame"
-    AtConnectionTab:
-      source_file: "src/pages/Ble/AtConnectionTab.tsx"
-      subscribes:
-        - "ble-notify"
-
-topic_naming_convention:
-  format: "{模块}:{动作}"
-  prefixes:
-    serial:
-      module: "串口管理"
-      description: "串口设备相关事件"
-    ble:
-      module: "BLE管理"
-      description: "蓝牙设备相关事件"
-    gh3036:
-      module: "GH3036协议"
-      description: "GH3036协议处理事件"
-    protocol:
-      module: "协议插件"
-      description: "协议解析事件"
-    ws:
-      module: "WebSocket"
-      description: "WebSocket连接事件"
-    waveform:
-      module: "波形数据"
-      description: "波形处理事件"
-    state:
-      module: "状态管理"
-      description: "应用状态事件"
-    system:
-      module: "系统事件"
-      description: "系统级事件"
-
-event_flow:
-  description: "事件流向说明"
-  data_flow:
-    - step: 1
-      description: "硬件设备产生数据"
-      components: ["串口硬件", "BLE设备"]
-    - step: 2
-      description: "管理器接收数据并发布到EventBus"
-      components: ["SerialManager", "BleManager"]
-    - step: 3
-      description: "EventBus广播事件给所有订阅者"
-      components: ["EventBus"]
-    - step: 4
-      description: "后端模块订阅处理事件"
-      components: ["Gh3036Manager", "ProtocolManager"]
-    - step: 5
-      description: "EventBridge将事件转发到前端"
-      components: ["EventBridge"]
-    - step: 6
-      description: "前端组件订阅显示数据"
-      components: ["React Components", "Zustand Store"]
+  AppStateManager:
+    module: "state::dispatcher"
+    subscribes:
+      - topic: "serial/+/connected"
+      - topic: "serial/+/disconnected"
+      - topic: "ble/+/connected"
+      - topic: "ble/+/disconnected"
+      - topic: "state/device/list/request"
+      - topic: "state/device/{device_id}/get/request"
+      - topic: "state/tab/list/request"
+      - topic: "state/settings/get/request"
+      - topic: "state/settings/set/request"

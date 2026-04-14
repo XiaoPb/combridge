@@ -1,0 +1,422 @@
+event_bus:
+  description: "ComBridge 事件总线配置文档"
+  version: "1.0.0"
+  last_updated: "2026-04-14"
+
+tauri_events:
+  - name: "event-bus"
+    description: "统一事件总线通道，所有后端事件通过此通道转发到前端"
+    direction: "backend_to_frontend"
+    payload_schema:
+      topic:
+        type: "string"
+        description: "事件主题，格式：{模块}:{动作}"
+      payload:
+        type: "string"
+        description: "事件载荷，JSON格式字符串"
+      timestamp:
+        type: "number"
+        description: "时间戳（毫秒）"
+
+  - name: "gh3036-event"
+    description: "GH3036设备事件"
+    direction: "backend_to_frontend"
+    deprecated: true
+    note: "建议使用 event-bus 统一通道"
+
+  - name: "gh3036-frame"
+    description: "GH3036帧数据事件"
+    direction: "backend_to_frontend"
+    deprecated: true
+    note: "建议使用 event-bus 统一通道"
+
+  - name: "ble-notify"
+    description: "BLE通知数据事件"
+    direction: "backend_to_frontend"
+    deprecated: true
+    note: "建议使用 event-bus 统一通道"
+
+topics:
+  serial_data:
+    name: "serial:data"
+    description: "串口接收数据事件"
+    event_type: "SerialDataEvent"
+    publisher: "SerialManager"
+    subscribers:
+      - "Gh3036Manager"
+      - "ProtocolManager"
+      - "Frontend"
+    payload:
+      device_id:
+        type: "string"
+        description: "设备ID（端口名）"
+        example: "COM1"
+      data:
+        type: "array<number>"
+        description: "接收数据（字节数组）"
+        example: [1, 2, 3, 4, 5]
+      timestamp:
+        type: "number"
+        description: "时间戳（毫秒）"
+        example: 1713072000000
+
+  serial_connected:
+    name: "serial:connected"
+    description: "串口连接成功事件"
+    event_type: "SerialConnectedEvent"
+    publisher: "SerialManager"
+    subscribers:
+      - "Frontend"
+    payload:
+      port_name:
+        type: "string"
+        description: "端口名称"
+        example: "COM1"
+      timestamp:
+        type: "number"
+        description: "时间戳（毫秒）"
+        example: 1713072000000
+
+  serial_disconnected:
+    name: "serial:disconnected"
+    description: "串口断开连接事件"
+    event_type: "SerialDisconnectedEvent"
+    publisher: "SerialManager"
+    subscribers:
+      - "Frontend"
+    payload:
+      port_name:
+        type: "string"
+        description: "端口名称"
+        example: "COM1"
+      timestamp:
+        type: "number"
+        description: "时间戳（毫秒）"
+        example: 1713072000000
+
+  ble_data:
+    name: "ble:data"
+    description: "BLE接收数据事件"
+    event_type: "BleDataEvent"
+    publisher: "BleManager"
+    subscribers:
+      - "Gh3036Manager"
+      - "ProtocolManager"
+      - "Frontend"
+    payload:
+      device_id:
+        type: "string"
+        description: "设备ID"
+        example: "ble-device-1"
+      address:
+        type: "string"
+        description: "设备地址"
+        example: "00:11:22:33:44:55"
+      characteristic_uuid:
+        type: "string"
+        description: "特征UUID"
+        example: "00002a37-0000-1000-8000-00805f9b34fb"
+      data:
+        type: "array<number>"
+        description: "接收数据（字节数组）"
+        example: [1, 2, 3, 4, 5]
+      timestamp:
+        type: "number"
+        description: "时间戳（毫秒）"
+        example: 1713072000000
+
+  ble_connected:
+    name: "ble:connected"
+    description: "BLE连接成功事件"
+    event_type: "BleConnectionEvent"
+    publisher: "BleManager"
+    subscribers:
+      - "Frontend"
+    payload:
+      address:
+        type: "string"
+        description: "设备地址"
+        example: "00:11:22:33:44:55"
+      name:
+        type: "string | null"
+        description: "设备名称（可选）"
+        example: "GH3036 Device"
+      timestamp:
+        type: "number"
+        description: "时间戳（毫秒）"
+        example: 1713072000000
+
+  ble_disconnected:
+    name: "ble:disconnected"
+    description: "BLE断开连接事件"
+    event_type: "BleConnectionEvent"
+    publisher: "BleManager"
+    subscribers:
+      - "Frontend"
+    payload:
+      address:
+        type: "string"
+        description: "设备地址"
+        example: "00:11:22:33:44:55"
+      name:
+        type: "string | null"
+        description: "设备名称（可选）"
+        example: "GH3036 Device"
+      timestamp:
+        type: "number"
+        description: "时间戳（毫秒）"
+        example: 1713072000000
+
+  gh3036_frame:
+    name: "gh3036:frame"
+    description: "GH3036帧数据事件"
+    event_type: "Gh3036FrameEvent"
+    publisher: "Gh3036Manager"
+    subscribers:
+      - "Frontend"
+    payload:
+      function_id:
+        type: "number"
+        description: "功能ID"
+        example: 1
+      function_name:
+        type: "string"
+        description: "功能名称"
+        example: "ECG"
+      frame_id:
+        type: "number"
+        description: "帧ID"
+        example: 100
+      timestamp:
+        type: "number"
+        description: "时间戳（毫秒）"
+        example: 1713072000000
+      channel_count:
+        type: "number"
+        description: "通道数"
+        example: 4
+      channels:
+        type: "array<number>"
+        description: "通道数据"
+        example: [1.0, 2.0, 3.0, 4.0]
+
+  protocol_parsed:
+    name: "protocol:parsed"
+    description: "协议解析结果事件"
+    event_type: "ProtocolParsedEvent"
+    publisher: "ProtocolManager"
+    subscribers:
+      - "Frontend"
+    payload:
+      plugin_id:
+        type: "string"
+        description: "插件ID"
+        example: "plugin-1"
+      device_id:
+        type: "string"
+        description: "设备ID"
+        example: "device-1"
+      original_data:
+        type: "array<number>"
+        description: "原始数据"
+        example: [1, 2, 3, 4, 5]
+      parsed_data:
+        type: "object"
+        description: "解析后数据（JSON对象）"
+        example:
+          value: 42
+          unit: "mV"
+      timestamp:
+        type: "number"
+        description: "时间戳（毫秒）"
+        example: 1713072000000
+
+publishers:
+  SerialManager:
+    module: "device::serial::serial_manager"
+    description: "串口设备管理器"
+    publishes:
+      - topic: "serial:data"
+        method: "event_bus.publish_typed()"
+        trigger: "串口接收到数据时"
+      - topic: "serial:connected"
+        method: "event_bus.publish_typed()"
+        trigger: "串口连接成功时"
+      - topic: "serial:disconnected"
+        method: "event_bus.publish_typed()"
+        trigger: "串口断开连接时"
+    source_file: "src-tauri/src/device/serial/serial_manager.rs"
+
+  BleManager:
+    module: "device::ble::ble_manager"
+    description: "BLE设备管理器"
+    publishes:
+      - topic: "ble:data"
+        method: "event_bus.publish_typed()"
+        trigger: "BLE特征值通知时"
+      - topic: "ble:connected"
+        method: "event_bus.publish_typed()"
+        trigger: "BLE连接成功时"
+      - topic: "ble:disconnected"
+        method: "event_bus.publish_typed()"
+        trigger: "BLE断开连接时"
+    source_file: "src-tauri/src/device/ble/ble_manager.rs"
+
+  Gh3036Manager:
+    module: "gh3036::manager"
+    description: "GH3036协议处理器"
+    publishes:
+      - topic: "gh3036:frame"
+        method: "event_bus.publish_typed()"
+        trigger: "解析到完整帧数据时"
+    source_file: "src-tauri/src/gh3036/manager.rs"
+
+  ProtocolManager:
+    module: "protocol::plugin_manager"
+    description: "协议插件管理器"
+    publishes:
+      - topic: "protocol:parsed"
+        method: "event_bus.publish_typed()"
+        trigger: "协议解析完成时"
+    source_file: "src-tauri/src/protocol/plugin_manager.rs"
+
+subscribers:
+  Gh3036Manager:
+    module: "gh3036::manager"
+    description: "GH3036协议处理器"
+    subscribes:
+      - topic: "serial:data"
+        method: "event_bus.subscribe_sync()"
+        handler: "处理串口数据，解析GH3036帧"
+      - topic: "ble:data"
+        method: "event_bus.subscribe_sync()"
+        handler: "处理BLE数据，解析GH3036帧"
+    source_file: "src-tauri/src/gh3036/manager.rs"
+
+  ProtocolManager:
+    module: "protocol::plugin_manager"
+    description: "协议插件管理器"
+    subscribes:
+      - topic: "serial:data"
+        method: "event_bus.subscribe_sync()"
+        handler: "处理串口数据，调用协议插件解析"
+      - topic: "ble:data"
+        method: "event_bus.subscribe_sync()"
+        handler: "处理BLE数据，调用协议插件解析"
+    source_file: "src-tauri/src/protocol/plugin_manager.rs"
+
+  EventBridge:
+    module: "service::event_bridge"
+    description: "事件桥接服务，将EventBus事件转发到前端"
+    subscribes:
+      - topic: "all"
+        method: "event_bus.subscribe_channel()"
+        handler: "将所有事件转发到前端 Tauri Event 系统"
+    source_file: "src-tauri/src/service/event_bridge.rs"
+
+frontend_api:
+  events_module: "src/api/events.ts"
+  description: "前端事件API模块"
+
+  helper_functions:
+    onEventBus:
+      description: "订阅所有事件总线事件"
+      signature: "onEventBus(callback: (event: EventBusEvent) => void): Promise<UnlistenFn>"
+    onTopic:
+      description: "订阅特定主题事件"
+      signature: "onTopic<T>(topic: string, callback: (payload: T) => void): Promise<UnlistenFn>"
+    onSerialData:
+      description: "订阅串口数据事件"
+      signature: "onSerialData(callback: (event: SerialDataEvent) => void): Promise<UnlistenFn>"
+    onBleData:
+      description: "订阅BLE数据事件"
+      signature: "onBleData(callback: (event: BleDataEvent) => void): Promise<UnlistenFn>"
+    onParsedData:
+      description: "订阅协议解析事件"
+      signature: "onParsedData(callback: (event: ParsedDataEvent) => void): Promise<UnlistenFn>"
+
+  hooks:
+    useModuleSubscribe:
+      description: "React Hook，用于订阅模块事件"
+      source_file: "src/hooks/useModuleSubscribe.ts"
+      usage_example: |
+        const { subscribe, unsubscribe, isSubscribed } = useModuleSubscribe('gh3036:frame');
+        useEffect(() => {
+          subscribe((event) => {
+            setFrameData(event.payload);
+          });
+          return () => unsubscribe();
+        }, []);
+
+  store_integration:
+    gh3036Store:
+      source_file: "src/stores/gh3036Store.ts"
+      subscribes:
+        - "gh3036:frame"
+        - "gh3036:event"
+
+  page_listeners:
+    Dashboard:
+      source_file: "src/pages/Dashboard/index.tsx"
+      subscribes:
+        - "serial:data"
+        - "ble:data"
+        - "protocol:parsed"
+    Gh3036Panel:
+      source_file: "src/pages/Protocol/Gh3036Panel.tsx"
+      subscribes:
+        - "gh3036:frame"
+    AtConnectionTab:
+      source_file: "src/pages/Ble/AtConnectionTab.tsx"
+      subscribes:
+        - "ble-notify"
+
+topic_naming_convention:
+  format: "{模块}:{动作}"
+  prefixes:
+    serial:
+      module: "串口管理"
+      description: "串口设备相关事件"
+    ble:
+      module: "BLE管理"
+      description: "蓝牙设备相关事件"
+    gh3036:
+      module: "GH3036协议"
+      description: "GH3036协议处理事件"
+    protocol:
+      module: "协议插件"
+      description: "协议解析事件"
+    ws:
+      module: "WebSocket"
+      description: "WebSocket连接事件"
+    waveform:
+      module: "波形数据"
+      description: "波形处理事件"
+    state:
+      module: "状态管理"
+      description: "应用状态事件"
+    system:
+      module: "系统事件"
+      description: "系统级事件"
+
+event_flow:
+  description: "事件流向说明"
+  data_flow:
+    - step: 1
+      description: "硬件设备产生数据"
+      components: ["串口硬件", "BLE设备"]
+    - step: 2
+      description: "管理器接收数据并发布到EventBus"
+      components: ["SerialManager", "BleManager"]
+    - step: 3
+      description: "EventBus广播事件给所有订阅者"
+      components: ["EventBus"]
+    - step: 4
+      description: "后端模块订阅处理事件"
+      components: ["Gh3036Manager", "ProtocolManager"]
+    - step: 5
+      description: "EventBridge将事件转发到前端"
+      components: ["EventBridge"]
+    - step: 6
+      description: "前端组件订阅显示数据"
+      components: ["React Components", "Zustand Store"]

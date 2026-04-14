@@ -370,11 +370,32 @@ pub mod topics {
     pub const SERIAL_DATA: &str = "serial:data";
     pub const SERIAL_CONNECTED: &str = "serial:connected";
     pub const SERIAL_DISCONNECTED: &str = "serial:disconnected";
+    pub const SERIAL_ERROR: &str = "serial:error";
+
     pub const BLE_DATA: &str = "ble:data";
     pub const BLE_CONNECTED: &str = "ble:connected";
     pub const BLE_DISCONNECTED: &str = "ble:disconnected";
+    pub const BLE_DISCOVERED: &str = "ble:discovered";
+    pub const BLE_SCAN_STATUS: &str = "ble:scan:status";
+    pub const BLE_ERROR: &str = "ble:error";
+
     pub const GH3036_FRAME: &str = "gh3036:frame";
+    pub const GH3036_EVENT: &str = "gh3036:event";
+    pub const GH3036_CHANNEL_CHANGED: &str = "gh3036:channel:changed";
+
     pub const PROTOCOL_PARSED: &str = "protocol:parsed";
+    pub const PROTOCOL_ERROR: &str = "protocol:error";
+
+    pub const WAVEFORM_DATA: &str = "waveform:data";
+    pub const WAVEFORM_STATUS: &str = "waveform:status";
+
+    pub const DASHBOARD_PARSER_UPDATED: &str = "dashboard:parser:updated";
+    pub const DASHBOARD_JSON_UPDATED: &str = "dashboard:json:updated";
+
+    pub const SYSTEM_STARTED: &str = "system:started";
+    pub const SYSTEM_SHUTDOWN: &str = "system:shutdown";
+    pub const SYSTEM_CONFIG_CHANGED: &str = "system:config:changed";
+    pub const SYSTEM_ERROR: &str = "system:error";
 }
 
 #[cfg(test)]

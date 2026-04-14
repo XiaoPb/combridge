@@ -47,6 +47,7 @@ regex = "1"
 gh-rpc = { path = "../libs/gh-rpc/gh-rpc" }
 rpc = { path = "../libs/gh-rpc/rpc" }
 heapless = "0.8"
+base64 = "0.22"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["dwmapi", "winuser", "windef"] }

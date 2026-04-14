@@ -1,17 +1,20 @@
 import React, { useEffect, useRef } from 'react';
 import { theme } from 'antd';
+import type { WidgetConfig } from '../../../types/dashboard';
+import { useDashboardStore } from '../../../stores/dashboardStore';
 
 interface CompassWidgetProps {
-  value: number;
-  color?: string;
+  config: WidgetConfig;
 }
 
-const CompassWidget: React.FC<CompassWidgetProps> = ({
-  value,
-  color,
-}) => {
+const CompassWidget: React.FC<CompassWidgetProps> = ({ config }) => {
   const { token } = theme.useToken();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { dataBuffer } = useDashboardStore();
+
+  const value = dataBuffer.length > 0 
+    ? dataBuffer[dataBuffer.length - 1].values[config.dataKey] ?? 0 
+    : 0;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -64,7 +67,7 @@ const CompassWidget: React.FC<CompassWidgetProps> = ({
     ctx.lineTo(0, 0);
     ctx.lineTo(8, 10);
     ctx.closePath();
-    ctx.fillStyle = color || token.colorError;
+    ctx.fillStyle = config.color || token.colorError;
     ctx.fill();
 
     ctx.beginPath();
@@ -82,7 +85,7 @@ const CompassWidget: React.FC<CompassWidgetProps> = ({
     ctx.font = 'bold 14px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(`${value.toFixed(0)}°`, centerX, centerY);
-  }, [value, color, token]);
+  }, [value, config, token]);
 
   return (
     <canvas

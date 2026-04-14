@@ -1,50 +1,54 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
+export interface EventBusEvent {
+  topic: string;
+  payload: string;
+  timestamp: number;
+}
+
 export type SerialDataEvent = {
-  port_name: string;
+  device_id: string;
   data: number[];
-  timestamp?: number;
+  timestamp: number;
 };
 
-export type SerialErrorEvent = {
-  portName: string;
-  error: string;
+export type SerialConnectedEvent = {
+  port_name: string;
+  timestamp: number;
+};
+
+export type SerialDisconnectedEvent = {
+  port_name: string;
+  timestamp: number;
 };
 
 export type BleDataEvent = {
-  deviceId: string;
-  characteristicUuid: string;
+  device_id: string;
+  address: string;
+  characteristic_uuid: string;
   data: number[];
   timestamp: number;
 };
 
-export type BleConnectionEvent = {
-  deviceId: string;
+export type BleConnectedEvent = {
   address: string;
   name?: string;
-  connected: boolean;
-};
-
-export type BleErrorEvent = {
-  deviceId?: string;
-  error: string;
-};
-
-export type BleScanResultEvent = {
-  device: {
-    address: string;
-    name?: string;
-    rssi?: number;
-    isConnectable: boolean;
-    services?: string[];
-    manufacturerData?: Record<string, number[]>;
-  };
   timestamp: number;
 };
 
-export type BleModeChangedEvent = {
-  mode: 'native' | 'at';
-  serialPort?: string;
+export type BleDisconnectedEvent = {
+  address: string;
+  name?: string;
+  timestamp: number;
+};
+
+export type Gh3036FrameEvent = {
+  function_id: number;
+  function_name: string;
+  frame_id: number;
+  timestamp: number;
+  channel_count: number;
+  channels: number[];
 };
 
 export type ParsedDataEvent = {
@@ -52,117 +56,61 @@ export type ParsedDataEvent = {
   values: Record<string, number>;
 };
 
-export const TauriEvents = {
-  SERIAL_DATA: 'serial-data',
-  SERIAL_ERROR: 'serial-error',
-  SERIAL_CONNECTED: 'serial-connected',
-  SERIAL_DISCONNECTED: 'serial-disconnected',
-  BLE_DATA: 'ble-notify',
-  BLE_CONNECTED: 'ble-connected',
-  BLE_DISCONNECTED: 'ble-disconnected',
-  BLE_ERROR: 'ble-error',
-  BLE_SCAN_RESULT: 'ble-scan-result',
-  BLE_MODE_CHANGED: 'ble-mode-changed',
-  PARSED_DATA: 'parsed-data',
-} as const;
-
-export function onSerialData(callback: (event: SerialDataEvent) => void): Promise<UnlistenFn> {
-  return listen<SerialDataEvent>(TauriEvents.SERIAL_DATA, (event) => {
-    callback(event.payload);
-  });
-}
-
-export function onSerialError(callback: (event: SerialErrorEvent) => void): Promise<UnlistenFn> {
-  return listen<SerialErrorEvent>(TauriEvents.SERIAL_ERROR, (event) => {
-    callback(event.payload);
-  });
-}
-
-export function onSerialConnected(callback: (portName: string) => void): Promise<UnlistenFn> {
-  return listen<string>(TauriEvents.SERIAL_CONNECTED, (event) => {
-    callback(event.payload);
-  });
-}
-
-export function onSerialDisconnected(callback: (portName: string) => void): Promise<UnlistenFn> {
-  return listen<string>(TauriEvents.SERIAL_DISCONNECTED, (event) => {
-    callback(event.payload);
-  });
-}
-
-export const serialEvents = {
-  onData: onSerialData,
-  onError: onSerialError,
-  onConnected: onSerialConnected,
-  onDisconnected: onSerialDisconnected,
+export type ProtocolParsedEvent = {
+  plugin_id: string;
+  device_id: string;
+  original_data: number[];
+  parsed_data: Record<string, unknown>;
+  timestamp: number;
 };
 
+export const EventBusTopics = {
+  SERIAL_DATA: 'serial:data',
+  SERIAL_CONNECTED: 'serial:connected',
+  SERIAL_DISCONNECTED: 'serial:disconnected',
+  BLE_DATA: 'ble:data',
+  BLE_CONNECTED: 'ble:connected',
+  BLE_DISCONNECTED: 'ble:disconnected',
+  GH3036_FRAME: 'gh3036:frame',
+  PROTOCOL_PARSED: 'protocol:parsed',
+} as const;
+
+export const TauriEvents = {
+  EVENT_BUS: 'event-bus',
+} as const;
+
+export function onEventBus(callback: (event: EventBusEvent) => void): Promise<UnlistenFn> {
+  return listen<EventBusEvent>(TauriEvents.EVENT_BUS, (event) => {
+    callback(event.payload);
+  });
+}
+
+export function onTopic<T>(topic: string, callback: (payload: T) => void): Promise<UnlistenFn> {
+  return listen<EventBusEvent>(TauriEvents.EVENT_BUS, (event) => {
+    if (event.payload.topic === topic) {
+      try {
+        const parsed = JSON.parse(event.payload.payload) as T;
+        callback(parsed);
+      } catch (err) {
+        console.error(`[onTopic] Failed to parse payload for topic "${topic}":`, err);
+      }
+    }
+  });
+}
+
+export function onSerialData(callback: (event: SerialDataEvent) => void): Promise<UnlistenFn> {
+  return onTopic<SerialDataEvent>(EventBusTopics.SERIAL_DATA, callback);
+}
+
 export function onBleData(callback: (event: BleDataEvent) => void): Promise<UnlistenFn> {
-  return listen<BleDataEvent>(TauriEvents.BLE_DATA, (event) => {
-    console.debug('[BLE Event] 收到 ble-notify:', JSON.stringify(event.payload));
-    callback(event.payload);
-  });
-}
-
-export function onBleConnected(callback: (event: BleConnectionEvent) => void): Promise<UnlistenFn> {
-  return listen<BleConnectionEvent>(TauriEvents.BLE_CONNECTED, (event) => {
-    callback(event.payload);
-  });
-}
-
-export function onBleDisconnected(callback: (event: BleConnectionEvent) => void): Promise<UnlistenFn> {
-  return listen<BleConnectionEvent>(TauriEvents.BLE_DISCONNECTED, (event) => {
-    callback(event.payload);
-  });
-}
-
-export function onBleError(callback: (event: BleErrorEvent) => void): Promise<UnlistenFn> {
-  return listen<BleErrorEvent>(TauriEvents.BLE_ERROR, (event) => {
-    callback(event.payload);
-  });
-}
-
-export function onBleScanResult(callback: (device: unknown) => void): Promise<UnlistenFn> {
-  return listen<unknown>(TauriEvents.BLE_SCAN_RESULT, (event) => {
-    callback(event.payload);
-  });
-}
-
-export function onBleModeChanged(callback: (event: BleModeChangedEvent) => void): Promise<UnlistenFn> {
-  return listen<BleModeChangedEvent>(TauriEvents.BLE_MODE_CHANGED, (event) => {
-    callback(event.payload);
-  });
+  return onTopic<BleDataEvent>(EventBusTopics.BLE_DATA, callback);
 }
 
 export function onParsedData(callback: (event: ParsedDataEvent) => void): Promise<UnlistenFn> {
-  return listen<ParsedDataEvent>(TauriEvents.PARSED_DATA, (event) => {
-    callback(event.payload);
-  });
+  return onTopic<ParsedDataEvent>(EventBusTopics.PROTOCOL_PARSED, callback);
 }
 
-export const bleEvents = {
-  onData: onBleData,
-  onConnected: onBleConnected,
-  onDisconnected: onBleDisconnected,
-  onError: onBleError,
-  onScanResult: onBleScanResult,
-  onModeChanged: onBleModeChanged,
+export const eventBus = {
+  on: onEventBus,
+  onTopic,
 };
-
-export interface EventListeners {
-  serialData?: UnlistenFn;
-  serialError?: UnlistenFn;
-  serialConnected?: UnlistenFn;
-  serialDisconnected?: UnlistenFn;
-  bleData?: UnlistenFn;
-  bleConnected?: UnlistenFn;
-  bleDisconnected?: UnlistenFn;
-  bleError?: UnlistenFn;
-  bleScanResult?: UnlistenFn;
-  bleModeChanged?: UnlistenFn;
-}
-
-export async function cleanupListeners(listeners: EventListeners): Promise<void> {
-  const unlistenFns = Object.values(listeners).filter((fn): fn is UnlistenFn => fn !== undefined);
-  await Promise.all(unlistenFns.map((fn) => fn()));
-}

@@ -77,7 +77,7 @@ const DashboardPage: React.FC = () => {
       if (dataSourceType === 'serial') {
         try {
           listenersRef.current.serialData = await onSerialData((event: SerialDataEvent) => {
-            if (connectedDevice && event.port_name !== connectedDevice) return;
+            if (connectedDevice && event.device_id !== connectedDevice) return;
             addRawDataPoint({
               timestamp: event.timestamp ?? Date.now(),
               data: event.data,
@@ -93,7 +93,7 @@ const DashboardPage: React.FC = () => {
       } else if (dataSourceType === 'ble') {
         try {
           listenersRef.current.bleData = await onBleData((event: BleDataEvent) => {
-            if (connectedDevice && event.deviceId !== connectedDevice) return;
+            if (connectedDevice && event.device_id !== connectedDevice) return;
             addRawDataPoint({
               timestamp: event.timestamp ?? Date.now(),
               data: event.data,

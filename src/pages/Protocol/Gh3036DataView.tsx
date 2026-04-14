@@ -3,7 +3,7 @@ import { Table, Button, Empty, Typography, Tag, Card } from 'antd';
 import { ClearOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
-import type { Gh3036FrameData } from '../../api/types';
+import type { Gh3036FramePayload } from '../../api/events';
 
 const { Text } = Typography;
 
@@ -27,7 +27,7 @@ const Gh3036DataView: React.FC = () => {
       dataIndex: 'function_id',
       key: 'function_id',
       width: 80,
-      render: (_id: number, record: Gh3036FrameData) => (
+      render: (_id: number, record: Gh3036FramePayload) => (
         <Tag color="blue">{record.function_name}</Tag>
       ),
     },
@@ -38,38 +38,20 @@ const Gh3036DataView: React.FC = () => {
       width: 60,
     },
     {
-      title: t('gh3036.gsData'),
-      dataIndex: 'gs_data',
-      key: 'gs_data',
-      width: 150,
-      render: (data: number[]) => (
-        <Text style={{ fontSize: 11, fontFamily: 'monospace' }}>
-          X:{data[0] ?? '-'} Y:{data[1] ?? '-'} Z:{data[2] ?? '-'}
-        </Text>
-      ),
+      title: t('gh3036.channelCount'),
+      dataIndex: 'channel_count',
+      key: 'channel_count',
+      width: 80,
     },
     {
-      title: t('gh3036.rawdata'),
-      dataIndex: 'rawdata',
-      key: 'rawdata',
+      title: t('gh3036.channels'),
+      dataIndex: 'channels',
+      key: 'channels',
       ellipsis: true,
-      render: (data: number[]) => (
+      render: (channels: number[]) => (
         <Text style={{ fontSize: 11, fontFamily: 'monospace' }}>
-          {data.slice(0, 8).map((v) => v.toString()).join(', ')}
-          {data.length > 8 && '...'}
-        </Text>
-      ),
-    },
-    {
-      title: t('gh3036.algoData'),
-      dataIndex: 'algo_data',
-      key: 'algo_data',
-      width: 120,
-      ellipsis: true,
-      render: (data: number[]) => (
-        <Text style={{ fontSize: 11, fontFamily: 'monospace' }}>
-          {data.slice(0, 4).map((v) => v.toString()).join(', ')}
-          {data.length > 4 && '...'}
+          {channels.slice(0, 8).map((v) => v.toFixed(3)).join(', ')}
+          {channels.length > 8 && '...'}
         </Text>
       ),
     },

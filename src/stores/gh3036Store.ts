@@ -3,10 +3,11 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { 
   Gh3036ChannelConfig, 
   Gh3036CsvConfig, 
-  Gh3036FrameData, 
   Gh3036RpcCommand 
 } from '../api/types';
 import { gh3036Api } from '../api/gh3036';
+import { decodePayload, type EventBusEvent } from '../utils/msgpack';
+import type { Gh3036FramePayload } from '../api/events';
 
 export type Gh3036EventData = {
   event_type: string;
@@ -14,13 +15,7 @@ export type Gh3036EventData = {
   data: Record<string, unknown>;
 };
 
-export type Gh3036FrameEventData = Gh3036FrameData;
-
-interface EventBusEvent {
-  topic: string;
-  payload: string;
-  timestamp: number;
-}
+export type Gh3036FrameEventData = Gh3036FramePayload;
 
 interface Gh3036State {
   isInitialized: boolean;
@@ -35,7 +30,7 @@ interface Gh3036State {
   rpcCommands: Gh3036RpcCommand[];
   expandedCommand: string | null;
   
-  frameData: Gh3036FrameData[];
+  frameData: Gh3036FramePayload[];
   maxFrameCount: number;
   
   eventData: Gh3036EventData[];
@@ -61,7 +56,7 @@ interface Gh3036State {
   setRpcCommands: (commands: Gh3036RpcCommand[]) => void;
   setExpandedCommand: (key: string | null) => void;
   
-  addFrameData: (frame: Gh3036FrameData) => void;
+  addFrameData: (frame: Gh3036FramePayload) => void;
   clearFrameData: () => void;
   
   addEventData: (event: Gh3036EventData) => void;
@@ -287,10 +282,10 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
       const eventUnlisten = await listen<EventBusEvent>('event-bus', (event) => {
         if (event.payload.topic === 'gh3036:event') {
           try {
-            const parsed = JSON.parse(event.payload.payload) as Gh3036EventData;
+            const parsed = decodePayload<Gh3036EventData>(event.payload);
             get().addEventData(parsed);
           } catch (err) {
-            console.error('[Gh3036Store] Failed to parse gh3036:event payload:', err);
+            console.error('[Gh3036Store] Failed to decode gh3036:event payload:', err);
           }
         }
       });
@@ -298,20 +293,21 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
       const frameUnlisten = await listen<EventBusEvent>('event-bus', (event) => {
         if (event.payload.topic === 'gh3036:frame') {
           try {
-            const parsed = JSON.parse(event.payload.payload) as Gh3036FrameEventData;
+            const parsed = decodePayload<Gh3036FrameEventData>(event.payload);
             get().addFrameData(parsed);
           } catch (err) {
-            console.error('[Gh3036Store] Failed to parse gh3036:frame payload:', err);
+            console.error('[Gh3036Store] Failed to decode gh3036:frame payload:', err);
           }
         }
       });
       
       const deviceDisconnectedUnlisten = await listen<EventBusEvent>('event-bus', (event) => {
-        const { topic, payload } = event.payload;
+        const { topic } = event.payload;
         
         if (topic === 'serial:disconnected' || topic === 'ble:disconnected') {
           try {
-            const parsed = JSON.parse(payload) as { port_name?: string; address?: string };
+            type DeviceDisconnectedPayload = { port_name?: string; address?: string };
+            const parsed = decodePayload<DeviceDisconnectedPayload>(event.payload);
             const deviceId = parsed.port_name || parsed.address;
             
             if (deviceId) {
@@ -328,7 +324,7 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
               }
             }
           } catch (err) {
-            console.error('[Gh3036Store] Failed to parse device disconnected payload:', err);
+            console.error('[Gh3036Store] Failed to decode device disconnected payload:', err);
           }
         }
       });

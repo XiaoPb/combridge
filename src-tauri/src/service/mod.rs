@@ -1,11 +1,13 @@
 pub mod config;
 pub mod data_queue;
+pub mod event_bridge;
 pub mod event_bus;
 pub mod logger;
 pub mod msgpack_handler;
 
 pub use config::ConfigService;
 pub use data_queue::DataQueue;
+pub use event_bridge::{EventBridge, EventFilter};
 pub use event_bus::EventBus;
 pub use logger::LoggerService;
 pub use msgpack_handler::{

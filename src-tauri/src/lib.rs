@@ -17,9 +17,10 @@ use dashboard::{create_parser_script_manager, create_json_config_manager};
 use device::{BleManager, DeviceManager, SerialManager};
 use gh3036::Gh3036Manager;
 use protocol::PluginManager;
-use state::{create_action_dispatcher, create_app_state, create_state_persistence};
+use service::{EventBridge, EventBus, EventFilter};
+use state::{create_action_dispatcher, create_app_state_with_event_bus, create_state_persistence};
 use tauri::Manager;
-use tracing::{info, error, warn};
+use tracing::{error, info, warn};
 use websocket::ConnectionPool;
 use crate::commands::waveform::WaveformManager;
 
@@ -79,11 +80,12 @@ pub fn run() {
     let connection_pool = Arc::new(ConnectionPool::new());
     let plugin_manager = Arc::new(PluginManager::new());
     let waveform_manager = Arc::new(WaveformManager::new());
+    let event_bus = Arc::new(EventBus::new(1024));
     
     let device_manager = Arc::new(DeviceManager::new(serial_manager.clone(), ble_manager.clone()));
     let gh3036_manager = Arc::new(Gh3036Manager::new(device_manager));
 
-    let app_state = create_app_state();
+    let app_state = create_app_state_with_event_bus(event_bus.clone());
     let app_data_dir = get_app_data_dir();
     let state_persistence = create_state_persistence(app_data_dir.clone());
     let action_dispatcher = create_action_dispatcher(
@@ -99,6 +101,7 @@ pub fn run() {
     info!("服务初始化完成");
 
     let ble_manager_clone = ble_manager.clone();
+    let event_bus_clone = event_bus.clone();
     
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -115,6 +118,7 @@ pub fn run() {
         .manage(waveform_manager)
         .manage(parser_script_manager)
         .manage(json_config_manager)
+        .manage(event_bus)
         .setup(move |app| {
             info!("Tauri setup hook 开始执行");
             
@@ -177,6 +181,20 @@ pub fn run() {
                     info!("BLE 初始化成功");
                 }
             });
+            
+            info!("启动 EventBridge 服务");
+            let app_handle = app.handle().clone();
+            let filter = EventFilter::with_prefixes(vec![
+                "serial:".to_string(),
+                "ble:".to_string(),
+                "gh3036:".to_string(),
+                "protocol:".to_string(),
+            ]);
+            let mut event_bridge = EventBridge::new(event_bus_clone.clone(), app_handle)
+                .with_filter(filter);
+            event_bridge.start();
+            
+            app.manage(std::sync::Mutex::new(event_bridge));
             
             info!("启动系统监控");
             commands::system::start_system_monitor();

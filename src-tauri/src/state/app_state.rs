@@ -5,6 +5,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use super::types::*;
+use crate::service::EventBus;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -13,6 +14,8 @@ pub struct AppState {
     pub active_device_id: Option<String>,
     pub settings: AppSettings,
     pub window_state: WindowState,
+    #[serde(skip)]
+    pub event_bus: Arc<EventBus>,
 }
 
 impl Default for AppState {
@@ -22,6 +25,7 @@ impl Default for AppState {
             active_device_id: None,
             settings: AppSettings::default(),
             window_state: WindowState::default(),
+            event_bus: Arc::new(EventBus::new(1024)),
         }
     }
 }
@@ -29,6 +33,16 @@ impl Default for AppState {
 impl AppState {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_event_bus(event_bus: Arc<EventBus>) -> Self {
+        Self {
+            devices: HashMap::new(),
+            active_device_id: None,
+            settings: AppSettings::default(),
+            window_state: WindowState::default(),
+            event_bus,
+        }
     }
 
     // ==================== 设备管理 ====================
@@ -315,4 +329,8 @@ pub type AppStateRef = Arc<RwLock<AppState>>;
 
 pub fn create_app_state() -> AppStateRef {
     Arc::new(RwLock::new(AppState::new()))
+}
+
+pub fn create_app_state_with_event_bus(event_bus: Arc<EventBus>) -> AppStateRef {
+    Arc::new(RwLock::new(AppState::with_event_bus(event_bus)))
 }

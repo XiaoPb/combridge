@@ -3,48 +3,15 @@ import { useSerialStore, generateId } from '../stores/serialStore';
 import { useBleStore, generateBleId } from '../stores/bleStore';
 import { useLogStore } from '../stores/logStore';
 import { useNotificationStore } from '../stores/notificationStore';
-
-interface EventBusEvent {
-  topic: string;
-  payload: string;
-  timestamp: number;
-}
-
-interface SerialDataPayload {
-  device_id: string;
-  data: number[];
-  timestamp: number;
-}
-
-interface SerialConnectedPayload {
-  port_name: string;
-  timestamp: number;
-}
-
-interface SerialDisconnectedPayload {
-  port_name: string;
-  timestamp: number;
-}
-
-interface BleDataPayload {
-  device_id: string;
-  address: string;
-  characteristic_uuid: string;
-  data: number[];
-  timestamp: number;
-}
-
-interface BleConnectedPayload {
-  address: string;
-  name?: string;
-  timestamp: number;
-}
-
-interface BleDisconnectedPayload {
-  address: string;
-  name?: string;
-  timestamp: number;
-}
+import { decodePayload, type EventBusEvent } from '../utils/msgpack';
+import type {
+  SerialDataPayload,
+  BleDataPayload,
+  SerialConnectedPayload,
+  SerialDisconnectedPayload,
+  BleConnectedPayload,
+  BleDisconnectedPayload,
+} from '../api/events';
 
 let eventBusListener: UnlistenFn | undefined;
 let initialized = false;
@@ -118,34 +85,32 @@ function handleBleDisconnected(payload: BleDisconnectedPayload) {
   useNotificationStore.getState().addNotification('info', `设备 ${payload.address} 已断开`);
 }
 
-function dispatchEvent(topic: string, payloadStr: string) {
+function dispatchEvent(event: EventBusEvent) {
   try {
-    const payload = JSON.parse(payloadStr);
-
-    switch (topic) {
+    switch (event.topic) {
       case 'serial:data':
-        handleSerialData(payload as SerialDataPayload);
+        handleSerialData(decodePayload<SerialDataPayload>(event));
         break;
       case 'serial:connected':
-        handleSerialConnected(payload as SerialConnectedPayload);
+        handleSerialConnected(decodePayload<SerialConnectedPayload>(event));
         break;
       case 'serial:disconnected':
-        handleSerialDisconnected(payload as SerialDisconnectedPayload);
+        handleSerialDisconnected(decodePayload<SerialDisconnectedPayload>(event));
         break;
       case 'ble:data':
-        handleBleData(payload as BleDataPayload);
+        handleBleData(decodePayload<BleDataPayload>(event));
         break;
       case 'ble:connected':
-        handleBleConnected(payload as BleConnectedPayload);
+        handleBleConnected(decodePayload<BleConnectedPayload>(event));
         break;
       case 'ble:disconnected':
-        handleBleDisconnected(payload as BleDisconnectedPayload);
+        handleBleDisconnected(decodePayload<BleDisconnectedPayload>(event));
         break;
       default:
         break;
     }
   } catch (err) {
-    console.error(`[EventListeners] Failed to parse payload for topic "${topic}":`, err);
+    console.error(`[EventListeners] Failed to decode payload for topic "${event.topic}":`, err);
   }
 }
 
@@ -160,8 +125,7 @@ export async function initAllEventListeners(): Promise<void> {
 
   initPromise = (async () => {
     eventBusListener = await listen<EventBusEvent>('event-bus', (event) => {
-      const { topic, payload } = event.payload;
-      dispatchEvent(topic, payload);
+      dispatchEvent(event.payload);
     });
 
     initialized = true;

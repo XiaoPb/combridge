@@ -1,4 +1,5 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { decode as msgpackDecode } from '@msgpack/msgpack';
 
 export interface EventBusEvent {
   topic: string;
@@ -38,50 +39,41 @@ export interface ProtocolParsedPayload {
   timestamp: number;
 }
 
-export type SerialDataEvent = {
-  device_id: string;
-  data: number[];
-  timestamp: number;
-};
-
-export type SerialConnectedEvent = {
+export interface SerialConnectedPayload {
   port_name: string;
   timestamp: number;
-};
+}
 
-export type SerialDisconnectedEvent = {
+export interface SerialDisconnectedPayload {
   port_name: string;
   timestamp: number;
-};
+}
 
-export type BleDataEvent = {
-  device_id: string;
-  address: string;
-  characteristic_uuid: string;
-  data: number[];
-  timestamp: number;
-};
-
-export type BleConnectedEvent = {
+export interface BleConnectedPayload {
   address: string;
   name?: string;
   timestamp: number;
-};
+}
 
-export type BleDisconnectedEvent = {
+export interface BleDisconnectedPayload {
   address: string;
   name?: string;
   timestamp: number;
-};
+}
 
-export type Gh3036FrameEvent = {
-  function_id: number;
-  function_name: string;
-  frame_id: number;
-  timestamp: number;
-  channel_count: number;
-  channels: number[];
-};
+export type SerialDataEvent = SerialDataPayload;
+
+export type SerialConnectedEvent = SerialConnectedPayload;
+
+export type SerialDisconnectedEvent = SerialDisconnectedPayload;
+
+export type BleDataEvent = BleDataPayload;
+
+export type BleConnectedEvent = BleConnectedPayload;
+
+export type BleDisconnectedEvent = BleDisconnectedPayload;
+
+export type Gh3036FrameEvent = Gh3036FramePayload;
 
 export type ParsedDataEvent = {
   timestamp: number;
@@ -121,10 +113,23 @@ export function onTopic<T>(topic: string, callback: (payload: T) => void): Promi
   return listen<EventBusEvent>(TauriEvents.EVENT_BUS, (event) => {
     if (event.payload.topic === topic) {
       try {
-        const parsed = JSON.parse(event.payload.payload) as T;
+        let parsed: T;
+        if (event.payload.encoding === 'json') {
+          parsed = JSON.parse(event.payload.payload) as T;
+        } else if (event.payload.encoding === 'msgpack+base64') {
+          const binaryString = atob(event.payload.payload);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          parsed = msgpackDecode(bytes) as T;
+        } else {
+          console.error(`[onTopic] Unknown encoding: ${event.payload.encoding}`);
+          return;
+        }
         callback(parsed);
       } catch (err) {
-        console.error(`[onTopic] Failed to parse payload for topic "${topic}":`, err);
+        console.error(`[onTopic] Failed to decode payload for topic "${topic}":`, err);
       }
     }
   });

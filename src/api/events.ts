@@ -4,6 +4,38 @@ export interface EventBusEvent {
   topic: string;
   payload: string;
   timestamp: number;
+  encoding: 'json' | 'msgpack+base64';
+}
+
+export interface SerialDataPayload {
+  device_id: string;
+  data: number[];
+  timestamp: number;
+}
+
+export interface BleDataPayload {
+  device_id: string;
+  address: string;
+  characteristic_uuid: string;
+  data: number[];
+  timestamp: number;
+}
+
+export interface Gh3036FramePayload {
+  function_id: number;
+  function_name: string;
+  frame_id: number;
+  timestamp: number;
+  channel_count: number;
+  channels: number[];
+}
+
+export interface ProtocolParsedPayload {
+  plugin_id: string;
+  device_id: string;
+  original_data: number[];
+  parsed_data: unknown;
+  timestamp: number;
 }
 
 export type SerialDataEvent = {

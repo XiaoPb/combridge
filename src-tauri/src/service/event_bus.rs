@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use std::sync::RwLock;
+use tokio::sync::broadcast;
+use serde::{Deserialize, Serialize};
 
 pub type EventCallback = Box<dyn Fn(&str, &str) + Send + Sync>;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Event {
     pub topic: String,
     pub payload: String,
@@ -51,10 +53,50 @@ impl EventBus {
             tracing::warn!("Failed to broadcast event: {}", e);
         }
 
-        let subscribers = self.subscribers.read().await;
+        let subscribers = self.subscribers.read().unwrap_or_else(|e| {
+            tracing::error!("Failed to acquire read lock: {}", e);
+            panic!("EventBus lock poisoned");
+        });
         if let Some(callbacks) = subscribers.get(&topic) {
             for callback in callbacks {
                 callback(&event.topic, &event.payload);
+            }
+        }
+    }
+
+    pub fn publish_sync(&self, topic: impl Into<String>, payload: impl Into<String>) {
+        let event = Event::new(topic, payload);
+        let topic = event.topic.clone();
+
+        if let Err(e) = self.sender.send(event.clone()) {
+            tracing::warn!("Failed to broadcast event: {}", e);
+        }
+
+        let subscribers = self.subscribers.read().unwrap_or_else(|e| {
+            tracing::error!("Failed to acquire read lock: {}", e);
+            panic!("EventBus lock poisoned");
+        });
+        if let Some(callbacks) = subscribers.get(&topic) {
+            for callback in callbacks {
+                callback(&event.topic, &event.payload);
+            }
+        }
+    }
+
+    pub fn publish_typed<T: Serialize>(&self, topic: impl Into<String>, payload: &T) {
+        match serde_json::to_string(payload) {
+            Ok(json) => self.publish_sync(topic, json),
+            Err(e) => {
+                tracing::error!("Failed to serialize typed event payload: {}", e);
+            }
+        }
+    }
+
+    pub async fn publish_typed_async<T: Serialize>(&self, topic: impl Into<String>, payload: &T) {
+        match serde_json::to_string(payload) {
+            Ok(json) => self.publish(topic, json).await,
+            Err(e) => {
+                tracing::error!("Failed to serialize typed event payload: {}", e);
             }
         }
     }
@@ -63,7 +105,24 @@ impl EventBus {
     where
         F: Fn(&str, &str) + Send + Sync + 'static,
     {
-        let mut subscribers = self.subscribers.write().await;
+        let mut subscribers = self.subscribers.write().unwrap_or_else(|e| {
+            tracing::error!("Failed to acquire write lock: {}", e);
+            panic!("EventBus lock poisoned");
+        });
+        subscribers
+            .entry(topic.to_string())
+            .or_insert_with(Vec::new)
+            .push(Box::new(callback));
+    }
+
+    pub fn subscribe_sync<F>(&self, topic: &str, callback: F)
+    where
+        F: Fn(&str, &str) + Send + Sync + 'static,
+    {
+        let mut subscribers = self.subscribers.write().unwrap_or_else(|e| {
+            tracing::error!("Failed to acquire write lock: {}", e);
+            panic!("EventBus lock poisoned");
+        });
         subscribers
             .entry(topic.to_string())
             .or_insert_with(Vec::new)
@@ -71,7 +130,18 @@ impl EventBus {
     }
 
     pub async fn unsubscribe(&self, topic: &str) {
-        let mut subscribers = self.subscribers.write().await;
+        let mut subscribers = self.subscribers.write().unwrap_or_else(|e| {
+            tracing::error!("Failed to acquire write lock: {}", e);
+            panic!("EventBus lock poisoned");
+        });
+        subscribers.remove(topic);
+    }
+
+    pub fn unsubscribe_sync(&self, topic: &str) {
+        let mut subscribers = self.subscribers.write().unwrap_or_else(|e| {
+            tracing::error!("Failed to acquire write lock: {}", e);
+            panic!("EventBus lock poisoned");
+        });
         subscribers.remove(topic);
     }
 
@@ -84,12 +154,34 @@ impl EventBus {
     }
 
     pub async fn subscriber_count(&self, topic: &str) -> usize {
-        let subscribers = self.subscribers.read().await;
+        let subscribers = self.subscribers.read().unwrap_or_else(|e| {
+            tracing::error!("Failed to acquire read lock: {}", e);
+            panic!("EventBus lock poisoned");
+        });
+        subscribers.get(topic).map(|v| v.len()).unwrap_or(0)
+    }
+
+    pub fn subscriber_count_sync(&self, topic: &str) -> usize {
+        let subscribers = self.subscribers.read().unwrap_or_else(|e| {
+            tracing::error!("Failed to acquire read lock: {}", e);
+            panic!("EventBus lock poisoned");
+        });
         subscribers.get(topic).map(|v| v.len()).unwrap_or(0)
     }
 
     pub async fn topic_count(&self) -> usize {
-        let subscribers = self.subscribers.read().await;
+        let subscribers = self.subscribers.read().unwrap_or_else(|e| {
+            tracing::error!("Failed to acquire read lock: {}", e);
+            panic!("EventBus lock poisoned");
+        });
+        subscribers.len()
+    }
+
+    pub fn topic_count_sync(&self) -> usize {
+        let subscribers = self.subscribers.read().unwrap_or_else(|e| {
+            tracing::error!("Failed to acquire read lock: {}", e);
+            panic!("EventBus lock poisoned");
+        });
         subscribers.len()
     }
 }
@@ -105,5 +197,198 @@ impl Debug for EventBus {
         f.debug_struct("EventBus")
             .field("capacity", &self.capacity)
             .finish()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerialDataEvent {
+    pub device_id: String,
+    pub data: Vec<u8>,
+    pub timestamp: u64,
+}
+
+impl SerialDataEvent {
+    pub fn new(device_id: impl Into<String>, data: Vec<u8>) -> Self {
+        Self {
+            device_id: device_id.into(),
+            data,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BleDataEvent {
+    pub device_id: String,
+    pub address: String,
+    pub characteristic_uuid: String,
+    pub data: Vec<u8>,
+    pub timestamp: u64,
+}
+
+impl BleDataEvent {
+    pub fn new(
+        device_id: impl Into<String>,
+        address: impl Into<String>,
+        characteristic_uuid: impl Into<String>,
+        data: Vec<u8>,
+    ) -> Self {
+        Self {
+            device_id: device_id.into(),
+            address: address.into(),
+            characteristic_uuid: characteristic_uuid.into(),
+            data,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Gh3036FrameEvent {
+    pub function_id: u8,
+    pub function_name: String,
+    pub frame_id: u32,
+    pub timestamp: u64,
+    pub channel_count: usize,
+    pub channels: Vec<f32>,
+}
+
+impl Gh3036FrameEvent {
+    pub fn new(
+        function_id: u8,
+        function_name: impl Into<String>,
+        frame_id: u32,
+        channel_count: usize,
+        channels: Vec<f32>,
+    ) -> Self {
+        Self {
+            function_id,
+            function_name: function_name.into(),
+            frame_id,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+            channel_count,
+            channels,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProtocolParsedEvent {
+    pub plugin_id: String,
+    pub device_id: String,
+    pub original_data: Vec<u8>,
+    pub parsed_data: serde_json::Value,
+    pub timestamp: u64,
+}
+
+impl ProtocolParsedEvent {
+    pub fn new(
+        plugin_id: impl Into<String>,
+        device_id: impl Into<String>,
+        original_data: Vec<u8>,
+        parsed_data: serde_json::Value,
+    ) -> Self {
+        Self {
+            plugin_id: plugin_id.into(),
+            device_id: device_id.into(),
+            original_data,
+            parsed_data,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+        }
+    }
+}
+
+pub mod topics {
+    pub const SERIAL_DATA: &str = "serial:data";
+    pub const BLE_DATA: &str = "ble:data";
+    pub const GH3036_FRAME: &str = "gh3036:frame";
+    pub const PROTOCOL_PARSED: &str = "protocol:parsed";
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_serial_data_event_serialization() {
+        let event = SerialDataEvent::new("serial-1", vec![0x01, 0x02, 0x03]);
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("serial-1"));
+        assert!(json.contains("device_id"));
+    }
+
+    #[test]
+    fn test_ble_data_event_serialization() {
+        let event = BleDataEvent::new(
+            "ble-1",
+            "00:11:22:33:44:55",
+            "00002a37-0000-1000-8000-00805f9b34fb",
+            vec![0x01, 0x02],
+        );
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("ble-1"));
+        assert!(json.contains("00:11:22:33:44:55"));
+    }
+
+    #[test]
+    fn test_gh3036_frame_event_serialization() {
+        let event = Gh3036FrameEvent::new(1, "ECG", 100, 4, vec![1.0, 2.0, 3.0, 4.0]);
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("ECG"));
+        assert!(json.contains("function_id"));
+    }
+
+    #[test]
+    fn test_protocol_parsed_event_serialization() {
+        let event = ProtocolParsedEvent::new(
+            "plugin-1",
+            "device-1",
+            vec![0x01, 0x02],
+            serde_json::json!({"value": 42}),
+        );
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("plugin-1"));
+        assert!(json.contains("42"));
+    }
+
+    #[test]
+    fn test_event_bus_publish_sync() {
+        let bus = EventBus::new(16);
+        bus.publish_sync("test:topic", "test_payload");
+    }
+
+    #[test]
+    fn test_event_bus_publish_typed() {
+        let bus = EventBus::new(16);
+        let event = SerialDataEvent::new("serial-1", vec![0x01, 0x02]);
+        bus.publish_typed(topics::SERIAL_DATA, &event);
+    }
+
+    #[test]
+    fn test_event_bus_subscribe_sync() {
+        let bus = EventBus::new(16);
+        let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let called_clone = called.clone();
+        
+        bus.subscribe_sync("test:topic", move |topic, payload| {
+            assert_eq!(topic, "test:topic");
+            assert_eq!(payload, "test_payload");
+            called_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+
+        bus.publish_sync("test:topic", "test_payload");
+        assert!(called.load(std::sync::atomic::Ordering::SeqCst));
     }
 }

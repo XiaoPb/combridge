@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::State;
 use tracing::{debug, error, info};
 
 use crate::device::ble::{
@@ -16,15 +16,6 @@ pub struct BleConfigDto {
     pub tx_uuid: Option<String>,
     pub rx_uuid: Option<String>,
     pub srv_uuid: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BleNotifyEvent {
-    pub device_id: String,
-    pub characteristic_uuid: String,
-    pub data: Vec<u8>,
-    pub timestamp: u64,
 }
 
 #[tauri::command]
@@ -146,7 +137,6 @@ pub async fn stop_ble_scan(
 #[tauri::command]
 pub async fn connect_ble(
     manager: State<'_, BleManagerRef>,
-    app: AppHandle,
     device_id: String,
 ) -> Result<BleConnection> {
     info!("尝试连接BLE设备: {}", device_id);
@@ -158,7 +148,6 @@ pub async fn connect_ble(
             
             let manager_clone = manager.clone();
             let device_id_clone = device_id.clone();
-            let app_clone = app.clone();
             let callback = std::sync::Arc::new(move |_addr: &str, _char: &str, data: &[u8]| {
                 debug!("收到BLE通知，设备: {}, 数据长度: {}", _addr, data.len());
                 
@@ -168,17 +157,6 @@ pub async fn connect_ble(
                 tokio::spawn(async move {
                     manager.add_at_received_data(&device_id, data_vec).await;
                 });
-                
-                let event = BleNotifyEvent {
-                    device_id: device_id_clone.clone(),
-                    characteristic_uuid: _char.to_string(),
-                    data: data.to_vec(),
-                    timestamp: std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as u64,
-                };
-                let _ = app_clone.emit("ble-notify", &event);
             });
             
             let _ = manager.subscribe_notify(&device_id, "", callback).await;
@@ -354,7 +332,6 @@ pub async fn write_ble_without_response(
 #[tauri::command]
 pub async fn subscribe_ble_notify(
     manager: State<'_, BleManagerRef>,
-    app: AppHandle,
     device_id: String,
     characteristic_uuid: String,
 ) -> Result<()> {
@@ -368,21 +345,8 @@ pub async fn subscribe_ble_notify(
         return Ok(());
     }
 
-    let app_clone = app.clone();
-    let device_id_clone = device_id.clone();
-    let char_clone = characteristic_uuid.clone();
     let callback = std::sync::Arc::new(move |_addr: &str, _char: &str, data: &[u8]| {
         debug!("收到BLE通知，设备: {}, 特征: {}, 数据长度: {}", _addr, _char, data.len());
-        let event = BleNotifyEvent {
-            device_id: device_id_clone.clone(),
-            characteristic_uuid: char_clone.clone(),
-            data: data.to_vec(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-        };
-        let _ = app_clone.emit("ble-notify", &event);
     });
 
     match manager.subscribe_notify(&device_id, &characteristic_uuid, callback).await {

@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use compat::check_compatibility;
 use dashboard::{create_parser_script_manager, create_json_config_manager};
-use device::{BleManager, DeviceManager, SerialManager};
+use device::DeviceManager;
 use gh3036::Gh3036Manager;
 use protocol::PluginManager;
 use service::{EventBridge, EventBus, EventFilter};
@@ -75,15 +75,13 @@ fn downgrade_window_transparency(window: &tauri::WebviewWindow) -> Result<(), St
 pub fn run() {
     init_logger();
 
-    let serial_manager = Arc::new(SerialManager::new());
-    let ble_manager = Arc::new(BleManager::new());
+    let event_bus = Arc::new(EventBus::new(1024));
     let connection_pool = Arc::new(ConnectionPool::new());
     let plugin_manager = Arc::new(PluginManager::new());
     let waveform_manager = Arc::new(WaveformManager::new());
-    let event_bus = Arc::new(EventBus::new(1024));
     
-    let device_manager = Arc::new(DeviceManager::new(serial_manager.clone(), ble_manager.clone()));
-    let gh3036_manager = Arc::new(Gh3036Manager::new(device_manager));
+    let device_manager = Arc::new(DeviceManager::new(event_bus.clone()));
+    let gh3036_manager = Arc::new(Gh3036Manager::new(device_manager.clone()));
 
     let app_state = create_app_state_with_event_bus(event_bus.clone());
     let app_data_dir = get_app_data_dir();
@@ -91,8 +89,8 @@ pub fn run() {
     let action_dispatcher = create_action_dispatcher(
         app_state.clone(),
         state_persistence.clone(),
-        serial_manager.clone(),
-        ble_manager.clone(),
+        device_manager.serial_manager.clone(),
+        device_manager.ble_manager.clone(),
     );
     
     let parser_script_manager = create_parser_script_manager(app_data_dir.clone());
@@ -100,15 +98,15 @@ pub fn run() {
 
     info!("服务初始化完成");
 
-    let ble_manager_clone = ble_manager.clone();
+    let ble_manager_clone = device_manager.ble_manager.clone();
     let event_bus_clone = event_bus.clone();
     
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
-        .manage(serial_manager)
-        .manage(ble_manager)
+        .manage(device_manager.serial_manager.clone())
+        .manage(device_manager.ble_manager.clone())
         .manage(connection_pool)
         .manage(plugin_manager)
         .manage(app_state)

@@ -76,50 +76,48 @@ impl PluginManager {
         let plugins_clone = Arc::clone(&plugins);
         let plugin_infos_clone = Arc::clone(&plugin_infos);
         let event_bus_clone = Arc::clone(&event_bus);
-        self.event_bus.subscribe_sync(topics::SERIAL_DATA, move |_topic, payload| {
-            if let Ok(serial_event) = serde_json::from_str::<SerialDataEvent>(payload) {
-                let device_id = &serial_event.device_id;
-                let data = &serial_event.data;
+        self.event_bus.subscribe_json::<SerialDataEvent, _>(topics::SERIAL_DATA, move |_topic, serial_event| {
+            let device_id = &serial_event.device_id;
+            let data = &serial_event.data;
 
-                let plugins_guard = plugins_clone.lock().unwrap_or_else(|e| {
-                    tracing::error!("Failed to lock plugins: {}", e);
-                    panic!("PluginManager lock poisoned");
-                });
+            let plugins_guard = plugins_clone.lock().unwrap_or_else(|e| {
+                tracing::error!("Failed to lock plugins: {}", e);
+                panic!("PluginManager lock poisoned");
+            });
 
-                let plugin_infos_guard = plugin_infos_clone.lock().unwrap_or_else(|e| {
-                    tracing::error!("Failed to lock plugin_infos: {}", e);
-                    panic!("PluginManager lock poisoned");
-                });
+            let plugin_infos_guard = plugin_infos_clone.lock().unwrap_or_else(|e| {
+                tracing::error!("Failed to lock plugin_infos: {}", e);
+                panic!("PluginManager lock poisoned");
+            });
 
-                for (plugin_id, info) in plugin_infos_guard.iter() {
-                    if info.state == PluginState::Enabled && info.bound_devices.contains(device_id) {
-                        if let Some(plugin) = plugins_guard.get(plugin_id) {
-                            if plugin.executor.has_hook(&HookType::OnDataReceived) {
-                                match plugin.executor.execute_data_hook(HookType::OnDataReceived, data) {
-                                    Ok(result) => {
-                                        if let Some(parsed_data) = result.data {
-                                            let parsed_event = ProtocolParsedEvent::new(
-                                                plugin_id.clone(),
-                                                device_id.clone(),
-                                                data.clone(),
-                                                serde_json::to_value(&parsed_data).unwrap_or(serde_json::Value::Null),
-                                            );
-                                            event_bus_clone.publish_typed(topics::PROTOCOL_PARSED, &parsed_event);
-                                            tracing::debug!(
-                                                "Protocol parsed: plugin={}, device={}, data_len={}",
-                                                plugin_id,
-                                                device_id,
-                                                parsed_data.len()
-                                            );
-                                        }
-                                    }
-                                    Err(e) => {
-                                        tracing::error!(
-                                            "Failed to execute protocol hook: plugin={}, error={}",
+            for (plugin_id, info) in plugin_infos_guard.iter() {
+                if info.state == PluginState::Enabled && info.bound_devices.contains(device_id) {
+                    if let Some(plugin) = plugins_guard.get(plugin_id) {
+                        if plugin.executor.has_hook(&HookType::OnDataReceived) {
+                            match plugin.executor.execute_data_hook(HookType::OnDataReceived, data) {
+                                Ok(result) => {
+                                    if let Some(parsed_data) = result.data {
+                                        let parsed_event = ProtocolParsedEvent::new(
+                                            plugin_id.clone(),
+                                            device_id.clone(),
+                                            data.clone(),
+                                            serde_json::to_value(&parsed_data).unwrap_or(serde_json::Value::Null),
+                                        );
+                                        event_bus_clone.publish_typed(topics::PROTOCOL_PARSED, &parsed_event);
+                                        tracing::debug!(
+                                            "Protocol parsed: plugin={}, device={}, data_len={}",
                                             plugin_id,
-                                            e
+                                            device_id,
+                                            parsed_data.len()
                                         );
                                     }
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Failed to execute protocol hook: plugin={}, error={}",
+                                        plugin_id,
+                                        e
+                                    );
                                 }
                             }
                         }
@@ -131,50 +129,48 @@ impl PluginManager {
         let plugins_for_ble = Arc::clone(&plugins);
         let plugin_infos_for_ble = Arc::clone(&plugin_infos);
         let event_bus_for_ble = Arc::clone(&event_bus);
-        self.event_bus.subscribe_sync(topics::BLE_DATA, move |_topic, payload| {
-            if let Ok(ble_event) = serde_json::from_str::<BleDataEvent>(payload) {
-                let device_id = &ble_event.device_id;
-                let data = &ble_event.data;
+        self.event_bus.subscribe_json::<BleDataEvent, _>(topics::BLE_DATA, move |_topic, ble_event| {
+            let device_id = &ble_event.device_id;
+            let data = &ble_event.data;
 
-                let plugins_guard = plugins_for_ble.lock().unwrap_or_else(|e| {
-                    tracing::error!("Failed to lock plugins: {}", e);
-                    panic!("PluginManager lock poisoned");
-                });
+            let plugins_guard = plugins_for_ble.lock().unwrap_or_else(|e| {
+                tracing::error!("Failed to lock plugins: {}", e);
+                panic!("PluginManager lock poisoned");
+            });
 
-                let plugin_infos_guard = plugin_infos_for_ble.lock().unwrap_or_else(|e| {
-                    tracing::error!("Failed to lock plugin_infos: {}", e);
-                    panic!("PluginManager lock poisoned");
-                });
+            let plugin_infos_guard = plugin_infos_for_ble.lock().unwrap_or_else(|e| {
+                tracing::error!("Failed to lock plugin_infos: {}", e);
+                panic!("PluginManager lock poisoned");
+            });
 
-                for (plugin_id, info) in plugin_infos_guard.iter() {
-                    if info.state == PluginState::Enabled && info.bound_devices.contains(device_id) {
-                        if let Some(plugin) = plugins_guard.get(plugin_id) {
-                            if plugin.executor.has_hook(&HookType::OnDataReceived) {
-                                match plugin.executor.execute_data_hook(HookType::OnDataReceived, data) {
-                                    Ok(result) => {
-                                        if let Some(parsed_data) = result.data {
-                                            let parsed_event = ProtocolParsedEvent::new(
-                                                plugin_id.clone(),
-                                                device_id.clone(),
-                                                data.clone(),
-                                                serde_json::to_value(&parsed_data).unwrap_or(serde_json::Value::Null),
-                                            );
-                                            event_bus_for_ble.publish_typed(topics::PROTOCOL_PARSED, &parsed_event);
-                                            tracing::debug!(
-                                                "Protocol parsed: plugin={}, device={}, data_len={}",
-                                                plugin_id,
-                                                device_id,
-                                                parsed_data.len()
-                                            );
-                                        }
-                                    }
-                                    Err(e) => {
-                                        tracing::error!(
-                                            "Failed to execute protocol hook: plugin={}, error={}",
+            for (plugin_id, info) in plugin_infos_guard.iter() {
+                if info.state == PluginState::Enabled && info.bound_devices.contains(device_id) {
+                    if let Some(plugin) = plugins_guard.get(plugin_id) {
+                        if plugin.executor.has_hook(&HookType::OnDataReceived) {
+                            match plugin.executor.execute_data_hook(HookType::OnDataReceived, data) {
+                                Ok(result) => {
+                                    if let Some(parsed_data) = result.data {
+                                        let parsed_event = ProtocolParsedEvent::new(
+                                            plugin_id.clone(),
+                                            device_id.clone(),
+                                            data.clone(),
+                                            serde_json::to_value(&parsed_data).unwrap_or(serde_json::Value::Null),
+                                        );
+                                        event_bus_for_ble.publish_typed(topics::PROTOCOL_PARSED, &parsed_event);
+                                        tracing::debug!(
+                                            "Protocol parsed: plugin={}, device={}, data_len={}",
                                             plugin_id,
-                                            e
+                                            device_id,
+                                            parsed_data.len()
                                         );
                                     }
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Failed to execute protocol hook: plugin={}, error={}",
+                                        plugin_id,
+                                        e
+                                    );
                                 }
                             }
                         }

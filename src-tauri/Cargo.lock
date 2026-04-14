@@ -536,6 +536,7 @@ name = "combridge-rust"
 version = "0.5.2"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "bluest",
  "cc",
  "chrono",

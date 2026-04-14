@@ -2,7 +2,9 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Runtime};
 use tokio::sync::broadcast;
 
-use super::event_bus::{Event, EventBus};
+use super::event_bus::{Event, EventBus, EventEncoding};
+
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 #[derive(Debug, Clone)]
 pub struct EventFilter {
@@ -127,14 +129,27 @@ impl<R: Runtime> EventBridge<R> {
     }
 
     fn emit_to_frontend(app_handle: &AppHandle<R>, event: &Event) -> Result<(), String> {
-        let payload = serde_json::json!({
+        let (payload_str, encoding_str) = match event.encoding {
+            EventEncoding::Json => {
+                let s = String::from_utf8(event.payload.clone())
+                    .unwrap_or_else(|_| BASE64.encode(&event.payload));
+                (s, "json")
+            }
+            EventEncoding::MsgPack => {
+                let b64 = BASE64.encode(&event.payload);
+                (b64, "msgpack+base64")
+            }
+        };
+
+        let wrapper = serde_json::json!({
             "topic": &event.topic,
-            "payload": &event.payload,
+            "payload": payload_str,
             "timestamp": event.timestamp,
+            "encoding": encoding_str,
         });
 
         app_handle
-            .emit("event-bus", payload)
+            .emit("event-bus", wrapper)
             .map_err(|e| format!("Failed to emit event: {}", e))
     }
 }

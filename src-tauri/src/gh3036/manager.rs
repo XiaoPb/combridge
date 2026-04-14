@@ -2,7 +2,7 @@
 //!
 //! 本模块实现 GH3036 协议的核心管理功能：
 //! - 协议实例生命周期管理
-//! - RPC 命令执行
+//! - RPC 命令执行（基于 gh-rpc 库）
 //! - RX 数据处理
 //! - CSV 数据保存
 
@@ -20,6 +20,20 @@ use tracing::{debug, error, info, warn};
 use crate::device::DeviceManager;
 use super::csv_writer::CsvWriter;
 use super::types::{Gh3036EventData, Gh3036FrameData, FuncFrame, FrameDecoder};
+
+use gh_rpc::cmd::{CMD_GET_VERSION, CMD_REGS_WRITE, CMD_REGS_READ, CMD_CHIP_CTRL, 
+                  CMD_SW_FUNCTION, CMD_DOWNLOAD_CONFIG, CMD_TIMESTAMP_SET, 
+                  CMD_TIME_SET, CMD_SET_WORK_MODE, CMD_LOW_POWER,
+                  CMD_REG_BIT_FIELD_WRITE};
+use rpc::{RpcCore, RpcConfig, InvokeNode, unpack, UnpackValue};
+
+const GH_PRO_TYPE_UNSIGNED: u8 = 1;
+const GH_PRO_TYPE_SIGNED: u8 = 2;
+
+fn type_header(pack_type: u8, width: u8, is_last: bool) -> u8 {
+    let end = if is_last { 1u8 } else { 0u8 };
+    (pack_type & 0b11) | (0 << 2) | ((width & 0b111) << 3) | (end << 6) | (0 << 7)
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ChannelType {
@@ -62,6 +76,10 @@ struct SendRequest {
     data: Vec<u8>,
 }
 
+struct RpcDataRequest {
+    data: Vec<u8>,
+}
+
 struct GlobalContext {
     tx_channel: Mutex<Option<ChannelConfig>>,
     device_manager: Mutex<Option<Arc<DeviceManager>>>,
@@ -71,6 +89,7 @@ struct GlobalContext {
     send_sender: Mutex<Option<Sender<SendRequest>>>,
     event_sender: Mutex<Option<Sender<Gh3036EventData>>>,
     frame_sender: Mutex<Option<Sender<Gh3036FrameData>>>,
+    rpc_data_sender: Mutex<Option<Sender<RpcDataRequest>>>,
     runtime_handle: Mutex<Option<Handle>>,
 }
 
@@ -85,20 +104,28 @@ impl GlobalContext {
             send_sender: Mutex::new(None),
             event_sender: Mutex::new(None),
             frame_sender: Mutex::new(None),
+            rpc_data_sender: Mutex::new(None),
             runtime_handle: Mutex::new(None),
         }
     }
 
-    fn setup_channels(&self) -> (Receiver<SendRequest>, Receiver<Gh3036EventData>, Receiver<Gh3036FrameData>) {
+    fn setup_channels(&self) -> (
+        Receiver<SendRequest>, 
+        Receiver<Gh3036EventData>, 
+        Receiver<Gh3036FrameData>,
+        Receiver<RpcDataRequest>,
+    ) {
         let (send_sender, send_receiver) = unbounded();
         let (event_sender, event_receiver) = unbounded();
         let (frame_sender, frame_receiver) = unbounded();
+        let (rpc_data_sender, rpc_data_receiver) = unbounded();
         
         *self.send_sender.lock() = Some(send_sender);
         *self.event_sender.lock() = Some(event_sender);
         *self.frame_sender.lock() = Some(frame_sender);
+        *self.rpc_data_sender.lock() = Some(rpc_data_sender);
         
-        (send_receiver, event_receiver, frame_receiver)
+        (send_receiver, event_receiver, frame_receiver, rpc_data_receiver)
     }
 
     fn set_tx_channel(&self, config: ChannelConfig) {
@@ -126,21 +153,11 @@ impl GlobalContext {
         *runtime_handle = Some(handle);
     }
 
-    #[allow(dead_code)]
-    fn send_data_request(&self, request: SendRequest) -> Result<(), crossbeam_channel::SendError<SendRequest>> {
-        if let Some(ref sender) = *self.send_sender.lock() {
-            sender.send(request)
+    fn send_rpc_data(&self, data: Vec<u8>) -> Result<(), crossbeam_channel::SendError<RpcDataRequest>> {
+        if let Some(ref sender) = *self.rpc_data_sender.lock() {
+            sender.send(RpcDataRequest { data })
         } else {
-            Err(crossbeam_channel::SendError(request))
-        }
-    }
-
-    #[allow(dead_code)]
-    fn send_event_data(&self, event_data: Gh3036EventData) -> Result<(), crossbeam_channel::SendError<Gh3036EventData>> {
-        if let Some(ref sender) = *self.event_sender.lock() {
-            sender.send(event_data)
-        } else {
-            Err(crossbeam_channel::SendError(event_data))
+            Err(crossbeam_channel::SendError(RpcDataRequest { data: vec![] }))
         }
     }
 
@@ -155,13 +172,32 @@ impl GlobalContext {
 
 static CALLBACK_CONTEXT: once_cell::sync::Lazy<GlobalContext> = once_cell::sync::Lazy::new(GlobalContext::new);
 
+static FRAME_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+fn data_frame_handler(data: &[u8], size: usize, _ret: Option<&mut [u8]>) -> i32 {
+    let count = FRAME_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+    
+    debug!("[GH3036] 接收到数据帧 #{}: {} 字节", count, size);
+    
+    if size > 0 {
+        let data_to_send = data[..size].to_vec();
+        if let Err(e) = CALLBACK_CONTEXT.send_rpc_data(data_to_send) {
+            error!("[GH3036] 发送数据到RPC处理通道失败: {}", e);
+        }
+    }
+    
+    0
+}
+
 pub struct Gh3036Manager {
     frame_decoder: Mutex<FrameDecoder>,
     device_manager: Arc<DeviceManager>,
     initialized: Mutex<bool>,
     running: Arc<std::sync::atomic::AtomicBool>,
     thread_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
+    rpc_thread_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
     events_subscribed: std::sync::atomic::AtomicBool,
+    rpc: Mutex<Option<Arc<std::sync::Mutex<RpcCore<16, Box<dyn Fn(&[u8]) + Send + Sync>>>>>>,
 }
 
 unsafe impl Send for Gh3036Manager {}
@@ -175,7 +211,9 @@ impl Gh3036Manager {
             initialized: Mutex::new(false),
             running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             thread_handle: Mutex::new(None),
+            rpc_thread_handle: Mutex::new(None),
             events_subscribed: std::sync::atomic::AtomicBool::new(false),
+            rpc: Mutex::new(None),
         }
     }
 
@@ -192,13 +230,15 @@ impl Gh3036Manager {
     }
 
     pub fn initialize(&self) -> Result<(), String> {
-        info!("GH3036 协议管理器初始化 (纯 Rust 模式)");
+        info!("GH3036 协议管理器初始化 (纯 Rust 模式 + RPC 集成)");
         
         CALLBACK_CONTEXT.set_device_manager(Arc::clone(&self.device_manager));
         
         if let Ok(handle) = Handle::try_current() {
             CALLBACK_CONTEXT.set_runtime_handle(handle);
         }
+
+        self.initialize_rpc()?;
 
         {
             let mut initialized = self.initialized.lock();
@@ -211,13 +251,71 @@ impl Gh3036Manager {
         Ok(())
     }
 
+    fn initialize_rpc(&self) -> Result<(), String> {
+        info!("GH3036 初始化 RPC 核心");
+        
+        let device_manager = Arc::clone(&self.device_manager);
+        let handle = Handle::try_current().map_err(|e| format!("获取 Tokio 运行时失败: {}", e))?;
+        
+        let send_fn: Box<dyn Fn(&[u8]) + Send + Sync> = Box::new(move |data: &[u8]| {
+            debug!("[RPC发送] 发送数据: {:02X?}", data);
+            
+            let (channel_type, device_id, char_uuid) = {
+                let tx_channel = CALLBACK_CONTEXT.tx_channel.lock();
+                match tx_channel.as_ref() {
+                    Some(channel) => (channel.channel_type, channel.device_id.clone(), channel.characteristic_uuid.clone()),
+                    None => {
+                        warn!("[RPC发送] TX 通道未配置");
+                        return;
+                    }
+                }
+            };
+            
+            let dm = Arc::clone(&device_manager);
+            let data_vec = data.to_vec();
+            handle.spawn(async move {
+                let result = dm
+                    .send_direct(
+                        channel_type.into(),
+                        &device_id,
+                        char_uuid.as_deref(),
+                        &data_vec,
+                    )
+                    .await;
+                
+                match result {
+                    Ok(_) => debug!("[RPC发送] 发送成功: {} bytes", data_vec.len()),
+                    Err(e) => error!("[RPC发送] 发送失败: {}", e),
+                }
+            });
+        });
+
+        let config = RpcConfig::new(send_fn).with_delay(|| {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        });
+        
+        let mut rpc: RpcCore<16, Box<dyn Fn(&[u8]) + Send + Sync>> = RpcCore::new(config);
+        
+        let node = InvokeNode::new("G", Some("<u8*>"), Some(data_frame_handler));
+        rpc.register(node).map_err(|e| format!("注册 G 键处理函数失败: {:?}", e))?;
+        
+        info!("GH3036 RPC 核心初始化完成，已注册 'G' 键处理函数");
+        
+        let rpc = Arc::new(std::sync::Mutex::new(rpc));
+        *self.rpc.lock() = Some(Arc::clone(&rpc));
+        
+        Ok(())
+    }
+
     fn start_processing_thread(&self) -> Result<(), String> {
         let running = self.running.clone();
         running.store(true, std::sync::atomic::Ordering::SeqCst);
 
-        let (send_receiver, event_receiver, frame_receiver) = CALLBACK_CONTEXT.setup_channels();
+        let (send_receiver, event_receiver, frame_receiver, rpc_data_receiver) = 
+            CALLBACK_CONTEXT.setup_channels();
         let device_manager = Arc::clone(&self.device_manager);
         let running_clone = running.clone();
+        let rpc = self.rpc.lock().as_ref().map(Arc::clone);
         
         let thread_handle = std::thread::spawn(move || {
             info!("GH3036 处理线程启动");
@@ -239,6 +337,11 @@ impl Gh3036Manager {
                             Self::handle_frame_data(frame_data);
                         }
                     }
+                    recv(rpc_data_receiver) -> result => {
+                        if let Ok(rpc_data) = result {
+                            Self::handle_rpc_data(&rpc, rpc_data);
+                        }
+                    }
                     default(std::time::Duration::from_millis(10)) => {
                     }
                 }
@@ -253,6 +356,21 @@ impl Gh3036Manager {
         }
 
         Ok(())
+    }
+
+    fn handle_rpc_data(
+        rpc: &Option<Arc<std::sync::Mutex<RpcCore<16, Box<dyn Fn(&[u8]) + Send + Sync>>>>>,
+        request: RpcDataRequest,
+    ) {
+        debug!("GH3036 handle_rpc_data 处理 RPC 数据: {} bytes", request.data.len());
+        
+        if let Some(rpc_core) = rpc {
+            let mut rpc_guard = rpc_core.lock().unwrap();
+            rpc_guard.process(&request.data, false);
+            debug!("GH3036 handle_rpc_data RPC 处理完成");
+        } else {
+            warn!("GH3036 handle_rpc_data RPC 核心未初始化");
+        }
     }
 
     fn handle_send_request(device_manager: &Arc<DeviceManager>, request: SendRequest) {
@@ -351,6 +469,11 @@ impl Gh3036Manager {
         if let Some(thread) = thread_guard.take() {
             let _ = thread.join();
         }
+        
+        let mut rpc_thread_guard = self.rpc_thread_handle.lock();
+        if let Some(thread) = rpc_thread_guard.take() {
+            let _ = thread.join();
+        }
     }
 
     pub fn configure_tx_channel(&self, config: ChannelConfig) -> Result<(), String> {
@@ -425,33 +548,104 @@ impl Gh3036Manager {
         }
     }
 
+    async fn call_command(&self, key: &str, data: &[u8]) -> Result<Vec<u8>, String> {
+        let rpc = {
+            let rpc_guard = self.rpc.lock();
+            rpc_guard.as_ref()
+                .ok_or("RPC 核心未初始化")?
+                .clone()
+        };
+
+        {
+            let mut rpc_guard = rpc.lock().map_err(|e| format!("RPC 锁定失败: {}", e))?;
+            rpc_guard.call_start(key, data).map_err(|e| format!("RPC call_start 失败: {:?}", e))?;
+        }
+
+        let max_retries = 501;
+        for _retry in 0..max_retries {
+            {
+                let mut rpc_guard = rpc.lock().map_err(|e| format!("RPC 锁定失败: {}", e))?;
+                if let Some(result) = rpc_guard.check_call_result(key) {
+                    return result
+                        .map(|r| r.to_vec())
+                        .map_err(|e| format!("RPC 错误: {:?}", e));
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        
+        Err("RPC 超时".to_string())
+    }
+
+    async fn send_command(&self, key: &str, data: &[u8]) -> Result<Vec<u8>, String> {
+        let rpc = {
+            let rpc_guard = self.rpc.lock();
+            rpc_guard.as_ref()
+                .ok_or("RPC 核心未初始化")?
+                .clone()
+        };
+
+        {
+            let mut rpc_guard = rpc.lock().map_err(|e| format!("RPC 锁定失败: {}", e))?;
+            rpc_guard.send(key, data).map_err(|e| format!("RPC send 失败: {:?}", e))?;
+        }
+
+        Ok(vec![])
+    }
+
+    async fn publish_command(&self, key: &str, data: &[u8]) -> Result<(), String> {
+        let rpc = {
+            let rpc_guard = self.rpc.lock();
+            rpc_guard.as_ref()
+                .ok_or("RPC 核心未初始化")?
+                .clone()
+        };
+
+        {
+            let mut rpc_guard = rpc.lock().map_err(|e| format!("RPC 锁定失败: {}", e))?;
+            rpc_guard.publish(key, data).map_err(|e| format!("RPC publish 失败: {:?}", e))?;
+        }
+
+        Ok(())
+    }
+
     pub fn execute_rpc(&self, command_key: &str, params: &[String]) -> Result<Vec<u8>, String> {
         info!("GH3036 execute_rpc 开始: key={}, params={:?}", command_key, params);
 
-        let result = match command_key {
-            "V" => self.execute_version_cmd(params),
-            "W" => self.execute_regs_write_cmd(params),
-            "R" => self.execute_regs_read_cmd(params),
-            "B" => self.execute_reg_bitfield_write_cmd(params),
-            "C" => self.execute_chip_ctrl_cmd(params),
-            "D" => self.execute_download_config_cmd(params),
-            "L" => self.execute_regs_list_write_cmd(params),
-            "S" => self.execute_sw_function_cmd(params),
-            "P" => self.execute_low_power_cmd(params),
-            "M" => self.execute_set_work_mode_cmd(params),
-            "TS" => self.execute_timestamp_set_cmd(params),
-            "TM" => self.execute_time_set_cmd(params),
+        let handle = Handle::try_current();
+        if handle.is_err() {
+            error!("GH3036 execute_rpc 需要在异步上下文中调用");
+            return Err("需要在异步上下文中调用".to_string());
+        }
+
+        let handle = handle.unwrap();
+        handle.block_on(async {
+            self.execute_rpc_async(command_key, params).await
+        })
+    }
+
+    async fn execute_rpc_async(&self, command_key: &str, params: &[String]) -> Result<Vec<u8>, String> {
+        match command_key {
+            "V" => self.execute_version_cmd_async(params).await,
+            "W" => self.execute_regs_write_cmd_async(params).await,
+            "R" => self.execute_regs_read_cmd_async(params).await,
+            "B" => self.execute_reg_bitfield_write_cmd_async(params).await,
+            "C" => self.execute_chip_ctrl_cmd_async(params).await,
+            "D" => self.execute_download_config_cmd_async(params).await,
+            "L" => self.execute_regs_list_write_cmd_async(params).await,
+            "S" => self.execute_sw_function_cmd_async(params).await,
+            "P" => self.execute_low_power_cmd_async(params).await,
+            "M" => self.execute_set_work_mode_cmd_async(params).await,
+            "TS" => self.execute_timestamp_set_cmd_async(params).await,
+            "TM" => self.execute_time_set_cmd_async(params).await,
             _ => {
                 error!("GH3036 execute_rpc 不支持的命令键: {}", command_key);
                 Err(format!("不支持的命令键: {}", command_key))
             }
-        };
-
-        info!("GH3036 execute_rpc 完成: key={}, result={:?}", command_key, result.is_ok());
-        result
+        }
     }
 
-    fn execute_version_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
+    async fn execute_version_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let ver_type: u8 = params
             .first()
             .and_then(|s| s.parse().ok())
@@ -459,10 +653,21 @@ impl Gh3036Manager {
 
         info!("GH3036 execute_version_cmd: ver_type={}", ver_type);
         
-        Ok(vec![ver_type])
+        let data = [type_header(GH_PRO_TYPE_UNSIGNED, 3, true), ver_type];
+        let param_data = self.call_command(CMD_GET_VERSION, &data).await?;
+        
+        let values = unpack(&param_data, "<u8*>").map_err(|e| format!("解包失败: {:?}", e))?;
+        match values.values.first() {
+            Some(UnpackValue::U8Array(arr)) => {
+                let version_str = String::from_utf8_lossy(arr).to_string();
+                info!("获取版本成功: {}", version_str);
+                Ok(arr.to_vec())
+            }
+            _ => Err("获取版本失败: 解包结果不是数组".into()),
+        }
     }
 
-    fn execute_regs_write_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
+    async fn execute_regs_write_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let regs: Vec<u16> = params
             .iter()
             .filter_map(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16).ok())
@@ -473,10 +678,20 @@ impl Gh3036Manager {
         }
 
         info!("寄存器写入: {} 个寄存器", regs.len() / 2);
+
+        let mut data = Vec::new();
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 4, true));
+        data.push((regs.len() / 2) as u8);
+        for i in (0..regs.len()).step_by(2) {
+            data.extend_from_slice(&regs[i].to_le_bytes());
+            data.extend_from_slice(&regs[i + 1].to_le_bytes());
+        }
+        
+        self.send_command(CMD_REGS_WRITE, &data).await?;
         Ok(vec![])
     }
 
-    fn execute_regs_read_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
+    async fn execute_regs_read_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let reg_addr: u16 = params
             .first()
             .and_then(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16).ok())
@@ -488,10 +703,29 @@ impl Gh3036Manager {
             .unwrap_or(1);
 
         info!("寄存器读取: addr=0x{:04X}, len={}", reg_addr, read_len);
-        Ok(vec![0; (read_len * 2) as usize])
+
+        let mut data = Vec::new();
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 4, false));
+        data.extend_from_slice(&reg_addr.to_le_bytes());
+        data.push(type_header(GH_PRO_TYPE_SIGNED, 5, true));
+        data.extend_from_slice(&read_len.to_le_bytes());
+        
+        let param_data = self.call_command(CMD_REGS_READ, &data).await?;
+        let values = unpack(&param_data, "<u16*>").map_err(|e| format!("解包失败: {:?}", e))?;
+        
+        match values.values.first() {
+            Some(UnpackValue::U16Array(arr)) => {
+                let mut result = Vec::new();
+                for &val in arr.iter() {
+                    result.extend_from_slice(&val.to_le_bytes());
+                }
+                Ok(result)
+            }
+            _ => Err("寄存器读取失败: 解包结果不是数组".into()),
+        }
     }
 
-    fn execute_reg_bitfield_write_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
+    async fn execute_reg_bitfield_write_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let reg_addr: u16 = params
             .first()
             .and_then(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16).ok())
@@ -513,30 +747,48 @@ impl Gh3036Manager {
             .ok_or("缺少寄存器值参数")?;
 
         info!("位域写入: addr=0x{:04X}, lsb={}, msb={}, val=0x{:04X}", reg_addr, lsb, msb, reg_val);
+
+        let mut data = Vec::new();
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 4, false));
+        data.extend_from_slice(&reg_addr.to_le_bytes());
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 3, false));
+        data.push(lsb);
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 3, false));
+        data.push(msb);
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 4, true));
+        data.extend_from_slice(&reg_val.to_le_bytes());
+        
+        self.send_command(CMD_REG_BIT_FIELD_WRITE, &data).await?;
         Ok(vec![])
     }
 
-    fn execute_chip_ctrl_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
+    async fn execute_chip_ctrl_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let ctrl_type: u8 = params
             .first()
             .and_then(|s| s.parse().ok())
             .ok_or("缺少控制类型参数")?;
 
         info!("芯片控制: type={}", ctrl_type);
+
+        let data = [type_header(GH_PRO_TYPE_UNSIGNED, 3, true), ctrl_type];
+        self.send_command(CMD_CHIP_CTRL, &data).await?;
         Ok(vec![])
     }
 
-    fn execute_download_config_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
+    async fn execute_download_config_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let stage: u8 = params
             .first()
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
 
         info!("下载配置: stage={}", stage);
+
+        let data = [type_header(GH_PRO_TYPE_UNSIGNED, 3, true), stage];
+        self.send_command(CMD_DOWNLOAD_CONFIG, &data).await?;
         Ok(vec![])
     }
 
-    fn execute_regs_list_write_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
+    async fn execute_regs_list_write_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let regs: Vec<u16> = params
             .iter()
             .filter_map(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16).ok())
@@ -547,10 +799,19 @@ impl Gh3036Manager {
         }
 
         info!("寄存器列表写入: {} 个值", regs.len());
+
+        let mut data = Vec::new();
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 4, true));
+        data.push(regs.len() as u8);
+        for &val in regs.iter() {
+            data.extend_from_slice(&val.to_le_bytes());
+        }
+        
+        self.send_command("GH3X_RegsListWriteCmd", &data).await?;
         Ok(vec![])
     }
 
-    fn execute_sw_function_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
+    async fn execute_sw_function_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let target_func_mode: u32 = params
             .first()
             .and_then(|s| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok())
@@ -562,10 +823,18 @@ impl Gh3036Manager {
             .unwrap_or(0);
 
         info!("软件功能命令: mode=0x{:08X}, ctrl={}", target_func_mode, ctrl_type);
+
+        let mut data = Vec::new();
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 5, false));
+        data.extend_from_slice(&target_func_mode.to_le_bytes());
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 3, true));
+        data.push(ctrl_type);
+        
+        self.send_command(CMD_SW_FUNCTION, &data).await?;
         Ok(vec![])
     }
 
-    fn execute_low_power_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
+    async fn execute_low_power_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let target_func_mode: u32 = params
             .first()
             .and_then(|s| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok())
@@ -577,30 +846,47 @@ impl Gh3036Manager {
             .unwrap_or(0);
 
         info!("低功耗命令: mode=0x{:08X}, ctrl={}", target_func_mode, ctrl_type);
+
+        let mut data = Vec::new();
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 5, false));
+        data.extend_from_slice(&target_func_mode.to_le_bytes());
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 3, true));
+        data.push(ctrl_type);
+        
+        self.publish_command(CMD_LOW_POWER, &data).await?;
         Ok(vec![])
     }
 
-    fn execute_set_work_mode_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
+    async fn execute_set_work_mode_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let work_mode: u8 = params
             .first()
             .and_then(|s| s.parse().ok())
             .ok_or("缺少工作模式参数")?;
 
         info!("设置工作模式: mode={}", work_mode);
+
+        let data = [type_header(GH_PRO_TYPE_UNSIGNED, 3, true), work_mode];
+        self.send_command(CMD_SET_WORK_MODE, &data).await?;
         Ok(vec![])
     }
 
-    fn execute_timestamp_set_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
+    async fn execute_timestamp_set_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let timestamp: u32 = params
             .first()
             .and_then(|s| s.parse().ok())
             .ok_or("缺少时间戳参数")?;
 
         info!("设置时间戳: {}", timestamp);
+
+        let mut data = Vec::new();
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 5, true));
+        data.extend_from_slice(&timestamp.to_le_bytes());
+        
+        self.send_command(CMD_TIMESTAMP_SET, &data).await?;
         Ok(vec![])
     }
 
-    fn execute_time_set_cmd(&self, params: &[String]) -> Result<Vec<u8>, String> {
+    async fn execute_time_set_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let timestamp: u32 = params
             .first()
             .and_then(|s| s.parse().ok())
@@ -612,6 +898,14 @@ impl Gh3036Manager {
             .unwrap_or(8);
 
         info!("设置时间: timestamp={}, offset={}", timestamp, hour_offset);
+
+        let mut data = Vec::new();
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 5, false));
+        data.extend_from_slice(&timestamp.to_le_bytes());
+        data.push(type_header(GH_PRO_TYPE_SIGNED, 3, true));
+        data.push(hour_offset as u8);
+        
+        self.send_command(CMD_TIME_SET, &data).await?;
         Ok(vec![])
     }
 

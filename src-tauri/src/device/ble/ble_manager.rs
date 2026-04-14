@@ -414,7 +414,7 @@ impl BleManager {
                 char,
                 data.to_vec(),
             );
-            event_bus.publish_typed(topics::BLE_DATA, &event);
+            event_bus.publish_msgpack(topics::BLE_DATA, &event);
 
             callback(addr, char, data);
         });

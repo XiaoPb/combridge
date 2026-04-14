@@ -76,7 +76,7 @@ impl PluginManager {
         let plugins_clone = Arc::clone(&plugins);
         let plugin_infos_clone = Arc::clone(&plugin_infos);
         let event_bus_clone = Arc::clone(&event_bus);
-        self.event_bus.subscribe_json::<SerialDataEvent, _>(topics::SERIAL_DATA, move |_topic, serial_event| {
+        self.event_bus.subscribe_msgpack::<SerialDataEvent, _>(topics::SERIAL_DATA, move |_topic, serial_event| {
             let device_id = &serial_event.device_id;
             let data = &serial_event.data;
 
@@ -103,7 +103,7 @@ impl PluginManager {
                                             data.clone(),
                                             serde_json::to_value(&parsed_data).unwrap_or(serde_json::Value::Null),
                                         );
-                                        event_bus_clone.publish_typed(topics::PROTOCOL_PARSED, &parsed_event);
+                                        event_bus_clone.publish_msgpack(topics::PROTOCOL_PARSED, &parsed_event);
                                         tracing::debug!(
                                             "Protocol parsed: plugin={}, device={}, data_len={}",
                                             plugin_id,
@@ -129,7 +129,7 @@ impl PluginManager {
         let plugins_for_ble = Arc::clone(&plugins);
         let plugin_infos_for_ble = Arc::clone(&plugin_infos);
         let event_bus_for_ble = Arc::clone(&event_bus);
-        self.event_bus.subscribe_json::<BleDataEvent, _>(topics::BLE_DATA, move |_topic, ble_event| {
+        self.event_bus.subscribe_msgpack::<BleDataEvent, _>(topics::BLE_DATA, move |_topic, ble_event| {
             let device_id = &ble_event.device_id;
             let data = &ble_event.data;
 
@@ -156,7 +156,7 @@ impl PluginManager {
                                             data.clone(),
                                             serde_json::to_value(&parsed_data).unwrap_or(serde_json::Value::Null),
                                         );
-                                        event_bus_for_ble.publish_typed(topics::PROTOCOL_PARSED, &parsed_event);
+                                        event_bus_for_ble.publish_msgpack(topics::PROTOCOL_PARSED, &parsed_event);
                                         tracing::debug!(
                                             "Protocol parsed: plugin={}, device={}, data_len={}",
                                             plugin_id,

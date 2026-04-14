@@ -58,19 +58,17 @@ impl ScriptLoader {
 
         let mut config = ProtocolConfig::default();
 
-        if engine.has_function("get_config") {
-            if let Ok(name) = engine.get_global_string("PROTOCOL_NAME") {
-                config.name = name;
-            }
-            if let Ok(version) = engine.get_global_string("PROTOCOL_VERSION") {
-                config.version = version;
-            }
-            if let Ok(description) = engine.get_global_string("PROTOCOL_DESCRIPTION") {
-                config.description = Some(description);
-            }
-            if let Ok(author) = engine.get_global_string("PROTOCOL_AUTHOR") {
-                config.author = Some(author);
-            }
+        if let Ok(name) = engine.get_global_string("PROTOCOL_NAME") {
+            config.name = name;
+        }
+        if let Ok(version) = engine.get_global_string("PROTOCOL_VERSION") {
+            config.version = version;
+        }
+        if let Ok(description) = engine.get_global_string("PROTOCOL_DESCRIPTION") {
+            config.description = Some(description);
+        }
+        if let Ok(author) = engine.get_global_string("PROTOCOL_AUTHOR") {
+            config.author = Some(author);
         }
 
         let mut hooks = Vec::new();

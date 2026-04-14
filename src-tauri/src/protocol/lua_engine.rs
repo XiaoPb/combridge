@@ -8,8 +8,9 @@ pub struct LuaEngine {
 
 impl LuaEngine {
     pub fn new() -> Result<Self> {
+        let safe_libs = StdLib::ALL_SAFE;
         let lua = Lua::new_with(
-            StdLib::ALL,
+            safe_libs,
             LuaOptions::default(),
         ).map_err(|e| ComBridgeError::protocol(format!("Failed to create Lua VM: {}", e)))?;
 
@@ -44,7 +45,7 @@ impl LuaEngine {
             .map_err(|e| ComBridgeError::protocol(format!("Function '{}' not found: {}", name, e)))?;
 
         let result: R = func
-            .call(args)
+            .call(mlua::MultiValue::from_vec(args))
             .map_err(|e| ComBridgeError::protocol(format!("Function call failed: {}", e)))?;
 
         Ok(result)
@@ -87,7 +88,7 @@ impl LuaEngine {
         }
 
         let result_table: mlua::Table = func
-            .call(vec![Value::Table(data_table)])
+            .call(mlua::MultiValue::from_vec(vec![Value::Table(data_table)]))
             .map_err(|e| ComBridgeError::protocol(format!("Function call failed: {}", e)))?;
 
         let mut result = Vec::new();

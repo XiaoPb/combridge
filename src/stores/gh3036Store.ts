@@ -46,6 +46,7 @@ interface Gh3036State {
   eventListeners: {
     event?: UnlistenFn;
     frame?: UnlistenFn;
+    deviceDisconnected?: UnlistenFn;
   };
   
   setIsInitialized: (value: boolean) => void;
@@ -305,10 +306,38 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
         }
       });
       
+      const deviceDisconnectedUnlisten = await listen<EventBusEvent>('event-bus', (event) => {
+        const { topic, payload } = event.payload;
+        
+        if (topic === 'serial:disconnected' || topic === 'ble:disconnected') {
+          try {
+            const parsed = JSON.parse(payload) as { port_name?: string; address?: string };
+            const deviceId = parsed.port_name || parsed.address;
+            
+            if (deviceId) {
+              const { txChannel, rxChannel } = get();
+              
+              if (txChannel?.device_id === deviceId) {
+                set({ txChannel: null });
+                console.log('[Gh3036Store] TX 通道已清理: 设备', deviceId, '已断开');
+              }
+              
+              if (rxChannel?.device_id === deviceId) {
+                set({ rxChannel: null });
+                console.log('[Gh3036Store] RX 通道已清理: 设备', deviceId, '已断开');
+              }
+            }
+          } catch (err) {
+            console.error('[Gh3036Store] Failed to parse device disconnected payload:', err);
+          }
+        }
+      });
+      
       set({ 
         eventListeners: { 
           event: eventUnlisten, 
-          frame: frameUnlisten 
+          frame: frameUnlisten,
+          deviceDisconnected: deviceDisconnectedUnlisten,
         } 
       });
     } catch (err) {
@@ -324,6 +353,9 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     }
     if (eventListeners.frame) {
       eventListeners.frame();
+    }
+    if (eventListeners.deviceDisconnected) {
+      eventListeners.deviceDisconnected();
     }
     
     set({ eventListeners: {} });

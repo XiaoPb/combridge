@@ -18,7 +18,7 @@ use tokio::runtime::Handle;
 use tracing::{debug, error, info, warn};
 
 use crate::device::DeviceManager;
-use crate::service::{EventBus, topics, SerialDataEvent, BleDataEvent, Gh3036FrameEvent};
+use crate::service::{EventBus, topics, SerialDataEvent, BleDataEvent, Gh3036FrameEvent, SerialDisconnectedEvent, BleConnectionEvent};
 use super::csv_writer::CsvWriter;
 use super::types::{Gh3036EventData, Gh3036FrameData, FuncFrame, FrameDecoder};
 
@@ -276,7 +276,33 @@ impl Gh3036Manager {
             }
         });
         
-        info!("GH3036 已订阅 serial:data 和 ble:data 事件");
+        self.event_bus.subscribe_sync(topics::SERIAL_DISCONNECTED, move |_topic, payload| {
+            if let Ok(event) = serde_json::from_str::<SerialDisconnectedEvent>(payload) {
+                info!("GH3036 收到串口断开事件: {}", event.port_name);
+                Self::handle_device_disconnected(&event.port_name);
+            }
+        });
+        
+        self.event_bus.subscribe_sync(topics::BLE_DISCONNECTED, move |_topic, payload| {
+            if let Ok(event) = serde_json::from_str::<BleConnectionEvent>(payload) {
+                info!("GH3036 收到 BLE 断开事件: {}", event.address);
+                Self::handle_device_disconnected(&event.address);
+            }
+        });
+        
+        info!("GH3036 已订阅 serial:data、ble:data、serial:disconnected 和 ble:disconnected 事件");
+    }
+    
+    fn handle_device_disconnected(device_id: &str) {
+        let tx_channel = CALLBACK_CONTEXT.tx_channel.lock();
+        if let Some(channel) = tx_channel.as_ref() {
+            if channel.device_id == device_id {
+                drop(tx_channel);
+                let mut tx_channel = CALLBACK_CONTEXT.tx_channel.lock();
+                *tx_channel = None;
+                info!("GH3036 TX 通道已清理: 设备 {} 已断开", device_id);
+            }
+        }
     }
     
     fn process_data_with_decoder(event_bus: &Arc<EventBus>, decoder: &mut FrameDecoder, data: &[u8]) {

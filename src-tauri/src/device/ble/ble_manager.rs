@@ -6,6 +6,8 @@ use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
 use crate::error::{ComBridgeError, Result};
+use crate::service::event_bus::{EventBus, BleDataEvent, BleConnectionEvent};
+use crate::service::event_bus::topics;
 use super::ble_traits::{
     BleBackend, BleDevice, BleConnection, BleService, BleCharacteristic, NotifyCallback,
 };
@@ -100,16 +102,18 @@ pub struct BleManager {
     subscriptions: RwLock<HashMap<String, HashSet<String>>>,
     at_tabs: RwLock<HashMap<String, AtConnectionTab>>,
     at_config: RwLock<AtConfig>,
+    event_bus: Arc<EventBus>,
 }
 
 impl BleManager {
-    pub fn new() -> Self {
+    pub fn new(event_bus: Arc<EventBus>) -> Self {
         Self {
             mode: RwLock::new(BleMode::Native),
             backend: RwLock::new(None),
             subscriptions: RwLock::new(HashMap::new()),
             at_tabs: RwLock::new(HashMap::new()),
             at_config: RwLock::new(AtConfig::default()),
+            event_bus,
         }
     }
 
@@ -265,6 +269,10 @@ impl BleManager {
             self.at_tabs.write().await.insert(tab.id.clone(), tab);
             info!("创建AT连接TAB: {}", address);
         }
+
+        let event = BleConnectionEvent::new(address, connection.name.clone());
+        self.event_bus.publish_typed(topics::BLE_CONNECTED, &event);
+        info!("BLE设备已连接: {}", address);
         
         Ok(connection)
     }
@@ -287,6 +295,10 @@ impl BleManager {
 
         let mut tabs = self.at_tabs.write().await;
         tabs.retain(|_, tab| tab.address != address);
+
+        let event = BleConnectionEvent::new(address, None);
+        self.event_bus.publish_typed(topics::BLE_DISCONNECTED, &event);
+        info!("BLE设备已断开: {}", address);
         
         Ok(())
     }
@@ -392,10 +404,24 @@ impl BleManager {
         let backend = backend_guard.as_ref().ok_or_else(|| {
             ComBridgeError::ble("BLE后端未配置")
         })?;
+
+        let event_bus = self.event_bus.clone();
+        let address_owned = address.to_string();
+        let wrapped_callback = Arc::new(move |addr: &str, char: &str, data: &[u8]| {
+            let event = BleDataEvent::new(
+                &address_owned,
+                addr,
+                char,
+                data.to_vec(),
+            );
+            event_bus.publish_typed(topics::BLE_DATA, &event);
+
+            callback(addr, char, data);
+        });
         
         match backend {
-            Backend::Native(b) => b.subscribe_notify(address, char_uuid, callback).await?,
-            Backend::At(b) => b.subscribe_notify(address, char_uuid, callback).await?,
+            Backend::Native(b) => b.subscribe_notify(address, char_uuid, wrapped_callback).await?,
+            Backend::At(b) => b.subscribe_notify(address, char_uuid, wrapped_callback).await?,
         }
 
         let mut subscriptions = self.subscriptions.write().await;
@@ -527,12 +553,6 @@ impl BleManager {
 
     pub async fn remove_at_tab(&self, tab_id: &str) {
         self.at_tabs.write().await.remove(tab_id);
-    }
-}
-
-impl Default for BleManager {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

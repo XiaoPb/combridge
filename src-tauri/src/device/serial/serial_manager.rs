@@ -7,6 +7,8 @@ use crate::error::{ComBridgeError, Result};
 use super::serial_config::{PortInfo, SerialPortConfig};
 use super::serial_port::{scan_ports, SerialPort};
 use crate::device::cache::{ChannelCache, RingBufferRef, create_ring_buffer};
+use crate::service::event_bus::{EventBus, SerialDataEvent, SerialConnectedEvent, SerialDisconnectedEvent};
+use crate::service::event_bus::topics;
 
 pub type DataCallback = Arc<dyn Fn(&str, &[u8]) + Send + Sync>;
 
@@ -28,14 +30,16 @@ pub struct SerialManager {
     ports: RwLock<HashMap<String, Arc<Mutex<SerialPort>>>>,
     callbacks: RwLock<HashMap<String, DataCallback>>,
     caches: RwLock<HashMap<String, SerialPortCache>>,
+    event_bus: Arc<EventBus>,
 }
 
 impl SerialManager {
-    pub fn new() -> Self {
+    pub fn new(event_bus: Arc<EventBus>) -> Self {
         Self {
             ports: RwLock::new(HashMap::new()),
             callbacks: RwLock::new(HashMap::new()),
             caches: RwLock::new(HashMap::new()),
+            event_bus,
         }
     }
 
@@ -77,11 +81,14 @@ impl SerialManager {
 
         let port = SerialPort::open(config)?;
         
+        let event_bus = Arc::clone(&self.event_bus);
         let callback_clone = Arc::clone(&callback_arc);
         port.start_read_loop(move |name, data| {
             if let Err(e) = rx_buffer.write(data) {
                 error!("写入接收缓存失败: {}", e);
             }
+            let event = SerialDataEvent::new(name, data.to_vec());
+            event_bus.publish_typed(topics::SERIAL_DATA, &event);
             callback_clone(name, data);
         })?;
 
@@ -93,11 +100,15 @@ impl SerialManager {
             ports.insert(port_name.clone(), Arc::clone(&port));
         }
 
+        let connected_event = SerialConnectedEvent::new(&port_name);
+        self.event_bus.publish_typed(topics::SERIAL_CONNECTED, &connected_event);
+        
         info!("串口 {} 已打开并添加到管理器", port_name);
         Ok(())
     }
 
     pub fn close_port(&self, port_name: &str) -> Result<()> {
+        let port_name_owned = port_name.to_string();
         let port = {
             let mut ports = self.ports.write()
                 .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
@@ -123,6 +134,9 @@ impl SerialManager {
         port.lock()
             .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?
             .close()?;
+
+        let disconnected_event = SerialDisconnectedEvent::new(&port_name_owned);
+        self.event_bus.publish_typed(topics::SERIAL_DISCONNECTED, &disconnected_event);
 
         info!("串口 {} 已关闭并从管理器移除", port_name);
         Ok(())
@@ -258,12 +272,6 @@ impl SerialManager {
     }
 }
 
-impl Default for SerialManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Drop for SerialManager {
     fn drop(&mut self) {
         let _ = self.close_all_ports();
@@ -275,23 +283,29 @@ pub type SerialManagerRef = Arc<SerialManager>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::service::event_bus::EventBus;
+
+    fn create_test_manager() -> SerialManager {
+        let event_bus = Arc::new(EventBus::new(16));
+        SerialManager::new(event_bus)
+    }
 
     #[test]
     fn test_serial_manager_new() {
-        let manager = SerialManager::new();
+        let manager = create_test_manager();
         assert!(manager.get_open_ports().unwrap().is_empty());
     }
 
     #[test]
     fn test_scan_ports() {
-        let manager = SerialManager::new();
+        let manager = create_test_manager();
         let ports = manager.scan_ports().unwrap();
         println!("扫描到 {} 个串口", ports.len());
     }
 
     #[test]
     fn test_register_callback() {
-        let manager = SerialManager::new();
+        let manager = create_test_manager();
         let call_count = Arc::new(Mutex::new(0));
         let count_clone = Arc::clone(&call_count);
 

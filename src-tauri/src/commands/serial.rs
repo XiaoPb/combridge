@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 use tracing::{debug, error, info};
 
 use crate::device::{
@@ -143,12 +143,6 @@ fn parse_flow_control(s: &str) -> Result<FlowControl> {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct SerialDataEvent {
-    pub port_name: String,
-    pub data: Vec<u8>,
-}
-
 #[tauri::command]
 pub async fn scan_serial_ports(
     manager: State<'_, SerialManagerRef>,
@@ -174,7 +168,6 @@ pub async fn scan_serial_ports(
 #[tauri::command]
 pub async fn open_serial_port(
     manager: State<'_, SerialManagerRef>,
-    app: AppHandle,
     config: SerialPortConfigDto,
 ) -> Result<()> {
     info!("尝试打开串口: {}", config.port_name);
@@ -189,15 +182,9 @@ pub async fn open_serial_port(
     };
 
     let port_name = config.port_name.clone();
-    let app_clone = app.clone();
     
     match manager.open_port(config, move |name, data| {
-        let event = SerialDataEvent {
-            port_name: name.to_string(),
-            data: data.to_vec(),
-        };
         debug!("串口 {} 接收到 {} 字节数据", name, data.len());
-        let _ = app_clone.emit("serial-data", &event);
     }) {
         Ok(()) => {
             info!("串口 {} 打开成功", port_name);

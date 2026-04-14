@@ -221,6 +221,42 @@ impl SerialDataEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerialConnectedEvent {
+    pub port_name: String,
+    pub timestamp: u64,
+}
+
+impl SerialConnectedEvent {
+    pub fn new(port_name: impl Into<String>) -> Self {
+        Self {
+            port_name: port_name.into(),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerialDisconnectedEvent {
+    pub port_name: String,
+    pub timestamp: u64,
+}
+
+impl SerialDisconnectedEvent {
+    pub fn new(port_name: impl Into<String>) -> Self {
+        Self {
+            port_name: port_name.into(),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BleDataEvent {
     pub device_id: String,
     pub address: String,
@@ -310,9 +346,33 @@ impl ProtocolParsedEvent {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BleConnectionEvent {
+    pub address: String,
+    pub name: Option<String>,
+    pub timestamp: u64,
+}
+
+impl BleConnectionEvent {
+    pub fn new(address: impl Into<String>, name: Option<String>) -> Self {
+        Self {
+            address: address.into(),
+            name,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+        }
+    }
+}
+
 pub mod topics {
     pub const SERIAL_DATA: &str = "serial:data";
+    pub const SERIAL_CONNECTED: &str = "serial:connected";
+    pub const SERIAL_DISCONNECTED: &str = "serial:disconnected";
     pub const BLE_DATA: &str = "ble:data";
+    pub const BLE_CONNECTED: &str = "ble:connected";
+    pub const BLE_DISCONNECTED: &str = "ble:disconnected";
     pub const GH3036_FRAME: &str = "gh3036:frame";
     pub const PROTOCOL_PARSED: &str = "protocol:parsed";
 }

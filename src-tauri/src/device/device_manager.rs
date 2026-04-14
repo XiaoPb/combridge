@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::error::{ComBridgeError, Result};
+use crate::service::event_bus::EventBus;
 use super::serial::{SerialManager, SerialManagerRef, SerialPortConfig};
 use super::ble::{BleManager, BleManagerRef, BleConnection, AtConfig};
 
@@ -23,15 +24,15 @@ impl std::fmt::Display for DeviceType {
 
 #[derive(Clone)]
 pub struct DeviceManager {
-    serial_manager: SerialManagerRef,
-    ble_manager: BleManagerRef,
+    pub serial_manager: SerialManagerRef,
+    pub ble_manager: BleManagerRef,
 }
 
 impl DeviceManager {
-    pub fn new(serial_manager: SerialManagerRef, ble_manager: BleManagerRef) -> Self {
+    pub fn new(event_bus: Arc<EventBus>) -> Self {
         Self {
-            serial_manager,
-            ble_manager,
+            serial_manager: Arc::new(SerialManager::new(Arc::clone(&event_bus))),
+            ble_manager: Arc::new(BleManager::new(event_bus)),
         }
     }
 
@@ -88,15 +89,6 @@ impl DeviceManager {
         self.ble_manager.disconnect(address).await?;
         info!("BLE 设备已断开: {}", address);
         Ok(())
-    }
-}
-
-impl Default for DeviceManager {
-    fn default() -> Self {
-        Self::new(
-            Arc::new(SerialManager::new()),
-            Arc::new(BleManager::new()),
-        )
     }
 }
 

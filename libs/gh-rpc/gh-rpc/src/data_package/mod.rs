@@ -402,8 +402,8 @@ impl FrameDecoder {
         if frame.pack_header.contains(PackHeader::ALG_DATA_EN) {
             let bits_zigzag = self.read_varint(buffer)?;
             frame.algo_data_bits = zigzag_decode(bits_zigzag) as usize;
-            if frame.algo_data_bits > MAX_ALGO_DATA {
-                frame.algo_data_bits = MAX_ALGO_DATA;
+            if frame.algo_data_bits > MAX_ALGO_DATA - 1 {
+                frame.algo_data_bits = MAX_ALGO_DATA - 1;
             }
             let mut temp = [0i32; MAX_ALGO_DATA];
             self.read_varints(buffer, frame.algo_data_bits, &mut temp)?;
@@ -567,10 +567,12 @@ impl FrameDecoder {
         if data_frame.pack_header.contains(PackHeader::ALG_DATA_EN) {
             self.last_algo_data[0] = data_frame.algo_data_bits as i32;
             for i in 0..data_frame.algo_data_bits {
-                if self.start_flag {
-                    self.last_algo_data[i + 1] = data_frame.algo_data[i];
-                } else {
-                    self.last_algo_data[i + 1] = self.last_algo_data[i + 1] + data_frame.algo_data[i];
+                if i + 1 < MAX_ALGO_DATA {
+                    if self.start_flag {
+                        self.last_algo_data[i + 1] = data_frame.algo_data[i];
+                    } else {
+                        self.last_algo_data[i + 1] = self.last_algo_data[i + 1] + data_frame.algo_data[i];
+                    }
                 }
             }
         }
@@ -907,12 +909,54 @@ mod tests {
         
         let count = decoder.decode_frames(actual_data, &mut frames);
         
-        println!("Decoded {} frames", count);
-        for (i, frame) in frames.iter().enumerate() {
-            println!("Frame {}: frame_cnt={}, ch_num={}, timestamp={}", 
-                i, frame.frame_cnt, frame.ch_num, frame.timestamp);
+        assert!(count > 0);
+    }
+
+    #[test]
+    fn test_algo_data_boundary() {
+        let mut decoder = FrameDecoder::new();
+        
+        let mut frame = DataFrame::default();
+        frame.pack_header = PackHeader::ALG_DATA_EN;
+        frame.algo_data_bits = MAX_ALGO_DATA;
+        for i in 0..MAX_ALGO_DATA {
+            frame.algo_data.push(i as i32).unwrap();
         }
         
-        assert!(count > 0);
+        let func_frame = decoder.process_single_frame(&frame);
+        
+        assert_eq!(func_frame.p_algo_res.len(), MAX_ALGO_DATA);
+        assert_eq!(func_frame.p_algo_res[0], MAX_ALGO_DATA as i32);
+    }
+
+    #[test]
+    fn test_algo_data_max_minus_one() {
+        let mut decoder = FrameDecoder::new();
+        
+        let mut frame = DataFrame::default();
+        frame.pack_header = PackHeader::ALG_DATA_EN;
+        frame.algo_data_bits = MAX_ALGO_DATA - 1;
+        for i in 0..(MAX_ALGO_DATA - 1) {
+            frame.algo_data.push(i as i32).unwrap();
+        }
+        
+        let func_frame = decoder.process_single_frame(&frame);
+        
+        assert_eq!(func_frame.p_algo_res.len(), MAX_ALGO_DATA);
+        assert_eq!(func_frame.p_algo_res[0], (MAX_ALGO_DATA - 1) as i32);
+    }
+
+    #[test]
+    fn test_algo_data_zero() {
+        let mut decoder = FrameDecoder::new();
+        
+        let mut frame = DataFrame::default();
+        frame.pack_header = PackHeader::ALG_DATA_EN;
+        frame.algo_data_bits = 0;
+        
+        let func_frame = decoder.process_single_frame(&frame);
+        
+        assert_eq!(func_frame.p_algo_res.len(), 1);
+        assert_eq!(func_frame.p_algo_res[0], 0);
     }
 }

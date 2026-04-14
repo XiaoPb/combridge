@@ -9,6 +9,12 @@ import Gh3036ChannelConfig from './Gh3036ChannelConfig';
 import Gh3036DataView from './Gh3036DataView';
 import type { Gh3036FrameData } from '../../api/types';
 
+interface EventBusEvent {
+  topic: string;
+  payload: string;
+  timestamp: number;
+}
+
 const Gh3036Panel: React.FC = () => {
   const { t } = useTranslation('protocol');
   const {
@@ -37,8 +43,15 @@ const Gh3036Panel: React.FC = () => {
     let unlisten: (() => void) | undefined;
 
     const setupListener = async () => {
-      unlisten = await listen<Gh3036FrameData>('gh3036-frame', (event) => {
-        addFrameData(event.payload);
+      unlisten = await listen<EventBusEvent>('event-bus', (event) => {
+        if (event.payload.topic === 'gh3036:frame') {
+          try {
+            const frameData = JSON.parse(event.payload.payload) as Gh3036FrameData;
+            addFrameData(frameData);
+          } catch (err) {
+            console.error('[Gh3036Panel] Failed to parse gh3036:frame payload:', err);
+          }
+        }
       });
     };
 

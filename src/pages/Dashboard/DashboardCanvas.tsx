@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, Row, Col, Empty, Statistic, Progress, Tag } from 'antd';
 import { useDashboardStore } from '../../stores/dashboardStore';
-import type { WidgetGroup, DatasetConfig } from '../../types/dashboard';
+import type { WidgetGroup, DatasetConfig, WidgetConfig } from '../../types/dashboard';
 import GaugeWidget from './widgets/GaugeWidget';
 import TextWidget from './widgets/TextWidget';
 import LedWidget from './widgets/LedWidget';
@@ -21,21 +21,26 @@ const DashboardCanvas: React.FC = () => {
     return null;
   };
 
-  const getValuesForIndices = (indices: number[]): number[] => {
-    if (parsedDataBuffer.length === 0) return indices.map(() => 0);
-    const latest = parsedDataBuffer[parsedDataBuffer.length - 1];
-    const keys = Object.keys(latest.values);
-    return indices.map((idx) => {
-      if (idx < keys.length) {
-        return latest.values[keys[idx]] ?? 0;
-      }
-      return 0;
-    });
-  };
+  const datasetToWidgetConfig = (dataset: DatasetConfig, dataKey: string): WidgetConfig => ({
+    id: `dataset-${dataset.index}`,
+    type: dataset.widget as WidgetConfig['type'],
+    title: dataset.title,
+    x: 0,
+    y: 0,
+    width: 1,
+    height: 1,
+    dataKey,
+    min: dataset.min,
+    max: dataset.max,
+    unit: dataset.units,
+    color: dataset.color,
+  });
 
   const renderDatasetWidget = (dataset: DatasetConfig, groupIndex: number, datasetIndex: number) => {
     const value = getLatestValue(dataset.index);
     const key = `${groupIndex}-${datasetIndex}`;
+    const dataKey = `field_${dataset.index}`;
+    const config = datasetToWidgetConfig(dataset, dataKey);
 
     switch (dataset.widget) {
       case 'x':
@@ -63,36 +68,19 @@ const DashboardCanvas: React.FC = () => {
       case 'gauge':
         return (
           <Card key={key} size="small" style={{ marginBottom: 8 }}>
-            <GaugeWidget
-              title={dataset.title}
-              value={value ?? 0}
-              unit={dataset.units}
-              min={dataset.min}
-              max={dataset.max}
-              color={dataset.color}
-            />
+            <GaugeWidget config={config} />
           </Card>
         );
       case 'text':
         return (
           <Card key={key} size="small" style={{ marginBottom: 8 }}>
-            <TextWidget
-              title={dataset.title}
-              value={value ?? 0}
-              unit={dataset.units}
-              color={dataset.color}
-            />
+            <TextWidget config={config} />
           </Card>
         );
       case 'led':
         return (
           <Card key={key} size="small" style={{ marginBottom: 8 }}>
-            <LedWidget
-              title={dataset.title}
-              value={value ?? 0}
-              threshold={dataset.ledHigh}
-              color={dataset.color}
-            />
+            <LedWidget config={config} />
           </Card>
         );
       default:
@@ -113,8 +101,19 @@ const DashboardCanvas: React.FC = () => {
     const isCompass = group.widget === 'compass';
 
     if (isAccelerometer && group.datasets.length >= 3) {
-      const indices = group.datasets.slice(0, 3).map((d) => d.index);
-      const values = getValuesForIndices(indices);
+      const config: WidgetConfig = {
+        id: `accelerometer-${groupIndex}`,
+        type: 'accelerometer',
+        title: group.title,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+        dataKey: 'accel',
+        min: group.datasets[0]?.min ?? -10,
+        max: group.datasets[0]?.max ?? 10,
+        color: group.datasets[0]?.color,
+      };
       return (
         <Card
           key={groupIndex}
@@ -122,18 +121,23 @@ const DashboardCanvas: React.FC = () => {
           size="small"
           style={{ marginBottom: 16 }}
         >
-          <AccelerometerWidget
-            values={{ x: values[0], y: values[1], z: values[2] }}
-            min={group.datasets[0]?.min ?? -10}
-            max={group.datasets[0]?.max ?? 10}
-            color={group.datasets[0]?.color}
-          />
+          <AccelerometerWidget config={config} />
         </Card>
       );
     }
 
     if (isCompass && group.datasets.length >= 1) {
-      const value = getLatestValue(group.datasets[0].index);
+      const config: WidgetConfig = {
+        id: `compass-${groupIndex}`,
+        type: 'compass',
+        title: group.title,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+        dataKey: `field_${group.datasets[0].index}`,
+        color: group.datasets[0]?.color,
+      };
       return (
         <Card
           key={groupIndex}
@@ -141,10 +145,7 @@ const DashboardCanvas: React.FC = () => {
           size="small"
           style={{ marginBottom: 16 }}
         >
-          <CompassWidget
-            value={value ?? 0}
-            color={group.datasets[0]?.color}
-          />
+          <CompassWidget config={config} />
         </Card>
       );
     }

@@ -8,3 +8,4 @@ export * from './useLog';
 export * from './useTheme';
 export * from './useProtocol';
 export * from './useConnectedDevices';
+export * from './useModuleSubscribe';

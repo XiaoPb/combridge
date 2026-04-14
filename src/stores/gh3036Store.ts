@@ -16,6 +16,12 @@ export type Gh3036EventData = {
 
 export type Gh3036FrameEventData = Gh3036FrameData;
 
+interface EventBusEvent {
+  topic: string;
+  payload: string;
+  timestamp: number;
+}
+
 interface Gh3036State {
   isInitialized: boolean;
   isLoading: boolean;
@@ -277,12 +283,26 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     try {
       await gh3036Api.subscribeEvents();
       
-      const eventUnlisten = await listen<Gh3036EventData>('gh3036-event', (event) => {
-        get().addEventData(event.payload);
+      const eventUnlisten = await listen<EventBusEvent>('event-bus', (event) => {
+        if (event.payload.topic === 'gh3036:event') {
+          try {
+            const parsed = JSON.parse(event.payload.payload) as Gh3036EventData;
+            get().addEventData(parsed);
+          } catch (err) {
+            console.error('[Gh3036Store] Failed to parse gh3036:event payload:', err);
+          }
+        }
       });
       
-      const frameUnlisten = await listen<Gh3036FrameEventData>('gh3036-frame', (event) => {
-        get().addFrameData(event.payload);
+      const frameUnlisten = await listen<EventBusEvent>('event-bus', (event) => {
+        if (event.payload.topic === 'gh3036:frame') {
+          try {
+            const parsed = JSON.parse(event.payload.payload) as Gh3036FrameEventData;
+            get().addFrameData(parsed);
+          } catch (err) {
+            console.error('[Gh3036Store] Failed to parse gh3036:frame payload:', err);
+          }
+        }
       });
       
       set({ 

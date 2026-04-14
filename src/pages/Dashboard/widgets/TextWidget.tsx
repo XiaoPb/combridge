@@ -1,22 +1,21 @@
 import React from 'react';
 import { Typography, theme } from 'antd';
+import type { WidgetConfig } from '../../../types/dashboard';
+import { useDashboardStore } from '../../../stores/dashboardStore';
 
 const { Text } = Typography;
 
 interface TextWidgetProps {
-  title: string;
-  value: number;
-  unit?: string;
-  color?: string;
+  config: WidgetConfig;
 }
 
-const TextWidget: React.FC<TextWidgetProps> = ({
-  title,
-  value,
-  unit = '',
-  color,
-}) => {
+const TextWidget: React.FC<TextWidgetProps> = ({ config }) => {
   const { token } = theme.useToken();
+  const { dataBuffer } = useDashboardStore();
+
+  const value = dataBuffer.length > 0 
+    ? dataBuffer[dataBuffer.length - 1].values[config.dataKey] ?? 0 
+    : 0;
 
   return (
     <div
@@ -29,20 +28,20 @@ const TextWidget: React.FC<TextWidgetProps> = ({
       }}
     >
       <Text type="secondary" style={{ fontSize: 12, marginBottom: 4 }}>
-        {title}
+        {config.title}
       </Text>
       <Text
         style={{
           fontSize: 32,
           fontWeight: 'bold',
-          color: color || token.colorText,
+          color: config.color || token.colorText,
         }}
       >
         {value.toFixed(2)}
       </Text>
-      {unit && (
+      {config.unit && (
         <Text type="secondary" style={{ fontSize: 14 }}>
-          {unit}
+          {config.unit}
         </Text>
       )}
     </div>

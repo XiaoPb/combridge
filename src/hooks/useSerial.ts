@@ -235,8 +235,21 @@ export const useSerial = () => {
             setPorts(portList);
           }
         }
+        const openPorts: string[] = await serialApi.getOpenPorts();
+        const store = useSerialStore.getState();
+        for (const portName of openPorts) {
+          const existingTab = store.tabs.find(t => t.portName === portName && t.tabType === 'port');
+          if (!existingTab) {
+            store.addPortTab(portName);
+            const newTab = store.tabs.find(t => t.portName === portName && t.tabType === 'port');
+            if (newTab) {
+              store.updateTab(newTab.key, { isConnected: true, openedAt: Date.now() });
+            }
+          } else if (!existingTab.isConnected) {
+            store.updateTab(existingTab.key, { isConnected: true, openedAt: Date.now() });
+          }
+        }
       } catch {
-        // 静默处理扫描错误
       }
     }, intervalMs);
   }, [setPorts, addLog]);

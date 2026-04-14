@@ -260,24 +260,24 @@ impl Gh3036Manager {
         
         let frame_decoder_clone = frame_decoder.clone();
         let event_bus_clone = event_bus.clone();
-        self.event_bus.subscribe_json::<SerialDataEvent, _>(topics::SERIAL_DATA, move |_topic, event| {
+        self.event_bus.subscribe_msgpack::<SerialDataEvent, _>(topics::SERIAL_DATA, move |_topic, event| {
             let mut decoder = frame_decoder_clone.lock();
             Self::process_data_with_decoder(&event_bus_clone, &mut decoder, &event.data);
         });
         
         let frame_decoder_clone = frame_decoder.clone();
         let event_bus_clone = event_bus.clone();
-        self.event_bus.subscribe_json::<BleDataEvent, _>(topics::BLE_DATA, move |_topic, event| {
+        self.event_bus.subscribe_msgpack::<BleDataEvent, _>(topics::BLE_DATA, move |_topic, event| {
             let mut decoder = frame_decoder_clone.lock();
             Self::process_data_with_decoder(&event_bus_clone, &mut decoder, &event.data);
         });
         
-        self.event_bus.subscribe_json::<SerialDisconnectedEvent, _>(topics::SERIAL_DISCONNECTED, move |_topic, event| {
+        self.event_bus.subscribe_msgpack::<SerialDisconnectedEvent, _>(topics::SERIAL_DISCONNECTED, move |_topic, event| {
             info!("GH3036 收到串口断开事件: {}", event.port_name);
             Self::handle_device_disconnected(&event.port_name);
         });
         
-        self.event_bus.subscribe_json::<BleConnectionEvent, _>(topics::BLE_DISCONNECTED, move |_topic, event| {
+        self.event_bus.subscribe_msgpack::<BleConnectionEvent, _>(topics::BLE_DISCONNECTED, move |_topic, event| {
             info!("GH3036 收到 BLE 断开事件: {}", event.address);
             Self::handle_device_disconnected(&event.address);
         });
@@ -312,7 +312,7 @@ impl Gh3036Manager {
                     frame_data.rawdata.len(),
                     frame_data.phy_value.iter().map(|&v| v as f32).collect(),
                 );
-                event_bus.publish_typed(topics::GH3036_FRAME, &frame_event);
+                event_bus.publish_msgpack(topics::GH3036_FRAME, &frame_event);
                 
                 if let Err(e) = CALLBACK_CONTEXT.send_frame_data(frame_data) {
                     error!("GH3036 帧数据入队失败: {}", e);

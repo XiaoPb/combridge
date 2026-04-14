@@ -88,7 +88,7 @@ impl SerialManager {
                 error!("写入接收缓存失败: {}", e);
             }
             let event = SerialDataEvent::new(name, data.to_vec());
-            event_bus.publish_typed(topics::SERIAL_DATA, &event);
+            event_bus.publish_msgpack(topics::SERIAL_DATA, &event);
             callback_clone(name, data);
         })?;
 

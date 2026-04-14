@@ -35,7 +35,7 @@ data_flow_events:
   
   serial_events:
     serial_data:
-      topic: "serial/{port_name}/data"
+      topic: "serial:data"
       description: "串口接收原始数据事件"
       publisher: "SerialManager"
       payload:
@@ -49,7 +49,7 @@ data_flow_events:
           type: "number"
 
     serial_connected:
-      topic: "serial/{port_name}/connected"
+      topic: "serial:connected"
       description: "串口连接成功事件"
       publisher: "SerialManager"
       payload:
@@ -66,7 +66,7 @@ data_flow_events:
           type: "number"
 
     serial_disconnected:
-      topic: "serial/{port_name}/disconnected"
+      topic: "serial:disconnected"
       description: "串口断开连接事件"
       publisher: "SerialManager"
       payload:
@@ -78,7 +78,7 @@ data_flow_events:
           type: "number"
 
     serial_error:
-      topic: "serial/{port_name}/error"
+      topic: "serial:error"
       description: "串口错误事件"
       publisher: "SerialManager"
       payload:
@@ -93,7 +93,7 @@ data_flow_events:
 
   ble_events:
     ble_data:
-      topic: "ble/{address}/{characteristic_uuid}/data"
+      topic: "ble:data"
       description: "BLE特征值数据事件"
       publisher: "BleManager"
       payload:
@@ -110,7 +110,7 @@ data_flow_events:
           type: "number"
 
     ble_connected:
-      topic: "ble/{address}/connected"
+      topic: "ble:connected"
       description: "BLE设备连接成功事件"
       publisher: "BleManager"
       payload:
@@ -126,7 +126,7 @@ data_flow_events:
           type: "number"
 
     ble_disconnected:
-      topic: "ble/{address}/disconnected"
+      topic: "ble:disconnected"
       description: "BLE设备断开连接事件"
       publisher: "BleManager"
       payload:
@@ -168,7 +168,7 @@ data_flow_events:
           type: "number"
 
     ble_error:
-      topic: "ble/{address}/error"
+      topic: "ble:error"
       description: "BLE错误事件"
       publisher: "BleManager"
       payload:
@@ -237,7 +237,7 @@ data_flow_events:
 
   protocol_events:
     protocol_parsed:
-      topic: "protocol/{plugin_id}/parsed"
+      topic: "protocol:parsed"
       description: "协议解析结果事件"
       publisher: "PluginManager"
       payload:
@@ -253,7 +253,7 @@ data_flow_events:
           type: "number"
 
     protocol_error:
-      topic: "protocol/{plugin_id}/error"
+      topic: "protocol:error"
       description: "协议解析错误事件"
       publisher: "PluginManager"
       payload:
@@ -271,7 +271,7 @@ data_flow_events:
 
   waveform_events:
     waveform_data:
-      topic: "waveform/{buffer_id}/data"
+      topic: "waveform:data"
       description: "波形数据更新事件"
       publisher: "WaveformManager"
       payload:
@@ -285,7 +285,7 @@ data_flow_events:
           type: "number"
 
     waveform_status:
-      topic: "waveform/{buffer_id}/status"
+      topic: "waveform:status"
       description: "缓冲区状态变化事件"
       publisher: "WaveformManager"
       payload:
@@ -302,7 +302,7 @@ data_flow_events:
 
   dashboard_events:
     dashboard_parser_updated:
-      topic: "dashboard/parser/{script_id}/updated"
+      topic: "dashboard:parser:updated"
       description: "解析脚本更新事件"
       publisher: "DashboardManager"
       payload:
@@ -314,7 +314,7 @@ data_flow_events:
           type: "number"
 
     dashboard_json_updated:
-      topic: "dashboard/json/{config_id}/updated"
+      topic: "dashboard:json:updated"
       description: "JSON配置更新事件"
       publisher: "DashboardManager"
       payload:
@@ -327,7 +327,7 @@ data_flow_events:
 
   system_events:
     system_started:
-      topic: "system/started"
+      topic: "system:started"
       description: "应用启动完成事件"
       publisher: "SystemManager"
       payload:
@@ -339,7 +339,7 @@ data_flow_events:
           type: "number"
 
     system_shutdown:
-      topic: "system/shutdown"
+      topic: "system:shutdown"
       description: "应用关闭事件"
       publisher: "SystemManager"
       payload:
@@ -350,7 +350,7 @@ data_flow_events:
           type: "number"
 
     system_config_changed:
-      topic: "system/config/changed"
+      topic: "system:config:changed"
       description: "配置变更事件"
       publisher: "SystemManager"
       payload:
@@ -366,7 +366,7 @@ data_flow_events:
           type: "number"
 
     system_error:
-      topic: "system/error"
+      topic: "system:error"
       description: "系统错误事件"
       publisher: "SystemManager"
       payload:
@@ -425,6 +425,30 @@ control_flow_commands:
       returns:
         success: { type: "boolean" }
         error: { type: "string", optional: true }
+
+    - command: "device_list"
+      description: "获取串口设备列表及连接状态"
+      params: {}
+      returns:
+        devices:
+          type: "array"
+          items:
+            port_name: { type: "string", description: "端口名称，如 COM1" }
+            description: { type: "string", description: "设备描述" }
+            manufacturer: { type: "string", description: "制造商" }
+            serial_number: { type: "string", description: "序列号" }
+            product_id: { type: "string", description: "产品ID" }
+            vendor_id: { type: "string", description: "供应商ID" }
+            available: { type: "boolean", description: "是否可用" }
+            connected: { type: "boolean", description: "是否已连接" }
+            config:
+              type: "object"
+              description: "当前配置（仅已连接设备）"
+              properties:
+                baud_rate: { type: "number" }
+                data_bits: { type: "number" }
+                parity: { type: "string" }
+                stop_bits: { type: "number" }
 
   ble_commands:
     - command: "start_scan"
@@ -502,6 +526,34 @@ control_flow_commands:
       returns:
         success: { type: "boolean" }
         error: { type: "string", optional: true }
+
+    - command: "device_list"
+      description: "获取BLE设备列表及连接状态"
+      params: {}
+      returns:
+        devices:
+          type: "array"
+          items:
+            address: { type: "string", description: "设备MAC地址" }
+            name: { type: "string", description: "设备名称" }
+            rssi: { type: "number", description: "信号强度" }
+            connected: { type: "boolean", description: "是否已连接" }
+            connectable: { type: "boolean", description: "是否可连接" }
+            mtu: { type: "number", description: "MTU大小（仅已连接设备）" }
+            services:
+              type: "array"
+              description: "服务列表（仅已连接设备）"
+              items:
+                uuid: { type: "string" }
+                primary: { type: "boolean" }
+                characteristics:
+                  type: "array"
+                  items:
+                    uuid: { type: "string" }
+                    properties: { type: "array<string>" }
+            advertised_data:
+              type: "object"
+              description: "广播数据"
 
   gh3036_commands:
     - command: "config_tx_channel"
@@ -910,23 +962,23 @@ event_subscriptions:
   Gh3036Manager:
     module: "gh3036::manager"
     subscribes:
-      - topic: "serial/{port_name}/data"
+      - topic: "serial:data"
         description: "订阅串口数据（TX/RX通道）"
-      - topic: "ble/{address}/{characteristic_uuid}/data"
+      - topic: "ble:data"
         description: "订阅BLE数据（TX/RX通道）"
 
   PluginManager:
     module: "protocol::plugin_manager"
     subscribes:
-      - topic: "serial/{port_name}/data"
+      - topic: "serial:data"
         description: "订阅串口数据进行协议解析"
-      - topic: "ble/{address}/{characteristic_uuid}/data"
+      - topic: "ble:data"
         description: "订阅BLE数据进行协议解析"
 
   WaveformManager:
     module: "waveform::buffer"
     subscribes:
-      - topic: "protocol/{plugin_id}/parsed"
+      - topic: "protocol:parsed"
         description: "订阅协议解析结果用于波形显示"
       - topic: "gh3036/frame"
         description: "订阅GH3036帧数据"
@@ -937,50 +989,50 @@ event_publishers:
   SerialManager:
     module: "device::serial::serial_manager"
     publishes:
-      - "serial/{port_name}/data"
-      - "serial/{port_name}/connected"
-      - "serial/{port_name}/disconnected"
-      - "serial/{port_name}/error"
+      - "serial:data"
+      - "serial:connected"
+      - "serial:disconnected"
+      - "serial:error"
 
   BleManager:
     module: "device::ble::ble_manager"
     publishes:
-      - "ble/{address}/{characteristic_uuid}/data"
-      - "ble/{address}/connected"
-      - "ble/{address}/disconnected"
-      - "ble/discovered"
-      - "ble/scan/status"
-      - "ble/{address}/error"
+      - "ble:data"
+      - "ble:connected"
+      - "ble:disconnected"
+      - "ble:discovered"
+      - "ble:scan:status"
+      - "ble:error"
 
   Gh3036Manager:
     module: "gh3036::manager"
     publishes:
-      - "gh3036/frame"
-      - "gh3036/event"
-      - "gh3036/channel/changed"
+      - "gh3036:frame"
+      - "gh3036:event"
+      - "gh3036:channel:changed"
 
   PluginManager:
     module: "protocol::plugin_manager"
     publishes:
-      - "protocol/{plugin_id}/parsed"
-      - "protocol/{plugin_id}/error"
+      - "protocol:parsed"
+      - "protocol:error"
 
   WaveformManager:
     module: "waveform::buffer"
     publishes:
-      - "waveform/{buffer_id}/data"
-      - "waveform/{buffer_id}/status"
+      - "waveform:data"
+      - "waveform:status"
 
   DashboardManager:
     module: "dashboard::mod"
     publishes:
-      - "dashboard/parser/{script_id}/updated"
-      - "dashboard/json/{config_id}/updated"
+      - "dashboard:parser:updated"
+      - "dashboard:json:updated"
 
   SystemManager:
     module: "service::system"
     publishes:
-      - "system/started"
-      - "system/shutdown"
-      - "system/config/changed"
-      - "system/error"
+      - "system:started"
+      - "system:shutdown"
+      - "system:config:changed"
+      - "system:error"

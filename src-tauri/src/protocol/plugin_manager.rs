@@ -1,5 +1,6 @@
 use crate::error::{ComBridgeError, Result};
 use crate::protocol::{HookExecutor, HookType, LuaEngine, ProtocolConfig, ScriptLoader};
+use crate::service::event_bus::{topics, BleDataEvent, EventBus, ProtocolParsedEvent, SerialDataEvent};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -54,15 +55,135 @@ pub struct PluginManager {
     plugins: Arc<Mutex<HashMap<String, PluginInternal>>>,
     plugin_infos: Arc<Mutex<HashMap<String, PluginInfo>>>,
     loader: Arc<Mutex<ScriptLoader>>,
+    event_bus: Arc<EventBus>,
 }
 
 impl PluginManager {
-    pub fn new() -> Self {
+    pub fn new(event_bus: Arc<EventBus>) -> Self {
         Self {
             plugins: Arc::new(Mutex::new(HashMap::new())),
             plugin_infos: Arc::new(Mutex::new(HashMap::new())),
             loader: Arc::new(Mutex::new(ScriptLoader::new())),
+            event_bus,
         }
+    }
+
+    pub fn subscribe_to_events(&self) {
+        let plugins = Arc::clone(&self.plugins);
+        let plugin_infos = Arc::clone(&self.plugin_infos);
+        let event_bus = Arc::clone(&self.event_bus);
+
+        let plugins_clone = Arc::clone(&plugins);
+        let plugin_infos_clone = Arc::clone(&plugin_infos);
+        let event_bus_clone = Arc::clone(&event_bus);
+        self.event_bus.subscribe_sync(topics::SERIAL_DATA, move |_topic, payload| {
+            if let Ok(serial_event) = serde_json::from_str::<SerialDataEvent>(payload) {
+                let device_id = &serial_event.device_id;
+                let data = &serial_event.data;
+
+                let plugins_guard = plugins_clone.lock().unwrap_or_else(|e| {
+                    tracing::error!("Failed to lock plugins: {}", e);
+                    panic!("PluginManager lock poisoned");
+                });
+
+                let plugin_infos_guard = plugin_infos_clone.lock().unwrap_or_else(|e| {
+                    tracing::error!("Failed to lock plugin_infos: {}", e);
+                    panic!("PluginManager lock poisoned");
+                });
+
+                for (plugin_id, info) in plugin_infos_guard.iter() {
+                    if info.state == PluginState::Enabled && info.bound_devices.contains(device_id) {
+                        if let Some(plugin) = plugins_guard.get(plugin_id) {
+                            if plugin.executor.has_hook(&HookType::OnDataReceived) {
+                                match plugin.executor.execute_data_hook(HookType::OnDataReceived, data) {
+                                    Ok(result) => {
+                                        if let Some(parsed_data) = result.data {
+                                            let parsed_event = ProtocolParsedEvent::new(
+                                                plugin_id.clone(),
+                                                device_id.clone(),
+                                                data.clone(),
+                                                serde_json::to_value(&parsed_data).unwrap_or(serde_json::Value::Null),
+                                            );
+                                            event_bus_clone.publish_typed(topics::PROTOCOL_PARSED, &parsed_event);
+                                            tracing::debug!(
+                                                "Protocol parsed: plugin={}, device={}, data_len={}",
+                                                plugin_id,
+                                                device_id,
+                                                parsed_data.len()
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "Failed to execute protocol hook: plugin={}, error={}",
+                                            plugin_id,
+                                            e
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        let plugins_for_ble = Arc::clone(&plugins);
+        let plugin_infos_for_ble = Arc::clone(&plugin_infos);
+        let event_bus_for_ble = Arc::clone(&event_bus);
+        self.event_bus.subscribe_sync(topics::BLE_DATA, move |_topic, payload| {
+            if let Ok(ble_event) = serde_json::from_str::<BleDataEvent>(payload) {
+                let device_id = &ble_event.device_id;
+                let data = &ble_event.data;
+
+                let plugins_guard = plugins_for_ble.lock().unwrap_or_else(|e| {
+                    tracing::error!("Failed to lock plugins: {}", e);
+                    panic!("PluginManager lock poisoned");
+                });
+
+                let plugin_infos_guard = plugin_infos_for_ble.lock().unwrap_or_else(|e| {
+                    tracing::error!("Failed to lock plugin_infos: {}", e);
+                    panic!("PluginManager lock poisoned");
+                });
+
+                for (plugin_id, info) in plugin_infos_guard.iter() {
+                    if info.state == PluginState::Enabled && info.bound_devices.contains(device_id) {
+                        if let Some(plugin) = plugins_guard.get(plugin_id) {
+                            if plugin.executor.has_hook(&HookType::OnDataReceived) {
+                                match plugin.executor.execute_data_hook(HookType::OnDataReceived, data) {
+                                    Ok(result) => {
+                                        if let Some(parsed_data) = result.data {
+                                            let parsed_event = ProtocolParsedEvent::new(
+                                                plugin_id.clone(),
+                                                device_id.clone(),
+                                                data.clone(),
+                                                serde_json::to_value(&parsed_data).unwrap_or(serde_json::Value::Null),
+                                            );
+                                            event_bus_for_ble.publish_typed(topics::PROTOCOL_PARSED, &parsed_event);
+                                            tracing::debug!(
+                                                "Protocol parsed: plugin={}, device={}, data_len={}",
+                                                plugin_id,
+                                                device_id,
+                                                parsed_data.len()
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "Failed to execute protocol hook: plugin={}, error={}",
+                                            plugin_id,
+                                            e
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        tracing::info!("PluginManager subscribed to serial:data and ble:data events");
     }
 
     pub fn load_plugin(&self, plugin_id: &str, path: PathBuf) -> Result<PluginInfo> {
@@ -326,18 +447,13 @@ impl PluginManager {
     }
 }
 
-impl Default for PluginManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Clone for PluginManager {
     fn clone(&self) -> Self {
         Self {
             plugins: Arc::clone(&self.plugins),
             plugin_infos: Arc::clone(&self.plugin_infos),
             loader: Arc::clone(&self.loader),
+            event_bus: Arc::clone(&self.event_bus),
         }
     }
 }
@@ -350,6 +466,10 @@ mod tests {
     use super::*;
     use std::io::Write;
     use tempfile::NamedTempFile;
+
+    fn create_event_bus() -> Arc<EventBus> {
+        Arc::new(EventBus::new(16))
+    }
 
     fn create_test_plugin_file() -> NamedTempFile {
         let mut temp_file = NamedTempFile::with_suffix(".lua").unwrap();
@@ -377,7 +497,7 @@ mod tests {
     #[test]
     fn test_load_plugin() {
         let temp_file = create_test_plugin_file();
-        let manager = PluginManager::new();
+        let manager = PluginManager::new(create_event_bus());
 
         let info = manager.load_plugin("test", temp_file.path().to_path_buf()).unwrap();
         assert_eq!(info.id, "test");
@@ -388,7 +508,7 @@ mod tests {
     #[test]
     fn test_enable_disable_plugin() {
         let temp_file = create_test_plugin_file();
-        let manager = PluginManager::new();
+        let manager = PluginManager::new(create_event_bus());
 
         manager.load_plugin("test", temp_file.path().to_path_buf()).unwrap();
 
@@ -404,7 +524,7 @@ mod tests {
     #[test]
     fn test_bind_unbind_protocol() {
         let temp_file = create_test_plugin_file();
-        let manager = PluginManager::new();
+        let manager = PluginManager::new(create_event_bus());
 
         manager.load_plugin("test", temp_file.path().to_path_buf()).unwrap();
         manager.bind_protocol("test", "device1").unwrap();
@@ -420,7 +540,7 @@ mod tests {
     #[test]
     fn test_unload_plugin() {
         let temp_file = create_test_plugin_file();
-        let manager = PluginManager::new();
+        let manager = PluginManager::new(create_event_bus());
 
         manager.load_plugin("test", temp_file.path().to_path_buf()).unwrap();
         assert!(manager.get_plugin("test").is_ok());
@@ -432,7 +552,7 @@ mod tests {
     #[test]
     fn test_list_protocols() {
         let temp_file = create_test_plugin_file();
-        let manager = PluginManager::new();
+        let manager = PluginManager::new(create_event_bus());
 
         manager.load_plugin("test1", temp_file.path().to_path_buf()).unwrap();
         manager.load_plugin("test2", temp_file.path().to_path_buf()).unwrap();

@@ -3,7 +3,7 @@
 //! 本模块实现 GH3036 协议的核心管理功能：
 //! - 协议实例生命周期管理
 //! - RPC 命令执行（基于 gh-rpc 库）
-//! - RX 数据处理
+//! - RX 数据处理（通过 EventBus 订阅）
 //! - CSV 数据保存
 
 use std::collections::HashMap;
@@ -18,6 +18,7 @@ use tokio::runtime::Handle;
 use tracing::{debug, error, info, warn};
 
 use crate::device::DeviceManager;
+use crate::service::{EventBus, topics, SerialDataEvent, BleDataEvent, Gh3036FrameEvent};
 use super::csv_writer::CsvWriter;
 use super::types::{Gh3036EventData, Gh3036FrameData, FuncFrame, FrameDecoder};
 
@@ -190,8 +191,8 @@ fn data_frame_handler(data: &[u8], size: usize, _ret: Option<&mut [u8]>) -> i32 
 }
 
 pub struct Gh3036Manager {
-    frame_decoder: Mutex<FrameDecoder>,
     device_manager: Arc<DeviceManager>,
+    event_bus: Arc<EventBus>,
     initialized: Mutex<bool>,
     running: Arc<std::sync::atomic::AtomicBool>,
     thread_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
@@ -204,10 +205,10 @@ unsafe impl Send for Gh3036Manager {}
 unsafe impl Sync for Gh3036Manager {}
 
 impl Gh3036Manager {
-    pub fn new(device_manager: Arc<DeviceManager>) -> Self {
+    pub fn new(device_manager: Arc<DeviceManager>, event_bus: Arc<EventBus>) -> Self {
         Self {
-            frame_decoder: Mutex::new(FrameDecoder::new()),
             device_manager,
+            event_bus,
             initialized: Mutex::new(false),
             running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             thread_handle: Mutex::new(None),
@@ -239,6 +240,8 @@ impl Gh3036Manager {
         }
 
         self.initialize_rpc()?;
+        
+        self.subscribe_data_events();
 
         {
             let mut initialized = self.initialized.lock();
@@ -249,6 +252,55 @@ impl Gh3036Manager {
 
         info!("GH3036 协议管理器初始化成功");
         Ok(())
+    }
+    
+    fn subscribe_data_events(&self) {
+        let frame_decoder = Arc::new(Mutex::new(FrameDecoder::new()));
+        let event_bus = self.event_bus.clone();
+        
+        let frame_decoder_clone = frame_decoder.clone();
+        let event_bus_clone = event_bus.clone();
+        self.event_bus.subscribe_sync(topics::SERIAL_DATA, move |_topic, payload| {
+            if let Ok(event) = serde_json::from_str::<SerialDataEvent>(payload) {
+                let mut decoder = frame_decoder_clone.lock();
+                Self::process_data_with_decoder(&event_bus_clone, &mut decoder, &event.data);
+            }
+        });
+        
+        let frame_decoder_clone = frame_decoder.clone();
+        let event_bus_clone = event_bus.clone();
+        self.event_bus.subscribe_sync(topics::BLE_DATA, move |_topic, payload| {
+            if let Ok(event) = serde_json::from_str::<BleDataEvent>(payload) {
+                let mut decoder = frame_decoder_clone.lock();
+                Self::process_data_with_decoder(&event_bus_clone, &mut decoder, &event.data);
+            }
+        });
+        
+        info!("GH3036 已订阅 serial:data 和 ble:data 事件");
+    }
+    
+    fn process_data_with_decoder(event_bus: &Arc<EventBus>, decoder: &mut FrameDecoder, data: &[u8]) {
+        let mut frames: heapless::Vec<FuncFrame, 16> = heapless::Vec::new();
+        let count = decoder.decode_frames(data, &mut frames);
+        
+        if count > 0 {
+            debug!("GH3036 解码到 {} 帧", count);
+            for frame in frames.iter() {
+                let frame_data = Gh3036FrameData::from_func_frame(frame);
+                let frame_event = Gh3036FrameEvent::new(
+                    frame_data.function_id as u8,
+                    &frame_data.function_name,
+                    frame_data.frame_id as u32,
+                    frame_data.rawdata.len(),
+                    frame_data.phy_value.iter().map(|&v| v as f32).collect(),
+                );
+                event_bus.publish_typed(topics::GH3036_FRAME, &frame_event);
+                
+                if let Err(e) = CALLBACK_CONTEXT.send_frame_data(frame_data) {
+                    error!("GH3036 帧数据入队失败: {}", e);
+                }
+            }
+        }
     }
 
     fn initialize_rpc(&self) -> Result<(), String> {
@@ -527,25 +579,6 @@ impl Gh3036Manager {
             })?;
 
         Ok(())
-    }
-
-    pub fn on_data_received(&self, _device_id: &str, data: &[u8]) {
-        debug!("GH3036 接收数据: {} bytes", data.len());
-
-        let mut frames: heapless::Vec<FuncFrame, 16> = heapless::Vec::new();
-        
-        let mut decoder = self.frame_decoder.lock();
-        let count = decoder.decode_frames(data, &mut frames);
-        
-        if count > 0 {
-            debug!("GH3036 解码到 {} 帧", count);
-            for frame in frames.iter() {
-                let frame_data = Gh3036FrameData::from_func_frame(frame);
-                if let Err(e) = CALLBACK_CONTEXT.send_frame_data(frame_data) {
-                    error!("GH3036 帧数据入队失败: {}", e);
-                }
-            }
-        }
     }
 
     async fn call_command(&self, key: &str, data: &[u8]) -> Result<Vec<u8>, String> {
@@ -921,10 +954,6 @@ impl Gh3036Manager {
 
     pub fn get_library_status(&self) -> (bool, bool) {
         (true, self.is_initialized())
-    }
-
-    pub fn on_rx_data(&self, device_id: &str, data: &[u8]) {
-        self.on_data_received(device_id, data);
     }
 }
 

@@ -77,11 +77,11 @@ pub fn run() {
 
     let event_bus = Arc::new(EventBus::new(1024));
     let connection_pool = Arc::new(ConnectionPool::new());
-    let plugin_manager = Arc::new(PluginManager::new());
+    let plugin_manager = Arc::new(PluginManager::new(event_bus.clone()));
     let waveform_manager = Arc::new(WaveformManager::new());
     
     let device_manager = Arc::new(DeviceManager::new(event_bus.clone()));
-    let gh3036_manager = Arc::new(Gh3036Manager::new(device_manager.clone()));
+    let gh3036_manager = Arc::new(Gh3036Manager::new(device_manager.clone(), event_bus.clone()));
 
     let app_state = create_app_state_with_event_bus(event_bus.clone());
     let app_data_dir = get_app_data_dir();
@@ -100,6 +100,7 @@ pub fn run() {
 
     let ble_manager_clone = device_manager.ble_manager.clone();
     let event_bus_clone = event_bus.clone();
+    let plugin_manager_clone = plugin_manager.clone();
     
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -179,6 +180,9 @@ pub fn run() {
                     info!("BLE 初始化成功");
                 }
             });
+            
+            info!("PluginManager 订阅 EventBus 事件");
+            plugin_manager_clone.subscribe_to_events();
             
             info!("启动 EventBridge 服务");
             let app_handle = app.handle().clone();
@@ -286,7 +290,6 @@ pub fn run() {
             commands::gh3036::gh3036_execute_rpc,
             commands::gh3036::gh3036_subscribe_events,
             commands::gh3036::gh3036_get_library_status,
-            commands::gh3036::gh3036_on_rx_data,
             commands::waveform::waveform_create_buffer,
             commands::waveform::waveform_remove_buffer,
             commands::waveform::waveform_configure_parser,

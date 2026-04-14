@@ -8,7 +8,13 @@ pub mod msgpack_handler;
 pub use config::ConfigService;
 pub use data_queue::DataQueue;
 pub use event_bridge::{EventBridge, EventFilter};
-pub use event_bus::EventBus;
+pub use event_bus::{
+    EventBus, Event, 
+    SerialDataEvent, SerialConnectedEvent, SerialDisconnectedEvent,
+    BleDataEvent, BleConnectionEvent,
+    Gh3036FrameEvent, ProtocolParsedEvent,
+    topics,
+};
 pub use logger::LoggerService;
 pub use msgpack_handler::{
     create_command_message, create_data_message, create_heartbeat_message, create_response_message,

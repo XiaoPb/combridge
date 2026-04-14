@@ -151,13 +151,3 @@ pub async fn gh3036_get_library_status(
 ) -> Result<(bool, bool), ErrorResponse> {
     Ok(manager.get_library_status())
 }
-
-#[tauri::command]
-pub async fn gh3036_on_rx_data(
-    device_id: String,
-    data: Vec<u8>,
-    manager: State<'_, Gh3036ManagerRef>,
-) -> Result<(), ErrorResponse> {
-    manager.on_rx_data(&device_id, &data);
-    Ok(())
-}

@@ -58,11 +58,15 @@ impl AtParser {
         }
 
         if line.starts_with("ERROR") {
-            let parts: Vec<&str> = line.splitn(3, '=').collect();
-            let (code, message) = if parts.len() >= 3 {
-                (parts[1].trim().parse().unwrap_or(-1), parts[2].trim().to_string())
-            } else if parts.len() == 2 {
-                (parts[1].trim().parse().unwrap_or(-1), String::new())
+            let parts: Vec<&str> = line.splitn(2, '=').collect();
+            let (code, message) = if parts.len() == 2 {
+                let error_content = parts[1].trim();
+                let error_parts: Vec<&str> = error_content.splitn(2, ':').collect();
+                if error_parts.len() == 2 {
+                    (error_parts[0].trim().parse().unwrap_or(-1), error_parts[1].trim().to_string())
+                } else {
+                    (error_content.parse().unwrap_or(-1), String::new())
+                }
             } else {
                 (-1, line.to_string())
             };

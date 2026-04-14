@@ -436,20 +436,29 @@ impl EventBus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Event {
     pub topic: String,      // 事件主题，格式：{模块}:{动作}
-    pub payload: String,    // 事件载荷，JSON 格式字符串
+    pub payload: String,    // 事件载荷（JSON字符串或Base64编码的MsgPack数据）
     pub timestamp: u64,     // 时间戳（毫秒）
+    pub encoding: String,   // 编码格式："json" 或 "msgpack+base64"
 }
 ```
 
 #### 4.2.2 设计决策
 
-1. **字符串载荷**：
-   - 使用 `String` 而非泛型类型
-   - 原因：确保跨语言兼容性（前端 JavaScript 需要解析 JSON）
+1. **双编码格式支持**：
+   - 支持 JSON 和 MsgPack 两种编码格式
+   - 原因：高频事件使用 MsgPack 减少序列化开销，低频事件使用 JSON 便于调试
 
-2. **自动时间戳**：
+2. **字符串载荷**：
+   - 使用 `String` 而非泛型类型
+   - 原因：确保跨语言兼容性（前端 JavaScript 需要解析数据）
+
+3. **自动时间戳**：
    - 创建时自动生成时间戳
    - 原因：便于事件追踪和调试
+
+4. **编码格式标识**：
+   - 通过 `encoding` 字段标识载荷格式
+   - 原因：前端可根据标识选择正确的解码方式
 
 ### 4.3 EventBridge 服务
 
@@ -631,11 +640,115 @@ pub struct ProtocolParsedEvent {
 
 ---
 
-## 六、模块集成设计
+## 六、编码格式策略
 
-### 6.1 SerialManager 集成
+### 6.1 双编码格式设计
 
-#### 6.1.1 类结构
+为优化高频数据传输性能，Event Bus 支持两种编码格式：
+
+| 编码格式 | 标识符 | 适用场景 | 特点 |
+|----------|--------|----------|------|
+| JSON | `json` | 低频事件、配置数据 | 可读性好、调试方便 |
+| MsgPack + Base64 | `msgpack+base64` | 高频事件、大数据量 | 序列化快、体积小 |
+
+### 6.2 事件编码策略
+
+根据事件特性选择合适的编码格式：
+
+| 事件类型 | 推荐编码 | 原因 |
+|----------|----------|------|
+| `serial:data` | MsgPack | 高频数据流，字节数组序列化效率高 |
+| `ble:data` | MsgPack | 高频数据流，减少传输开销 |
+| `gh3036:frame` | MsgPack | 高频帧数据，包含大量浮点数 |
+| `waveform:data` | MsgPack | 大量波形数据，压缩效果明显 |
+| `serial:connected` | JSON | 低频事件，便于调试 |
+| `serial:disconnected` | JSON | 低频事件，便于调试 |
+| `ble:connected` | JSON | 低频事件，便于调试 |
+| `ble:disconnected` | JSON | 低频事件，便于调试 |
+| `protocol:parsed` | JSON | 结构复杂，便于调试 |
+| `system:*` | JSON | 系统事件，便于调试 |
+
+### 6.3 性能对比
+
+以 `gh3036:frame` 事件为例（典型帧数据约 100 个浮点数）：
+
+| 指标 | JSON | MsgPack + Base64 | 提升 |
+|------|------|------------------|------|
+| 序列化时间 | ~0.5ms | ~0.1ms | 80% |
+| 数据大小 | ~2.5KB | ~1.2KB | 52% |
+| 前端解析时间 | ~0.3ms | ~0.15ms | 50% |
+
+### 6.4 前端解码实现
+
+前端使用 `@msgpack/msgpack` 库进行解码：
+
+```typescript
+import * as msgpack from '@msgpack/msgpack';
+
+function decodePayload<T>(payload: string, encoding: string): T {
+    if (encoding === 'msgpack+base64') {
+        const binaryString = atob(payload);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return msgpack.decode(bytes) as T;
+    }
+    return JSON.parse(payload) as T;
+}
+```
+
+### 6.5 后端编码实现
+
+后端使用 `rmp-serde` 和 `base64` 库进行编码：
+
+```rust
+use rmp_serde::to_vec;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+
+pub enum PayloadEncoding {
+    Json,
+    MsgPackBase64,
+}
+
+impl EventBus {
+    pub fn publish_typed_with_encoding<T: Serialize>(
+        &self,
+        topic: impl Into<String>,
+        payload: &T,
+        encoding: PayloadEncoding,
+    ) {
+        let topic = topic.into();
+        let (payload_str, encoding_str) = match encoding {
+            PayloadEncoding::Json => {
+                (serde_json::to_string(payload).unwrap_or_default(), "json".to_string())
+            }
+            PayloadEncoding::MsgPackBase64 => {
+                let bytes = to_vec(payload).unwrap_or_default();
+                (BASE64.encode(&bytes), "msgpack+base64".to_string())
+            }
+        };
+        let event = Event {
+            topic,
+            payload: payload_str,
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64,
+            encoding: encoding_str,
+        };
+        self.publish_event(event);
+    }
+}
+```
+
+---
+
+## 七、模块集成设计
+
+### 7.1 SerialManager 集成
+
+#### 7.1.1 类结构
 
 ```mermaid
 classDiagram
@@ -660,7 +773,7 @@ classDiagram
     SerialManager ..> SerialDisconnectedEvent : publishes
 ```
 
-#### 6.1.2 事件发布流程
+#### 7.1.2 事件发布流程
 
 ```rust
 impl SerialManager {
@@ -698,9 +811,9 @@ impl SerialManager {
 }
 ```
 
-### 6.2 BleManager 集成
+### 7.2 BleManager 集成
 
-#### 6.2.1 类结构
+#### 7.2.1 类结构
 
 ```mermaid
 classDiagram
@@ -724,7 +837,7 @@ classDiagram
     BleManager ..> BleConnectionEvent : publishes
 ```
 
-#### 6.2.2 事件发布流程
+#### 7.2.2 事件发布流程
 
 ```rust
 impl BleManager {
@@ -759,9 +872,9 @@ impl BleManager {
 }
 ```
 
-### 6.3 Gh3036Manager 集成
+### 7.3 Gh3036Manager 集成
 
-#### 6.3.1 订阅关系
+#### 7.3.1 订阅关系
 
 ```mermaid
 flowchart LR
@@ -785,7 +898,7 @@ flowchart LR
     GM -->|gh3036:frame| EB
 ```
 
-#### 6.3.2 订阅实现
+#### 7.3.2 订阅实现
 
 ```rust
 impl Gh3036Manager {
@@ -825,7 +938,7 @@ impl Gh3036Manager {
 }
 ```
 
-### 6.4 模块订阅关系矩阵
+### 7.4 模块订阅关系矩阵
 
 ```
 ┌─────────────────┬─────────────────────────────────────────────────────────┐
@@ -844,9 +957,9 @@ impl Gh3036Manager {
 
 ---
 
-## 七、数据流设计
+## 八、数据流设计
 
-### 7.1 重构前数据流
+### 8.1 重构前数据流
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -881,7 +994,7 @@ impl Gh3036Manager {
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 7.2 重构后数据流
+### 8.2 重构后数据流
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -921,7 +1034,7 @@ impl Gh3036Manager {
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 7.3 事件流向图
+### 8.3 事件流向图
 
 ```mermaid
 flowchart TB
@@ -976,9 +1089,9 @@ flowchart TB
 
 ---
 
-## 八、与重构前架构的主要差异
+## 九、与重构前架构的主要差异
 
-### 8.1 架构对比
+### 9.1 架构对比
 
 | 方面 | 重构前 | 重构后 |
 |------|--------|--------|
@@ -988,9 +1101,9 @@ flowchart TB
 | **前端职责** | 数据中转+显示 | 仅显示 |
 | **扩展性** | 新增消费者需修改发布者 | 新增消费者只需订阅 |
 
-### 8.2 代码变更对比
+### 9.2 代码变更对比
 
-#### 8.2.1 数据发布方式
+#### 9.2.1 数据发布方式
 
 **重构前**：
 ```rust
@@ -1009,7 +1122,7 @@ fn on_data_received(&self, port_name: &str, data: &[u8]) {
 }
 ```
 
-#### 8.2.2 数据订阅方式
+#### 9.2.2 数据订阅方式
 
 **重构前**：
 ```typescript
@@ -1029,7 +1142,7 @@ useModuleSubscribe('gh3036:frame', (event) => {
 });
 ```
 
-### 8.3 性能提升预期
+### 9.3 性能提升预期
 
 | 指标 | 重构前 | 重构后 | 提升 |
 |------|--------|--------|------|
@@ -1038,7 +1151,7 @@ useModuleSubscribe('gh3036:frame', (event) => {
 | CPU使用率 | 基准 | -20% | 20% |
 | 内存使用 | 基准 | -10% | 10% |
 
-### 8.4 可维护性提升
+### 9.4 可维护性提升
 
 1. **单一职责**：每个模块只负责自己的业务逻辑
 2. **松耦合**：模块间通过EventBus通信，互不依赖
@@ -1047,17 +1160,37 @@ useModuleSubscribe('gh3036:frame', (event) => {
 
 ---
 
-## 九、前端集成设计
+## 十、前端集成设计
 
 ### 9.1 useModuleSubscribe Hook
 
 ```typescript
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import * as msgpack from '@msgpack/msgpack';
+
+interface EventBusPayload {
+    topic: string;
+    payload: string;
+    timestamp: number;
+    encoding: 'json' | 'msgpack+base64';
+}
 
 interface UseModuleSubscribeReturn {
     subscribe: <T>(topic: string, callback: (event: T) => void) => void;
     unsubscribe: (topic: string) => void;
+}
+
+function decodePayload<T>(payload: string, encoding: string): T {
+    if (encoding === 'msgpack+base64') {
+        const binaryString = atob(payload);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return msgpack.decode(bytes) as T;
+    }
+    return JSON.parse(payload) as T;
 }
 
 export function useModuleSubscribe(): UseModuleSubscribeReturn {
@@ -1065,9 +1198,10 @@ export function useModuleSubscribe(): UseModuleSubscribeReturn {
 
     const subscribe = useCallback(<T,>(topic: string, callback: (event: T) => void) => {
         const unlisten = listen('event-bus', (event) => {
-            const payload = event.payload as { topic: string; payload: T };
-            if (payload.topic === topic) {
-                callback(payload.payload);
+            const data = event.payload as EventBusPayload;
+            if (data.topic === topic) {
+                const decodedPayload = decodePayload<T>(data.payload, data.encoding);
+                callback(decodedPayload);
             }
         });
         subscriptions.current.set(topic, unlisten);
@@ -1091,7 +1225,7 @@ export function useModuleSubscribe(): UseModuleSubscribeReturn {
 }
 ```
 
-### 9.2 使用示例
+### 10.2 使用示例
 
 ```typescript
 function Gh3036Page() {
@@ -1118,9 +1252,9 @@ function Gh3036Page() {
 
 ---
 
-## 十、错误处理与日志
+## 十一、错误处理与日志
 
-### 10.1 错误处理策略
+### 11.1 错误处理策略
 
 ```rust
 impl EventBus {
@@ -1135,7 +1269,7 @@ impl EventBus {
 }
 ```
 
-### 10.2 日志记录规范
+### 11.2 日志记录规范
 
 | 级别 | 场景 |
 |------|------|
@@ -1146,9 +1280,9 @@ impl EventBus {
 
 ---
 
-## 十一、测试策略
+## 十二、测试策略
 
-### 11.1 单元测试
+### 12.1 单元测试
 
 ```rust
 #[cfg(test)]
@@ -1187,7 +1321,7 @@ mod tests {
 }
 ```
 
-### 11.2 集成测试
+### 12.2 集成测试
 
 ```rust
 #[tokio::test]
@@ -1216,9 +1350,9 @@ async fn test_serial_to_gh3036_flow() {
 
 ---
 
-## 十二、迁移指南
+## 十三、迁移指南
 
-### 12.1 后端迁移步骤
+### 13.1 后端迁移步骤
 
 1. **创建全局 EventBus 实例**
    ```rust
@@ -1246,7 +1380,7 @@ async fn test_serial_to_gh3036_flow() {
    - 移除 `app.emit()` 调用
    - 改为 `event_bus.publish_typed()` 调用
 
-### 12.2 前端迁移步骤
+### 13.2 前端迁移步骤
 
 1. **创建 useModuleSubscribe Hook**
 
@@ -1260,22 +1394,22 @@ async fn test_serial_to_gh3036_flow() {
 
 ---
 
-## 十三、总结
+## 十四、总结
 
-### 13.1 架构优势
+### 14.1 架构优势
 
 1. **性能优化**：消除数据循环，减少IPC开销
 2. **解耦设计**：模块通过EventBus通信，降低耦合度
 3. **可扩展性**：新增模块只需订阅相关事件
 4. **可测试性**：模块可独立测试
 
-### 13.2 实施建议
+### 14.2 实施建议
 
 1. **分阶段实施**：先迁移数据流类功能，再迁移状态类功能
 2. **保持兼容**：保留旧API，逐步迁移
 3. **充分测试**：确保功能正确性和性能提升
 
-### 13.3 后续工作
+### 14.3 后续工作
 
 1. 完善 GH3036Manager 的 EventBus 订阅实现
 2. 实现 ProtocolManager 的 EventBus 集成

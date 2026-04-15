@@ -54,7 +54,7 @@ winapi = { version = "0.3", features = ["dwmapi", "winuser", "windef"] }
 winreg = "0.52"
 
 [features]
-default = []
+default = ["devtools"]
 devtools = ["tauri/devtools"]
 
 [profile.release]

@@ -36,7 +36,7 @@ fn type_header(pack_type: u8, width: u8, is_last: bool) -> u8 {
     (pack_type & 0b11) | (0 << 2) | ((width & 0b111) << 3) | (end << 6) | (0 << 7)
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum ChannelType {
     Serial,
     Ble,
@@ -82,6 +82,7 @@ struct RpcDataRequest {
 }
 
 struct GlobalContext {
+    rx_channel: Mutex<Option<ChannelConfig>>,
     tx_channel: Mutex<Option<ChannelConfig>>,
     device_manager: Mutex<Option<Arc<DeviceManager>>>,
     app_handle: Mutex<Option<AppHandle>>,
@@ -91,12 +92,14 @@ struct GlobalContext {
     event_sender: Mutex<Option<Sender<Gh3036EventData>>>,
     frame_sender: Mutex<Option<Sender<Gh3036FrameData>>>,
     rpc_data_sender: Mutex<Option<Sender<RpcDataRequest>>>,
+    frame_raw_sender: Mutex<Option<Sender<Vec<u8>>>>,
     runtime_handle: Mutex<Option<Handle>>,
 }
 
 impl GlobalContext {
     fn new() -> Self {
         Self {
+            rx_channel: Mutex::new(None),
             tx_channel: Mutex::new(None),
             device_manager: Mutex::new(None),
             app_handle: Mutex::new(None),
@@ -106,6 +109,7 @@ impl GlobalContext {
             event_sender: Mutex::new(None),
             frame_sender: Mutex::new(None),
             rpc_data_sender: Mutex::new(None),
+            frame_raw_sender: Mutex::new(None),
             runtime_handle: Mutex::new(None),
         }
     }
@@ -115,18 +119,40 @@ impl GlobalContext {
         Receiver<Gh3036EventData>, 
         Receiver<Gh3036FrameData>,
         Receiver<RpcDataRequest>,
+        Receiver<Vec<u8>>,
     ) {
         let (send_sender, send_receiver) = unbounded();
         let (event_sender, event_receiver) = unbounded();
         let (frame_sender, frame_receiver) = unbounded();
         let (rpc_data_sender, rpc_data_receiver) = unbounded();
+        let (frame_raw_sender, frame_raw_receiver) = unbounded();
         
         *self.send_sender.lock() = Some(send_sender);
         *self.event_sender.lock() = Some(event_sender);
         *self.frame_sender.lock() = Some(frame_sender);
         *self.rpc_data_sender.lock() = Some(rpc_data_sender);
+        *self.frame_raw_sender.lock() = Some(frame_raw_sender);
         
-        (send_receiver, event_receiver, frame_receiver, rpc_data_receiver)
+        (send_receiver, event_receiver, frame_receiver, rpc_data_receiver, frame_raw_receiver)
+    }
+
+    fn set_rx_channel(&self, config: ChannelConfig) {
+        let mut rx_channel = self.rx_channel.lock();
+        *rx_channel = Some(config);
+    }
+
+    fn get_rx_channel(&self) -> Option<ChannelConfig> {
+        self.rx_channel.lock().clone()
+    }
+
+    fn is_channel_match(&self, device_id: &str, channel_type: ChannelType) -> bool {
+        let rx_channel = self.rx_channel.lock();
+        match rx_channel.as_ref() {
+            Some(config) => {
+                config.device_id == device_id && config.channel_type == channel_type
+            }
+            None => false,
+        }
     }
 
     fn set_tx_channel(&self, config: ChannelConfig) {
@@ -169,6 +195,14 @@ impl GlobalContext {
             Err(crossbeam_channel::SendError(frame_data))
         }
     }
+
+    fn send_frame_raw_data(&self, data: Vec<u8>) -> Result<(), crossbeam_channel::SendError<Vec<u8>>> {
+        if let Some(ref sender) = *self.frame_raw_sender.lock() {
+            sender.send(data)
+        } else {
+            Err(crossbeam_channel::SendError(vec![]))
+        }
+    }
 }
 
 static CALLBACK_CONTEXT: once_cell::sync::Lazy<GlobalContext> = once_cell::sync::Lazy::new(GlobalContext::new);
@@ -178,12 +212,12 @@ static FRAME_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUs
 fn data_frame_handler(data: &[u8], size: usize, _ret: Option<&mut [u8]>) -> i32 {
     let count = FRAME_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
     
-    debug!("[GH3036] 接收到数据帧 #{}: {} 字节", count, size);
+    info!("[GH3036] RPC 回调接收到数据帧 #{}: {} 字节", count, size);
     
     if size > 0 {
         let data_to_send = data[..size].to_vec();
-        if let Err(e) = CALLBACK_CONTEXT.send_rpc_data(data_to_send) {
-            error!("[GH3036] 发送数据到RPC处理通道失败: {}", e);
+        if let Err(e) = CALLBACK_CONTEXT.send_frame_raw_data(data_to_send) {
+            error!("[GH3036] 发送数据到帧处理通道失败: {}", e);
         }
     }
     
@@ -255,34 +289,41 @@ impl Gh3036Manager {
     }
     
     fn subscribe_data_events(&self) {
-        let frame_decoder = Arc::new(Mutex::new(FrameDecoder::new()));
-        let event_bus = self.event_bus.clone();
+        info!("[GH3036] 订阅 EventBus 数据事件");
         
-        let frame_decoder_clone = frame_decoder.clone();
-        let event_bus_clone = event_bus.clone();
         self.event_bus.subscribe_msgpack::<SerialDataEvent, _>(topics::SERIAL_DATA, move |_topic, event| {
-            let mut decoder = frame_decoder_clone.lock();
-            Self::process_data_with_decoder(&event_bus_clone, &mut decoder, &event.data);
+            if !CALLBACK_CONTEXT.is_channel_match(&event.device_id, ChannelType::Serial) {
+                debug!("[GH3036] 过滤非配置通道数据: device_id={}", event.device_id);
+                return;
+            }
+            info!("[GH3036] 接收到串口数据: device_id={}, len={}", event.device_id, event.data.len());
+            if let Err(e) = CALLBACK_CONTEXT.send_rpc_data(event.data.clone()) {
+                error!("[GH3036] 发送数据到 RPC 通道失败: {}", e);
+            }
         });
         
-        let frame_decoder_clone = frame_decoder.clone();
-        let event_bus_clone = event_bus.clone();
         self.event_bus.subscribe_msgpack::<BleDataEvent, _>(topics::BLE_DATA, move |_topic, event| {
-            let mut decoder = frame_decoder_clone.lock();
-            Self::process_data_with_decoder(&event_bus_clone, &mut decoder, &event.data);
+            if !CALLBACK_CONTEXT.is_channel_match(&event.device_id, ChannelType::Ble) {
+                debug!("[GH3036] 过滤非配置通道数据: device_id={}", event.device_id);
+                return;
+            }
+            info!("[GH3036] 接收到 BLE 数据: device_id={}, len={}", event.device_id, event.data.len());
+            if let Err(e) = CALLBACK_CONTEXT.send_rpc_data(event.data.clone()) {
+                error!("[GH3036] 发送数据到 RPC 通道失败: {}", e);
+            }
         });
         
         self.event_bus.subscribe_msgpack::<SerialDisconnectedEvent, _>(topics::SERIAL_DISCONNECTED, move |_topic, event| {
-            info!("GH3036 收到串口断开事件: {}", event.port_name);
+            info!("[GH3036] 收到串口断开事件: {}", event.port_name);
             Self::handle_device_disconnected(&event.port_name);
         });
         
         self.event_bus.subscribe_msgpack::<BleConnectionEvent, _>(topics::BLE_DISCONNECTED, move |_topic, event| {
-            info!("GH3036 收到 BLE 断开事件: {}", event.address);
+            info!("[GH3036] 收到 BLE 断开事件: {}", event.address);
             Self::handle_device_disconnected(&event.address);
         });
         
-        info!("GH3036 已订阅 serial:data、ble:data、serial:disconnected 和 ble:disconnected 事件");
+        info!("[GH3036] 已订阅 serial:data、ble:data、serial:disconnected 和 ble:disconnected 事件");
     }
     
     fn handle_device_disconnected(device_id: &str) {
@@ -297,13 +338,12 @@ impl Gh3036Manager {
         }
     }
     
-    fn process_data_with_decoder(event_bus: &Arc<EventBus>, decoder: &mut FrameDecoder, data: &[u8]) {
+    fn process_frame_data(event_bus: &Arc<EventBus>, decoder: &mut FrameDecoder, data: &[u8]) {
         let mut frames: heapless::Vec<FuncFrame, 16> = heapless::Vec::new();
         let count = decoder.decode_frames(data, &mut frames);
-        info!("[GH3036] data: {:02X?}", data);
+        info!("[GH3036] 帧解析: 数据长度={}, 解码帧数={}", data.len(), count);
         
         if count > 0 {
-            info!("[GH3036] 解码到 {} 帧", count);
             for frame in frames.iter() {
                 let frame_data = Gh3036FrameData::from_func_frame(frame);
                 let frame_event = Gh3036FrameEvent::new(
@@ -315,18 +355,17 @@ impl Gh3036Manager {
                 );
                 
                 info!(
-                    "[GH3036] 发布帧事件: function_id={}, function_name={}, frame_id={}, channel_count={}, channels={:?}",
+                    "[GH3036] 发布帧事件: function_id={}, function_name={}, frame_id={}, channel_count={}",
                     frame_event.function_id,
                     frame_event.function_name,
                     frame_event.frame_id,
-                    frame_event.channel_count,
-                    &frame_event.channels[..frame_event.channel_count.min(10) as usize]
+                    frame_event.channel_count
                 );
                 
                 event_bus.publish_msgpack(topics::GH3036_FRAME, &frame_event);
                 
                 if let Err(e) = CALLBACK_CONTEXT.send_frame_data(frame_data) {
-                    error!("GH3036 帧数据入队失败: {}", e);
+                    error!("[GH3036] 帧数据入队失败: {}", e);
                 }
             }
         }
@@ -392,14 +431,16 @@ impl Gh3036Manager {
         let running = self.running.clone();
         running.store(true, std::sync::atomic::Ordering::SeqCst);
 
-        let (send_receiver, event_receiver, frame_receiver, rpc_data_receiver) = 
+        let (send_receiver, event_receiver, frame_receiver, rpc_data_receiver, frame_raw_receiver) = 
             CALLBACK_CONTEXT.setup_channels();
         let device_manager = Arc::clone(&self.device_manager);
         let running_clone = running.clone();
         let rpc = self.rpc.lock().as_ref().map(Arc::clone);
+        let event_bus = self.event_bus.clone();
         
         let thread_handle = std::thread::spawn(move || {
-            info!("GH3036 处理线程启动");
+            info!("[GH3036] 处理线程启动");
+            let mut frame_decoder = FrameDecoder::new();
 
             while running_clone.load(std::sync::atomic::Ordering::SeqCst) {
                 crossbeam_channel::select! {
@@ -423,12 +464,17 @@ impl Gh3036Manager {
                             Self::handle_rpc_data(&rpc, rpc_data);
                         }
                     }
+                    recv(frame_raw_receiver) -> result => {
+                        if let Ok(raw_data) = result {
+                            Self::process_frame_data(&event_bus, &mut frame_decoder, &raw_data);
+                        }
+                    }
                     default(std::time::Duration::from_millis(10)) => {
                     }
                 }
             }
 
-            info!("GH3036 处理线程停止");
+            info!("[GH3036] 处理线程停止");
         });
 
         {
@@ -564,7 +610,8 @@ impl Gh3036Manager {
     }
 
     pub fn configure_rx_channel(&self, config: ChannelConfig) -> Result<(), String> {
-        info!("GH3036 RX 通道配置成功: {:?}", config);
+        CALLBACK_CONTEXT.set_rx_channel(config.clone());
+        info!("[GH3036] RX 通道配置成功: {:?}", config);
         Ok(())
     }
 
@@ -573,7 +620,7 @@ impl Gh3036Manager {
     }
 
     pub fn get_rx_channel(&self) -> Option<ChannelConfig> {
-        None
+        CALLBACK_CONTEXT.get_rx_channel()
     }
 
     pub fn set_csv_config(&self, config: CsvConfig) -> Result<(), String> {

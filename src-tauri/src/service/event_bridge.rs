@@ -82,15 +82,27 @@ impl<R: Runtime> EventBridge<R> {
                                     continue;
                                 }
 
+                                tracing::info!(
+                                    "[EventBridge] Received event: topic={}, encoding={:?}, payload_len={}",
+                                    event.topic,
+                                    event.encoding,
+                                    event.payload.len()
+                                );
+                                
+                                if !filter.matches(&event.topic) {
+                                    tracing::debug!("[EventBridge] Event filtered out: topic={}", event.topic);
+                                    continue;
+                                }
+
                                 if let Err(e) = Self::emit_to_frontend(&app_handle, &event) {
                                     tracing::error!(
-                                        "Failed to emit event to frontend: topic={}, error={}",
+                                        "[EventBridge] Failed to emit event to frontend: topic={}, error={}",
                                         event.topic,
                                         e
                                     );
                                 } else {
-                                    tracing::debug!(
-                                        "Event forwarded to frontend: topic={}, timestamp={}",
+                                    tracing::info!(
+                                        "[EventBridge] Event forwarded to frontend: topic={}, timestamp={}",
                                         event.topic,
                                         event.timestamp
                                     );

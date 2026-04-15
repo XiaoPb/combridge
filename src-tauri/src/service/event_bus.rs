@@ -133,28 +133,37 @@ impl EventBus {
     }
 
     pub fn publish_msgpack<T: Serialize>(&self, topic: impl Into<String>, payload: &T) {
+        let topic_str = topic.into();
         match rmp_serde::to_vec(payload) {
             Ok(bytes) => {
-                let event = Event::new_msgpack(topic, bytes);
+                let event = Event::new_msgpack(&topic_str, bytes);
                 let topic = event.topic.clone();
                 let encoding = event.encoding;
 
+                tracing::info!(
+                    "[EventBus] Publishing msgpack event: topic={}, payload_len={}, subscriber_count={}",
+                    topic,
+                    event.payload.len(),
+                    self.subscriber_count_sync(&topic)
+                );
+
                 if let Err(e) = self.sender.send(event.clone()) {
-                    tracing::warn!("Failed to broadcast event: {}", e);
+                    tracing::warn!("[EventBus] Failed to broadcast event: {}", e);
                 }
 
                 let subscribers = self.subscribers.read().unwrap_or_else(|e| {
-                    tracing::error!("Failed to acquire read lock: {}", e);
+                    tracing::error!("[EventBus] Failed to acquire read lock: {}", e);
                     panic!("EventBus lock poisoned");
                 });
                 if let Some(callbacks) = subscribers.get(&topic) {
+                    tracing::info!("[EventBus] Invoking {} callbacks for topic={}", callbacks.len(), topic);
                     for callback in callbacks {
                         callback(&event.topic, &event.payload, encoding);
                     }
                 }
             }
             Err(e) => {
-                tracing::error!("MsgPack serialization failed: {}", e);
+                tracing::error!("[EventBus] MsgPack serialization failed: {}", e);
             }
         }
     }

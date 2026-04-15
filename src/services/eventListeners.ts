@@ -86,27 +86,36 @@ function handleBleDisconnected(payload: BleDisconnectedPayload) {
 }
 
 function dispatchEvent(event: EventBusEvent) {
+  console.log('[EventListeners] Received event-bus event:', event.topic, event);
+  
   try {
     switch (event.topic) {
       case 'serial:data':
+        console.log('[EventListeners] Handling serial:data');
         handleSerialData(decodePayload<SerialDataPayload>(event));
         break;
       case 'serial:connected':
+        console.log('[EventListeners] Handling serial:connected');
         handleSerialConnected(decodePayload<SerialConnectedPayload>(event));
         break;
       case 'serial:disconnected':
+        console.log('[EventListeners] Handling serial:disconnected');
         handleSerialDisconnected(decodePayload<SerialDisconnectedPayload>(event));
         break;
       case 'ble:data':
+        console.log('[EventListeners] Handling ble:data');
         handleBleData(decodePayload<BleDataPayload>(event));
         break;
       case 'ble:connected':
+        console.log('[EventListeners] Handling ble:connected');
         handleBleConnected(decodePayload<BleConnectedPayload>(event));
         break;
       case 'ble:disconnected':
+        console.log('[EventListeners] Handling ble:disconnected');
         handleBleDisconnected(decodePayload<BleDisconnectedPayload>(event));
         break;
       default:
+        console.log('[EventListeners] Unknown topic:', event.topic);
         break;
     }
   } catch (err) {
@@ -124,12 +133,14 @@ export async function initAllEventListeners(): Promise<void> {
   }
 
   initPromise = (async () => {
+    console.log('[EventListeners] Initializing event-bus listener...');
     eventBusListener = await listen<EventBusEvent>('event-bus', (event) => {
       dispatchEvent(event.payload);
     });
 
     initialized = true;
     initPromise = null;
+    console.log('[EventListeners] Event-bus listener initialized successfully');
   })();
 
   return initPromise;

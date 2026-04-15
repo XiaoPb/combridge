@@ -166,17 +166,14 @@ function AppContent() {
     const isDev = import.meta.env.DEV;
     
     const handleContextMenu = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      const isChartArea = target?.closest('.chart-container') !== null;
-      
       if (isDev) {
-        if (!isChartArea) {
-          event.preventDefault();
-          invoke('open_devtools').catch((err) => {
-            console.error('Failed to open devtools:', err);
-          });
-        }
+        event.preventDefault();
+        invoke('open_devtools').catch((err) => {
+          console.error('Failed to open devtools:', err);
+        });
       } else {
+        const target = event.target as HTMLElement;
+        const isChartArea = target?.closest('.chart-container') !== null;
         if (!isChartArea) {
           event.preventDefault();
         }

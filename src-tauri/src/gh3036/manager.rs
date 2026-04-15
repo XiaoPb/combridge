@@ -302,7 +302,7 @@ impl Gh3036Manager {
         let count = decoder.decode_frames(data, &mut frames);
         
         if count > 0 {
-            debug!("GH3036 解码到 {} 帧", count);
+            info!("[GH3036] 解码到 {} 帧", count);
             for frame in frames.iter() {
                 let frame_data = Gh3036FrameData::from_func_frame(frame);
                 let frame_event = Gh3036FrameEvent::new(
@@ -312,6 +312,16 @@ impl Gh3036Manager {
                     frame_data.rawdata.len(),
                     frame_data.phy_value.iter().map(|&v| v as f32).collect(),
                 );
+                
+                info!(
+                    "[GH3036] 发布帧事件: function_id={}, function_name={}, frame_id={}, channel_count={}, channels={:?}",
+                    frame_event.function_id,
+                    frame_event.function_name,
+                    frame_event.frame_id,
+                    frame_event.channel_count,
+                    &frame_event.channels[..frame_event.channel_count.min(10) as usize]
+                );
+                
                 event_bus.publish_msgpack(topics::GH3036_FRAME, &frame_event);
                 
                 if let Err(e) = CALLBACK_CONTEXT.send_frame_data(frame_data) {

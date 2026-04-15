@@ -71,6 +71,15 @@ function convertArrayToObject(arr: unknown[], topic: string): Record<string, unk
         channel_count: arr[4] as number,
         channels: arr[5] as number[],
       };
+    case 'gh3036:frames':
+      return {
+        function_id: arr[0] as number,
+        function_name: arr[1] as string,
+        frame_count: arr[2] as number,
+        channel_count: arr[3] as number,
+        timestamps: arr[4] as number[],
+        channels: arr[5] as number[][],
+      };
     case 'protocol:parsed':
       return {
         plugin_id: arr[0] as string,

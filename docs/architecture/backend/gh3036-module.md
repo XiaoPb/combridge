@@ -2,15 +2,13 @@
 
 ## 概述
 
-GH3036 协议模块提供对 GH3036 芯片协议的支持，包括 FFI 绑定、线程同步、协议管理和数据导出等功能。
+GH3036 协议模块提供对 GH3036 芯片协议的纯 Rust 实现，包括协议解析、RPC 命令执行、帧数据处理等功能。本模块基于 EventBus 架构与其他模块解耦。
 
 ## 模块位置
 
 - 源码路径：`src-tauri/src/gh3036/`
 - 主要文件：
-  - `manager.rs` - 协议管理器
-  - `ffi.rs` - C 库 FFI 绑定
-  - `sync.rs` - 线程同步机制
+  - `manager.rs` - 协议管理器（核心逻辑）
   - `types.rs` - 数据类型定义
   - `csv_writer.rs` - CSV 数据导出
 
@@ -18,292 +16,315 @@ GH3036 协议模块提供对 GH3036 芯片协议的支持，包括 FFI 绑定、
 
 ### Gh3036Manager
 
-协议管理器：
-
 ```rust
 pub struct Gh3036Manager {
-    device_manager: DeviceManagerRef,  // 设备管理器引用
-    initialized: Arc<RwLock<bool>>,    // 初始化状态
-    channels: Arc<RwLock<HashMap<String, ChannelConfig>>>, // 通道配置
-    csv_config: Arc<RwLock<Option<CsvConfig>>>, // CSV 配置
+    device_manager: Arc<DeviceManager>,  // 设备管理器引用
+    event_bus: Arc<EventBus>,            // EventBus 引用
+    initialized: Mutex<bool>,            // 初始化状态
+    running: Arc<AtomicBool>,           // 运行状态
+    thread_handle: Mutex<Option<JoinHandle<()>>>,  // 处理线程
+    rpc: Mutex<Option<Arc<Mutex<RpcCore<...>>>>>, // RPC 核心
 }
 ```
 
-### ChannelConfig
-
-通道配置：
+### GlobalContext (全局上下文)
 
 ```rust
-pub struct ChannelConfig {
-    pub channel_id: String,        // 通道 ID
-    pub channel_type: ChannelType, // 通道类型
-    pub enabled: bool,             // 是否启用
-    pub sample_rate: u32,          // 采样率
-    pub gain: f32,                 // 增益
+struct GlobalContext {
+    tx_channel: Mutex<Option<ChannelConfig>>,       // TX 通道配置
+    device_manager: Mutex<Option<Arc<DeviceManager>>>, // 设备管理器
+    app_handle: Mutex<Option<AppHandle>>,           // Tauri 句柄
+    csv_config: Mutex<CsvConfig>,                  // CSV 配置
+    csv_writers: Mutex<HashMap<i32, CsvWriter>>,   // CSV 写入器
+    send_sender: Mutex<Option<Sender<SendRequest>>>,      // 发送通道
+    event_sender: Mutex<Option<Sender<Gh3036EventData>>>, // 事件通道
+    frame_sender: Mutex<Option<Sender<Gh3036FrameData>>>, // 帧数据通道
+    rpc_data_sender: Mutex<Option<Sender<RpcDataRequest>>>, // RPC 数据通道
+    runtime_handle: Mutex<Option<Handle>>,          // Tokio 运行时
 }
 ```
 
-### ChannelType
+## 调用流程图
 
-通道类型：
+### 1. 初始化流程
+
+```mermaid
+sequenceDiagram
+    participant App as 应用启动
+    participant GM as Gh3036Manager
+    participant EB as EventBus
+    participant GC as GlobalContext
+    participant RPC as RPC 核心
+    participant PT as Processing Thread
+
+    App->>GM: initialize()
+    GM->>GC: set_device_manager()
+    GM->>GC: set_runtime_handle()
+    GM->>GM: subscribe_data_events()
+    GM->>EB: subscribe "serial:data"
+    GM->>EB: subscribe "ble:data"
+    GM->>GM: initialize_rpc()
+    GM->>RPC: 创建 RPC 核心
+    GM->>RPC: 注册 "G" 键处理函数
+    GM->>GM: start_processing_thread()
+    GM->>PT: 启动处理线程
+    GM-->>App: 初始化完成
+```
+
+### 2. 数据接收与解析流程
+
+```mermaid
+sequenceDiagram
+    participant HW as 硬件设备
+    participant SM as SerialManager
+    participant BM as BleManager
+    participant EB as EventBus
+    participant GM as Gh3036Manager
+    participant FD as FrameDecoder
+    participant EB2 as EventBridge
+    participant FE as 前端
+
+    HW->>SM: 串口数据
+    SM->>EB: publish "serial:data" (MsgPack)
+    
+    HW->>BM: BLE 数据
+    BM->>EB: publish "ble:data" (MsgPack)
+    
+    EB->>GM: serial:data 事件
+    GM->>FD: decode_frames()
+    FD-->>GM: Vec<FuncFrame>
+    
+    GM->>GM: process_data_with_decoder()
+    
+    loop 每帧数据
+        GM->>GM: Gh3036FrameData::from_func_frame()
+        GM->>EB: publish "gh3036:frame" (MsgPack)
+        
+        EB->>EB2: 转发事件
+        EB2->>FE: "event-bus" 事件
+        
+        GM->>GC: send_frame_data()
+        GC->>GM: handle_frame_data()
+        GM->>FE: emit "gh3036-frame"
+        GM->>GM: save_frame_to_csv()
+    end
+```
+
+### 3. RPC 命令执行流程
+
+```mermaid
+sequenceDiagram
+    participant FE as 前端
+    participant API as Tauri Command
+    participant GM as Gh3036Manager
+    participant RPC as RPC 核心
+    participant DM as DeviceManager
+    participant HW as 硬件设备
+
+    FE->>API: execute_rpc(key, params)
+    API->>GM: execute_rpc()
+    GM->>GM: execute_rpc_async()
+    
+    alt call 类型
+        GM->>RPC: call_start(key, data)
+        loop 检查结果
+            RPC->>RPC: check_call_result()
+        end
+        RPC-->>GM: result
+    else send 类型
+        GM->>RPC: send(key, data)
+        RPC-->>GM: ()
+    else publish 类型
+        GM->>RPC: publish(key, data)
+        RPC-->>GM: ()
+    end
+    
+    GM->>DM: send_direct()
+    DM->>HW: 发送数据
+    GM-->>FE: 返回结果
+```
+
+### 4. EventBus 订阅关系
+
+```mermaid
+flowchart TB
+    subgraph Publishers["发布者"]
+        SM[SerialManager]
+        BM[BleManager]
+    end
+
+    subgraph EventBusLayer["EventBus"]
+        EB[(EventBus)]
+    end
+
+    subgraph Subscribers["订阅者"]
+        GM[Gh3036Manager]
+        PM[ProtocolManager]
+    end
+
+    SM -->|serial:data| EB
+    SM -->|serial:connected| EB
+    SM -->|serial:disconnected| EB
+    
+    BM -->|ble:data| EB
+    BM -->|ble:connected| EB
+    BM -->|ble:disconnected| EB
+    
+    EB -->|serial:data| GM
+    EB -->|ble:data| GM
+    EB -->|serial:data| PM
+    EB -->|ble:data| PM
+    
+    GM -->|gh3036:frame| EB
+```
+
+## EventBus 交互
+
+### 订阅的事件
+
+| 事件主题 | 编码格式 | 处理逻辑 |
+|----------|----------|----------|
+| `serial:data` | MsgPack | 调用 FrameDecoder 解码，发布 gh3036:frame |
+| `ble:data` | MsgPack | 调用 FrameDecoder 解码，发布 gh3036:frame |
+| `serial:disconnected` | JSON | 清理 TX 通道配置 |
+| `ble:disconnected` | JSON | 清理 TX 通道配置 |
+
+### 发布的事件
+
+| 事件主题 | 编码格式 | 载荷 |
+|----------|----------|------|
+| `gh3036:frame` | MsgPack | Gh3036FrameEvent |
+
+### EventBus 订阅代码
 
 ```rust
-pub enum ChannelType {
-    Tx,  // 发送通道
-    Rx,  // 接收通道
+fn subscribe_data_events(&self) {
+    // 订阅串口数据
+    self.event_bus.subscribe_msgpack::<SerialDataEvent, _>(topics::SERIAL_DATA, move |_topic, event| {
+        let mut decoder = frame_decoder_clone.lock();
+        Self::process_data_with_decoder(&event_bus_clone, &mut decoder, &event.data);
+    });
+    
+    // 订阅 BLE 数据
+    self.event_bus.subscribe_msgpack::<BleDataEvent, _>(topics::BLE_DATA, move |_topic, event| {
+        let mut decoder = frame_decoder_clone.lock();
+        Self::process_data_with_decoder(&event_bus_clone, &mut decoder, &event.data);
+    });
+    
+    // 订阅断开事件
+    self.event_bus.subscribe_msgpack::<SerialDisconnectedEvent, _>(topics::SERIAL_DISCONNECTED, move |_topic, event| {
+        Self::handle_device_disconnected(&event.port_name);
+    });
 }
 ```
 
-### CsvConfig
+## 数据类型定义
 
-CSV 导出配置：
+### Gh3036FrameEvent
 
 ```rust
-pub struct CsvConfig {
-    pub enabled: bool,         // 是否启用
-    pub output_path: String,   // 输出路径
-    pub delimiter: char,       // 分隔符
-    pub include_timestamp: bool, // 包含时间戳
-    pub include_header: bool,  // 包含表头
+pub struct Gh3036FrameEvent {
+    pub function_id: u8,        // 功能 ID
+    pub function_name: String,  // 功能名称
+    pub frame_id: u32,         // 帧 ID
+    pub timestamp: u64,        // 时间戳
+    pub channel_count: usize,  // 通道数
+    pub channels: Vec<f32>,    // 通道数据 (物理值)
 }
 ```
 
 ### Gh3036FrameData
 
-帧数据结构：
-
 ```rust
 pub struct Gh3036FrameData {
+    pub function_id: i32,       // 功能 ID
+    pub function_name: String,  // 功能名称
+    pub frame_id: i32,         // 帧 ID
     pub timestamp: u64,        // 时间戳
-    pub channel_id: String,    // 通道 ID
-    pub data: Vec<f64>,        // 数据点
-    pub sequence: u32,         // 序列号
+    pub gs_data: Vec<i32>,     // 六轴传感器数据 (acc + gyro)
+    pub rawdata: Vec<i32>,     // 原始数据
+    pub flags: Vec<i32>,       // 标志位
+    pub algo_data: Vec<i32>,   // 算法数据
+    pub agc_info: Vec<i32>,    // AGC 信息
+    pub phy_value: Vec<i32>,   // 物理值
 }
 ```
 
-### Gh3036EventData
-
-事件数据：
+### ChannelConfig
 
 ```rust
-pub struct Gh3036EventData {
-    pub event_type: String,    // 事件类型
-    pub timestamp: u64,        // 时间戳
-    pub data: HashMap<String, Value>, // 事件数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChannelConfig {
+    pub channel_type: ChannelType,  // Serial 或 Ble
+    pub device_id: String,          // 设备 ID (端口名或地址)
+    pub characteristic_uuid: Option<String>, // BLE 特征 UUID
 }
-```
 
-## 架构图
-
-```mermaid
-graph TB
-    subgraph Gh3036Manager
-        GM[Gh3036Manager]
-        Channels[通道配置]
-        CsvConfig[CSV 配置]
-    end
-    
-    subgraph FFI
-        FFI[FFI 绑定]
-        CLib[C 库]
-    end
-    
-    subgraph Sync
-        Mutex[互斥锁]
-        RwLock[读写锁]
-    end
-    
-    subgraph DataExport
-        CSV[CSV Writer]
-        File[文件输出]
-    end
-    
-    GM --> Channels
-    GM --> CsvConfig
-    GM --> FFI
-    GM --> Sync
-    GM --> CSV
-    
-    FFI --> CLib
-    CSV --> File
-```
-
-## 核心功能
-
-### 初始化
-
-```rust
-// 初始化 GH3036
-pub async fn init(&self) -> Result<()>
-
-// 检查是否已初始化
-pub async fn is_initialized(&self) -> bool
-```
-
-### 通道配置
-
-```rust
-// 配置发送通道
-pub async fn configure_tx_channel(&self, config: ChannelConfig) -> Result<()>
-
-// 配置接收通道
-pub async fn configure_rx_channel(&self, config: ChannelConfig) -> Result<()>
-
-// 获取所有通道
-pub async fn get_channels(&self) -> Vec<ChannelConfig>
-```
-
-### 数据操作
-
-```rust
-// 发送数据
-pub async fn send_data(&self, channel_id: &str, data: &[u8]) -> Result<()>
-
-// 订阅接收事件
-pub async fn subscribe_events(&self, callback: EventCallback) -> Result<()>
-
-// 获取 RPC 命令列表
-pub async fn get_rpc_commands(&self) -> Vec<RpcCommand>
-
-// 执行 RPC 命令
-pub async fn execute_rpc(&self, command: &str, params: HashMap<String, Value>) -> Result<Value>
-```
-
-### CSV 导出
-
-```rust
-// 设置 CSV 配置
-pub async fn set_csv_config(&self, config: CsvConfig) -> Result<()>
-
-// 获取 CSV 配置
-pub async fn get_csv_config(&self) -> Option<CsvConfig>
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum ChannelType {
+    Serial,
+    Ble,
+}
 ```
 
 ## RPC 命令
 
-```rust
-pub struct RpcCommand {
-    pub name: String,           // 命令名称
-    pub description: String,    // 描述
-    pub params: Vec<RpcParam>,  // 参数列表
-    pub return_type: String,    // 返回类型
-}
+| 命令键 | 名称 | 描述 |
+|--------|------|------|
+| `V` | GET_VERSION | 获取芯片版本信息 |
+| `W` | REGS_WRITE | 寄存器写入 |
+| `R` | REGS_READ | 寄存器读取 |
+| `B` | REG_BIT_FIELD_WRITE | 位域写入 |
+| `C` | CHIP_CTRL | 芯片控制 (复位/休眠) |
+| `D` | DOWNLOAD_CONFIG | 下载配置 |
+| `L` | REGS_LIST_WRITE | 寄存器列表批量写入 |
+| `S` | SW_FUNCTION | 软件功能命令 |
+| `P` | LOW_POWER | 低功耗命令 |
+| `M` | SET_WORK_MODE | 设置工作模式 |
+| `TS` | TIMESTAMP_SET | 设置时间戳 |
+| `TM` | TIME_SET | 设置时间 (带时区) |
 
-pub struct RpcParam {
-    pub name: String,           // 参数名
-    pub param_type: String,     // 参数类型
-    pub required: bool,         // 是否必需
-    pub default: Option<Value>, // 默认值
-}
-```
+## 处理线程
 
-## 数据流
-
-```mermaid
-sequenceDiagram
-    participant UI as 前端
-    participant GM as Gh3036Manager
-    participant FFI as FFI
-    participant CLib as C 库
-    participant Device as 设备
-    
-    UI->>GM: init()
-    GM->>FFI: 初始化 C 库
-    FFI->>CLib: gh3036_init()
-    CLib-->>FFI: 初始化结果
-    FFI-->>GM: Result
-    
-    UI->>GM: configure_tx_channel(config)
-    GM->>FFI: 配置通道
-    FFI->>CLib: gh3036_config_tx()
-    
-    UI->>GM: send_data(channel, data)
-    GM->>FFI: 发送数据
-    FFI->>CLib: gh3036_send()
-    CLib->>Device: 发送到设备
-    
-    Device->>CLib: 接收数据
-    CLib->>FFI: 回调通知
-    FFI->>GM: 事件通知
-    GM->>UI: 推送事件
-```
-
-## FFI 绑定
+Gh3036Manager 启动专用处理线程，处理以下通道的消息：
 
 ```rust
-// C 库函数绑定示例
-extern "C" {
-    fn gh3036_init() -> i32;
-    fn gh3036_deinit() -> i32;
-    fn gh3036_config_tx(channel_id: u32, config: *const TxConfig) -> i32;
-    fn gh3036_config_rx(channel_id: u32, config: *const RxConfig) -> i32;
-    fn gh3036_send(channel_id: u32, data: *const u8, len: usize) -> i32;
-    fn gh3036_set_callback(callback: extern "C" fn(*const u8, usize));
-}
-```
-
-## 线程同步
-
-```rust
-// 同步包装器
-pub struct Gh3036Sync {
-    inner: Arc<Mutex<Gh3036Inner>>,
-}
-
-impl Gh3036Sync {
-    pub fn new() -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(Gh3036Inner::new())),
-        }
-    }
-    
-    pub fn with_lock<F, T>(&self, f: F) -> T
-    where
-        F: FnOnce(&mut Gh3036Inner) -> T,
-    {
-        let mut guard = self.inner.lock().unwrap();
-        f(&mut guard)
+while running_clone.load() {
+    crossbeam_channel::select! {
+        recv(send_receiver) -> handle_send_request(),    // 发送请求
+        recv(event_receiver) -> handle_event_data(),      // 事件数据
+        recv(frame_receiver) -> handle_frame_data(),      // 帧数据
+        recv(rpc_data_receiver) -> handle_rpc_data(),    // RPC 数据
+        default(Duration::from_millis(10)) => {}          // 超时
     }
 }
 ```
 
-## 使用示例
+## CSV 导出
 
-### 初始化
-
-```rust
-let manager = Gh3036Manager::new(device_manager);
-manager.init().await?;
-```
-
-### 配置通道
+帧数据可导出为 CSV 格式：
 
 ```rust
-manager.configure_tx_channel(ChannelConfig {
-    channel_id: "tx1".to_string(),
-    channel_type: ChannelType::Tx,
-    enabled: true,
-    sample_rate: 1000,
-    gain: 1.0,
-}).await?;
+fn save_frame_to_csv(frame_data: &Gh3036FrameData) {
+    // 按 function_id 创建不同的 CSV 文件
+    // 包含: timestamp, frame_id, gs_data, rawdata, algo_data, phy_value
+}
 ```
 
-### 发送数据
+## 调试日志
 
-```rust
-manager.send_data("tx1", &[0x01, 0x02, 0x03]).await?;
-```
+模块使用 `tracing` 库进行日志记录：
 
-### 订阅事件
-
-```rust
-manager.subscribe_events(|event| {
-    println!("收到事件: {:?}", event);
-}).await?;
-```
+| 级别 | 场景 |
+|------|------|
+| `info` | 初始化、完成处理、RPC 执行 |
+| `debug` | 数据接收、RPC 发送 |
+| `warn` | 通道未配置、运行时不可用 |
+| `error` | 发送失败、帧数据入队失败 |
 
 ## 相关模块
 
-- [设备管理](./device-manager.md) - 设备管理集成
+- [EventBus 架构](../event-bus-architecture.md) - 事件总线设计
+- [设备管理](./device-manager.md) - SerialManager/BleManager
 - [协议插件](./protocol-module.md) - Lua 协议解析
 - [波形模块](./waveform-module.md) - 波形数据处理

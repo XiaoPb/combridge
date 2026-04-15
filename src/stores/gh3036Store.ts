@@ -7,7 +7,7 @@ import type {
 } from '../api/types';
 import { gh3036Api } from '../api/gh3036';
 import { decodePayload, type EventBusEvent } from '../utils/msgpack';
-import type { Gh3036FramePayload } from '../api/events';
+import type { Gh3036FramePayload, Gh3036FramesPayload } from '../api/events';
 
 export type Gh3036EventData = {
   event_type: string;
@@ -36,6 +36,10 @@ interface Gh3036State {
   eventData: Gh3036EventData[];
   maxEventCount: number;
   
+  waveformColumns: string[];
+  waveformRows: number[][];
+  maxWaveformRows: number;
+  
   isLinked: boolean;
   
   eventListeners: {
@@ -61,6 +65,9 @@ interface Gh3036State {
   
   addEventData: (event: Gh3036EventData) => void;
   clearEventData: () => void;
+  
+  addFramesData: (frames: Gh3036FramesPayload) => void;
+  clearWaveformData: () => void;
   
   setIsLinked: (value: boolean) => void;
   
@@ -104,6 +111,10 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   eventData: [],
   maxEventCount: 500,
   
+  waveformColumns: [],
+  waveformRows: [],
+  maxWaveformRows: 500,
+  
   isLinked: false,
   
   eventListeners: {},
@@ -141,6 +152,33 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   },
   
   clearEventData: () => set({ eventData: [] }),
+  
+  addFramesData: (frames) => {
+    const { waveformRows, maxWaveformRows } = get();
+    
+    const columns = Array.from({ length: frames.channel_count }, (_, i) => `CH${i}`);
+    
+    const newRows: number[][] = [];
+    for (let frameIdx = 0; frameIdx < frames.frame_count; frameIdx++) {
+      const row: number[] = [];
+      for (let chIdx = 0; chIdx < frames.channel_count; chIdx++) {
+        row.push(frames.channels[chIdx]?.[frameIdx] ?? 0);
+      }
+      newRows.push(row);
+    }
+    
+    const combinedRows = [...waveformRows, ...newRows];
+    if (combinedRows.length > maxWaveformRows) {
+      combinedRows.splice(0, combinedRows.length - maxWaveformRows);
+    }
+    
+    set({ 
+      waveformColumns: columns,
+      waveformRows: combinedRows 
+    });
+  },
+  
+  clearWaveformData: () => set({ waveformColumns: [], waveformRows: [] }),
   
   setIsLinked: (value) => set({ isLinked: value }),
   

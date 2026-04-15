@@ -3,6 +3,7 @@ import { useSerialStore, generateId } from '../stores/serialStore';
 import { useBleStore, generateBleId } from '../stores/bleStore';
 import { useLogStore } from '../stores/logStore';
 import { useNotificationStore } from '../stores/notificationStore';
+import { useGh3036Store } from '../stores/gh3036Store';
 import { decodePayload, type EventBusEvent } from '../utils/msgpack';
 import type {
   SerialDataPayload,
@@ -11,6 +12,7 @@ import type {
   SerialDisconnectedPayload,
   BleConnectedPayload,
   BleDisconnectedPayload,
+  Gh3036FramesPayload,
 } from '../api/events';
 
 let eventBusListener: UnlistenFn | undefined;
@@ -95,6 +97,12 @@ function handleBleDisconnected(payload: BleDisconnectedPayload) {
   useNotificationStore.getState().addNotification('info', `设备 ${payload.address} 已断开`);
 }
 
+function handleGh3036Frames(payload: Gh3036FramesPayload) {
+  console.log('[EventListeners] handleGh3036Frames:', payload);
+  const store = useGh3036Store.getState();
+  store.addFramesData(payload);
+}
+
 function dispatchEvent(event: EventBusEvent) {
   console.log('[EventListeners] Received event-bus event:', event.topic, event);
   
@@ -123,6 +131,9 @@ function dispatchEvent(event: EventBusEvent) {
       case 'ble:disconnected':
         console.log('[EventListeners] Handling ble:disconnected');
         handleBleDisconnected(decodePayload<BleDisconnectedPayload>(event));
+        break;
+      case 'gh3036:frames':
+        handleGh3036Frames(decodePayload<Gh3036FramesPayload>(event));
         break;
       default:
         console.log('[EventListeners] Unknown topic:', event.topic);

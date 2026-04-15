@@ -18,7 +18,13 @@ let initialized = false;
 let initPromise: Promise<void> | null = null;
 
 function handleSerialData(payload: SerialDataPayload) {
+  console.log('[EventListeners] handleSerialData called with payload:', payload);
+  console.log('[EventListeners] device_id:', payload.device_id, 'data type:', typeof payload.data, 'data length:', payload.data?.length);
+  
   const store = useSerialStore.getState();
+  const matchingTab = store.tabs.find(t => t.portName === payload.device_id && t.tabType === 'port');
+  console.log('[EventListeners] Matching tab found:', !!matchingTab, 'Available tabs:', store.tabs.map(t => ({ portName: t.portName, tabType: t.tabType })));
+  
   store.addReceivedData(payload.device_id, {
     id: generateId(),
     timestamp: payload.timestamp ?? Date.now(),
@@ -26,11 +32,15 @@ function handleSerialData(payload: SerialDataPayload) {
     direction: 'receive',
     format: 'hex',
   });
+  console.log('[EventListeners] addReceivedData called for device_id:', payload.device_id);
 }
 
 function handleSerialConnected(payload: SerialConnectedPayload) {
+  console.log('[EventListeners] handleSerialConnected called with payload:', payload);
   const store = useSerialStore.getState();
   store.addPortTab(payload.port_name);
+  console.log('[EventListeners] Added port tab for:', payload.port_name);
+  console.log('[EventListeners] Current tabs after addPortTab:', store.tabs.map(t => ({ portName: t.portName, tabType: t.tabType })));
   useLogStore.getState().addLog('info', 'SerialManager', `串口 ${payload.port_name} 已连接`);
   useNotificationStore.getState().addNotification('success', `串口 ${payload.port_name} 已连接`);
 }

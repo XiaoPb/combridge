@@ -300,6 +300,7 @@ impl Gh3036Manager {
     fn process_data_with_decoder(event_bus: &Arc<EventBus>, decoder: &mut FrameDecoder, data: &[u8]) {
         let mut frames: heapless::Vec<FuncFrame, 16> = heapless::Vec::new();
         let count = decoder.decode_frames(data, &mut frames);
+        info!("[GH3036] data: {:02X?}", data);
         
         if count > 0 {
             info!("[GH3036] 解码到 {} 帧", count);

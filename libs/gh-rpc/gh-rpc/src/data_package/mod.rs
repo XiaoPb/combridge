@@ -471,7 +471,7 @@ impl FrameDecoder {
                     | ((self.last_timestamp_high as u64) << 32);
                 let diff_ts = (data_frame.timestamp as u64) 
                     | ((data_frame.timestamp_high as u64) << 32);
-                func_frame.timestamp = last_ts + diff_ts;
+                func_frame.timestamp = last_ts.saturating_add(diff_ts);
                 self.last_timestamp = (func_frame.timestamp & 0xFFFFFFFF) as i32;
                 self.last_timestamp_high = ((func_frame.timestamp >> 32) & 0xFFFFFFFF) as i32;
             }

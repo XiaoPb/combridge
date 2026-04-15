@@ -1,63 +1,15 @@
 import React from 'react';
-import { Table, Button, Empty, Typography, Tag, Card } from 'antd';
+import { Button, Empty, Card } from 'antd';
 import { ClearOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
-import type { Gh3036FramePayload } from '../../api/events';
-
-const { Text } = Typography;
+import WaveformChart from '../Waveform/WaveformChart';
 
 const Gh3036DataView: React.FC = () => {
   const { t } = useTranslation('protocol');
-  const { frameData, clearFrameData } = useGh3036Store();
+  const { waveformColumns, waveformRows, clearWaveformData } = useGh3036Store();
 
-  const columns = [
-    {
-      title: t('gh3036.timestamp'),
-      dataIndex: 'timestamp',
-      key: 'timestamp',
-      width: 120,
-      render: (ts: number) => {
-        const date = new Date(Number(ts));
-        return date.toLocaleTimeString();
-      },
-    },
-    {
-      title: t('gh3036.functionId'),
-      dataIndex: 'function_id',
-      key: 'function_id',
-      width: 80,
-      render: (_id: number, record: Gh3036FramePayload) => (
-        <Tag color="blue">{record.function_name}</Tag>
-      ),
-    },
-    {
-      title: t('gh3036.frameId'),
-      dataIndex: 'frame_id',
-      key: 'frame_id',
-      width: 60,
-    },
-    {
-      title: t('gh3036.channelCount'),
-      dataIndex: 'channel_count',
-      key: 'channel_count',
-      width: 80,
-    },
-    {
-      title: t('gh3036.channels'),
-      dataIndex: 'channels',
-      key: 'channels',
-      ellipsis: true,
-      render: (channels: number[]) => (
-        <Text style={{ fontSize: 11, fontFamily: 'monospace' }}>
-          {channels.slice(0, 8).map((v) => v.toFixed(3)).join(', ')}
-          {channels.length > 8 && '...'}
-        </Text>
-      ),
-    },
-  ];
-
-  if (frameData.length === 0) {
+  if (waveformRows.length === 0) {
     return (
       <Card
         size="small"
@@ -78,21 +30,18 @@ const Gh3036DataView: React.FC = () => {
         <Button
           size="small"
           icon={<ClearOutlined />}
-          onClick={clearFrameData}
+          onClick={clearWaveformData}
         >
           {t('gh3036.clearData')}
         </Button>
       }
       style={{ height: '100%' }}
-      styles={{ body: { padding: 8, height: 'calc(100% - 40px)', overflow: 'auto' } }}
+      styles={{ body: { padding: 8, height: 'calc(100% - 40px)' } }}
     >
-      <Table
-        size="small"
-        dataSource={frameData}
-        columns={columns}
-        rowKey={(record, index) => `${record.timestamp}-${index}`}
-        pagination={false}
-        scroll={{ y: 'calc(100% - 40px)' }}
+      <WaveformChart
+        columns={waveformColumns}
+        rows={waveformRows}
+        displayRows={500}
       />
     </Card>
   );

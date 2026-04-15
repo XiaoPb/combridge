@@ -445,3 +445,53 @@ impl Gh3036EventData {
         }
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Gh3036FramesEvent {
+    pub function_id: u8,
+    pub function_name: String,
+    pub frame_count: usize,
+    pub channel_count: usize,
+    pub timestamps: Vec<u64>,
+    pub channels: Vec<Vec<f32>>,
+}
+
+impl Gh3036FramesEvent {
+    pub fn new(function_id: u8, function_name: String) -> Self {
+        Self {
+            function_id,
+            function_name,
+            frame_count: 0,
+            channel_count: 0,
+            timestamps: Vec::new(),
+            channels: Vec::new(),
+        }
+    }
+
+    pub fn add_frame(&mut self, timestamp: u64, channel_data: &[f32]) {
+        self.timestamps.push(timestamp);
+        if self.channels.is_empty() {
+            self.channel_count = channel_data.len();
+            self.channels = vec![Vec::new(); channel_data.len()];
+        }
+        for (i, &value) in channel_data.iter().enumerate() {
+            if i < self.channels.len() {
+                self.channels[i].push(value);
+            }
+        }
+        self.frame_count += 1;
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.frame_count == 0
+    }
+
+    pub fn clear(&mut self) {
+        self.frame_count = 0;
+        self.channel_count = 0;
+        self.timestamps.clear();
+        for ch in &mut self.channels {
+            ch.clear();
+        }
+    }
+}

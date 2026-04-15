@@ -31,6 +31,15 @@ export interface Gh3036FramePayload {
   channels: number[];
 }
 
+export interface Gh3036FramesPayload {
+  function_id: number;
+  function_name: string;
+  frame_count: number;
+  channel_count: number;
+  timestamps: number[];
+  channels: number[][];
+}
+
 export interface ProtocolParsedPayload {
   plugin_id: string;
   device_id: string;

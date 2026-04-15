@@ -20,7 +20,7 @@ use tracing::{debug, error, info, warn};
 use crate::device::DeviceManager;
 use crate::service::{EventBus, topics, SerialDataEvent, BleDataEvent, Gh3036FrameEvent, SerialDisconnectedEvent, BleConnectionEvent};
 use super::csv_writer::CsvWriter;
-use super::types::{Gh3036EventData, Gh3036FrameData, FuncFrame, FrameDecoder};
+use super::types::{Gh3036EventData, Gh3036FrameData, FuncFrame, FrameDecoder, Gh3036FramesEvent};
 
 use gh_rpc::cmd::{CMD_GET_VERSION, CMD_REGS_WRITE, CMD_REGS_READ, CMD_CHIP_CTRL, 
                   CMD_SW_FUNCTION, CMD_DOWNLOAD_CONFIG, CMD_TIMESTAMP_SET, 
@@ -81,6 +81,56 @@ struct RpcDataRequest {
     data: Vec<u8>,
 }
 
+struct FrameAggregator {
+    buffer: HashMap<u8, Gh3036FramesEvent>,
+    last_publish_time: std::time::Instant,
+    min_interval: std::time::Duration,
+}
+
+impl FrameAggregator {
+    fn new() -> Self {
+        Self {
+            buffer: HashMap::new(),
+            last_publish_time: std::time::Instant::now(),
+            min_interval: std::time::Duration::from_millis(30),
+        }
+    }
+
+    fn add_frame(&mut self, frame: &Gh3036FrameEvent) -> Option<Gh3036FramesEvent> {
+        let event = self.buffer.entry(frame.function_id).or_insert_with(|| {
+            Gh3036FramesEvent::new(frame.function_id, frame.function_name.clone())
+        });
+        event.add_frame(frame.timestamp, &frame.channels);
+
+        let now = std::time::Instant::now();
+        if now.duration_since(self.last_publish_time) >= self.min_interval {
+            self.flush()
+        } else {
+            None
+        }
+    }
+
+    fn flush(&mut self) -> Option<Gh3036FramesEvent> {
+        if self.buffer.is_empty() {
+            return None;
+        }
+
+        let mut result: Option<Gh3036FramesEvent> = None;
+        
+        for (_, event) in self.buffer.drain() {
+            if !event.is_empty() {
+                result = Some(event);
+                break;
+            }
+        }
+
+        if result.is_some() {
+            self.last_publish_time = std::time::Instant::now();
+        }
+        result
+    }
+}
+
 struct GlobalContext {
     rx_channel: Mutex<Option<ChannelConfig>>,
     tx_channel: Mutex<Option<ChannelConfig>>,
@@ -93,6 +143,7 @@ struct GlobalContext {
     frame_sender: Mutex<Option<Sender<Gh3036FrameData>>>,
     rpc_data_sender: Mutex<Option<Sender<RpcDataRequest>>>,
     frame_raw_sender: Mutex<Option<Sender<Vec<u8>>>>,
+    frame_aggregator: Mutex<FrameAggregator>,
     runtime_handle: Mutex<Option<Handle>>,
 }
 
@@ -110,6 +161,7 @@ impl GlobalContext {
             frame_sender: Mutex::new(None),
             rpc_data_sender: Mutex::new(None),
             frame_raw_sender: Mutex::new(None),
+            frame_aggregator: Mutex::new(FrameAggregator::new()),
             runtime_handle: Mutex::new(None),
         }
     }
@@ -202,6 +254,16 @@ impl GlobalContext {
         } else {
             Err(crossbeam_channel::SendError(vec![]))
         }
+    }
+
+    fn add_frame_to_aggregator(&self, frame: &Gh3036FrameEvent) -> Option<Gh3036FramesEvent> {
+        let mut aggregator = self.frame_aggregator.lock();
+        aggregator.add_frame(frame)
+    }
+
+    fn flush_aggregator(&self) -> Option<Gh3036FramesEvent> {
+        let mut aggregator = self.frame_aggregator.lock();
+        aggregator.flush()
     }
 }
 
@@ -341,7 +403,6 @@ impl Gh3036Manager {
     fn process_frame_data(event_bus: &Arc<EventBus>, decoder: &mut FrameDecoder, data: &[u8]) {
         let mut frames: heapless::Vec<FuncFrame, 16> = heapless::Vec::new();
         let count = decoder.decode_frames(data, &mut frames);
-        info!("[GH3036] 帧解析: 数据长度={}, 解码帧数={}", data.len(), count);
         
         if count > 0 {
             for frame in frames.iter() {
@@ -354,15 +415,15 @@ impl Gh3036Manager {
                     frame_data.phy_value.iter().map(|&v| v as f32).collect(),
                 );
                 
-                info!(
-                    "[GH3036] 发布帧事件: function_id={}, function_name={}, frame_id={}, channel_count={}",
-                    frame_event.function_id,
-                    frame_event.function_name,
-                    frame_event.frame_id,
-                    frame_event.channel_count
-                );
-                
-                event_bus.publish_msgpack(topics::GH3036_FRAME, &frame_event);
+                if let Some(aggregated) = CALLBACK_CONTEXT.add_frame_to_aggregator(&frame_event) {
+                    info!(
+                        "[GH3036] 发布聚合帧事件: function_id={}, frame_count={}, channel_count={}",
+                        aggregated.function_id,
+                        aggregated.frame_count,
+                        aggregated.channel_count
+                    );
+                    event_bus.publish_msgpack("gh3036:frames", &aggregated);
+                }
                 
                 if let Err(e) = CALLBACK_CONTEXT.send_frame_data(frame_data) {
                     error!("[GH3036] 帧数据入队失败: {}", e);

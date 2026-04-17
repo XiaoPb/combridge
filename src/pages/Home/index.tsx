@@ -10,7 +10,9 @@ import {
   FileTextOutlined,
   CodeOutlined as EditorIcon,
   FolderOpenOutlined,
-  ApiOutlined as Gh3036Icon,
+  HeartOutlined,
+  SettingOutlined as ConfigIcon,
+  LineChartOutlined as MonitorIcon,
   InfoCircleOutlined,
   FileTextOutlined as LogsIcon,
   SettingOutlined as SettingsIcon,
@@ -146,7 +148,7 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation('home');
-  const { setWaveformActiveTab, setProtocolActiveTab, setSystemActiveTab } = usePageTabsStore();
+  const { setWaveformActiveTab, setProtocolActiveTab, setSystemActiveTab, setGh3036ActiveTab } = usePageTabsStore();
 
   const modules = [
     {
@@ -162,13 +164,22 @@ const HomePage: React.FC = () => {
       subTabs: [],
     },
     {
+      key: 'gh3036',
+      icon: <HeartOutlined />,
+      path: '/gh3036',
+      subTabs: [
+        { key: 'config', label: t('modules.gh3036.tabs.config'), icon: <ConfigIcon /> },
+        { key: 'monitor', label: t('modules.gh3036.tabs.monitor'), icon: <MonitorIcon /> },
+        { key: 'version', label: t('modules.gh3036.tabs.version'), icon: <InfoCircleOutlined /> },
+      ],
+    },
+    {
       key: 'protocol',
       icon: <CodeOutlined />,
       path: '/protocol',
       subTabs: [
         { key: 'editor', label: t('modules.protocol.tabs.editor'), icon: <EditorIcon /> },
         { key: 'bind', label: t('modules.protocol.tabs.bind'), icon: <FolderOpenOutlined /> },
-        { key: 'gh3036', label: t('modules.protocol.tabs.gh3036'), icon: <Gh3036Icon /> },
       ],
     },
     {
@@ -206,6 +217,9 @@ const HomePage: React.FC = () => {
         break;
       case '/system':
         setSystemActiveTab(tabKey as 'info' | 'logs' | 'settings');
+        break;
+      case '/gh3036':
+        setGh3036ActiveTab(tabKey as 'config' | 'monitor' | 'version');
         break;
     }
     navigate(path);

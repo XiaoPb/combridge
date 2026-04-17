@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { Tabs, Alert, Spin } from 'antd';
-import { SettingOutlined, LineChartOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import React, { useEffect } from 'react';
+import { Alert, Spin } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
+import { usePageTabsStore } from '../../stores/pageTabsStore';
 import ConfigTab from './ConfigTab';
 import MonitorTab from './MonitorTab';
 import VersionTab from './VersionTab';
@@ -22,7 +22,7 @@ const Gh3036Page: React.FC = () => {
     loadLibraryStatus,
   } = useGh3036Store();
 
-  const [activeTab, setActiveTab] = useState('monitor');
+  const { gh3036ActiveTab } = usePageTabsStore();
 
   useEffect(() => {
     loadLibraryStatus();
@@ -50,38 +50,18 @@ const Gh3036Page: React.FC = () => {
     );
   }
 
-  const tabItems = [
-    {
-      key: 'config',
-      label: (
-        <span>
-          <SettingOutlined />
-          <span style={{ marginLeft: 4 }}>{t('tabs.config')}</span>
-        </span>
-      ),
-      children: <ConfigTab />,
-    },
-    {
-      key: 'monitor',
-      label: (
-        <span>
-          <LineChartOutlined />
-          <span style={{ marginLeft: 4 }}>{t('tabs.monitor')}</span>
-        </span>
-      ),
-      children: <MonitorTab />,
-    },
-    {
-      key: 'version',
-      label: (
-        <span>
-          <InfoCircleOutlined />
-          <span style={{ marginLeft: 4 }}>{t('tabs.version')}</span>
-        </span>
-      ),
-      children: <VersionTab />,
-    },
-  ];
+  const renderContent = () => {
+    switch (gh3036ActiveTab) {
+      case 'config':
+        return <ConfigTab />;
+      case 'monitor':
+        return <MonitorTab />;
+      case 'version':
+        return <VersionTab />;
+      default:
+        return <MonitorTab />;
+    }
+  };
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -95,13 +75,9 @@ const Gh3036Page: React.FC = () => {
         />
       )}
       
-      <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
-        items={tabItems}
-        style={{ flex: 1, overflow: 'hidden' }}
-        className="gh3036-tabs"
-      />
+      <div style={{ flex: 1, overflow: 'auto' }}>
+        {renderContent()}
+      </div>
     </div>
   );
 };

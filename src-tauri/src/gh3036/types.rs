@@ -12,6 +12,7 @@ pub use gh_rpc::cmd::{
     CMD_SET_WORK_MODE, CMD_LOW_POWER, CMD_REGS_BIT_FIELD_WRITE,
     VER_TYPE_FW, VER_TYPE_DEMO, VER_TYPE_BOOTLOADER, VER_TYPE_PROTOCOL,
     VER_TYPE_VIRTUAL_REG, VER_TYPE_DRV, VER_TYPE_CHIP, VER_TYPE_BLE, VER_TYPE_ALGO,
+    VER_TYPE_FUNC_SUPPORT,
     HR_VERSION_OFFSET, HRV_VERSION_OFFSET, SPO2_VERSION_OFFSET, ADT_VERSION_OFFSET, NADT_VERSION_OFFSET,
     CHIP_CTRL_HARD_RESET, CHIP_CTRL_RX_RESET, CHIP_CTRL_SOFT_RESET,
     CHIP_CTRL_WAKEUP, CHIP_CTRL_SLEEP,
@@ -455,7 +456,7 @@ pub fn get_version_types() -> Vec<VersionTypeConfig> {
             description: "协议版本".to_string(),
         },
         VersionTypeConfig {
-            type_value: 0x06,
+            type_value: VER_TYPE_FUNC_SUPPORT,
             name: "func_support".to_string(),
             description: "功能支持".to_string(),
         },

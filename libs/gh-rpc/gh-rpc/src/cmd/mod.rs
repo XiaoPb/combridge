@@ -68,20 +68,22 @@ pub const CHIP_CTRL_SLEEP: u8 = 0xC4;
 
 /// 固件版本类型
 pub const VER_TYPE_FW: u8 = 0x01;
-/// Demo 版本类型
-pub const VER_TYPE_DEMO: u8 = 0x02;
-/// Bootloader 版本类型
-pub const VER_TYPE_BOOTLOADER: u8 = 0x03;
-/// 协议版本类型
-pub const VER_TYPE_PROTOCOL: u8 = 0x04;
 /// 虚拟寄存器版本类型
-pub const VER_TYPE_VIRTUAL_REG: u8 = 0x05;
+pub const VER_TYPE_VIRTUAL_REG: u8 = 0x03;
+/// Bootloader 版本类型
+pub const VER_TYPE_BOOTLOADER: u8 = 0x04;
+/// 协议版本类型
+pub const VER_TYPE_PROTOCOL: u8 = 0x05;
+/// 功能支持版本类型
+pub const VER_TYPE_FUNC_SUPPORT: u8 = 0x06;
 /// 驱动版本类型
 pub const VER_TYPE_DRV: u8 = 0x07;
 /// 芯片版本类型
 pub const VER_TYPE_CHIP: u8 = 0x08;
 /// BLE 版本类型
 pub const VER_TYPE_BLE: u8 = 0x09;
+/// Demo 版本类型
+pub const VER_TYPE_DEMO: u8 = 0x0A;
 /// 算法版本类型
 pub const VER_TYPE_ALGO: u8 = 0x20;
 

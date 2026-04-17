@@ -2,13 +2,19 @@
   "title": "欢迎使用 ComBridge",
   "subtitle": "选择一个功能模块开始使用",
   "modules": {
-    "serial": {
-      "name": "串口通信",
-      "description": "串口设备的连接、数据收发和调试"
+    "connection": {
+      "name": "设备连接",
+      "description": "串口和蓝牙设备的连接与数据交互"
     },
-    "ble": {
-      "name": "蓝牙通信",
-      "description": "BLE设备的扫描、连接和数据交互"
+    "dashboard": {
+      "name": "仪表盘",
+      "description": "数据可视化与实时监控",
+      "tabs": {
+        "dashboard": "仪表盘",
+        "console": "控制台",
+        "settings": "设置",
+        "jsonEditor": "JSON编辑器"
+      }
     },
     "gh3036": {
       "name": "GH3036",

@@ -2,13 +2,19 @@
   "title": "Welcome to ComBridge",
   "subtitle": "Select a module to get started",
   "modules": {
-    "serial": {
-      "name": "Serial Communication",
-      "description": "Connect, send and receive data with serial devices"
+    "connection": {
+      "name": "Device Connection",
+      "description": "Serial and BLE device connection and data interaction"
     },
-    "ble": {
-      "name": "BLE Communication",
-      "description": "Scan, connect and interact with BLE devices"
+    "dashboard": {
+      "name": "Dashboard",
+      "description": "Data visualization and real-time monitoring",
+      "tabs": {
+        "dashboard": "Dashboard",
+        "console": "Console",
+        "settings": "Settings",
+        "jsonEditor": "JSON Editor"
+      }
     },
     "gh3036": {
       "name": "GH3036",

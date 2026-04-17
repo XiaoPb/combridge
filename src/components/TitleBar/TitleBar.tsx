@@ -18,6 +18,7 @@ import ProtocolTitleTabs from './ProtocolTitleTabs';
 import SystemTitleTabs from './SystemTitleTabs';
 import WaveformTitleTabs from './WaveformTitleTabs';
 import Gh3036TitleTabs from './Gh3036TitleTabs';
+import DashboardTitleTabs from './DashboardTitleTabs';
 import { useTranslation } from 'react-i18next';
 
 interface ThemeSwitchProps {
@@ -109,6 +110,8 @@ const TitleBar: React.FC = () => {
         return <BleTitleTabs />;
       case '/gh3036':
         return <Gh3036TitleTabs />;
+      case '/dashboard':
+        return <DashboardTitleTabs />;
       case '/protocol':
         return <ProtocolTitleTabs />;
       case '/system':

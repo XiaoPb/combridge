@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu } from 'antd';
 import {
   HomeOutlined,
-  UsbOutlined,
   ApiOutlined,
   CodeOutlined,
   SettingOutlined,
@@ -35,13 +34,13 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
     },
     {
       key: '/serial',
-      icon: <UsbOutlined />,
-      label: t('menu.serial'),
+      icon: <ApiOutlined />,
+      label: t('menu.connection'),
     },
     {
-      key: '/ble',
-      icon: <ApiOutlined />,
-      label: t('menu.ble'),
+      key: '/dashboard',
+      icon: <DashboardOutlined />,
+      label: t('menu.dashboard'),
     },
     {
       key: '/gh3036',
@@ -52,11 +51,6 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
       key: '/protocol',
       icon: <CodeOutlined />,
       label: t('menu.protocol'),
-    },
-    {
-      key: '/dashboard',
-      icon: <DashboardOutlined />,
-      label: t('menu.dashboard'),
     },
     {
       key: '/waveform',

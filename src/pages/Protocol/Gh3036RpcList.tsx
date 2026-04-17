@@ -67,7 +67,7 @@ const Gh3036RpcList: React.FC = () => {
     const result = await executeRpc('V', ['1']);
     if (result && result.length > 0) {
       const versionStr = String.fromCharCode(...result.filter(c => c >= 32 && c < 127));
-      setVersion(versionStr || '1.0.0');
+      setVersion(versionStr || '-');
     }
   };
 

@@ -1086,8 +1086,7 @@ impl Gh3036Manager {
     }
 
     pub fn subscribe_events(&self) -> bool {
-        EVENTS_SUBSCRIBED.store(true, std::sync::atomic::Ordering::SeqCst);
-        info!("GH3036 事件订阅已启用");
+        self.subscribe_data_events();
         true
     }
 

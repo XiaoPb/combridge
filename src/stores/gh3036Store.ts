@@ -422,11 +422,16 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     const { eventListeners } = get();
     
     if (eventListeners.event || eventListeners.frame) {
+      console.debug('[Gh3036Store] 事件已订阅，跳过重复订阅');
       return;
     }
     
     try {
-      await gh3036Api.subscribeEvents();
+      const status = await gh3036Api.getLibraryStatus();
+      if (!status.isInitialized) {
+        console.debug('[Gh3036Store] 库未初始化，跳过订阅');
+        return;
+      }
       
       const eventUnlisten = await listen<EventBusEvent>('event-bus', (event) => {
         if (event.payload.topic === 'gh3036:event') {

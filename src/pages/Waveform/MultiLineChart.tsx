@@ -53,6 +53,17 @@ const COLORS = [
   '#40A9FF'
 ];
 
+const colorCache = new Map<string, string>();
+
+const getStableColor = (col: string, index: number): string => {
+  if (colorCache.has(col)) {
+    return colorCache.get(col)!;
+  }
+  const color = COLORS[index % COLORS.length];
+  colorCache.set(col, color);
+  return color;
+};
+
 const Y_AXIS_WIDTH = 50;
 const MAX_LINES_PER_CHART = 4;
 
@@ -111,19 +122,8 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
 
   const colorMap = useMemo(() => {
     const map = new Map<string, string>();
-    const usedColors = new Set<string>();
-    
-    columns.forEach((col) => {
-      const availableColors = COLORS.filter(c => !usedColors.has(c));
-      if (availableColors.length > 0) {
-        const randomIndex = Math.floor(Math.random() * availableColors.length);
-        const color = availableColors[randomIndex];
-        map.set(col, color);
-        usedColors.add(color);
-      } else {
-        const fallbackIndex = usedColors.size % COLORS.length;
-        map.set(col, COLORS[fallbackIndex]);
-      }
+    columns.forEach((col, index) => {
+      map.set(col, getStableColor(col, index));
     });
     return map;
   }, [columns]);

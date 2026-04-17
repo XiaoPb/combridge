@@ -4,7 +4,11 @@
   "modules": {
     "connection": {
       "name": "Device Connection",
-      "description": "Serial and BLE device connection and data interaction"
+      "description": "Serial and BLE device connection and data interaction",
+      "tabs": {
+        "serial": "Serial",
+        "ble": "BLE"
+      }
     },
     "dashboard": {
       "name": "Dashboard",

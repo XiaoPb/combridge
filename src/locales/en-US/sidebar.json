@@ -1,7 +1,8 @@
 {
   "menu": {
     "home": "Home",
-    "connection": "Connection",
+    "serial": "Serial",
+    "ble": "BLE",
     "dashboard": "Dashboard",
     "gh3036": "GH3036",
     "protocol": "Protocol",

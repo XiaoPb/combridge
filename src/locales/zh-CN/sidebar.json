@@ -1,7 +1,8 @@
 {
   "menu": {
     "home": "主页",
-    "connection": "设备连接",
+    "serial": "串口",
+    "ble": "蓝牙",
     "dashboard": "仪表盘",
     "gh3036": "GH3036",
     "protocol": "协议",

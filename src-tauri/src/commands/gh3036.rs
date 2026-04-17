@@ -3,6 +3,7 @@ use tauri::{AppHandle, State};
 use crate::error::{ComBridgeError, ErrorResponse};
 use crate::gh3036::{
     ChannelConfig, ChannelType, CsvConfig, Gh3036ManagerRef, RpcCommand,
+    VersionTypeConfig,
 };
 
 #[tauri::command]
@@ -125,6 +126,11 @@ pub async fn gh3036_get_csv_config(
 #[tauri::command]
 pub fn gh3036_get_rpc_commands() -> Result<Vec<RpcCommand>, ErrorResponse> {
     Ok(crate::gh3036::get_rpc_commands())
+}
+
+#[tauri::command]
+pub fn gh3036_get_version_types() -> Result<Vec<VersionTypeConfig>, ErrorResponse> {
+    Ok(crate::gh3036::get_version_types())
 }
 
 #[tauri::command]

@@ -1,67 +1,159 @@
-import React, { useState } from 'react';
-import { Card, Descriptions, Button, Spin, message, theme } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import React, { useState, useEffect } from 'react';
+import { Card, Table, Button, Space, message, theme, Tag } from 'antd';
+import { ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
+import { gh3036Api } from '../../api/gh3036';
+import type { Gh3036VersionTypeConfig } from '../../api/types';
 
 interface VersionInfo {
-  firmware: string;
-  protocol: string;
-  driver: string;
-  chip: string;
-  algo: string;
+  [key: string]: string;
 }
 
 const VersionTab: React.FC = () => {
   const { t } = useTranslation('gh3036');
   const { token } = theme.useToken();
-  const { executeRpc, txChannel } = useGh3036Store();
+  const { txChannel } = useGh3036Store();
   
   const [loading, setLoading] = useState(false);
-  const [versionInfo, setVersionInfo] = useState<VersionInfo>({
-    firmware: '--',
-    protocol: '--',
-    driver: '--',
-    chip: '--',
-    algo: '--',
-  });
+  const [versionTypes, setVersionTypes] = useState<Gh3036VersionTypeConfig[]>([]);
+  const [versionInfo, setVersionInfo] = useState<VersionInfo>({});
+  const [refreshingKey, setRefreshingKey] = useState<string | null>(null);
 
-  const handleGetVersion = async (verType: number): Promise<string> => {
+  useEffect(() => {
+    loadVersionTypes();
+  }, []);
+
+  const loadVersionTypes = async () => {
+    try {
+      const types = await gh3036Api.getVersionTypes();
+      setVersionTypes(types);
+      
+      const initialInfo: VersionInfo = {};
+      types.forEach(type => {
+        initialInfo[type.name] = '--';
+      });
+      setVersionInfo(initialInfo);
+    } catch (err) {
+      console.error('加载版本类型配置失败:', err);
+    }
+  };
+
+  const handleGetVersion = async (typeConfig: Gh3036VersionTypeConfig): Promise<string> => {
     if (!txChannel) {
-      message.error(t('version.noTxChannel'));
-      return '--';
+      throw new Error(t('version.noTxChannel'));
     }
     
+    const result = await gh3036Api.executeRpc('V', [typeConfig.type_value.toString()]);
+    const versionStr = String.fromCharCode(...result.filter(c => c >= 32 && c < 127));
+    return versionStr || '--';
+  };
+
+  const handleRefreshOne = async (typeConfig: Gh3036VersionTypeConfig) => {
+    setRefreshingKey(typeConfig.name);
     try {
-      const success = await executeRpc('V', [verType.toString()]);
-      return success ? '1.0.0' : '--';
-    } catch {
-      return '--';
+      const version = await handleGetVersion(typeConfig);
+      setVersionInfo(prev => ({
+        ...prev,
+        [typeConfig.name]: version,
+      }));
+      message.success(`${typeConfig.description}: ${version}`);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '获取失败';
+      message.error(errorMsg);
+      setVersionInfo(prev => ({
+        ...prev,
+        [typeConfig.name]: '获取失败',
+      }));
+    } finally {
+      setRefreshingKey(null);
     }
   };
 
   const handleRefreshAll = async () => {
-    setLoading(true);
-    try {
-      const [firmware, protocol, driver, chip, algo] = await Promise.all([
-        handleGetVersion(0),
-        handleGetVersion(1),
-        handleGetVersion(2),
-        handleGetVersion(3),
-        handleGetVersion(4),
-      ]);
-      
-      setVersionInfo({ firmware, protocol, driver, chip, algo });
-      message.success(t('version.refreshSuccess'));
-    } finally {
-      setLoading(false);
+    if (!txChannel) {
+      message.error(t('version.noTxChannel'));
+      return;
     }
+
+    setLoading(true);
+    const newVersionInfo: VersionInfo = { ...versionInfo };
+    
+    for (const typeConfig of versionTypes) {
+      try {
+        const version = await handleGetVersion(typeConfig);
+        newVersionInfo[typeConfig.name] = version;
+      } catch {
+        newVersionInfo[typeConfig.name] = '获取失败';
+      }
+    }
+    
+    setVersionInfo(newVersionInfo);
+    setLoading(false);
+    message.success(t('version.refreshSuccess'));
   };
 
   const cardStyle: React.CSSProperties = {
     background: token.colorBgContainer,
     borderRadius: token.borderRadius,
   };
+
+  const columns = [
+    {
+      title: t('version.typeName'),
+      dataIndex: 'name',
+      key: 'name',
+      width: 120,
+      render: (name: string) => <Tag color="blue">{name}</Tag>,
+    },
+    {
+      title: t('version.typeValue'),
+      dataIndex: 'type_value',
+      key: 'type_value',
+      width: 80,
+      render: (value: number) => `0x${value.toString(16).toUpperCase().padStart(2, '0')}`,
+    },
+    {
+      title: t('version.description'),
+      dataIndex: 'description',
+      key: 'description',
+      width: 150,
+    },
+    {
+      title: t('version.version'),
+      key: 'version',
+      render: (_: unknown, record: Gh3036VersionTypeConfig) => {
+        const version = versionInfo[record.name] || '--';
+        const isSuccess = version !== '--' && version !== '获取失败';
+        return (
+          <Space>
+            {isSuccess ? (
+              <CheckCircleOutlined style={{ color: token.colorSuccess }} />
+            ) : (
+              <CloseCircleOutlined style={{ color: token.colorTextDisabled }} />
+            )}
+            <span style={{ fontFamily: 'monospace' }}>{version}</span>
+          </Space>
+        );
+      },
+    },
+    {
+      title: t('version.action'),
+      key: 'action',
+      width: 100,
+      render: (_: unknown, record: Gh3036VersionTypeConfig) => (
+        <Button
+          size="small"
+          icon={<ReloadOutlined />}
+          onClick={() => handleRefreshOne(record)}
+          loading={refreshingKey === record.name}
+          disabled={!txChannel}
+        >
+          {t('version.refresh')}
+        </Button>
+      ),
+    },
+  ];
 
   return (
     <div style={{ height: '100%', overflow: 'auto', padding: '8px 0' }}>
@@ -75,31 +167,21 @@ const VersionTab: React.FC = () => {
             onClick={handleRefreshAll}
             loading={loading}
             size="small"
+            disabled={!txChannel}
           >
-            {t('version.refresh')}
+            {t('version.refreshAll')}
           </Button>
         }
         style={cardStyle}
       >
-        <Spin spinning={loading}>
-          <Descriptions column={1} bordered size="small">
-            <Descriptions.Item label={t('version.firmware')}>
-              {versionInfo.firmware}
-            </Descriptions.Item>
-            <Descriptions.Item label={t('version.protocol')}>
-              {versionInfo.protocol}
-            </Descriptions.Item>
-            <Descriptions.Item label={t('version.driver')}>
-              {versionInfo.driver}
-            </Descriptions.Item>
-            <Descriptions.Item label={t('version.chip')}>
-              {versionInfo.chip}
-            </Descriptions.Item>
-            <Descriptions.Item label={t('version.algo')}>
-              {versionInfo.algo}
-            </Descriptions.Item>
-          </Descriptions>
-        </Spin>
+        <Table
+          columns={columns}
+          dataSource={versionTypes}
+          rowKey="name"
+          size="small"
+          pagination={false}
+          loading={loading}
+        />
       </Card>
 
       <Card
@@ -107,14 +189,15 @@ const VersionTab: React.FC = () => {
         title={t('version.libraryInfo')}
         style={{ ...cardStyle, marginTop: 8 }}
       >
-        <Descriptions column={1} bordered size="small">
-          <Descriptions.Item label={t('version.libraryStatus')}>
-            {t('version.linked')}
-          </Descriptions.Item>
-          <Descriptions.Item label={t('version.rpcStatus')}>
-            {t('version.ready')}
-          </Descriptions.Item>
-        </Descriptions>
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <div>
+            <Tag color="green">{t('version.linked')}</Tag>
+            <Tag color="blue">{t('version.ready')}</Tag>
+          </div>
+          {!txChannel && (
+            <Tag color="orange">{t('version.noTxChannel')}</Tag>
+          )}
+        </Space>
       </Card>
     </div>
   );

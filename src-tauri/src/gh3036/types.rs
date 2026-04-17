@@ -231,8 +231,8 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
                 RpcParam {
                     name: "verType".to_string(),
                     param_type: "u8".to_string(),
-                    description: "版本类型（0: 固件版本, 1: 协议版本）".to_string(),
-                    default_value: Some("0".to_string()),
+                    description: "版本类型（参考版本类型配置）".to_string(),
+                    default_value: Some("1".to_string()),
                 },
             ],
         },
@@ -420,6 +420,68 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
                     default_value: Some("8".to_string()),
                 },
             ],
+        },
+    ]
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VersionTypeConfig {
+    pub type_value: u8,
+    pub name: String,
+    pub description: String,
+}
+
+pub fn get_version_types() -> Vec<VersionTypeConfig> {
+    vec![
+        VersionTypeConfig {
+            type_value: 0x01,
+            name: "firmware".to_string(),
+            description: "固件版本".to_string(),
+        },
+        VersionTypeConfig {
+            type_value: 0x03,
+            name: "virtual_reg".to_string(),
+            description: "虚拟寄存器版本".to_string(),
+        },
+        VersionTypeConfig {
+            type_value: 0x04,
+            name: "bootloader".to_string(),
+            description: "Bootloader版本".to_string(),
+        },
+        VersionTypeConfig {
+            type_value: 0x05,
+            name: "protocol".to_string(),
+            description: "协议版本".to_string(),
+        },
+        VersionTypeConfig {
+            type_value: 0x06,
+            name: "func_support".to_string(),
+            description: "功能支持".to_string(),
+        },
+        VersionTypeConfig {
+            type_value: 0x07,
+            name: "driver".to_string(),
+            description: "驱动版本".to_string(),
+        },
+        VersionTypeConfig {
+            type_value: 0x08,
+            name: "chip".to_string(),
+            description: "芯片版本".to_string(),
+        },
+        VersionTypeConfig {
+            type_value: 0x09,
+            name: "ble".to_string(),
+            description: "BLE版本".to_string(),
+        },
+        VersionTypeConfig {
+            type_value: 0x0A,
+            name: "demo".to_string(),
+            description: "Demo版本".to_string(),
+        },
+        VersionTypeConfig {
+            type_value: 0x20,
+            name: "algo".to_string(),
+            description: "算法版本".to_string(),
         },
     ]
 }

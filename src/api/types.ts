@@ -166,3 +166,9 @@ export interface Gh3036RpcCommand {
   description: string;
   params: Gh3036RpcParam[];
 }
+
+export interface Gh3036VersionTypeConfig {
+  type_value: number;
+  name: string;
+  description: string;
+}

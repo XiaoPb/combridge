@@ -453,7 +453,10 @@ pub struct Gh3036FramesEvent {
     pub frame_count: usize,
     pub channel_count: usize,
     pub timestamps: Vec<u64>,
+    pub frame_ids: Vec<u32>,
     pub channels: Vec<Vec<f32>>,
+    pub rawdata: Vec<Vec<i32>>,
+    pub gs_data: Vec<Vec<i32>>,
 }
 
 impl Gh3036FramesEvent {
@@ -464,21 +467,42 @@ impl Gh3036FramesEvent {
             frame_count: 0,
             channel_count: 0,
             timestamps: Vec::new(),
+            frame_ids: Vec::new(),
             channels: Vec::new(),
+            rawdata: Vec::new(),
+            gs_data: Vec::new(),
         }
     }
 
-    pub fn add_frame(&mut self, timestamp: u64, channel_data: &[f32]) {
-        self.timestamps.push(timestamp);
+    pub fn add_frame(&mut self, frame: &Gh3036FrameData, channel_data: &[f32]) {
+        self.timestamps.push(frame.timestamp);
+        self.frame_ids.push(frame.frame_id as u32);
+        
         if self.channels.is_empty() {
             self.channel_count = channel_data.len();
             self.channels = vec![Vec::new(); channel_data.len()];
+            self.rawdata = vec![Vec::new(); frame.rawdata.len().max(1)];
+            self.gs_data = vec![Vec::new(); frame.gs_data.len().max(1)];
         }
+        
         for (i, &value) in channel_data.iter().enumerate() {
             if i < self.channels.len() {
                 self.channels[i].push(value);
             }
         }
+        
+        for (i, &value) in frame.rawdata.iter().enumerate() {
+            if i < self.rawdata.len() {
+                self.rawdata[i].push(value);
+            }
+        }
+        
+        for (i, &value) in frame.gs_data.iter().enumerate() {
+            if i < self.gs_data.len() {
+                self.gs_data[i].push(value);
+            }
+        }
+        
         self.frame_count += 1;
     }
 
@@ -490,8 +514,15 @@ impl Gh3036FramesEvent {
         self.frame_count = 0;
         self.channel_count = 0;
         self.timestamps.clear();
+        self.frame_ids.clear();
         for ch in &mut self.channels {
             ch.clear();
+        }
+        for rd in &mut self.rawdata {
+            rd.clear();
+        }
+        for gs in &mut self.gs_data {
+            gs.clear();
         }
     }
 }

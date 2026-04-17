@@ -66,9 +66,16 @@ pub struct CsvConfig {
 
 impl Default for CsvConfig {
     fn default() -> Self {
+        let output_dir = std::env::current_exe()
+            .ok()
+            .and_then(|exe_path| exe_path.parent().map(|p| p.to_path_buf()))
+            .map(|exe_dir| exe_dir.join("data"))
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| String::from("data"));
+        
         Self {
             enabled: false,
-            output_dir: String::from("."),
+            output_dir,
         }
     }
 }
@@ -96,11 +103,11 @@ impl FrameAggregator {
         }
     }
 
-    fn add_frame(&mut self, frame: &Gh3036FrameEvent) -> Option<Gh3036FramesEvent> {
-        let event = self.buffer.entry(frame.function_id).or_insert_with(|| {
-            Gh3036FramesEvent::new(frame.function_id, frame.function_name.clone())
+    fn add_frame(&mut self, frame_data: &Gh3036FrameData, frame_event: &Gh3036FrameEvent) -> Option<Gh3036FramesEvent> {
+        let event = self.buffer.entry(frame_event.function_id).or_insert_with(|| {
+            Gh3036FramesEvent::new(frame_event.function_id, frame_event.function_name.clone())
         });
-        event.add_frame(frame.timestamp, &frame.channels);
+        event.add_frame(frame_data, &frame_event.channels);
 
         let now = std::time::Instant::now();
         if now.duration_since(self.last_publish_time) >= self.min_interval {
@@ -256,9 +263,9 @@ impl GlobalContext {
         }
     }
 
-    fn add_frame_to_aggregator(&self, frame: &Gh3036FrameEvent) -> Option<Gh3036FramesEvent> {
+    fn add_frame_to_aggregator(&self, frame_data: &Gh3036FrameData, frame_event: &Gh3036FrameEvent) -> Option<Gh3036FramesEvent> {
         let mut aggregator = self.frame_aggregator.lock();
-        aggregator.add_frame(frame)
+        aggregator.add_frame(frame_data, frame_event)
     }
 
     fn flush_aggregator(&self) -> Option<Gh3036FramesEvent> {
@@ -421,7 +428,7 @@ impl Gh3036Manager {
                     frame_data.phy_value.iter().map(|&v| v as f32).collect(),
                 );
                 
-                if let Some(aggregated) = CALLBACK_CONTEXT.add_frame_to_aggregator(&frame_event) {
+                if let Some(aggregated) = CALLBACK_CONTEXT.add_frame_to_aggregator(&frame_data, &frame_event) {
                     info!(
                         "[GH3036] 发布聚合帧事件: function_id={}, frame_count={}, channel_count={}",
                         aggregated.function_id,

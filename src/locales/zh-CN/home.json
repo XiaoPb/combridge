@@ -4,7 +4,11 @@
   "modules": {
     "connection": {
       "name": "设备连接",
-      "description": "串口和蓝牙设备的连接与数据交互"
+      "description": "串口和蓝牙设备的连接与数据交互",
+      "tabs": {
+        "serial": "串口",
+        "ble": "蓝牙"
+      }
     },
     "dashboard": {
       "name": "仪表盘",

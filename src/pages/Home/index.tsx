@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, Row, Col, Typography, Button, Space } from 'antd';
 import {
+  UsbOutlined,
   ApiOutlined,
   CodeOutlined,
   LineChartOutlined,
@@ -161,7 +162,10 @@ const HomePage: React.FC = () => {
       key: 'connection',
       icon: <ApiOutlined />,
       path: '/serial',
-      subTabs: [],
+      subTabs: [
+        { key: 'serial', label: t('modules.connection.tabs.serial'), icon: <UsbOutlined /> },
+        { key: 'ble', label: t('modules.connection.tabs.ble'), icon: <ApiOutlined /> },
+      ],
     },
     {
       key: 'dashboard',
@@ -220,6 +224,13 @@ const HomePage: React.FC = () => {
 
   const handleTabClick = (path: string, tabKey: string) => {
     switch (path) {
+      case '/serial':
+        if (tabKey === 'serial') {
+          navigate('/serial');
+        } else if (tabKey === 'ble') {
+          navigate('/ble');
+        }
+        return;
       case '/waveform':
         setWaveformActiveTab(tabKey as 'realtime' | 'csvLoader');
         break;

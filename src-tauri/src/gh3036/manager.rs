@@ -18,7 +18,7 @@ use tokio::runtime::Handle;
 use tracing::{debug, error, info, warn};
 
 use crate::device::DeviceManager;
-use crate::service::{EventBus, topics, SerialDataEvent, BleDataEvent, Gh3036FrameEvent, SerialDisconnectedEvent, BleConnectionEvent};
+use crate::service::{EventBus, topics, SerialDataEvent, BleDataEvent, SerialDisconnectedEvent, BleConnectionEvent};
 use super::csv_writer::CsvWriter;
 use super::types::{Gh3036EventData, Gh3036FrameData, FuncFrame, FrameDecoder, Gh3036FramesEvent, GhFuncFixIdx};
 
@@ -31,9 +31,11 @@ use rpc::{RpcCore, RpcConfig, InvokeNode, unpack, UnpackValue};
 const GH_PRO_TYPE_UNSIGNED: u8 = 1;
 const GH_PRO_TYPE_SIGNED: u8 = 2;
 
-fn type_header(pack_type: u8, width: u8, is_last: bool) -> u8 {
+fn type_header(pack_type: u8, is_array: bool, width: u8, is_last: bool, is_split: bool) -> u8 {
     let end = if is_last { 1u8 } else { 0u8 };
-    (pack_type & 0b11) | (0 << 2) | ((width & 0b111) << 3) | (end << 6) | (0 << 7)
+    let array = if is_array { 1u8 } else { 0u8 };
+    let split = if is_split { 1u8 } else { 0u8 };
+    (pack_type & 0b11) | (array << 2) | ((width & 0b111) << 3) | (end << 6) | (split << 7)
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -821,7 +823,7 @@ impl Gh3036Manager {
 
         info!("GH3036 execute_version_cmd: ver_type={}", ver_type);
         
-        let data = [type_header(GH_PRO_TYPE_UNSIGNED, 3, true), ver_type];
+        let data = [type_header(GH_PRO_TYPE_UNSIGNED, false, 3, true, false), ver_type];
         let param_data = self.call_command(CMD_GET_VERSION, &data).await?;
         
         let values = unpack(&param_data, "<u8*>").map_err(|e| format!("解包失败: {:?}", e))?;
@@ -848,7 +850,7 @@ impl Gh3036Manager {
         info!("寄存器写入: {} 个寄存器", regs.len() / 2);
 
         let mut data = Vec::new();
-        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 4, true));
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, false, 4, true, false));
         data.push((regs.len() / 2) as u8);
         for i in (0..regs.len()).step_by(2) {
             data.extend_from_slice(&regs[i].to_le_bytes());
@@ -873,9 +875,9 @@ impl Gh3036Manager {
         info!("寄存器读取: addr=0x{:04X}, len={}", reg_addr, read_len);
 
         let mut data = Vec::new();
-        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 4, false));
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, false, 4, false, false));
         data.extend_from_slice(&reg_addr.to_le_bytes());
-        data.push(type_header(GH_PRO_TYPE_SIGNED, 5, true));
+        data.push(type_header(GH_PRO_TYPE_SIGNED, false, 5, true, false));
         data.extend_from_slice(&read_len.to_le_bytes());
         
         let param_data = self.call_command(CMD_REGS_READ, &data).await?;
@@ -920,13 +922,13 @@ impl Gh3036Manager {
         info!("位域写入: addr=0x{:04X}, lsb={}, msb={}, val=0x{:04X}", reg_addr, lsb, msb, reg_val);
 
         let mut data = Vec::new();
-        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 4, false));
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, false, 4, false, false));
         data.extend_from_slice(&reg_addr.to_le_bytes());
-        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 3, false));
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, false, 3, false, false));
         data.push(lsb);
-        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 3, false));
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, false, 3, false, false));
         data.push(msb);
-        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 4, true));
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, false, 4, true, false));
         data.extend_from_slice(&reg_val.to_le_bytes());
         
         self.send_command(CMD_REG_BIT_FIELD_WRITE, &data).await?;
@@ -941,7 +943,7 @@ impl Gh3036Manager {
 
         info!("芯片控制: type={}", ctrl_type);
 
-        let data = [type_header(GH_PRO_TYPE_UNSIGNED, 3, true), ctrl_type];
+        let data = [type_header(GH_PRO_TYPE_UNSIGNED, false, 3, true, false), ctrl_type];
         self.send_command(CMD_CHIP_CTRL, &data).await?;
         Ok(vec![])
     }
@@ -954,7 +956,7 @@ impl Gh3036Manager {
 
         info!("下载配置: stage={}", stage);
 
-        let data = [type_header(GH_PRO_TYPE_UNSIGNED, 3, true), stage];
+        let data = [type_header(GH_PRO_TYPE_UNSIGNED, false, 3, true, false), stage];
         self.send_command(CMD_DOWNLOAD_CONFIG, &data).await?;
         Ok(vec![])
     }
@@ -972,7 +974,7 @@ impl Gh3036Manager {
         info!("寄存器列表写入: {} 个值", regs.len());
 
         let mut data = Vec::new();
-        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 4, true));
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, false, 4, true, false));
         data.push(regs.len() as u8);
         for &val in regs.iter() {
             data.extend_from_slice(&val.to_le_bytes());
@@ -996,9 +998,9 @@ impl Gh3036Manager {
         info!("软件功能命令: mode=0x{:08X}, ctrl={}", target_func_mode, ctrl_type);
 
         let mut data = Vec::new();
-        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 5, false));
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, false, 5, false, false));
         data.extend_from_slice(&target_func_mode.to_le_bytes());
-        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 3, true));
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, false, 3, true, false));
         data.push(ctrl_type);
         
         self.send_command(CMD_SW_FUNCTION, &data).await?;
@@ -1019,9 +1021,9 @@ impl Gh3036Manager {
         info!("低功耗命令: mode=0x{:08X}, ctrl={}", target_func_mode, ctrl_type);
 
         let mut data = Vec::new();
-        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 5, false));
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, false, 5, false, false));
         data.extend_from_slice(&target_func_mode.to_le_bytes());
-        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 3, true));
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, false, 3, true, false));
         data.push(ctrl_type);
         
         self.publish_command(CMD_LOW_POWER, &data).await?;
@@ -1036,7 +1038,7 @@ impl Gh3036Manager {
 
         info!("设置工作模式: mode={}", work_mode);
 
-        let data = [type_header(GH_PRO_TYPE_UNSIGNED, 3, true), work_mode];
+        let data = [type_header(GH_PRO_TYPE_UNSIGNED, false, 3, true, false), work_mode];
         self.send_command(CMD_SET_WORK_MODE, &data).await?;
         Ok(vec![])
     }
@@ -1050,7 +1052,7 @@ impl Gh3036Manager {
         info!("设置时间戳: {}", timestamp);
 
         let mut data = Vec::new();
-        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 5, true));
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, false, 5, true, false));
         data.extend_from_slice(&timestamp.to_le_bytes());
         
         self.send_command(CMD_TIMESTAMP_SET, &data).await?;
@@ -1071,9 +1073,9 @@ impl Gh3036Manager {
         info!("设置时间: timestamp={}, offset={}", timestamp, hour_offset);
 
         let mut data = Vec::new();
-        data.push(type_header(GH_PRO_TYPE_UNSIGNED, 5, false));
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, false, 5, false, false));
         data.extend_from_slice(&timestamp.to_le_bytes());
-        data.push(type_header(GH_PRO_TYPE_SIGNED, 3, true));
+        data.push(type_header(GH_PRO_TYPE_SIGNED, false, 3, true, false));
         data.push(hour_offset as u8);
         
         self.send_command(CMD_TIME_SET, &data).await?;

@@ -351,6 +351,11 @@ impl Gh3036Manager {
     }
     
     fn subscribe_data_events(&self) {
+        if self.events_subscribed.load(std::sync::atomic::Ordering::SeqCst) {
+            info!("[GH3036] 事件已订阅，跳过重复订阅");
+            return;
+        }
+        
         info!("[GH3036] 订阅 EventBus 数据事件");
         
         self.event_bus.subscribe_msgpack::<SerialDataEvent, _>(topics::SERIAL_DATA, move |_topic, event| {
@@ -385,6 +390,7 @@ impl Gh3036Manager {
             Self::handle_device_disconnected(&event.address);
         });
         
+        self.events_subscribed.store(true, std::sync::atomic::Ordering::SeqCst);
         info!("[GH3036] 已订阅 serial:data、ble:data、serial:disconnected 和 ble:disconnected 事件");
     }
     

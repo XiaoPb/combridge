@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Alert, Spin } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
@@ -23,6 +23,7 @@ const Gh3036Page: React.FC = () => {
   } = useGh3036Store();
 
   const { gh3036ActiveTab } = usePageTabsStore();
+  const subscribedRef = useRef(false);
 
   useEffect(() => {
     loadLibraryStatus();
@@ -35,12 +36,19 @@ const Gh3036Page: React.FC = () => {
     loadChannels();
     loadCsvConfig();
     loadRpcCommands();
-    subscribeEvents();
+
+    if (!subscribedRef.current) {
+      subscribedRef.current = true;
+      subscribeEvents();
+    }
 
     return () => {
-      unsubscribeEvents();
+      if (subscribedRef.current) {
+        subscribedRef.current = false;
+        unsubscribeEvents();
+      }
     };
-  }, [isInitialized, initialize, loadChannels, loadCsvConfig, loadRpcCommands, subscribeEvents, unsubscribeEvents]);
+  }, []);
 
   if (isLoading && !isInitialized) {
     return (

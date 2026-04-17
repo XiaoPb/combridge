@@ -86,15 +86,15 @@ pub const VER_TYPE_BLE: u8 = 0x09;
 pub const VER_TYPE_ALGO: u8 = 0x20;
 
 /// 心率版本偏移
-pub const HR_VERSION_OFFSET: u8 = 0x20;
+pub const HR_VERSION_OFFSET: u8 = 0x00;
 /// HRV 版本偏移
-pub const HRV_VERSION_OFFSET: u8 = 0x21;
+pub const HRV_VERSION_OFFSET: u8 = 0x01;
 /// SpO2 版本偏移
-pub const SPO2_VERSION_OFFSET: u8 = 0x22;
+pub const SPO2_VERSION_OFFSET: u8 = 0x02;
 /// NADT 版本偏移
-pub const ADT_VERSION_OFFSET: u8 = 0x23;
+pub const ADT_VERSION_OFFSET: u8 = 0x03;
 /// NADT 版本偏移
-pub const NADT_VERSION_OFFSET: u8 = 0x24;
+pub const NADT_VERSION_OFFSET: u8 = 0x04;
 
 const MAX_REGS_LIST: usize = 300;
 const MAX_VERSION_LEN: usize = 150;

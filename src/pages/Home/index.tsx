@@ -1,7 +1,6 @@
 import React from 'react';
 import { Card, Row, Col, Typography, Button, Space } from 'antd';
 import {
-  UsbOutlined,
   ApiOutlined,
   CodeOutlined,
   LineChartOutlined,
@@ -17,10 +16,16 @@ import {
   FileTextOutlined as LogsIcon,
   SettingOutlined as SettingsIcon,
   RightOutlined,
+  DashboardOutlined,
+  DashboardOutlined as DashboardIcon,
+  CodeOutlined as ConsoleIcon,
+  SettingOutlined as SettingsTabIcon,
+  FileTextOutlined as JsonEditorIcon,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { usePageTabsStore } from '../../stores/pageTabsStore';
+import { useDashboardStore } from '../../stores/dashboardStore';
 
 const { Title, Text } = Typography;
 
@@ -149,19 +154,25 @@ const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation('home');
   const { setWaveformActiveTab, setProtocolActiveTab, setSystemActiveTab, setGh3036ActiveTab } = usePageTabsStore();
+  const { setActiveTabs } = useDashboardStore();
 
   const modules = [
     {
-      key: 'serial',
-      icon: <UsbOutlined />,
+      key: 'connection',
+      icon: <ApiOutlined />,
       path: '/serial',
       subTabs: [],
     },
     {
-      key: 'ble',
-      icon: <ApiOutlined />,
-      path: '/ble',
-      subTabs: [],
+      key: 'dashboard',
+      icon: <DashboardOutlined />,
+      path: '/dashboard',
+      subTabs: [
+        { key: 'dashboard', label: t('modules.dashboard.tabs.dashboard'), icon: <DashboardIcon /> },
+        { key: 'console', label: t('modules.dashboard.tabs.console'), icon: <ConsoleIcon /> },
+        { key: 'settings', label: t('modules.dashboard.tabs.settings'), icon: <SettingsTabIcon /> },
+        { key: 'jsonEditor', label: t('modules.dashboard.tabs.jsonEditor'), icon: <JsonEditorIcon /> },
+      ],
     },
     {
       key: 'gh3036',
@@ -220,6 +231,9 @@ const HomePage: React.FC = () => {
         break;
       case '/gh3036':
         setGh3036ActiveTab(tabKey as 'config' | 'monitor' | 'version');
+        break;
+      case '/dashboard':
+        setActiveTabs([tabKey as 'dashboard' | 'console' | 'settings' | 'jsonEditor']);
         break;
     }
     navigate(path);

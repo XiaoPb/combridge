@@ -6,7 +6,6 @@ import { useTheme } from '../../hooks';
 import { dashboardApi } from '../../api/dashboard';
 import { onSerialData, onBleData, onParsedData } from '../../api/events';
 import { useLogStore } from '../../stores/logStore';
-import DashboardTabs from './DashboardTabs';
 import DashboardCanvas from './DashboardCanvas';
 import ConsolePanel from './ConsolePanel';
 import SettingsPanel from './SettingsPanel';
@@ -140,7 +139,6 @@ const DashboardPage: React.FC = () => {
   if (isJsonEditorActive) {
     return (
       <Layout style={{ height: '100%', background: 'transparent' }}>
-        <DashboardTabs />
         <JsonEditor />
       </Layout>
     );
@@ -152,7 +150,6 @@ const DashboardPage: React.FC = () => {
 
   return (
     <Layout style={{ height: '100%', background: 'transparent' }}>
-      <DashboardTabs />
       <Layout>
         <Content style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           {showDashboard && !showConsole && <DashboardCanvas />}

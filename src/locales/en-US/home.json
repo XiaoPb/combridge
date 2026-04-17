@@ -10,13 +10,21 @@
       "name": "BLE Communication",
       "description": "Scan, connect and interact with BLE devices"
     },
+    "gh3036": {
+      "name": "GH3036",
+      "description": "GH3036 sensor data acquisition and visualization",
+      "tabs": {
+        "config": "Channel Config",
+        "monitor": "Data Monitor",
+        "version": "Version Info"
+      }
+    },
     "protocol": {
       "name": "Protocol Management",
       "description": "Configure communication protocols and parse data",
       "tabs": {
         "editor": "Script Editor",
-        "bind": "Bind Config",
-        "gh3036": "GH3036"
+        "bind": "Bind Config"
       }
     },
     "waveform": {

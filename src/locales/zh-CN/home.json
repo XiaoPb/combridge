@@ -10,13 +10,21 @@
       "name": "蓝牙通信",
       "description": "BLE设备的扫描、连接和数据交互"
     },
+    "gh3036": {
+      "name": "GH3036",
+      "description": "GH3036传感器数据采集与可视化",
+      "tabs": {
+        "config": "通道配置",
+        "monitor": "数据监控",
+        "version": "版本信息"
+      }
+    },
     "protocol": {
       "name": "协议管理",
       "description": "通信协议的配置和数据解析",
       "tabs": {
         "editor": "脚本编辑器",
-        "bind": "绑定配置",
-        "gh3036": "GH3036"
+        "bind": "绑定配置"
       }
     },
     "waveform": {

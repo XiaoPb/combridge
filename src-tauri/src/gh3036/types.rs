@@ -12,6 +12,7 @@ pub use gh_rpc::cmd::{
     CMD_SET_WORK_MODE, CMD_LOW_POWER, CMD_REGS_BIT_FIELD_WRITE,
     VER_TYPE_FW, VER_TYPE_DEMO, VER_TYPE_BOOTLOADER, VER_TYPE_PROTOCOL,
     VER_TYPE_VIRTUAL_REG, VER_TYPE_DRV, VER_TYPE_CHIP, VER_TYPE_BLE, VER_TYPE_ALGO,
+    HR_VERSION_OFFSET, HRV_VERSION_OFFSET, SPO2_VERSION_OFFSET, NADT_VERSION_OFFSET,
     CHIP_CTRL_HARD_RESET, CHIP_CTRL_RX_RESET, CHIP_CTRL_SOFT_RESET,
     CHIP_CTRL_WAKEUP, CHIP_CTRL_SLEEP,
 };
@@ -434,22 +435,22 @@ pub struct VersionTypeConfig {
 pub fn get_version_types() -> Vec<VersionTypeConfig> {
     vec![
         VersionTypeConfig {
-            type_value: 0x01,
+            type_value: VER_TYPE_FW,
             name: "firmware".to_string(),
             description: "固件版本".to_string(),
         },
         VersionTypeConfig {
-            type_value: 0x03,
+            type_value: VER_TYPE_VIRTUAL_REG,
             name: "virtual_reg".to_string(),
             description: "虚拟寄存器版本".to_string(),
         },
         VersionTypeConfig {
-            type_value: 0x04,
+            type_value: VER_TYPE_BOOTLOADER,
             name: "bootloader".to_string(),
             description: "Bootloader版本".to_string(),
         },
         VersionTypeConfig {
-            type_value: 0x05,
+            type_value: VER_TYPE_PROTOCOL,
             name: "protocol".to_string(),
             description: "协议版本".to_string(),
         },
@@ -459,29 +460,44 @@ pub fn get_version_types() -> Vec<VersionTypeConfig> {
             description: "功能支持".to_string(),
         },
         VersionTypeConfig {
-            type_value: 0x07,
+            type_value: VER_TYPE_DRV,
             name: "driver".to_string(),
             description: "驱动版本".to_string(),
         },
         VersionTypeConfig {
-            type_value: 0x08,
+            type_value: VER_TYPE_CHIP,
             name: "chip".to_string(),
             description: "芯片版本".to_string(),
         },
         VersionTypeConfig {
-            type_value: 0x09,
+            type_value: VER_TYPE_BLE,
             name: "ble".to_string(),
             description: "BLE版本".to_string(),
         },
         VersionTypeConfig {
-            type_value: 0x0A,
+            type_value: VER_TYPE_DEMO,
             name: "demo".to_string(),
             description: "Demo版本".to_string(),
         },
         VersionTypeConfig {
-            type_value: 0x20,
-            name: "algo".to_string(),
-            description: "算法版本".to_string(),
+            type_value: VER_TYPE_ALGO | HR_VERSION_OFFSET,
+            name: "algo_hr".to_string(),
+            description: "HR算法版本".to_string(),
+        },
+        VersionTypeConfig {
+            type_value: VER_TYPE_ALGO | HRV_VERSION_OFFSET,
+            name: "algo_hrv".to_string(),
+            description: "HRV算法版本".to_string(),
+        },
+        VersionTypeConfig {
+            type_value: VER_TYPE_ALGO | SPO2_VERSION_OFFSET,
+            name: "algo_spo2".to_string(),
+            description: "SPO2算法版本".to_string(),
+        },
+        VersionTypeConfig {
+            type_value: VER_TYPE_ALGO | NADT_VERSION_OFFSET,
+            name: "algo_nadt".to_string(),
+            description: "NADT算法版本".to_string(),
         },
     ]
 }

@@ -37,7 +37,10 @@ export interface Gh3036FramesPayload {
   frame_count: number;
   channel_count: number;
   timestamps: number[];
+  frame_ids: number[];
   channels: number[][];
+  rawdata: number[][];
+  gs_data: number[][];
 }
 
 export interface ProtocolParsedPayload {

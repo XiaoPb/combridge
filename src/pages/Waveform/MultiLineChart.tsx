@@ -46,6 +46,11 @@ const COLORS = [
   '#F53F3F',
   '#00B42A',
   '#FF7D00',
+  '#722ED1',
+  '#14C9C9',
+  '#EB0AA4',
+  '#FFC107',
+  '#40A9FF'
 ];
 
 const Y_AXIS_WIDTH = 50;
@@ -106,8 +111,19 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
 
   const colorMap = useMemo(() => {
     const map = new Map<string, string>();
-    columns.forEach((col, index) => {
-      map.set(col, COLORS[index % COLORS.length]);
+    const usedColors = new Set<string>();
+    
+    columns.forEach((col) => {
+      const availableColors = COLORS.filter(c => !usedColors.has(c));
+      if (availableColors.length > 0) {
+        const randomIndex = Math.floor(Math.random() * availableColors.length);
+        const color = availableColors[randomIndex];
+        map.set(col, color);
+        usedColors.add(color);
+      } else {
+        const fallbackIndex = usedColors.size % COLORS.length;
+        map.set(col, COLORS[fallbackIndex]);
+      }
     });
     return map;
   }, [columns]);

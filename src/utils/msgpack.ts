@@ -78,7 +78,10 @@ function convertArrayToObject(arr: unknown[], topic: string): Record<string, unk
         frame_count: arr[2] as number,
         channel_count: arr[3] as number,
         timestamps: arr[4] as number[],
-        channels: arr[5] as number[][],
+        frame_ids: arr[5] as number[],
+        channels: arr[6] as number[][],
+        rawdata: arr[7] as number[][],
+        gs_data: arr[8] as number[][],
       };
     case 'protocol:parsed':
       return {

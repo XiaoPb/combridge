@@ -36,9 +36,11 @@ interface Gh3036State {
   eventData: Gh3036EventData[];
   maxEventCount: number;
   
-  waveformColumns: string[];
-  waveformRows: number[][];
-  maxWaveformRows: number;
+  framesData: Map<number, Gh3036FramesPayload>;
+  maxFramesCount: number;
+  
+  chartGroups: ChartGroupConfig[];
+  selectedFunctionId: number | null;
   
   isLinked: boolean;
   
@@ -69,6 +71,9 @@ interface Gh3036State {
   addFramesData: (frames: Gh3036FramesPayload) => void;
   clearWaveformData: () => void;
   
+  setChartGroups: (groups: ChartGroupConfig[]) => void;
+  setSelectedFunctionId: (id: number | null) => void;
+  
   setIsLinked: (value: boolean) => void;
   
   initialize: () => Promise<void>;
@@ -87,6 +92,12 @@ interface Gh3036State {
   subscribeEvents: () => Promise<void>;
   unsubscribeEvents: () => void;
   loadLibraryStatus: () => Promise<void>;
+}
+
+interface ChartGroupConfig {
+  name: string;
+  columns: string[];
+  height?: number;
 }
 
 export const useGh3036Store = create<Gh3036State>((set, get) => ({
@@ -111,9 +122,11 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   eventData: [],
   maxEventCount: 500,
   
-  waveformColumns: [],
-  waveformRows: [],
-  maxWaveformRows: 500,
+  framesData: new Map(),
+  maxFramesCount: 100,
+  
+  chartGroups: [],
+  selectedFunctionId: null,
   
   isLinked: false,
   
@@ -154,31 +167,37 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   clearEventData: () => set({ eventData: [] }),
   
   addFramesData: (frames) => {
-    const { waveformRows, maxWaveformRows } = get();
+    const { framesData, maxFramesCount } = get();
+    const newFramesData = new Map(framesData);
     
-    const columns = Array.from({ length: frames.channel_count }, (_, i) => `CH${i}`);
-    
-    const newRows: number[][] = [];
-    for (let frameIdx = 0; frameIdx < frames.frame_count; frameIdx++) {
-      const row: number[] = [];
-      for (let chIdx = 0; chIdx < frames.channel_count; chIdx++) {
-        row.push(frames.channels[chIdx]?.[frameIdx] ?? 0);
-      }
-      newRows.push(row);
-    }
-    
-    const combinedRows = [...waveformRows, ...newRows];
-    if (combinedRows.length > maxWaveformRows) {
-      combinedRows.splice(0, combinedRows.length - maxWaveformRows);
+    const existing = newFramesData.get(frames.function_id);
+    if (existing) {
+      const combined: Gh3036FramesPayload = {
+        function_id: frames.function_id,
+        function_name: frames.function_name,
+        frame_count: existing.frame_count + frames.frame_count,
+        channel_count: frames.channel_count,
+        timestamps: [...existing.timestamps, ...frames.timestamps].slice(-maxFramesCount * 10),
+        frame_ids: [...existing.frame_ids, ...frames.frame_ids].slice(-maxFramesCount * 10),
+        channels: existing.channels.map((ch, i) => [...ch, ...(frames.channels[i] || [])].slice(-maxFramesCount * 10)),
+        rawdata: existing.rawdata.map((rd, i) => [...rd, ...(frames.rawdata[i] || [])].slice(-maxFramesCount * 10)),
+        gs_data: existing.gs_data.map((gs, i) => [...gs, ...(frames.gs_data[i] || [])].slice(-maxFramesCount * 10)),
+      };
+      newFramesData.set(frames.function_id, combined);
+    } else {
+      newFramesData.set(frames.function_id, frames);
     }
     
     set({ 
-      waveformColumns: columns,
-      waveformRows: combinedRows 
+      framesData: newFramesData,
+      selectedFunctionId: get().selectedFunctionId ?? frames.function_id 
     });
   },
   
-  clearWaveformData: () => set({ waveformColumns: [], waveformRows: [] }),
+  clearWaveformData: () => set({ framesData: new Map(), chartGroups: [], selectedFunctionId: null }),
+  
+  setChartGroups: (groups) => set({ chartGroups: groups }),
+  setSelectedFunctionId: (id) => set({ selectedFunctionId: id }),
   
   setIsLinked: (value) => set({ isLinked: value }),
   

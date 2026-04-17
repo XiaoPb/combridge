@@ -89,9 +89,11 @@ const Gh3036RpcList: React.FC = () => {
 
   const handleReadReg = async () => {
     const addr = parseInt(readRegAddr, 16);
-    const success = await handleExecuteRpc('R', [addr.toString(), '1']);
-    if (success) {
-      setReadRegValue('0000');
+    const result = await executeRpc('R', [addr.toString(), '1']);
+    if (result && result.length >= 2) {
+      const value = (result[1] << 8) | result[0];
+      setReadRegValue(value.toString(16).toUpperCase().padStart(4, '0'));
+      message.success(`寄存器 0x${readRegAddr.toUpperCase()} = 0x${value.toString(16).toUpperCase().padStart(4, '0')}`);
     }
   };
 

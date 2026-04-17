@@ -879,13 +879,16 @@ impl Gh3036Manager {
         data.extend_from_slice(&read_len.to_le_bytes());
         
         let param_data = self.call_command(CMD_REGS_READ, &data).await?;
+        info!("寄存器读取响应: {:04X?}", param_data);
         let values = unpack(&param_data, "<u16*>").map_err(|e| format!("解包失败: {:?}", e))?;
+        info!("寄存器读取解包结果: {:?}", values);
         
         match values.values.first() {
             Some(UnpackValue::U16Array(arr)) => {
                 let mut result = Vec::new();
                 for &val in arr.iter() {
                     result.extend_from_slice(&val.to_le_bytes());
+                    info!("寄存器读取值: 0x{:04X}", val);
                 }
                 Ok(result)
             }

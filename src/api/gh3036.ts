@@ -3,7 +3,8 @@ import type {
   Gh3036ChannelConfig, 
   Gh3036CsvConfig, 
   Gh3036FrameData, 
-  Gh3036RpcCommand 
+  Gh3036RpcCommand,
+  Gh3036VersionTypeConfig
 } from './types';
 
 export interface LibraryStatus {
@@ -70,8 +71,12 @@ export const gh3036Api = {
     return invoke<Gh3036RpcCommand[]>('gh3036_get_rpc_commands');
   },
 
-  async executeRpc(commandKey: string, params: string[]): Promise<void> {
-    await invoke<void>('gh3036_execute_rpc', { commandKey, params });
+  async getVersionTypes(): Promise<Gh3036VersionTypeConfig[]> {
+    return invoke<Gh3036VersionTypeConfig[]>('gh3036_get_version_types');
+  },
+
+  async executeRpc(commandKey: string, params: string[]): Promise<number[]> {
+    return invoke<number[]>('gh3036_execute_rpc', { commandKey, params });
   },
 
   async subscribeEvents(): Promise<void> {

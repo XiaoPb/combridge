@@ -105,7 +105,7 @@ interface Gh3036State {
   
   sendData: (data: number[]) => Promise<boolean>;
   
-  executeRpc: (commandKey: string, params: string[]) => Promise<boolean>;
+  executeRpc: (commandKey: string, params: string[]) => Promise<number[]>;
   subscribeEvents: () => Promise<void>;
   unsubscribeEvents: () => void;
   loadLibraryStatus: () => Promise<void>;
@@ -407,12 +407,12 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   executeRpc: async (commandKey, params) => {
     set({ isLoading: true, error: null });
     try {
-      await gh3036Api.executeRpc(commandKey, params);
-      return true;
+      const result = await gh3036Api.executeRpc(commandKey, params);
+      return result;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '执行RPC指令失败';
       set({ error: errorMsg });
-      return false;
+      return [];
     } finally {
       set({ isLoading: false });
     }

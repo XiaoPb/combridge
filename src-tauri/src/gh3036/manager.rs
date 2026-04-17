@@ -271,6 +271,8 @@ static CALLBACK_CONTEXT: once_cell::sync::Lazy<GlobalContext> = once_cell::sync:
 
 static FRAME_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
+static EVENTS_SUBSCRIBED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn data_frame_handler(data: &[u8], size: usize, _ret: Option<&mut [u8]>) -> i32 {
     let count = FRAME_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
     
@@ -293,7 +295,6 @@ pub struct Gh3036Manager {
     running: Arc<std::sync::atomic::AtomicBool>,
     thread_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
     rpc_thread_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
-    events_subscribed: std::sync::atomic::AtomicBool,
     rpc: Mutex<Option<Arc<std::sync::Mutex<RpcCore<16, Box<dyn Fn(&[u8]) + Send + Sync>>>>>>,
 }
 
@@ -309,7 +310,6 @@ impl Gh3036Manager {
             running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             thread_handle: Mutex::new(None),
             rpc_thread_handle: Mutex::new(None),
-            events_subscribed: std::sync::atomic::AtomicBool::new(false),
             rpc: Mutex::new(None),
         }
     }
@@ -351,7 +351,7 @@ impl Gh3036Manager {
     }
     
     fn subscribe_data_events(&self) {
-        if self.events_subscribed.load(std::sync::atomic::Ordering::SeqCst) {
+        if EVENTS_SUBSCRIBED.load(std::sync::atomic::Ordering::SeqCst) {
             info!("[GH3036] 事件已订阅，跳过重复订阅");
             return;
         }
@@ -390,7 +390,7 @@ impl Gh3036Manager {
             Self::handle_device_disconnected(&event.address);
         });
         
-        self.events_subscribed.store(true, std::sync::atomic::Ordering::SeqCst);
+        EVENTS_SUBSCRIBED.store(true, std::sync::atomic::Ordering::SeqCst);
         info!("[GH3036] 已订阅 serial:data、ble:data、serial:disconnected 和 ble:disconnected 事件");
     }
     
@@ -1086,13 +1086,13 @@ impl Gh3036Manager {
     }
 
     pub fn subscribe_events(&self) -> bool {
-        self.events_subscribed.store(true, std::sync::atomic::Ordering::SeqCst);
+        EVENTS_SUBSCRIBED.store(true, std::sync::atomic::Ordering::SeqCst);
         info!("GH3036 事件订阅已启用");
         true
     }
 
     pub fn is_events_subscribed(&self) -> bool {
-        self.events_subscribed.load(std::sync::atomic::Ordering::SeqCst)
+        EVENTS_SUBSCRIBED.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     pub fn get_library_status(&self) -> (bool, bool) {

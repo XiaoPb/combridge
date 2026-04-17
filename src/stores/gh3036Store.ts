@@ -39,6 +39,23 @@ interface Gh3036State {
   framesData: Map<number, Gh3036FramesPayload>;
   maxFramesCount: number;
   
+  vitalSigns: {
+    hr: number | null;
+    spo2: number | null;
+    adt: string | null;
+    gnadt: string | null;
+  };
+  
+  gsensorData: {
+    acc_x: number[];
+    acc_y: number[];
+    acc_z: number[];
+    gyro_x: number[];
+    gyro_y: number[];
+    gyro_z: number[];
+  };
+  maxGsensorCount: number;
+  
   chartGroups: ChartGroupConfig[];
   selectedFunctionId: number | null;
   
@@ -125,6 +142,23 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   framesData: new Map(),
   maxFramesCount: 100,
   
+  vitalSigns: {
+    hr: null,
+    spo2: null,
+    adt: null,
+    gnadt: null,
+  },
+  
+  gsensorData: {
+    acc_x: [],
+    acc_y: [],
+    acc_z: [],
+    gyro_x: [],
+    gyro_y: [],
+    gyro_z: [],
+  },
+  maxGsensorCount: 500,
+  
   chartGroups: [],
   selectedFunctionId: null,
   
@@ -167,7 +201,7 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   clearEventData: () => set({ eventData: [] }),
   
   addFramesData: (frames) => {
-    const { framesData, maxFramesCount } = get();
+    const { framesData, maxFramesCount, gsensorData, maxGsensorCount, vitalSigns } = get();
     const newFramesData = new Map(framesData);
     
     const existing = newFramesData.get(frames.function_id);
@@ -177,24 +211,82 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
         function_name: frames.function_name,
         frame_count: existing.frame_count + frames.frame_count,
         channel_count: frames.channel_count,
+        frame_cnts: [...existing.frame_cnts, ...frames.frame_cnts].slice(-maxFramesCount * 10),
         timestamps: [...existing.timestamps, ...frames.timestamps].slice(-maxFramesCount * 10),
         frame_ids: [...existing.frame_ids, ...frames.frame_ids].slice(-maxFramesCount * 10),
-        channels: existing.channels.map((ch, i) => [...ch, ...(frames.channels[i] || [])].slice(-maxFramesCount * 10)),
+        ipd_pa: existing.ipd_pa.map((ch, i) => [...ch, ...(frames.ipd_pa[i] || [])].slice(-maxFramesCount * 10)),
         rawdata: existing.rawdata.map((rd, i) => [...rd, ...(frames.rawdata[i] || [])].slice(-maxFramesCount * 10)),
-        gs_data: existing.gs_data.map((gs, i) => [...gs, ...(frames.gs_data[i] || [])].slice(-maxFramesCount * 10)),
+        flags: existing.flags.map((f, i) => [...f, ...(frames.flags[i] || [])].slice(-maxFramesCount * 10)),
+        agc_info: existing.agc_info.map((a, i) => [...a, ...(frames.agc_info[i] || [])].slice(-maxFramesCount * 10)),
+        acc_x: [...existing.acc_x, ...frames.acc_x].slice(-maxFramesCount * 10),
+        acc_y: [...existing.acc_y, ...frames.acc_y].slice(-maxFramesCount * 10),
+        acc_z: [...existing.acc_z, ...frames.acc_z].slice(-maxFramesCount * 10),
+        gyro_x: [...existing.gyro_x, ...frames.gyro_x].slice(-maxFramesCount * 10),
+        gyro_y: [...existing.gyro_y, ...frames.gyro_y].slice(-maxFramesCount * 10),
+        gyro_z: [...existing.gyro_z, ...frames.gyro_z].slice(-maxFramesCount * 10),
+        algo_results: [...existing.algo_results, ...frames.algo_results].slice(-maxFramesCount * 10),
+        led_drv_fs: [...existing.led_drv_fs, ...frames.led_drv_fs].slice(-maxFramesCount * 10),
       };
       newFramesData.set(frames.function_id, combined);
     } else {
       newFramesData.set(frames.function_id, frames);
     }
     
+    const newGsensorData = {
+      acc_x: [...gsensorData.acc_x, ...frames.acc_x].slice(-maxGsensorCount),
+      acc_y: [...gsensorData.acc_y, ...frames.acc_y].slice(-maxGsensorCount),
+      acc_z: [...gsensorData.acc_z, ...frames.acc_z].slice(-maxGsensorCount),
+      gyro_x: [...gsensorData.gyro_x, ...frames.gyro_x].slice(-maxGsensorCount),
+      gyro_y: [...gsensorData.gyro_y, ...frames.gyro_y].slice(-maxGsensorCount),
+      gyro_z: [...gsensorData.gyro_z, ...frames.gyro_z].slice(-maxGsensorCount),
+    };
+    
+    let newVitalSigns = { ...vitalSigns };
+    if (frames.algo_results.length > 0 && frames.algo_results[0].length > 0) {
+      const algoValue = frames.algo_results[frames.algo_results.length - 1][0];
+      switch (frames.function_id) {
+        case 1:
+          newVitalSigns = { ...newVitalSigns, hr: algoValue };
+          break;
+        case 2:
+          newVitalSigns = { ...newVitalSigns, spo2: algoValue };
+          break;
+        case 0:
+          newVitalSigns = { ...newVitalSigns, adt: algoValue === 1 ? '佩戴' : '未佩戴' };
+          break;
+        case 4:
+          newVitalSigns = { ...newVitalSigns, gnadt: algoValue === 1 ? '活体' : '非活体' };
+          break;
+      }
+    }
+    
     set({ 
       framesData: newFramesData,
+      gsensorData: newGsensorData,
+      vitalSigns: newVitalSigns,
       selectedFunctionId: get().selectedFunctionId ?? frames.function_id 
     });
   },
   
-  clearWaveformData: () => set({ framesData: new Map(), chartGroups: [], selectedFunctionId: null }),
+  clearWaveformData: () => set({ 
+    framesData: new Map(), 
+    chartGroups: [], 
+    selectedFunctionId: null,
+    gsensorData: {
+      acc_x: [],
+      acc_y: [],
+      acc_z: [],
+      gyro_x: [],
+      gyro_y: [],
+      gyro_z: [],
+    },
+    vitalSigns: {
+      hr: null,
+      spo2: null,
+      adt: null,
+      gnadt: null,
+    },
+  }),
   
   setChartGroups: (groups) => set({ chartGroups: groups }),
   setSelectedFunctionId: (id) => set({ selectedFunctionId: id }),

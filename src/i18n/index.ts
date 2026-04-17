@@ -11,6 +11,7 @@ import zhCNDashboard from '../locales/zh-CN/dashboard.json';
 import zhCNSystem from '../locales/zh-CN/system.json';
 import zhCNWaveform from '../locales/zh-CN/waveform.json';
 import zhCNHome from '../locales/zh-CN/home.json';
+import zhCNGh3036 from '../locales/zh-CN/gh3036.json';
 
 import enUSCommon from '../locales/en-US/common.json';
 import enUSSidebar from '../locales/en-US/sidebar.json';
@@ -21,6 +22,7 @@ import enUSDashboard from '../locales/en-US/dashboard.json';
 import enUSSystem from '../locales/en-US/system.json';
 import enUSWaveform from '../locales/en-US/waveform.json';
 import enUSHome from '../locales/en-US/home.json';
+import enUSGh3036 from '../locales/en-US/gh3036.json';
 
 const resources = {
   'zh-CN': {
@@ -33,6 +35,7 @@ const resources = {
     system: zhCNSystem,
     waveform: zhCNWaveform,
     home: zhCNHome,
+    gh3036: zhCNGh3036,
   },
   'en-US': {
     common: enUSCommon,
@@ -44,6 +47,7 @@ const resources = {
     system: enUSSystem,
     waveform: enUSWaveform,
     home: enUSHome,
+    gh3036: enUSGh3036,
   },
 };
 

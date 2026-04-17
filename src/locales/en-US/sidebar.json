@@ -3,6 +3,7 @@
     "home": "Home",
     "serial": "Serial",
     "ble": "BLE",
+    "gh3036": "GH3036",
     "protocol": "Protocol",
     "dashboard": "Dashboard",
     "waveform": "Waveform",

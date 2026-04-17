@@ -202,7 +202,7 @@ const HomePage: React.FC = () => {
         setWaveformActiveTab(tabKey as 'realtime' | 'csvLoader');
         break;
       case '/protocol':
-        setProtocolActiveTab(tabKey as 'editor' | 'bind' | 'gh3036');
+        setProtocolActiveTab(tabKey as 'editor' | 'bind');
         break;
       case '/system':
         setSystemActiveTab(tabKey as 'info' | 'logs' | 'settings');

@@ -1,0 +1,36 @@
+{
+  "initializing": "Initializing GH3036...",
+  "tabs": {
+    "config": "Channel Config",
+    "monitor": "Data Monitor",
+    "version": "Version Info"
+  },
+  "monitor": {
+    "hr": "Heart Rate",
+    "spo2": "SpO2",
+    "adt": "Wear Status",
+    "gnadt": "Liveness",
+    "ipdPaChart": "IPD/PA Data Trend",
+    "gsensorChart": "Accelerometer Data",
+    "selectFunction": "Select Function",
+    "clearData": "Clear Data",
+    "noData": "No Data",
+    "noGsensorData": "No Accelerometer Data"
+  },
+  "version": {
+    "title": "Device Version Info",
+    "refresh": "Refresh Version",
+    "refreshSuccess": "Version info refreshed",
+    "noTxChannel": "TX channel not configured",
+    "firmware": "Firmware Version",
+    "protocol": "Protocol Version",
+    "driver": "Driver Version",
+    "chip": "Chip Version",
+    "algo": "Algorithm Version",
+    "libraryInfo": "Library Info",
+    "libraryStatus": "Library Status",
+    "rpcStatus": "RPC Status",
+    "linked": "Linked",
+    "ready": "Ready"
+  }
+}

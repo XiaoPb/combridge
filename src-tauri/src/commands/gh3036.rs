@@ -135,6 +135,7 @@ pub async fn gh3036_execute_rpc(
 ) -> Result<Vec<u8>, ErrorResponse> {
     manager
         .execute_rpc(&command_key, &params)
+        .await
         .map_err(|e| ComBridgeError::protocol(e).to_error_response())
 }
 

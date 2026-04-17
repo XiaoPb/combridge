@@ -787,19 +787,9 @@ impl Gh3036Manager {
         Ok(())
     }
 
-    pub fn execute_rpc(&self, command_key: &str, params: &[String]) -> Result<Vec<u8>, String> {
+    pub async fn execute_rpc(&self, command_key: &str, params: &[String]) -> Result<Vec<u8>, String> {
         info!("GH3036 execute_rpc 开始: key={}, params={:?}", command_key, params);
-
-        let handle = Handle::try_current();
-        if handle.is_err() {
-            error!("GH3036 execute_rpc 需要在异步上下文中调用");
-            return Err("需要在异步上下文中调用".to_string());
-        }
-
-        let handle = handle.unwrap();
-        handle.block_on(async {
-            self.execute_rpc_async(command_key, params).await
-        })
+        self.execute_rpc_async(command_key, params).await
     }
 
     async fn execute_rpc_async(&self, command_key: &str, params: &[String]) -> Result<Vec<u8>, String> {

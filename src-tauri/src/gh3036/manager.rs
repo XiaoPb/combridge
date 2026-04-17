@@ -20,7 +20,7 @@ use tracing::{debug, error, info, warn};
 use crate::device::DeviceManager;
 use crate::service::{EventBus, topics, SerialDataEvent, BleDataEvent, Gh3036FrameEvent, SerialDisconnectedEvent, BleConnectionEvent};
 use super::csv_writer::CsvWriter;
-use super::types::{Gh3036EventData, Gh3036FrameData, FuncFrame, FrameDecoder, Gh3036FramesEvent};
+use super::types::{Gh3036EventData, Gh3036FrameData, FuncFrame, FrameDecoder, Gh3036FramesEvent, GhFuncFixIdx};
 
 use gh_rpc::cmd::{CMD_GET_VERSION, CMD_REGS_WRITE, CMD_REGS_READ, CMD_CHIP_CTRL, 
                   CMD_SW_FUNCTION, CMD_DOWNLOAD_CONFIG, CMD_TIMESTAMP_SET, 
@@ -103,11 +103,14 @@ impl FrameAggregator {
         }
     }
 
-    fn add_frame(&mut self, frame_data: &Gh3036FrameData, frame_event: &Gh3036FrameEvent) -> Option<Gh3036FramesEvent> {
-        let event = self.buffer.entry(frame_event.function_id).or_insert_with(|| {
-            Gh3036FramesEvent::new(frame_event.function_id, frame_event.function_name.clone())
+    fn add_frame(&mut self, frame: &FuncFrame) -> Option<Gh3036FramesEvent> {
+        let func_id = frame.id as u8;
+        let func_name = GhFuncFixIdx::from(frame.id).name().to_string();
+        
+        let event = self.buffer.entry(func_id).or_insert_with(|| {
+            Gh3036FramesEvent::new(func_id, func_name)
         });
-        event.add_frame(frame_data, &frame_event.channels);
+        event.add_frame(frame);
 
         let now = std::time::Instant::now();
         if now.duration_since(self.last_publish_time) >= self.min_interval {
@@ -263,9 +266,9 @@ impl GlobalContext {
         }
     }
 
-    fn add_frame_to_aggregator(&self, frame_data: &Gh3036FrameData, frame_event: &Gh3036FrameEvent) -> Option<Gh3036FramesEvent> {
+    fn add_frame_to_aggregator(&self, frame: &FuncFrame) -> Option<Gh3036FramesEvent> {
         let mut aggregator = self.frame_aggregator.lock();
-        aggregator.add_frame(frame_data, frame_event)
+        aggregator.add_frame(frame)
     }
 
     fn flush_aggregator(&self) -> Option<Gh3036FramesEvent> {
@@ -419,16 +422,7 @@ impl Gh3036Manager {
         
         if count > 0 {
             for frame in frames.iter() {
-                let frame_data = Gh3036FrameData::from_func_frame(frame);
-                let frame_event = Gh3036FrameEvent::new(
-                    frame_data.function_id as u8,
-                    &frame_data.function_name,
-                    frame_data.frame_id as u32,
-                    frame_data.rawdata.len(),
-                    frame_data.phy_value.iter().map(|&v| v as f32).collect(),
-                );
-                
-                if let Some(aggregated) = CALLBACK_CONTEXT.add_frame_to_aggregator(&frame_data, &frame_event) {
+                if let Some(aggregated) = CALLBACK_CONTEXT.add_frame_to_aggregator(frame) {
                     info!(
                         "[GH3036] 发布聚合帧事件: function_id={}, frame_count={}, channel_count={}",
                         aggregated.function_id,
@@ -438,6 +432,7 @@ impl Gh3036Manager {
                     event_bus.publish_msgpack("gh3036:frames", &aggregated);
                 }
                 
+                let frame_data = Gh3036FrameData::from_func_frame(frame);
                 if let Err(e) = CALLBACK_CONTEXT.send_frame_data(frame_data) {
                     error!("[GH3036] 帧数据入队失败: {}", e);
                 }

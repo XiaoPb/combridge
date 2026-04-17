@@ -452,11 +452,25 @@ pub struct Gh3036FramesEvent {
     pub function_name: String,
     pub frame_count: usize,
     pub channel_count: usize,
+    
+    pub frame_cnts: Vec<u32>,
     pub timestamps: Vec<u64>,
     pub frame_ids: Vec<u32>,
-    pub channels: Vec<Vec<f32>>,
+    
+    pub ipd_pa: Vec<Vec<i32>>,
     pub rawdata: Vec<Vec<i32>>,
-    pub gs_data: Vec<Vec<i32>>,
+    pub flags: Vec<Vec<i32>>,
+    pub agc_info: Vec<Vec<i32>>,
+    
+    pub acc_x: Vec<i16>,
+    pub acc_y: Vec<i16>,
+    pub acc_z: Vec<i16>,
+    pub gyro_x: Vec<i16>,
+    pub gyro_y: Vec<i16>,
+    pub gyro_z: Vec<i16>,
+    
+    pub algo_results: Vec<Vec<i32>>,
+    pub led_drv_fs: Vec<[u8; 2]>,
 }
 
 impl Gh3036FramesEvent {
@@ -466,42 +480,66 @@ impl Gh3036FramesEvent {
             function_name,
             frame_count: 0,
             channel_count: 0,
+            frame_cnts: Vec::new(),
             timestamps: Vec::new(),
             frame_ids: Vec::new(),
-            channels: Vec::new(),
+            ipd_pa: Vec::new(),
             rawdata: Vec::new(),
-            gs_data: Vec::new(),
+            flags: Vec::new(),
+            agc_info: Vec::new(),
+            acc_x: Vec::new(),
+            acc_y: Vec::new(),
+            acc_z: Vec::new(),
+            gyro_x: Vec::new(),
+            gyro_y: Vec::new(),
+            gyro_z: Vec::new(),
+            algo_results: Vec::new(),
+            led_drv_fs: Vec::new(),
         }
     }
 
-    pub fn add_frame(&mut self, frame: &Gh3036FrameData, channel_data: &[f32]) {
+    pub fn add_frame(&mut self, frame: &FuncFrame) {
+        self.frame_cnts.push(frame.frame_cnt);
         self.timestamps.push(frame.timestamp);
-        self.frame_ids.push(frame.frame_id as u32);
+        self.frame_ids.push(frame.frame_cnt);
         
-        if self.channels.is_empty() {
-            self.channel_count = channel_data.len();
-            self.channels = vec![Vec::new(); channel_data.len()];
-            self.rawdata = vec![Vec::new(); frame.rawdata.len().max(1)];
-            self.gs_data = vec![Vec::new(); frame.gs_data.len().max(1)];
+        if self.ipd_pa.is_empty() {
+            self.channel_count = frame.ch_num as usize;
+            self.ipd_pa = vec![Vec::new(); frame.ch_num as usize];
+            self.rawdata = vec![Vec::new(); frame.ch_num as usize];
+            self.flags = vec![Vec::new(); frame.ch_num as usize];
+            self.agc_info = vec![Vec::new(); frame.ch_num as usize];
         }
         
-        for (i, &value) in channel_data.iter().enumerate() {
-            if i < self.channels.len() {
-                self.channels[i].push(value);
+        for (i, ch_data) in frame.p_data.iter().enumerate() {
+            if i < self.ipd_pa.len() {
+                self.ipd_pa[i].push(ch_data.ipd_pa);
+                self.rawdata[i].push(ch_data.rawdata);
+                
+                let mut flag_val = 0i32;
+                if ch_data.flag.led_adj_flag { flag_val |= 1; }
+                if ch_data.flag.sa_flag { flag_val |= 2; }
+                if ch_data.flag.param_change_flag { flag_val |= 4; }
+                if ch_data.flag.dre_update { flag_val |= 8; }
+                if ch_data.flag.skip_ok_flag { flag_val |= 16; }
+                self.flags[i].push(flag_val);
+                
+                self.agc_info[i].push(ch_data.agc_info.to_low_u32() as i32);
+                self.agc_info[i].push(ch_data.agc_info.to_high_u32() as i32);
             }
         }
         
-        for (i, &value) in frame.rawdata.iter().enumerate() {
-            if i < self.rawdata.len() {
-                self.rawdata[i].push(value);
-            }
-        }
+        self.acc_x.push(frame.gsensor_data.acc[0]);
+        self.acc_y.push(frame.gsensor_data.acc[1]);
+        self.acc_z.push(frame.gsensor_data.acc[2]);
+        self.gyro_x.push(frame.gsensor_data.gyro[0]);
+        self.gyro_y.push(frame.gsensor_data.gyro[1]);
+        self.gyro_z.push(frame.gsensor_data.gyro[2]);
         
-        for (i, &value) in frame.gs_data.iter().enumerate() {
-            if i < self.gs_data.len() {
-                self.gs_data[i].push(value);
-            }
-        }
+        let algo: Vec<i32> = frame.p_algo_res.iter().map(|&v| v as i32).collect();
+        self.algo_results.push(algo);
+        
+        self.led_drv_fs.push(frame.led_drv_fs);
         
         self.frame_count += 1;
     }
@@ -513,16 +551,20 @@ impl Gh3036FramesEvent {
     pub fn clear(&mut self) {
         self.frame_count = 0;
         self.channel_count = 0;
+        self.frame_cnts.clear();
         self.timestamps.clear();
         self.frame_ids.clear();
-        for ch in &mut self.channels {
-            ch.clear();
-        }
-        for rd in &mut self.rawdata {
-            rd.clear();
-        }
-        for gs in &mut self.gs_data {
-            gs.clear();
-        }
+        for ch in &mut self.ipd_pa { ch.clear(); }
+        for rd in &mut self.rawdata { rd.clear(); }
+        for f in &mut self.flags { f.clear(); }
+        for a in &mut self.agc_info { a.clear(); }
+        self.acc_x.clear();
+        self.acc_y.clear();
+        self.acc_z.clear();
+        self.gyro_x.clear();
+        self.gyro_y.clear();
+        self.gyro_z.clear();
+        self.algo_results.clear();
+        self.led_drv_fs.clear();
     }
 }

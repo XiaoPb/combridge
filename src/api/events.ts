@@ -36,11 +36,25 @@ export interface Gh3036FramesPayload {
   function_name: string;
   frame_count: number;
   channel_count: number;
+  
+  frame_cnts: number[];
   timestamps: number[];
   frame_ids: number[];
-  channels: number[][];
+  
+  ipd_pa: number[][];
   rawdata: number[][];
-  gs_data: number[][];
+  flags: number[][];
+  agc_info: number[][];
+  
+  acc_x: number[];
+  acc_y: number[];
+  acc_z: number[];
+  gyro_x: number[];
+  gyro_y: number[];
+  gyro_z: number[];
+  
+  algo_results: number[][];
+  led_drv_fs: [number, number][];
 }
 
 export interface ProtocolParsedPayload {

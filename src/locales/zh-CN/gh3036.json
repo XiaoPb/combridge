@@ -1,0 +1,36 @@
+{
+  "initializing": "正在初始化 GH3036...",
+  "tabs": {
+    "config": "通道配置",
+    "monitor": "数据监控",
+    "version": "版本信息"
+  },
+  "monitor": {
+    "hr": "心率",
+    "spo2": "血氧",
+    "adt": "佩戴状态",
+    "gnadt": "活体检测",
+    "ipdPaChart": "IPD/PA 数据趋势",
+    "gsensorChart": "加速度计数据",
+    "selectFunction": "选择功能",
+    "clearData": "清除数据",
+    "noData": "暂无数据",
+    "noGsensorData": "暂无加速度计数据"
+  },
+  "version": {
+    "title": "设备版本信息",
+    "refresh": "刷新版本",
+    "refreshSuccess": "版本信息已刷新",
+    "noTxChannel": "发送通道未配置",
+    "firmware": "固件版本",
+    "protocol": "协议版本",
+    "driver": "驱动版本",
+    "chip": "芯片版本",
+    "algo": "算法版本",
+    "libraryInfo": "库信息",
+    "libraryStatus": "库状态",
+    "rpcStatus": "RPC 状态",
+    "linked": "已链接",
+    "ready": "就绪"
+  }
+}

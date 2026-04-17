@@ -11,6 +11,7 @@ import {
   MenuUnfoldOutlined,
   LineChartOutlined,
   DashboardOutlined,
+  HeartOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 
@@ -41,6 +42,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
       key: '/ble',
       icon: <ApiOutlined />,
       label: t('menu.ble'),
+    },
+    {
+      key: '/gh3036',
+      icon: <HeartOutlined />,
+      label: t('menu.gh3036'),
     },
     {
       key: '/protocol',

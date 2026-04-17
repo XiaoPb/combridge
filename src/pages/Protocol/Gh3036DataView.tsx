@@ -72,7 +72,7 @@ const Gh3036DataView: React.FC = () => {
         const row: number[] = [];
         for (const col of columns) {
           const chIdx = parseInt(col.replace('CH', ''), 10);
-          row.push(currentFrames.channels[chIdx]?.[frameIdx] ?? 0);
+          row.push(currentFrames.ipd_pa[chIdx]?.[frameIdx] ?? 0);
         }
         rows.push(row);
       }

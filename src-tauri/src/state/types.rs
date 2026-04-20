@@ -386,11 +386,67 @@ impl BlePreferences {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WaveformPreferences {
+    pub display_rows: u32,
+    pub refresh_interval: u32,
+    pub sidebar_collapsed: bool,
+}
+
+impl Default for WaveformPreferences {
+    fn default() -> Self {
+        Self::default_values()
+    }
+}
+
+impl WaveformPreferences {
+    pub fn default_values() -> Self {
+        Self {
+            display_rows: 20,
+            refresh_interval: 100,
+            sidebar_collapsed: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Gh3036ChannelPreferences {
+    pub connection_type: String,
+    pub serial_port: String,
+    pub ble_device: String,
+    pub tx_char: String,
+    pub rx_char: String,
+}
+
+impl Default for Gh3036ChannelPreferences {
+    fn default() -> Self {
+        Self::default_values()
+    }
+}
+
+impl Gh3036ChannelPreferences {
+    pub fn default_values() -> Self {
+        Self {
+            connection_type: "serial".to_string(),
+            serial_port: String::new(),
+            ble_device: String::new(),
+            tx_char: "00000004-0000-1000-8000-00805f9b34fb".to_string(),
+            rx_char: "00000003-0000-1000-8000-00805f9b34fb".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Preferences {
     #[serde(default = "SerialPreferences::default_values")]
     pub serial: SerialPreferences,
     #[serde(default = "BlePreferences::default_values")]
     pub ble: BlePreferences,
+    #[serde(default = "WaveformPreferences::default_values")]
+    pub waveform: WaveformPreferences,
+    #[serde(default = "Gh3036ChannelPreferences::default_values")]
+    pub gh3036_channel: Gh3036ChannelPreferences,
 }
 
 impl Default for Preferences {
@@ -404,6 +460,8 @@ impl Preferences {
         Self {
             serial: SerialPreferences::default_values(),
             ble: BlePreferences::default_values(),
+            waveform: WaveformPreferences::default_values(),
+            gh3036_channel: Gh3036ChannelPreferences::default_values(),
         }
     }
 }

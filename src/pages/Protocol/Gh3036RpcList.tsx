@@ -10,21 +10,8 @@ const { useToken } = theme;
 const Gh3036RpcList: React.FC = () => {
   const { t } = useTranslation('protocol');
   const { token } = useToken();
-  const { executeRpc, txChannel } = useGh3036Store();
-
-  const [workMode, setWorkMode] = useState<string>('0');
-  const [version, setVersion] = useState<string>(t('gh3036.versionNone'));
-  const [command, setCommand] = useState<string>('idle');
-  const [writeRegAddr, setWriteRegAddr] = useState<string>('0000');
-  const [writeRegValue, setWriteRegValue] = useState<string>('0000');
-  const [readRegAddr, setReadRegAddr] = useState<string>('0000');
-  const [readRegValue, setReadRegValue] = useState<string>('0000');
-  const [configPath, setConfigPath] = useState<string>('');
-  const [selectedFunctions, setSelectedFunctions] = useState<string[]>(['adt', 'hr', 'hrv', 'hsm', 'fpbp']);
+  const { executeRpc, txChannel, rpcConfig, setRpcConfig } = useGh3036Store();
   const [extendedCmd, setExtendedCmd] = useState<string>('');
-  const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [factoryMode, setFactoryMode] = useState<string[]>([]);
-  const [factoryResult, setFactoryResult] = useState<string>('-');
 
   const workModeOptions = [
     { value: '0', label: t('gh3036.workModes.mcuOnline') },
@@ -70,14 +57,14 @@ const Gh3036RpcList: React.FC = () => {
   };
 
   const handleRestart = async () => {
-    await handleExecuteRpc('M', [workMode]);
+    await handleExecuteRpc('M', [rpcConfig.workMode]);
   };
 
   const handleGetVersion = async () => {
     const result = await executeRpc('V', ['1']);
     if (result && result.length > 0) {
       const versionStr = String.fromCharCode(...result.filter(c => c >= 32 && c < 127));
-      setVersion(versionStr || '-');
+      setRpcConfig({ version: versionStr || '-' });
     }
   };
 
@@ -88,27 +75,27 @@ const Gh3036RpcList: React.FC = () => {
       sleep: '196',
       wakeup: '195',
     };
-    await handleExecuteRpc('C', [ctrlTypeMap[command] || '0']);
+    await handleExecuteRpc('C', [ctrlTypeMap[rpcConfig.command] || '0']);
   };
 
   const handleWriteReg = async () => {
-    const addr = parseInt(writeRegAddr, 16);
-    const value = parseInt(writeRegValue, 16);
+    const addr = parseInt(rpcConfig.writeRegAddr, 16);
+    const value = parseInt(rpcConfig.writeRegValue, 16);
     await handleExecuteRpc('W', [addr.toString(), value.toString()]);
   };
 
   const handleReadReg = async () => {
-    const addr = parseInt(readRegAddr, 16);
+    const addr = parseInt(rpcConfig.readRegAddr, 16);
     const result = await executeRpc('R', [addr.toString(), '1']);
     if (result && result.length >= 2) {
       const value = (result[1] << 8) | result[0];
-      setReadRegValue(value.toString(16).toUpperCase().padStart(4, '0'));
-      message.success(`寄存器 0x${readRegAddr.toUpperCase()} = 0x${value.toString(16).toUpperCase().padStart(4, '0')}`);
+      setRpcConfig({ readRegValue: value.toString(16).toUpperCase().padStart(4, '0') });
+      message.success(`寄存器 0x${rpcConfig.readRegAddr.toUpperCase()} = 0x${value.toString(16).toUpperCase().padStart(4, '0')}`);
     }
   };
 
   const handleLoadConfig = async () => {
-    if (!configPath.trim()) {
+    if (!rpcConfig.configPath.trim()) {
       message.error(t('gh3036.configPathPlaceholder'));
       return;
     }
@@ -116,11 +103,11 @@ const Gh3036RpcList: React.FC = () => {
   };
 
   const handleStartFunction = async () => {
-    if (selectedFunctions.length === 0) {
+    if (rpcConfig.selectedFunctions.length === 0) {
       message.error(t('gh3036.functionSelectPlaceholder'));
       return;
     }
-    const funcBits = selectedFunctions.reduce((acc, func) => {
+    const funcBits = rpcConfig.selectedFunctions.reduce((acc, func) => {
       const bitMap: Record<string, number> = {
         adt: 1,
         hr: 2,
@@ -134,14 +121,14 @@ const Gh3036RpcList: React.FC = () => {
     
     const success = await handleExecuteRpc('S', [funcBits.toString(), '0']);
     if (success) {
-      setIsRunning(true);
+      setRpcConfig({ isRunning: true });
     }
   };
 
   const handleStopFunction = async () => {
     const success = await handleExecuteRpc('S', ['0', '1']);
     if (success) {
-      setIsRunning(false);
+      setRpcConfig({ isRunning: false });
     }
   };
 
@@ -159,11 +146,11 @@ const Gh3036RpcList: React.FC = () => {
   };
 
   const handleFactorySetMode = async () => {
-    if (factoryMode.length === 0) {
+    if (rpcConfig.factoryMode.length === 0) {
       message.error(t('gh3036.factoryModeSelectPlaceholder'));
       return;
     }
-    const modeBits = factoryMode.reduce((acc, mode) => {
+    const modeBits = rpcConfig.factoryMode.reduce((acc, mode) => {
       const bitMap: Record<string, number> = {
         chipInit: 0x02,
         chipUid: 0x04,
@@ -178,11 +165,11 @@ const Gh3036RpcList: React.FC = () => {
   };
 
   const handleFactoryGetMode = async () => {
-    if (factoryMode.length === 0) {
+    if (rpcConfig.factoryMode.length === 0) {
       message.error(t('gh3036.factoryModeSelectPlaceholder'));
       return;
     }
-    const modeBits = factoryMode.reduce((acc, mode) => {
+    const modeBits = rpcConfig.factoryMode.reduce((acc, mode) => {
       const bitMap: Record<string, number> = {
         chipInit: 0x02,
         chipUid: 0x04,
@@ -196,7 +183,7 @@ const Gh3036RpcList: React.FC = () => {
     const result = await executeRpc('FG', [modeBits.toString()]);
     if (result && result.length >= 2) {
       const value = (result[1] << 8) | result[0];
-      setFactoryResult(`0x${value.toString(16).toUpperCase().padStart(4, '0')}`);
+      setRpcConfig({ factoryResult: `0x${value.toString(16).toUpperCase().padStart(4, '0')}` });
       message.success(t('gh3036.factoryResultSuccess', { value: `0x${value.toString(16).toUpperCase().padStart(4, '0')}` }));
     }
   };
@@ -246,8 +233,8 @@ const Gh3036RpcList: React.FC = () => {
             <Text style={labelStyle}>{t('gh3036.modeSelect')}</Text>
             <div style={controlStyle}>
               <Select
-                value={workMode}
-                onChange={setWorkMode}
+                value={rpcConfig.workMode}
+                onChange={(value) => setRpcConfig({ workMode: value })}
                 options={workModeOptions}
                 style={{ flex: 1 }}
                 size="small"
@@ -268,7 +255,7 @@ const Gh3036RpcList: React.FC = () => {
           <div style={rowStyle}>
             <Text style={labelStyle}>{t('gh3036.versionGet')}</Text>
             <div style={controlStyle}>
-              <Text style={{ fontSize: 13 }}>{version}</Text>
+              <Text style={{ fontSize: 13 }}>{rpcConfig.version}</Text>
             </div>
             <Button
               size="small"
@@ -285,8 +272,8 @@ const Gh3036RpcList: React.FC = () => {
             <Text style={labelStyle}>{t('gh3036.sendCommand')}</Text>
             <div style={controlStyle}>
               <Select
-                value={command}
-                onChange={setCommand}
+                value={rpcConfig.command}
+                onChange={(value) => setRpcConfig({ command: value })}
                 options={commandOptions}
                 style={{ flex: 1 }}
                 size="small"
@@ -310,16 +297,16 @@ const Gh3036RpcList: React.FC = () => {
                 <Text style={{ fontSize: 11, color: token.colorTextTertiary }}>{t('gh3036.regAddr')}:</Text>
                 <Input
                   size="small"
-                  value={writeRegAddr}
-                  onChange={(e) => setWriteRegAddr(e.target.value)}
+                  value={rpcConfig.writeRegAddr}
+                  onChange={(e) => setRpcConfig({ writeRegAddr: e.target.value })}
                   style={smallInputStyle}
                   maxLength={4}
                 />
                 <Text style={{ fontSize: 11, color: token.colorTextTertiary }}>{t('gh3036.regValue')}:</Text>
                 <Input
                   size="small"
-                  value={writeRegValue}
-                  onChange={(e) => setWriteRegValue(e.target.value)}
+                  value={rpcConfig.writeRegValue}
+                  onChange={(e) => setRpcConfig({ writeRegValue: e.target.value })}
                   style={smallInputStyle}
                   maxLength={4}
                 />
@@ -343,15 +330,15 @@ const Gh3036RpcList: React.FC = () => {
                 <Text style={{ fontSize: 11, color: token.colorTextTertiary }}>{t('gh3036.regAddr')}:</Text>
                 <Input
                   size="small"
-                  value={readRegAddr}
-                  onChange={(e) => setReadRegAddr(e.target.value)}
+                  value={rpcConfig.readRegAddr}
+                  onChange={(e) => setRpcConfig({ readRegAddr: e.target.value })}
                   style={smallInputStyle}
                   maxLength={4}
                 />
                 <Text style={{ fontSize: 11, color: token.colorTextTertiary }}>{t('gh3036.regValue')}:</Text>
                 <Input
                   size="small"
-                  value={readRegValue}
+                  value={rpcConfig.readRegValue}
                   readOnly
                   style={{ ...smallInputStyle, background: token.colorFillSecondary }}
                   maxLength={4}
@@ -375,8 +362,8 @@ const Gh3036RpcList: React.FC = () => {
               <Input
                 size="small"
                 placeholder={t('gh3036.configPathPlaceholder')}
-                value={configPath}
-                onChange={(e) => setConfigPath(e.target.value)}
+                value={rpcConfig.configPath}
+                onChange={(e) => setRpcConfig({ configPath: e.target.value })}
                 style={{ flex: 1 }}
               />
             </div>
@@ -396,8 +383,8 @@ const Gh3036RpcList: React.FC = () => {
             <div style={controlStyle}>
               <Select
                 mode="multiple"
-                value={selectedFunctions}
-                onChange={setSelectedFunctions}
+                value={rpcConfig.selectedFunctions}
+                onChange={(value) => setRpcConfig({ selectedFunctions: value })}
                 options={functionOptions}
                 style={{ flex: 1 }}
                 size="small"
@@ -405,14 +392,14 @@ const Gh3036RpcList: React.FC = () => {
               />
             </div>
             <Button
-              type={isRunning ? 'default' : 'primary'}
+              type={rpcConfig.isRunning ? 'default' : 'primary'}
               size="small"
               icon={<PlayCircleOutlined />}
-              onClick={isRunning ? handleStopFunction : handleStartFunction}
+              onClick={rpcConfig.isRunning ? handleStopFunction : handleStartFunction}
               style={buttonStyle}
-              danger={isRunning}
+              danger={rpcConfig.isRunning}
             >
-              {isRunning ? t('gh3036.stop') : t('gh3036.start')}
+              {rpcConfig.isRunning ? t('gh3036.stop') : t('gh3036.start')}
             </Button>
           </div>
         </Col>
@@ -423,8 +410,8 @@ const Gh3036RpcList: React.FC = () => {
             <div style={controlStyle}>
               <Select
                 mode="multiple"
-                value={factoryMode}
-                onChange={setFactoryMode}
+                value={rpcConfig.factoryMode}
+                onChange={(value) => setRpcConfig({ factoryMode: value })}
                 options={factoryModeOptions}
                 style={{ flex: 1 }}
                 size="small"
@@ -446,7 +433,7 @@ const Gh3036RpcList: React.FC = () => {
           <div style={rowStyle}>
             <Text style={labelStyle}>{t('gh3036.factoryResult')}</Text>
             <div style={controlStyle}>
-              <Text style={{ fontSize: 13 }}>{factoryResult}</Text>
+              <Text style={{ fontSize: 13 }}>{rpcConfig.factoryResult}</Text>
             </div>
             <Button
               size="small"

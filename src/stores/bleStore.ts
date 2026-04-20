@@ -30,6 +30,27 @@ export interface AtDataEntry {
   direction: 'send' | 'receive';
 }
 
+export interface DeviceLogEntry {
+  id: string;
+  timestamp: number;
+  direction: 'READ' | 'WRITE' | 'NOTIFY' | 'SUBSCRIBE' | 'UNSUBSCRIBE';
+  data?: number[];
+  text?: string;
+  characteristicUuid?: string;
+}
+
+export interface DeviceTabData {
+  deviceId: string;
+  name: string;
+  address: string;
+  services: BleService[];
+  characteristics: BleCharacteristic[];
+  logs: DeviceLogEntry[];
+  selectedCharacteristic: BleCharacteristic | null;
+  discoveringServices: boolean;
+  subscribedUuids: string[];
+}
+
 export interface AtConfig {
   portName: string;
   baudRate: number;
@@ -76,6 +97,7 @@ interface BleState {
   atConfig: AtConfig | null;
   atTabs: AtConnectionTab[];
   activeAtTabId: string | null;
+  deviceTabs: Record<string, DeviceTabData>;
   
   setMode: (mode: BleMode) => void;
   setSerialPort: (serialPort: string | null) => void;
@@ -113,6 +135,12 @@ interface BleState {
   addAtReceivedData: (tabId: string, entry: AtDataEntry) => void;
   addAtSentData: (tabId: string, entry: AtDataEntry) => void;
   clearAtTabData: (tabId: string) => void;
+  setDeviceTabs: (tabs: Record<string, DeviceTabData>) => void;
+  setDeviceTab: (deviceId: string, tab: DeviceTabData) => void;
+  updateDeviceTab: (deviceId: string, updates: Partial<DeviceTabData>) => void;
+  removeDeviceTab: (deviceId: string) => void;
+  addDeviceLog: (deviceId: string, entry: DeviceLogEntry) => void;
+  clearDeviceLogs: (deviceId: string) => void;
 }
 
 export const useBleStore = create<BleState>((set, _get) => ({
@@ -132,6 +160,7 @@ export const useBleStore = create<BleState>((set, _get) => ({
   atConfig: null,
   atTabs: [],
   activeAtTabId: null,
+  deviceTabs: {},
 
   setMode: (mode: BleMode) => set({ mode }),
 
@@ -278,6 +307,7 @@ export const useBleStore = create<BleState>((set, _get) => ({
     atConfig: null,
     atTabs: [],
     activeAtTabId: null,
+    deviceTabs: {},
   }),
 
   setAtConfig: (config: AtConfig) => set({ atConfig: config }),
@@ -333,6 +363,55 @@ export const useBleStore = create<BleState>((set, _get) => ({
         t.id === tabId ? { ...t, receivedData: [], sentData: [] } : t
       ),
     })),
+
+  setDeviceTabs: (tabs: Record<string, DeviceTabData>) => set({ deviceTabs: tabs }),
+
+  setDeviceTab: (deviceId: string, tab: DeviceTabData) =>
+    set((state) => ({
+      deviceTabs: { ...state.deviceTabs, [deviceId]: tab },
+    })),
+
+  updateDeviceTab: (deviceId: string, updates: Partial<DeviceTabData>) =>
+    set((state) => {
+      const existing = state.deviceTabs[deviceId];
+      if (!existing) return state;
+      return {
+        deviceTabs: { ...state.deviceTabs, [deviceId]: { ...existing, ...updates } },
+      };
+    }),
+
+  removeDeviceTab: (deviceId: string) =>
+    set((state) => {
+      const { [deviceId]: _, ...rest } = state.deviceTabs;
+      return { deviceTabs: rest };
+    }),
+
+  addDeviceLog: (deviceId: string, entry: DeviceLogEntry) =>
+    set((state) => {
+      const existing = state.deviceTabs[deviceId];
+      if (!existing) return state;
+      return {
+        deviceTabs: {
+          ...state.deviceTabs,
+          [deviceId]: {
+            ...existing,
+            logs: [...existing.logs, entry].slice(-500),
+          },
+        },
+      };
+    }),
+
+  clearDeviceLogs: (deviceId: string) =>
+    set((state) => {
+      const existing = state.deviceTabs[deviceId];
+      if (!existing) return state;
+      return {
+        deviceTabs: {
+          ...state.deviceTabs,
+          [deviceId]: { ...existing, logs: [] },
+        },
+      };
+    }),
 }));
 
 export const generateBleId = (): string => {

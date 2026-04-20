@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import { Alert, Space, Button, Tree, Tag, Typography, Empty, Spin, Card, Input, Segmented, Tooltip } from 'antd';
 import { MenuFoldOutlined, MenuUnfoldOutlined, ClearOutlined, DownloadOutlined, VerticalAlignBottomOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useBle } from '../../hooks/useBle';
 import { useSerialStore } from '../../stores/serialStore';
-import { useBleStore, formatBleData, getShortUuid, formatMacAddress } from '../../stores/bleStore';
+import { useBleStore, formatBleData, getShortUuid, formatMacAddress, type DeviceLogEntry, type DeviceTabData } from '../../stores/bleStore';
 import { serialApi, bleApi } from '../../api/tauri';
 import type { CacheData } from '../../api/types';
 import { getServiceName, getCharacteristicName } from '../../types/ble';
@@ -17,27 +17,6 @@ import type { TextAreaRef } from 'antd/es/input/TextArea';
 
 const { Text } = Typography;
 const { TextArea } = Input;
-
-interface DeviceLogEntry {
-  id: string;
-  timestamp: number;
-  direction: 'READ' | 'WRITE' | 'NOTIFY' | 'SUBSCRIBE' | 'UNSUBSCRIBE';
-  data?: number[];
-  text?: string;
-  characteristicUuid?: string;
-}
-
-interface DeviceTabData {
-  deviceId: string;
-  name: string;
-  address: string;
-  services: BleService[];
-  characteristics: BleCharacteristic[];
-  logs: DeviceLogEntry[];
-  selectedCharacteristic: BleCharacteristic | null;
-  discoveringServices: boolean;
-  subscribedUuids: Set<string>;
-}
 
 const formatTimestamp = (timestamp: number): string => {
   const date = new Date(timestamp);
@@ -77,9 +56,18 @@ const BlePage: React.FC = () => {
   } = useBle();
 
   const { ports, setPorts } = useSerialStore();
-  const { preferences, updatePreferences, loadPreferences } = useBleStore();
-  const [deviceTabs, setDeviceTabs] = useState<Record<string, DeviceTabData>>({});
-  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+  const { 
+    preferences, 
+    updatePreferences, 
+    loadPreferences,
+    deviceTabs,
+    setDeviceTabs,
+    updateDeviceTab,
+    removeDeviceTab,
+    addDeviceLog,
+    clearDeviceLogs,
+  } = useBleStore();
+  const [preferencesLoaded, setPreferencesLoaded] = React.useState(false);
   const processedNotificationIds = useRef<Set<string>>(new Set());
   const logContainerRefs = useRef<Record<string, TextAreaRef>>({});
   const lastLogCountRef = useRef<Record<string, number>>({});
@@ -116,9 +104,7 @@ const BlePage: React.FC = () => {
             }
           }
 
-          const subscribedUuids = new Set(
-            allCharacteristics.filter(c => c.subscribed).map(c => c.uuid)
-          );
+          const subscribedUuids = allCharacteristics.filter(c => c.subscribed).map(c => c.uuid);
 
           tabs[conn.address] = {
             deviceId: conn.address,
@@ -144,40 +130,32 @@ const BlePage: React.FC = () => {
     };
 
     restoreConnectedDevices();
-  }, [preferencesLoaded, restoreConnections, setCurrentDevice]);
+  }, [preferencesLoaded, restoreConnections, setCurrentDevice, setDeviceTabs]);
 
   useEffect(() => {
     if (!currentDevice) return;
     const conn = connections.find((c) => c.address === currentDevice && c.isConnected);
     if (!conn) return;
 
-    setDeviceTabs((prev) => {
-      const existing = prev[currentDevice];
-      if (existing && !existing.discoveringServices && existing.services.length === 0) {
-        return {
-          ...prev,
-          [currentDevice]: { ...existing, discoveringServices: true },
-        };
-      }
-      if (!existing) {
-        return {
-          ...prev,
-          [currentDevice]: {
-            deviceId: currentDevice,
-            name: conn.name || formatMacAddress(conn.address),
-            address: conn.address,
-            services: [],
-            characteristics: [],
-            logs: [],
-            selectedCharacteristic: null,
-            discoveringServices: true,
-            subscribedUuids: new Set(),
-          },
-        };
-
-      }
-      return prev;
-    });
+    const existing = deviceTabs[currentDevice];
+    if (existing && !existing.discoveringServices && existing.services.length === 0) {
+      updateDeviceTab(currentDevice, { discoveringServices: true });
+    } else if (!existing) {
+      setDeviceTabs({
+        ...deviceTabs,
+        [currentDevice]: {
+          deviceId: currentDevice,
+          name: conn.name || formatMacAddress(conn.address),
+          address: conn.address,
+          services: [],
+          characteristics: [],
+          logs: [],
+          selectedCharacteristic: null,
+          discoveringServices: true,
+          subscribedUuids: [],
+        },
+      });
+    }
 
     discoverServices(currentDevice)
       .then((svcList) => {
@@ -190,51 +168,28 @@ const BlePage: React.FC = () => {
           }
         }
         
-        const subscribedUuids = new Set(
-          allCharacteristics.filter(c => c.subscribed).map(c => c.uuid)
-        );
+        const subscribedUuids = allCharacteristics.filter(c => c.subscribed).map(c => c.uuid);
         
-        setDeviceTabs((prev) => {
-          const tab = prev[currentDevice];
-          if (!tab) return prev;
-          return {
-            ...prev,
-            [currentDevice]: {
-              ...tab,
-              services: svcList,
-              characteristics: allCharacteristics,
-              discoveringServices: false,
-              subscribedUuids,
-            },
-          };
+        updateDeviceTab(currentDevice, {
+          services: svcList,
+          characteristics: allCharacteristics,
+          discoveringServices: false,
+          subscribedUuids,
         });
       })
       .catch(() => {
-        setDeviceTabs((prev) => {
-          const tab = prev[currentDevice];
-          if (!tab) return prev;
-          return {
-            ...prev,
-            [currentDevice]: { ...tab, discoveringServices: false },
-          };
-        });
+        updateDeviceTab(currentDevice, { discoveringServices: false });
       });
-  }, [currentDevice, connections, discoverServices]);
+  }, [currentDevice, connections, discoverServices, deviceTabs, setDeviceTabs, updateDeviceTab]);
 
   useEffect(() => {
     if (!currentDevice || services.length === 0) return;
-    setDeviceTabs((prev) => {
-      const tab = prev[currentDevice];
-      if (!tab) return prev;
-      if (JSON.stringify(tab.services) !== JSON.stringify(services)) {
-        return {
-          ...prev,
-          [currentDevice]: { ...tab, services },
-        };
-      }
-      return prev;
-    });
-  }, [currentDevice, services]);
+    const tab = deviceTabs[currentDevice];
+    if (!tab) return;
+    if (JSON.stringify(tab.services) !== JSON.stringify(services)) {
+      updateDeviceTab(currentDevice, { services });
+    }
+  }, [currentDevice, services, deviceTabs, updateDeviceTab]);
 
   const handleModeChange = async (newMode: 'native' | 'at') => {
     await configure(newMode, serialPort || undefined);
@@ -247,19 +202,9 @@ const BlePage: React.FC = () => {
   const handleSendAtCommand = (_command: string) => {
   };
 
-  const addLogToDevice = useCallback((deviceId: string, entry: Omit<DeviceLogEntry, 'id'>) => {
-    setDeviceTabs((prev) => {
-      const tab = prev[deviceId];
-      if (!tab) return prev;
-      return {
-        ...prev,
-        [deviceId]: {
-          ...tab,
-          logs: [...tab.logs, { ...entry, id: `${Date.now()}-${Math.random()}` }].slice(-500),
-        },
-      };
-    });
-  }, []);
+  const addLogToDeviceCallback = useCallback((deviceId: string, entry: Omit<DeviceLogEntry, 'id'>) => {
+    addDeviceLog(deviceId, { ...entry, id: `${Date.now()}-${Math.random()}` });
+  }, [addDeviceLog]);
 
   useEffect(() => {
     if (!notifications.length || !currentDevice) return;
@@ -270,7 +215,7 @@ const BlePage: React.FC = () => {
       
       const targetAddress = connections.find(c => c.address === currentDevice)?.address;
       if (notif.deviceId === currentDevice || notif.deviceId === targetAddress) {
-        addLogToDevice(currentDevice, {
+        addLogToDeviceCallback(currentDevice, {
           timestamp: notif.timestamp,
           direction: 'NOTIFY',
           data: notif.data,
@@ -278,7 +223,7 @@ const BlePage: React.FC = () => {
         });
       }
     }
-  }, [notifications, currentDevice, connections, addLogToDevice]);
+  }, [notifications, currentDevice, connections, addLogToDeviceCallback]);
 
   const currentTab = currentDevice ? deviceTabs[currentDevice] : null;
   
@@ -319,11 +264,7 @@ const BlePage: React.FC = () => {
     } catch {
       // error already handled by hook
     }
-    setDeviceTabs((prev) => {
-      const next = { ...prev };
-      delete next[deviceId];
-      return next;
-    });
+    removeDeviceTab(deviceId);
     if (currentDevice === deviceId) {
       setCurrentDevice(null);
     }
@@ -333,31 +274,17 @@ const BlePage: React.FC = () => {
     async (serviceUuid: string, deviceId: string) => {
       try {
         const charList = await discoverCharacteristics(serviceUuid, deviceId);
-        setDeviceTabs((prev) => {
-          const tab = prev[deviceId];
-          if (!tab) return prev;
-          return {
-            ...prev,
-            [deviceId]: { ...tab, characteristics: charList || [] },
-          };
-        });
+        updateDeviceTab(deviceId, { characteristics: charList || [] });
       } catch (err) {
         console.error(t('message.discoverFailed'), err);
       }
     },
-    [discoverCharacteristics]
+    [discoverCharacteristics, updateDeviceTab]
   );
 
   const handleCharacteristicSelectForDevice = useCallback(
     async (characteristic: BleCharacteristic, deviceId: string) => {
-      setDeviceTabs((prev) => {
-        const tab = prev[deviceId];
-        if (!tab) return prev;
-        return {
-          ...prev,
-          [deviceId]: { ...tab, selectedCharacteristic: characteristic },
-        };
-      });
+      updateDeviceTab(deviceId, { selectedCharacteristic: characteristic });
 
       try {
         const cacheData: CacheData = await bleApi.getCache(characteristic.uuid);
@@ -386,32 +313,25 @@ const BlePage: React.FC = () => {
         cacheLogs.sort((a, b) => a.timestamp - b.timestamp);
         
         if (cacheLogs.length > 0) {
-          setDeviceTabs((prev) => {
-            const tab = prev[deviceId];
-            if (!tab) return prev;
+          const tab = deviceTabs[deviceId];
+          if (tab) {
             const existingIds = new Set(tab.logs.map(l => l.id));
             const newLogs = cacheLogs.filter(l => !existingIds.has(l.id));
-            return {
-              ...prev,
-              [deviceId]: {
-                ...tab,
-                logs: [...tab.logs, ...newLogs].slice(-500),
-              },
-            };
-          });
+            updateDeviceTab(deviceId, { logs: [...tab.logs, ...newLogs].slice(-500) });
+          }
         }
       } catch (err) {
         console.debug('[BlePage] get cache failed or no cache:', err);
       }
     },
-    []
+    [deviceTabs, updateDeviceTab]
   );
 
   const handleReadForDevice = useCallback(
     async (uuid: string, deviceId: string) => {
       try {
         const data = await readCharacteristic(uuid, deviceId);
-        addLogToDevice(deviceId, {
+        addLogToDeviceCallback(deviceId, {
           timestamp: Date.now(),
           direction: 'READ',
           data,
@@ -421,14 +341,14 @@ const BlePage: React.FC = () => {
         // handled by hook
       }
     },
-    [readCharacteristic, addLogToDevice]
+    [readCharacteristic, addLogToDeviceCallback]
   );
 
   const handleWriteForDevice = useCallback(
     async (uuid: string, dataStr: string, format: 'hex' | 'text', withoutResponse: boolean, deviceId: string) => {
       try {
         await writeCharacteristic(uuid, dataStr, format, withoutResponse, deviceId);
-        addLogToDevice(deviceId, {
+        addLogToDeviceCallback(deviceId, {
           timestamp: Date.now(),
           direction: 'WRITE',
           text: dataStr,
@@ -438,21 +358,19 @@ const BlePage: React.FC = () => {
         // handled by hook
       }
     },
-    [writeCharacteristic, addLogToDevice]
+    [writeCharacteristic, addLogToDeviceCallback]
   );
 
   const handleSubscribeForDevice = useCallback(
     async (uuid: string, deviceId: string) => {
       try {
         await subscribeNotify(uuid, deviceId);
-        setDeviceTabs((prev) => {
-          const tab = prev[deviceId];
-          if (!tab) return prev;
-          const newSet = new Set(tab.subscribedUuids);
-          newSet.add(uuid);
-          return { ...prev, [deviceId]: { ...tab, subscribedUuids: newSet } };
-        });
-        addLogToDevice(deviceId, {
+        const tab = deviceTabs[deviceId];
+        if (tab) {
+          const newUuids = [...new Set([...tab.subscribedUuids, uuid])];
+          updateDeviceTab(deviceId, { subscribedUuids: newUuids });
+        }
+        addLogToDeviceCallback(deviceId, {
           timestamp: Date.now(),
           direction: 'SUBSCRIBE',
           characteristicUuid: uuid,
@@ -461,21 +379,19 @@ const BlePage: React.FC = () => {
         // handled by hook
       }
     },
-    [subscribeNotify, addLogToDevice]
+    [subscribeNotify, addLogToDeviceCallback, deviceTabs, updateDeviceTab]
   );
 
   const handleUnsubscribeForDevice = useCallback(
     async (uuid: string, deviceId: string) => {
       try {
         await unsubscribeNotify(uuid, deviceId);
-        setDeviceTabs((prev) => {
-          const tab = prev[deviceId];
-          if (!tab) return prev;
-          const newSet = new Set(tab.subscribedUuids);
-          newSet.delete(uuid);
-          return { ...prev, [deviceId]: { ...tab, subscribedUuids: newSet } };
-        });
-        addLogToDevice(deviceId, {
+        const tab = deviceTabs[deviceId];
+        if (tab) {
+          const newUuids = tab.subscribedUuids.filter(u => u !== uuid);
+          updateDeviceTab(deviceId, { subscribedUuids: newUuids });
+        }
+        addLogToDeviceCallback(deviceId, {
           timestamp: Date.now(),
           direction: 'UNSUBSCRIBE',
           characteristicUuid: uuid,
@@ -484,16 +400,12 @@ const BlePage: React.FC = () => {
         // handled by hook
       }
     },
-    [unsubscribeNotify, addLogToDevice]
+    [unsubscribeNotify, addLogToDeviceCallback, deviceTabs, updateDeviceTab]
   );
 
   const handleClearLogs = useCallback((deviceId: string) => {
-    setDeviceTabs((prev) => {
-      const tab = prev[deviceId];
-      if (!tab) return prev;
-      return { ...prev, [deviceId]: { ...tab, logs: [] } };
-    });
-  }, []);
+    clearDeviceLogs(deviceId);
+  }, [clearDeviceLogs]);
 
   const handleExportLog = useCallback(async (tabData: DeviceTabData) => {
     if (tabData.logs.length === 0) return;
@@ -529,7 +441,7 @@ const BlePage: React.FC = () => {
     } catch (err) {
       console.error('[BlePage]', t('message.saveLogFailed'), err);
     }
-  }, []);
+  }, [t]);
 
   const buildTreeData = (svcList: BleService[]) => {
     return svcList.map((svc) => ({
@@ -626,7 +538,7 @@ const BlePage: React.FC = () => {
   const renderDeviceContent = (tabData: DeviceTabData) => {
     const treeData = buildTreeData(tabData.services);
     const isSubscribed = tabData.selectedCharacteristic 
-      ? tabData.subscribedUuids.has(tabData.selectedCharacteristic.uuid)
+      ? tabData.subscribedUuids.includes(tabData.selectedCharacteristic.uuid)
       : false;
 
     return (

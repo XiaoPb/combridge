@@ -67,6 +67,21 @@ interface Gh3036State {
     deviceDisconnected?: UnlistenFn;
   };
   
+  rpcConfig: {
+    workMode: string;
+    command: string;
+    writeRegAddr: string;
+    writeRegValue: string;
+    readRegAddr: string;
+    readRegValue: string;
+    configPath: string;
+    selectedFunctions: string[];
+    isRunning: boolean;
+    factoryMode: string[];
+    factoryResult: string;
+    version: string;
+  };
+  
   setIsInitialized: (value: boolean) => void;
   setIsLoading: (value: boolean) => void;
   setError: (error: string | null) => void;
@@ -92,6 +107,8 @@ interface Gh3036State {
   setSelectedFunctionId: (id: number | null) => void;
   
   setIsLinked: (value: boolean) => void;
+  
+  setRpcConfig: (config: Partial<Gh3036State['rpcConfig']>) => void;
   
   initialize: () => Promise<void>;
   loadChannels: () => Promise<void>;
@@ -165,6 +182,21 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   isLinked: false,
   
   eventListeners: {},
+  
+  rpcConfig: {
+    workMode: '0',
+    command: 'idle',
+    writeRegAddr: '0000',
+    writeRegValue: '0000',
+    readRegAddr: '0000',
+    readRegValue: '0000',
+    configPath: '',
+    selectedFunctions: ['adt', 'hr', 'hrv', 'hsm', 'fpbp'],
+    isRunning: false,
+    factoryMode: [],
+    factoryResult: '-',
+    version: '-',
+  },
   
   setIsInitialized: (value) => set({ isInitialized: value }),
   setIsLoading: (value) => set({ isLoading: value }),
@@ -292,6 +324,10 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   setSelectedFunctionId: (id) => set({ selectedFunctionId: id }),
   
   setIsLinked: (value) => set({ isLinked: value }),
+  
+  setRpcConfig: (config) => set((state) => ({
+    rpcConfig: { ...state.rpcConfig, ...config },
+  })),
   
   initialize: async () => {
     set({ isLoading: true, error: null });

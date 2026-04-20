@@ -6,6 +6,17 @@ import { useGh3036Store } from '../../stores/gh3036Store';
 import VitalSignCard from './components/VitalSignCard';
 import MultiLineChart from '../Waveform/MultiLineChart';
 
+const DISPLAY_DURATION_SECONDS = 6;
+const ADT_SAMPLE_RATE = 5;
+const DEFAULT_SAMPLE_RATE = 25;
+
+const getSampleRateByFunctionId = (functionId: number | null): number => {
+  if (functionId === 0) {
+    return ADT_SAMPLE_RATE;
+  }
+  return DEFAULT_SAMPLE_RATE;
+};
+
 const MonitorTab: React.FC = () => {
   const { t } = useTranslation('gh3036');
   const {
@@ -16,6 +27,8 @@ const MonitorTab: React.FC = () => {
     clearWaveformData,
     setSelectedFunctionId,
   } = useGh3036Store();
+
+  const sampleRate = getSampleRateByFunctionId(selectedFunctionId);
 
   const functionOptions = useMemo(() => {
     return Array.from(framesData.entries()).map(([id, frames]) => ({
@@ -39,8 +52,11 @@ const MonitorTab: React.FC = () => {
       columns.push(`CH${i}`);
     }
 
+    const maxPoints = DISPLAY_DURATION_SECONDS * sampleRate;
+    const startIndex = Math.max(0, currentFrames.frame_count - maxPoints);
+    
     const rows: number[][] = [];
-    for (let frameIdx = 0; frameIdx < currentFrames.frame_count; frameIdx++) {
+    for (let frameIdx = startIndex; frameIdx < currentFrames.frame_count; frameIdx++) {
       const row: number[] = [];
       for (let chIdx = 0; chIdx < currentFrames.channel_count; chIdx++) {
         row.push(currentFrames.ipd_pa[chIdx]?.[frameIdx] ?? 0);
@@ -49,19 +65,27 @@ const MonitorTab: React.FC = () => {
     }
 
     return { columns, rows };
-  }, [currentFrames]);
+  }, [currentFrames, sampleRate]);
 
   const gsensorChartData = useMemo(() => {
     const columns = ['ACC_X', 'ACC_Y', 'ACC_Z'];
     const rows: number[][] = [];
 
+    const maxPoints = DISPLAY_DURATION_SECONDS * DEFAULT_SAMPLE_RATE;
     const len = Math.min(
       gsensorData.acc_x.length,
       gsensorData.acc_y.length,
-      gsensorData.acc_z.length
+      gsensorData.acc_z.length,
+      maxPoints
     );
 
-    for (let i = 0; i < len; i++) {
+    const startIndex = Math.max(0, Math.min(
+      gsensorData.acc_x.length,
+      gsensorData.acc_y.length,
+      gsensorData.acc_z.length
+    ) - maxPoints);
+
+    for (let i = startIndex; i < startIndex + len; i++) {
       rows.push([
         gsensorData.acc_x[i],
         gsensorData.acc_y[i],
@@ -174,6 +198,7 @@ const MonitorTab: React.FC = () => {
             columns={ipdPaChartData.columns}
             rows={ipdPaChartData.rows}
             chartGroups={ipdPaChartGroups}
+            sampleRate={sampleRate}
           />
         ) : (
           <Empty description={t('monitor.noData')} style={{ marginTop: 80 }} />
@@ -191,6 +216,7 @@ const MonitorTab: React.FC = () => {
             columns={gsensorChartData.columns}
             rows={gsensorChartData.rows}
             chartGroups={gsensorChartGroups}
+            sampleRate={DEFAULT_SAMPLE_RATE}
           />
         ) : (
           <Empty description={t('monitor.noGsensorData')} style={{ marginTop: 60 }} />

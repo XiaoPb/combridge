@@ -94,6 +94,7 @@ const BlePage: React.FC = () => {
         const connectionList = await restoreConnections();
         if (!connectionList || connectionList.length === 0) return;
 
+        const existingTabs = useBleStore.getState().deviceTabs;
         const tabs: Record<string, DeviceTabData> = {};
         for (const conn of connectionList) {
           if (!conn.isConnected) continue;
@@ -106,6 +107,8 @@ const BlePage: React.FC = () => {
           }
 
           const subscribedUuids = allCharacteristics.filter(c => c.subscribed).map(c => c.uuid);
+          
+          const existingTab = existingTabs[conn.address];
 
           tabs[conn.address] = {
             deviceId: conn.address,
@@ -113,8 +116,8 @@ const BlePage: React.FC = () => {
             address: conn.address,
             services: conn.services || [],
             characteristics: allCharacteristics,
-            logs: [],
-            selectedCharacteristic: null,
+            logs: existingTab?.logs || [],
+            selectedCharacteristic: existingTab?.selectedCharacteristic || null,
             discoveringServices: false,
             subscribedUuids,
           };
@@ -123,7 +126,9 @@ const BlePage: React.FC = () => {
         if (Object.keys(tabs).length > 0) {
           setDeviceTabs(tabs);
           const firstDeviceId = Object.keys(tabs)[0];
-          setCurrentDevice(firstDeviceId);
+          if (!useBleStore.getState().currentDevice) {
+            setCurrentDevice(firstDeviceId);
+          }
         }
       } catch (err) {
         console.error('[BlePage]', t('message.restoreFailed'), err);

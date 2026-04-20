@@ -23,6 +23,8 @@ const Gh3036RpcList: React.FC = () => {
   const [selectedFunctions, setSelectedFunctions] = useState<string[]>(['adt', 'hr', 'hrv', 'hsm', 'fpbp']);
   const [extendedCmd, setExtendedCmd] = useState<string>('');
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [factoryMode, setFactoryMode] = useState<string[]>([]);
+  const [factoryResult, setFactoryResult] = useState<string>('-');
 
   const workModeOptions = [
     { value: '0', label: t('gh3036.workModes.mcuOnline') },
@@ -44,6 +46,15 @@ const Gh3036RpcList: React.FC = () => {
     { value: 'hrv', label: t('gh3036.functions.hrv') },
     { value: 'hsm', label: t('gh3036.functions.hsm') },
     { value: 'fpbp', label: t('gh3036.functions.fpbp') },
+  ];
+
+  const factoryModeOptions = [
+    { value: 'chipInit', label: t('gh3036.factoryModes.chipInit') },
+    { value: 'chipUid', label: t('gh3036.factoryModes.chipUid') },
+    { value: 'baseNoise', label: t('gh3036.factoryModes.baseNoise') },
+    { value: 'ppgNoise', label: t('gh3036.factoryModes.ppgNoise') },
+    { value: 'lpctr', label: t('gh3036.factoryModes.lpctr') },
+    { value: 'lplctr', label: t('gh3036.factoryModes.lplctr') },
   ];
 
   const handleExecuteRpc = async (commandKey: string, params: string[]) => {
@@ -144,6 +155,49 @@ const Gh3036RpcList: React.FC = () => {
       const cmdKey = parts[0];
       const params = parts.slice(1);
       await handleExecuteRpc(cmdKey, params);
+    }
+  };
+
+  const handleFactorySetMode = async () => {
+    if (factoryMode.length === 0) {
+      message.error(t('gh3036.factoryModeSelectPlaceholder'));
+      return;
+    }
+    const modeBits = factoryMode.reduce((acc, mode) => {
+      const bitMap: Record<string, number> = {
+        chipInit: 0x02,
+        chipUid: 0x04,
+        baseNoise: 0x08,
+        ppgNoise: 0x10,
+        lpctr: 0x20,
+        lplctr: 0x40,
+      };
+      return acc | (bitMap[mode] || 0);
+    }, 0);
+    await handleExecuteRpc('FS', [modeBits.toString()]);
+  };
+
+  const handleFactoryGetMode = async () => {
+    if (factoryMode.length === 0) {
+      message.error(t('gh3036.factoryModeSelectPlaceholder'));
+      return;
+    }
+    const modeBits = factoryMode.reduce((acc, mode) => {
+      const bitMap: Record<string, number> = {
+        chipInit: 0x02,
+        chipUid: 0x04,
+        baseNoise: 0x08,
+        ppgNoise: 0x10,
+        lpctr: 0x20,
+        lplctr: 0x40,
+      };
+      return acc | (bitMap[mode] || 0);
+    }, 0);
+    const result = await executeRpc('FG', [modeBits.toString()]);
+    if (result && result.length >= 2) {
+      const value = (result[1] << 8) | result[0];
+      setFactoryResult(`0x${value.toString(16).toUpperCase().padStart(4, '0')}`);
+      message.success(t('gh3036.factoryResultSuccess', { value: `0x${value.toString(16).toUpperCase().padStart(4, '0')}` }));
     }
   };
 
@@ -359,6 +413,47 @@ const Gh3036RpcList: React.FC = () => {
               danger={isRunning}
             >
               {isRunning ? t('gh3036.stop') : t('gh3036.start')}
+            </Button>
+          </div>
+        </Col>
+
+        <Col span={24}>
+          <div style={rowStyle}>
+            <Text style={labelStyle}>{t('gh3036.factoryMode')}</Text>
+            <div style={controlStyle}>
+              <Select
+                mode="multiple"
+                value={factoryMode}
+                onChange={setFactoryMode}
+                options={factoryModeOptions}
+                style={{ flex: 1 }}
+                size="small"
+                maxTagCount={3}
+                placeholder={t('gh3036.factoryModeSelectPlaceholder')}
+              />
+            </div>
+            <Button
+              size="small"
+              onClick={handleFactorySetMode}
+              style={{ ...buttonStyle, marginRight: 4 }}
+            >
+              {t('gh3036.factorySet')}
+            </Button>
+          </div>
+        </Col>
+
+        <Col span={24}>
+          <div style={rowStyle}>
+            <Text style={labelStyle}>{t('gh3036.factoryResult')}</Text>
+            <div style={controlStyle}>
+              <Text style={{ fontSize: 13 }}>{factoryResult}</Text>
+            </div>
+            <Button
+              size="small"
+              onClick={handleFactoryGetMode}
+              style={buttonStyle}
+            >
+              {t('gh3036.factoryGet')}
             </Button>
           </div>
         </Col>

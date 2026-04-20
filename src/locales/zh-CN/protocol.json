@@ -206,6 +206,20 @@
       "hrv": "HRV",
       "hsm": "HSM",
       "fpbp": "FPBP"
-    }
+    },
+    "factoryModes": {
+      "chipInit": "CHIP_INIT",
+      "chipUid": "CHIP_UID",
+      "baseNoise": "BASE_NOISE",
+      "ppgNoise": "PPG_NOISE",
+      "lpctr": "LPCTR",
+      "lplctr": "LPLCTR"
+    },
+    "factoryMode": "产测模式",
+    "factoryModeSelectPlaceholder": "选择产测模式",
+    "factorySet": "设置",
+    "factoryResult": "产测结果",
+    "factoryGet": "获取",
+    "factoryResultSuccess": "产测结果: {{value}}"
   }
 }

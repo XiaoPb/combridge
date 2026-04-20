@@ -88,7 +88,7 @@ interface Gh3036State {
     configPath: string;
     selectedFunctions: string[];
     isRunning: boolean;
-    factoryMode: string[];
+    factoryMode: string;
     factoryResult: string;
     version: string;
   };
@@ -215,7 +215,7 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     configPath: '',
     selectedFunctions: ['adt', 'hr', 'hrv', 'hsm', 'fpbp'],
     isRunning: false,
-    factoryMode: [],
+    factoryMode: '',
     factoryResult: '-',
     version: '-',
   },

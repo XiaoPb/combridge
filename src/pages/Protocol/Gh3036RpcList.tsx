@@ -146,40 +146,36 @@ const Gh3036RpcList: React.FC = () => {
   };
 
   const handleFactorySetMode = async () => {
-    if (rpcConfig.factoryMode.length === 0) {
+    if (!rpcConfig.factoryMode) {
       message.error(t('gh3036.factoryModeSelectPlaceholder'));
       return;
     }
-    const modeBits = rpcConfig.factoryMode.reduce((acc, mode) => {
-      const bitMap: Record<string, number> = {
-        chipInit: 0x02,
-        chipUid: 0x04,
-        baseNoise: 0x08,
-        ppgNoise: 0x10,
-        lpctr: 0x20,
-        lplctr: 0x40,
-      };
-      return acc | (bitMap[mode] || 0);
-    }, 0);
+    const bitMap: Record<string, number> = {
+      chipInit: 0x02,
+      chipUid: 0x04,
+      baseNoise: 0x08,
+      ppgNoise: 0x10,
+      lpctr: 0x20,
+      lplctr: 0x40,
+    };
+    const modeBits = bitMap[rpcConfig.factoryMode] || 0;
     await handleExecuteRpc('FS', [modeBits.toString()]);
   };
 
   const handleFactoryGetMode = async () => {
-    if (rpcConfig.factoryMode.length === 0) {
+    if (!rpcConfig.factoryMode) {
       message.error(t('gh3036.factoryModeSelectPlaceholder'));
       return;
     }
-    const modeBits = rpcConfig.factoryMode.reduce((acc, mode) => {
-      const bitMap: Record<string, number> = {
-        chipInit: 0x02,
-        chipUid: 0x04,
-        baseNoise: 0x08,
-        ppgNoise: 0x10,
-        lpctr: 0x20,
-        lplctr: 0x40,
-      };
-      return acc | (bitMap[mode] || 0);
-    }, 0);
+    const bitMap: Record<string, number> = {
+      chipInit: 0x02,
+      chipUid: 0x04,
+      baseNoise: 0x08,
+      ppgNoise: 0x10,
+      lpctr: 0x20,
+      lplctr: 0x40,
+    };
+    const modeBits = bitMap[rpcConfig.factoryMode] || 0;
     const result = await executeRpc('FG', [modeBits.toString()]);
     if (result && result.length >= 2) {
       const value = (result[1] << 8) | result[0];
@@ -409,13 +405,11 @@ const Gh3036RpcList: React.FC = () => {
             <Text style={labelStyle}>{t('gh3036.factoryMode')}</Text>
             <div style={controlStyle}>
               <Select
-                mode="multiple"
                 value={rpcConfig.factoryMode}
                 onChange={(value) => setRpcConfig({ factoryMode: value })}
                 options={factoryModeOptions}
                 style={{ flex: 1 }}
                 size="small"
-                maxTagCount={3}
                 placeholder={t('gh3036.factoryModeSelectPlaceholder')}
               />
             </div>

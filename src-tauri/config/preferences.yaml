@@ -13,3 +13,13 @@ ble:
   configCollapsed: false
   gattCollapsed: false
   panelCollapsed: false
+waveform:
+  displayRows: 20
+  refreshInterval: 100
+  sidebarCollapsed: false
+gh3036Channel:
+  connectionType: ble
+  serialPort: ''
+  bleDevice: BluetoothLE#BluetoothLE28:d0:43:5d:73:9b-cb:18:17:33:01:3a
+  txChar: 00000004-0000-1000-8000-00805f9b34fb
+  rxChar: 00000003-0000-1000-8000-00805f9b34fb

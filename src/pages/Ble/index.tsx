@@ -71,6 +71,7 @@ const BlePage: React.FC = () => {
   const processedNotificationIds = useRef<Set<string>>(new Set());
   const logContainerRefs = useRef<Record<string, TextAreaRef>>({});
   const lastLogCountRef = useRef<Record<string, number>>({});
+  const discoveringDevicesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     loadPreferences()
@@ -137,10 +138,16 @@ const BlePage: React.FC = () => {
     const conn = connections.find((c) => c.address === currentDevice && c.isConnected);
     if (!conn) return;
 
+    if (discoveringDevicesRef.current.has(currentDevice)) return;
+
     const existing = deviceTabs[currentDevice];
-    if (existing && !existing.discoveringServices && existing.services.length === 0) {
+    if (existing && existing.services.length > 0) return;
+
+    discoveringDevicesRef.current.add(currentDevice);
+
+    if (existing) {
       updateDeviceTab(currentDevice, { discoveringServices: true });
-    } else if (!existing) {
+    } else {
       setDeviceTabs({
         ...deviceTabs,
         [currentDevice]: {
@@ -159,6 +166,7 @@ const BlePage: React.FC = () => {
 
     discoverServices(currentDevice)
       .then((svcList) => {
+        discoveringDevicesRef.current.delete(currentDevice);
         if (!svcList) return;
         
         const allCharacteristics: BleCharacteristic[] = [];
@@ -178,6 +186,7 @@ const BlePage: React.FC = () => {
         });
       })
       .catch(() => {
+        discoveringDevicesRef.current.delete(currentDevice);
         updateDeviceTab(currentDevice, { discoveringServices: false });
       });
   }, [currentDevice, connections, discoverServices, deviceTabs, setDeviceTabs, updateDeviceTab]);

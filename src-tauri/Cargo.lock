@@ -570,6 +570,7 @@ dependencies = [
  "tokio-tungstenite",
  "tracing",
  "tracing-appender",
+ "tracing-log",
  "tracing-subscriber",
  "uuid",
  "winapi",

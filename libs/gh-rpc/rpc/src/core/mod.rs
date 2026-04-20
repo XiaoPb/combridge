@@ -1212,7 +1212,7 @@ where
     /// ```
     pub fn send(&mut self, key: &str, data: &[u8]) -> Result<HeaplessVec<u8, GHRPC_FRAME_SIZE>, RpcError> {
         log::debug!("[RPC] send() 开始: key={}, data_len={}", key, data.len());
-        let frame = self.build_frame(key, data, true, false)?;
+        let frame = self.build_frame(key, data, true, true)?;
         log::debug!("[RPC] send() 构建安全帧完成, len={}", frame.len());
         (self.send)(&frame);
         log::info!("[RPC] send() 发送完成: key={}", key);
@@ -1649,7 +1649,7 @@ where
         let key = core::str::from_utf8(&key_buf)
             .map_err(|_| RpcError::FormatError)?;
         
-        let frame = self.build_frame(key, data, false, false)?;
+        let frame = self.build_frame(key, data, false, true)?;
         (self.send)(&frame);
         Ok(())
     }

@@ -8,55 +8,26 @@ import { open } from '@tauri-apps/plugin-dialog';
 
 const { Text } = Typography;
 
-const DEFAULT_TX_UUID = '00000004-0000-1000-8000-00805f9b34fb';
-const DEFAULT_RX_UUID = '00000003-0000-1000-8000-00805f9b34fb';
-
 const Gh3036ChannelConfig: React.FC = () => {
   const { t } = useTranslation('protocol');
   const { token } = theme.useToken();
   const {
-    txChannel,
-    rxChannel,
+    channelConfig,
     csvConfig,
+    loadChannelConfig,
+    updateChannelConfig,
     configureTxChannel,
     configureRxChannel,
     updateCsvConfig,
   } = useGh3036Store();
   const connectedDevices = useConnectedDevices();
 
-  const [connectionType, setConnectionType] = useState<'serial' | 'ble'>(
-    txChannel?.channel_type === 'Ble' || rxChannel?.channel_type === 'Ble' ? 'ble' : 'serial'
-  );
-  
-  const [serialPort, setSerialPort] = useState<string>('');
-  
-  const [bleDevice, setBleDevice] = useState<string>('');
-  const [txChar, setTxChar] = useState(txChannel?.characteristic_uuid || DEFAULT_TX_UUID);
-  const [rxChar, setRxChar] = useState(rxChannel?.characteristic_uuid || DEFAULT_RX_UUID);
-
   const [csvEnabled, setCsvEnabled] = useState(csvConfig.enabled);
   const [csvDir, setCsvDir] = useState(csvConfig.output_dir);
 
   useEffect(() => {
-    if (txChannel?.channel_type === 'Serial' && rxChannel?.channel_type === 'Serial') {
-      if (txChannel.device_id === rxChannel.device_id) {
-        setSerialPort(txChannel.device_id);
-      }
-    }
-    if (txChannel?.channel_type === 'Ble' || rxChannel?.channel_type === 'Ble') {
-      setConnectionType('ble');
-      if (txChannel?.channel_type === 'Ble') {
-        setBleDevice(txChannel.device_id);
-        setTxChar(txChannel.characteristic_uuid || DEFAULT_TX_UUID);
-      }
-      if (rxChannel?.channel_type === 'Ble') {
-        if (!txChannel || txChannel.channel_type !== 'Ble') {
-          setBleDevice(rxChannel.device_id);
-        }
-        setRxChar(rxChannel.characteristic_uuid || DEFAULT_RX_UUID);
-      }
-    }
-  }, [txChannel, rxChannel]);
+    loadChannelConfig();
+  }, [loadChannelConfig]);
 
   useEffect(() => {
     setCsvEnabled(csvConfig.enabled);
@@ -72,39 +43,41 @@ const Gh3036ChannelConfig: React.FC = () => {
     .map((d) => ({ label: d.name, value: d.id }));
 
   const handleSaveSerialChannel = async () => {
-    if (!serialPort) {
+    if (!channelConfig.serialPort) {
       message.error(t('gh3036.selectSerialPort'));
       return;
     }
     
-    const txSuccess = await configureTxChannel('serial', serialPort);
+    const txSuccess = await configureTxChannel('serial', channelConfig.serialPort);
     if (!txSuccess) return;
     
-    const rxSuccess = await configureRxChannel('serial', serialPort);
+    const rxSuccess = await configureRxChannel('serial', channelConfig.serialPort);
     if (rxSuccess) {
+      await updateChannelConfig({ connectionType: 'serial' });
       message.success(t('gh3036.channelSaved'));
     }
   };
 
   const handleSaveBleChannel = async () => {
-    if (!bleDevice) {
+    if (!channelConfig.bleDevice) {
       message.error(t('gh3036.selectBleDevice'));
       return;
     }
-    if (!txChar) {
+    if (!channelConfig.txChar) {
       message.error(t('gh3036.inputTxUuid'));
       return;
     }
-    if (!rxChar) {
+    if (!channelConfig.rxChar) {
       message.error(t('gh3036.inputRxUuid'));
       return;
     }
     
-    const txSuccess = await configureTxChannel('ble', bleDevice, txChar);
+    const txSuccess = await configureTxChannel('ble', channelConfig.bleDevice, channelConfig.txChar);
     if (!txSuccess) return;
     
-    const rxSuccess = await configureRxChannel('ble', bleDevice, rxChar);
+    const rxSuccess = await configureRxChannel('ble', channelConfig.bleDevice, channelConfig.rxChar);
     if (rxSuccess) {
+      await updateChannelConfig({ connectionType: 'ble' });
       message.success(t('gh3036.channelSaved'));
     }
   };
@@ -147,8 +120,8 @@ const Gh3036ChannelConfig: React.FC = () => {
           <Space direction="vertical" style={{ width: '100%' }} size={12}>
             <Select
               size="small"
-              value={connectionType}
-              onChange={setConnectionType}
+              value={channelConfig.connectionType}
+              onChange={(value) => updateChannelConfig({ connectionType: value })}
               options={[
                 { label: t('gh3036.serialConnection'), value: 'serial' },
                 { label: t('gh3036.bleConnection'), value: 'ble' },
@@ -156,15 +129,15 @@ const Gh3036ChannelConfig: React.FC = () => {
               style={{ width: '100%' }}
             />
             
-            {connectionType === 'serial' ? (
+            {channelConfig.connectionType === 'serial' ? (
               <Space direction="vertical" style={{ width: '100%' }} size={8}>
                 <Text type="secondary" style={{ fontSize: 12 }}>
                   {t('gh3036.serialHint')}
                 </Text>
                 <Select
                   size="small"
-                  value={serialPort}
-                  onChange={setSerialPort}
+                  value={channelConfig.serialPort}
+                  onChange={(value) => updateChannelConfig({ serialPort: value })}
                   options={serialOptions}
                   placeholder={t('gh3036.selectSerialPort')}
                   style={{ width: '100%' }}
@@ -180,8 +153,8 @@ const Gh3036ChannelConfig: React.FC = () => {
                 </Text>
                 <Select
                   size="small"
-                  value={bleDevice}
-                  onChange={setBleDevice}
+                  value={channelConfig.bleDevice}
+                  onChange={(value) => updateChannelConfig({ bleDevice: value })}
                   options={bleOptions}
                   placeholder={t('gh3036.selectBleDevice')}
                   style={{ width: '100%' }}
@@ -191,8 +164,8 @@ const Gh3036ChannelConfig: React.FC = () => {
                   <Text style={{ fontSize: 12, width: 60 }}>{t('gh3036.txUuid')}</Text>
                   <Input
                     size="small"
-                    value={txChar}
-                    onChange={(e) => setTxChar(e.target.value)}
+                    value={channelConfig.txChar}
+                    onChange={(e) => updateChannelConfig({ txChar: e.target.value })}
                     placeholder={t('gh3036.charUuidPlaceholder')}
                     style={{ flex: 1 }}
                   />
@@ -201,8 +174,8 @@ const Gh3036ChannelConfig: React.FC = () => {
                   <Text style={{ fontSize: 12, width: 60 }}>{t('gh3036.rxUuid')}</Text>
                   <Input
                     size="small"
-                    value={rxChar}
-                    onChange={(e) => setRxChar(e.target.value)}
+                    value={channelConfig.rxChar}
+                    onChange={(e) => updateChannelConfig({ rxChar: e.target.value })}
                     placeholder={t('gh3036.charUuidPlaceholder')}
                     style={{ flex: 1 }}
                   />

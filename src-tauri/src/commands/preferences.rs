@@ -101,3 +101,59 @@ pub async fn update_ble_preferences(
     
     Ok(())
 }
+
+#[tauri::command]
+pub async fn update_waveform_preferences(
+    persistence: State<'_, StatePersistenceRef>,
+    display_rows: u32,
+    refresh_interval: u32,
+    sidebar_collapsed: bool,
+) -> Result<()> {
+    debug!("更新波形偏好设置");
+    
+    let persistence = persistence.inner().read().await;
+    let mut prefs = persistence.load_preferences().await.unwrap_or_else(|_| {
+        Preferences::default()
+    });
+    
+    prefs.waveform.display_rows = display_rows;
+    prefs.waveform.refresh_interval = refresh_interval;
+    prefs.waveform.sidebar_collapsed = sidebar_collapsed;
+    
+    persistence.save_preferences(&prefs).await.map_err(|e| {
+        error!("保存偏好设置失败: {}", e);
+        e
+    })?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn update_gh3036_channel_preferences(
+    persistence: State<'_, StatePersistenceRef>,
+    connection_type: String,
+    serial_port: String,
+    ble_device: String,
+    tx_char: String,
+    rx_char: String,
+) -> Result<()> {
+    debug!("更新GH3036通道偏好设置");
+    
+    let persistence = persistence.inner().read().await;
+    let mut prefs = persistence.load_preferences().await.unwrap_or_else(|_| {
+        Preferences::default()
+    });
+    
+    prefs.gh3036_channel.connection_type = connection_type;
+    prefs.gh3036_channel.serial_port = serial_port;
+    prefs.gh3036_channel.ble_device = ble_device;
+    prefs.gh3036_channel.tx_char = tx_char;
+    prefs.gh3036_channel.rx_char = rx_char;
+    
+    persistence.save_preferences(&prefs).await.map_err(|e| {
+        error!("保存偏好设置失败: {}", e);
+        e
+    })?;
+    
+    Ok(())
+}

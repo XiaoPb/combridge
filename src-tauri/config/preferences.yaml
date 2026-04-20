@@ -11,5 +11,5 @@ ble:
   inputFormat: text
   withoutResponse: false
   configCollapsed: false
-  gattCollapsed: true
+  gattCollapsed: false
   panelCollapsed: false

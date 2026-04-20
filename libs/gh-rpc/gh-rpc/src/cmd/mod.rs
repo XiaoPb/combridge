@@ -54,6 +54,10 @@ pub const CMD_SET_WORK_MODE: &str = "GHSetWorkModeCmd";
 pub const CMD_LOW_POWER: &str = "gh_low_power_cmd";
 /// 寄存器位域写入命令键（别名）
 pub const CMD_REGS_BIT_FIELD_WRITE: &str = "GH3X_RegsBitFieldWriteCmd";
+/// 产测模式设置命令键
+pub const CMD_FACTORY_SET_MODE: &str = "F_SetMode";
+/// 产测模式获取命令键
+pub const CMD_FACTORY_GET_MODE: &str = "F_GetMode";
 
 /// 硬复位控制类型
 pub const CHIP_CTRL_HARD_RESET: u8 = 0x5A;

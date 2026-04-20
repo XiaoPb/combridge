@@ -25,7 +25,7 @@ use super::types::{Gh3036EventData, Gh3036FrameData, FuncFrame, FrameDecoder, Gh
 use gh_rpc::cmd::{CMD_GET_VERSION, CMD_REGS_WRITE, CMD_REGS_READ, CMD_CHIP_CTRL, 
                   CMD_SW_FUNCTION, CMD_DOWNLOAD_CONFIG, CMD_TIMESTAMP_SET, 
                   CMD_TIME_SET, CMD_SET_WORK_MODE, CMD_LOW_POWER,
-                  CMD_REG_BIT_FIELD_WRITE};
+                  CMD_REG_BIT_FIELD_WRITE, CMD_FACTORY_SET_MODE, CMD_FACTORY_GET_MODE};
 use rpc::{RpcCore, RpcConfig, InvokeNode, unpack, UnpackValue};
 
 const GH_PRO_TYPE_UNSIGNED: u8 = 1;
@@ -808,6 +808,8 @@ impl Gh3036Manager {
             "M" => self.execute_set_work_mode_cmd_async(params).await,
             "TS" => self.execute_timestamp_set_cmd_async(params).await,
             "TM" => self.execute_time_set_cmd_async(params).await,
+            "FS" => self.execute_factory_set_mode_cmd_async(params).await,
+            "FG" => self.execute_factory_get_mode_cmd_async(params).await,
             _ => {
                 error!("GH3036 execute_rpc 不支持的命令键: {}", command_key);
                 Err(format!("不支持的命令键: {}", command_key))
@@ -850,7 +852,7 @@ impl Gh3036Manager {
         info!("寄存器写入: {} 个寄存器", regs.len() / 2);
 
         let mut data = Vec::new();
-        data.push(type_header(GH_PRO_TYPE_UNSIGNED, false, 4, true, false));
+        data.push(type_header(GH_PRO_TYPE_UNSIGNED, true, 4, true, false));
         data.push((regs.len() / 2) as u8);
         for i in (0..regs.len()).step_by(2) {
             data.extend_from_slice(&regs[i].to_le_bytes());
@@ -1080,6 +1082,47 @@ impl Gh3036Manager {
         
         self.send_command(CMD_TIME_SET, &data).await?;
         Ok(vec![])
+    }
+
+    async fn execute_factory_set_mode_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
+        let factory_mode: u8 = params
+            .first()
+            .and_then(|s| u8::from_str_radix(s.trim_start_matches("0x"), 16).ok())
+            .ok_or("缺少产测模式参数")?;
+
+        info!("产测模式设置: mode=0x{:02X}", factory_mode);
+
+        let data = [type_header(GH_PRO_TYPE_UNSIGNED, false, 3, true, false), factory_mode];
+        self.send_command(CMD_FACTORY_SET_MODE, &data).await?;
+        Ok(vec![])
+    }
+
+    async fn execute_factory_get_mode_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
+        let factory_mode: u8 = params
+            .first()
+            .and_then(|s| u8::from_str_radix(s.trim_start_matches("0x"), 16).ok())
+            .ok_or("缺少产测模式参数")?;
+
+        info!("产测模式结果获取: mode=0x{:02X}", factory_mode);
+
+        let data = [type_header(GH_PRO_TYPE_UNSIGNED, false, 3, true, false), factory_mode];
+        let param_data = self.call_command(CMD_FACTORY_GET_MODE, &data).await?;
+        info!("产测模式结果响应: {:04X?}", param_data);
+        
+        let values = unpack(&param_data, "<u16*>").map_err(|e| format!("解包失败: {:?}", e))?;
+        info!("产测模式结果解包: {:?}", values);
+        
+        match values.values.first() {
+            Some(UnpackValue::U16Array(arr)) => {
+                let mut result = Vec::new();
+                for &val in arr.iter() {
+                    result.extend_from_slice(&val.to_le_bytes());
+                    info!("产测结果值: 0x{:04X}", val);
+                }
+                Ok(result)
+            }
+            _ => Err("产测模式结果获取失败: 解包结果不是数组".into()),
+        }
     }
 
     pub fn subscribe_events(&self) -> bool {

@@ -220,6 +220,8 @@
     "factorySet": "Set",
     "factoryResult": "Factory Result",
     "factoryGet": "Get",
-    "factoryResultSuccess": "Factory result: {{value}}"
+    "factoryResultSuccess": "Factory result: {{value}}",
+    "configParsed": "Parsed {{count}} registers",
+    "configParseFailed": "Config parse failed: {{error}}"
   }
 }

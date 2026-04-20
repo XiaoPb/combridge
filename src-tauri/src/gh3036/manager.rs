@@ -1137,6 +1137,93 @@ impl Gh3036Manager {
     pub fn get_library_status(&self) -> (bool, bool) {
         (true, self.is_initialized())
     }
+
+    pub async fn load_config_file(&self, file_path: &str) -> Result<Vec<String>, String> {
+        use std::fs;
+        use std::path::Path;
+
+        info!("加载配置文件: {}", file_path);
+
+        let path = Path::new(file_path);
+        if !path.exists() {
+            return Err(format!("文件不存在: {}", file_path));
+        }
+
+        let extension = path.extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_lowercase())
+            .unwrap_or_default();
+
+        if extension != "config" && extension != "ini" {
+            return Err(format!("不支持的文件类型: {}", extension));
+        }
+
+        let content = fs::read_to_string(path)
+            .map_err(|e| format!("读取文件失败: {}", e))?;
+
+        let regs = Self::parse_config_registers(&content)?;
+        
+        info!("解析到 {} 个寄存器", regs.len());
+        
+        let reg_strings: Vec<String> = regs.iter()
+            .map(|(addr, value)| format!("0x{:04X},0x{:04X}", addr, value))
+            .collect();
+
+        Ok(reg_strings)
+    }
+
+    fn parse_config_registers(content: &str) -> Result<Vec<(u16, u16)>, String> {
+        let mut regs = Vec::new();
+        let mut in_register_list = false;
+
+        for line in content.lines() {
+            let trimmed = line.trim();
+            
+            if trimmed.starts_with('[') && trimmed.ends_with(']') {
+                let section = trimmed[1..trimmed.len()-1].to_lowercase();
+                in_register_list = section == "register_list";
+                continue;
+            }
+
+            if !in_register_list {
+                continue;
+            }
+
+            if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("#") {
+                continue;
+            }
+
+            if trimmed.starts_with('{') && trimmed.contains('}') {
+                let inner = trimmed.trim_start_matches('{').trim_end_matches('}');
+                let parts: Vec<&str> = inner.split(',')
+                    .map(|s| s.trim())
+                    .collect();
+
+                if parts.len() >= 2 {
+                    let addr_str = parts[0].trim_start_matches("0x").trim_start_matches("0X");
+                    let value_str = parts[1].split("//")
+                        .next()
+                        .unwrap_or("")
+                        .trim()
+                        .trim_start_matches("0x")
+                        .trim_start_matches("0X");
+
+                    if let (Ok(addr), Ok(value)) = (
+                        u16::from_str_radix(addr_str, 16),
+                        u16::from_str_radix(value_str, 16)
+                    ) {
+                        regs.push((addr, value));
+                    }
+                }
+            }
+        }
+
+        if regs.is_empty() {
+            return Err("未找到寄存器配置".to_string());
+        }
+
+        Ok(regs)
+    }
 }
 
 impl Drop for Gh3036Manager {

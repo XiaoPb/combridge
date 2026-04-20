@@ -86,6 +86,10 @@ export const gh3036Api = {
   async getLibraryStatus(): Promise<LibraryStatus> {
     return invoke<LibraryStatus>('gh3036_get_library_status');
   },
+
+  async loadConfigFile(filePath: string): Promise<string[]> {
+    return invoke<string[]>('gh3036_load_config_file', { filePath });
+  },
 };
 
 export type { Gh3036FrameData };

@@ -369,9 +369,15 @@ impl GattClient {
             }
         }
 
-        char.write(data)
-            .await
-            .map_err(|e| ComBridgeError::ble(format!("写入失败: {}", e)))?;
+        if let Err(e) = char.write(data).await {
+            let error_str = format!("{}", e);
+            if error_str.contains("已关闭") || error_str.contains("closed") || error_str.contains("disconnected") {
+                warn!("[{}] 设备已断开，写入失败: {}", extract_short_mac(&self.address), e);
+            } else {
+                error!("[{}] 写入特征失败: {}", extract_short_mac(&self.address), e);
+            }
+            return Err(ComBridgeError::ble(format!("写入失败: {}", e)));
+        }
 
         Ok(())
     }
@@ -400,9 +406,15 @@ impl GattClient {
             }
         }
 
-        char.write_without_response(data)
-            .await
-            .map_err(|e| ComBridgeError::ble(format!("写入失败: {}", e)))?;
+        if let Err(e) = char.write_without_response(data).await {
+            let error_str = format!("{}", e);
+            if error_str.contains("已关闭") || error_str.contains("closed") || error_str.contains("disconnected") {
+                warn!("[{}] 设备已断开，写入失败: {}", extract_short_mac(&self.address), e);
+            } else {
+                error!("[{}] 写入特征失败: {}", extract_short_mac(&self.address), e);
+            }
+            return Err(ComBridgeError::ble(format!("写入失败: {}", e)));
+        }
 
         Ok(())
     }

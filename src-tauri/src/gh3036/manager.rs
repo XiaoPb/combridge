@@ -476,7 +476,14 @@ impl Gh3036Manager {
                 
                 match result {
                     Ok(_) => debug!("[RPC发送] 发送成功: {} bytes", data_vec.len()),
-                    Err(e) => error!("[RPC发送] 发送失败: {}", e),
+                    Err(e) => {
+                        let error_str = format!("{}", e);
+                        if error_str.contains("已关闭") || error_str.contains("closed") || error_str.contains("disconnected") {
+                            warn!("[RPC发送] 设备已断开，发送失败");
+                        } else {
+                            error!("[RPC发送] 发送失败: {}", e);
+                        }
+                    }
                 }
             });
         });

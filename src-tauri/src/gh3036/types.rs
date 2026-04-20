@@ -10,6 +10,7 @@ pub use gh_rpc::cmd::{
     CMD_CHIP_CTRL, CMD_SW_FUNCTION, CMD_DOWNLOAD_CONFIG, CMD_REGS_LIST_WRITE,
     CMD_FW_UPDATE, CMD_GET_CHIP_LINK_STATUS, CMD_TIMESTAMP_SET, CMD_TIME_SET,
     CMD_SET_WORK_MODE, CMD_LOW_POWER, CMD_REGS_BIT_FIELD_WRITE,
+    CMD_FACTORY_SET_MODE, CMD_FACTORY_GET_MODE,
     VER_TYPE_FW, VER_TYPE_DEMO, VER_TYPE_BOOTLOADER, VER_TYPE_PROTOCOL,
     VER_TYPE_VIRTUAL_REG, VER_TYPE_DRV, VER_TYPE_CHIP, VER_TYPE_BLE, VER_TYPE_ALGO,
     VER_TYPE_FUNC_SUPPORT,
@@ -22,6 +23,21 @@ pub use rpc::PackHeader;
 
 pub const GH_ACC_AXIS_NUM: usize = 3;
 pub const GH_GYRO_AXIS_NUM: usize = 3;
+
+pub const FACTORY_TEST_MODE_CHIP_INIT_OFFSET: u8 = 1;
+pub const FACTORY_TEST_MODE_CHIP_UID_OFFSET: u8 = 2;
+pub const FACTORY_TEST_MODE_BASE_NOISE_OFFSET: u8 = 3;
+pub const FACTORY_TEST_MODE_PPG_NOISE_OFFSET: u8 = 4;
+pub const FACTORY_TEST_MODE_LPCTR_OFFSET: u8 = 5;
+pub const FACTORY_TEST_MODE_LPLCTR_OFFSET: u8 = 6;
+
+pub const FACTORY_TEST_MODE_NONE: u8 = 0;
+pub const FACTORY_TEST_MODE_CHIP_INIT: u8 = 1 << FACTORY_TEST_MODE_CHIP_INIT_OFFSET;
+pub const FACTORY_TEST_MODE_CHIP_UID: u8 = 1 << FACTORY_TEST_MODE_CHIP_UID_OFFSET;
+pub const FACTORY_TEST_MODE_BASE_NOISE: u8 = 1 << FACTORY_TEST_MODE_BASE_NOISE_OFFSET;
+pub const FACTORY_TEST_MODE_PPG_NOISE: u8 = 1 << FACTORY_TEST_MODE_PPG_NOISE_OFFSET;
+pub const FACTORY_TEST_MODE_LPCTR: u8 = 1 << FACTORY_TEST_MODE_LPCTR_OFFSET;
+pub const FACTORY_TEST_MODE_LPLCTR: u8 = 1 << FACTORY_TEST_MODE_LPLCTR_OFFSET;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(i32)]
@@ -420,6 +436,32 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
                     param_type: "i8".to_string(),
                     description: "时区偏移（小时）".to_string(),
                     default_value: Some("8".to_string()),
+                },
+            ],
+        },
+        RpcCommand {
+            key: "FS".to_string(),
+            name: CMD_FACTORY_SET_MODE.to_string(),
+            description: "产测模式设置".to_string(),
+            params: vec![
+                RpcParam {
+                    name: "factoryMode".to_string(),
+                    param_type: "u8".to_string(),
+                    description: "产测模式（位掩码：0x02=CHIP_INIT, 0x04=CHIP_UID, 0x08=BASE_NOISE, 0x10=PPG_NOISE, 0x20=LPCTR, 0x40=LPLCTR）".to_string(),
+                    default_value: None,
+                },
+            ],
+        },
+        RpcCommand {
+            key: "FG".to_string(),
+            name: CMD_FACTORY_GET_MODE.to_string(),
+            description: "产测模式结果获取".to_string(),
+            params: vec![
+                RpcParam {
+                    name: "factoryMode".to_string(),
+                    param_type: "u8".to_string(),
+                    description: "产测模式（位掩码）".to_string(),
+                    default_value: None,
                 },
             ],
         },

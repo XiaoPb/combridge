@@ -189,10 +189,9 @@
     "extendedCommandPlaceholder": "输入扩展指令",
     "send": "发送",
     "workModes": {
-      "mcuOnline": "Mcu Online Work Mode",
-      "mcuOffline": "Mcu Offline Work Mode",
-      "dspOnline": "Dsp Online Work Mode",
-      "dspOffline": "Dsp Offline Work Mode"
+      "mcuOnline": "MCU在线模式",
+      "mcuOffline": "MCU离线模式",
+      "mptTest": "量产测试模式"
     },
     "commands": {
       "idle": "IDLE",

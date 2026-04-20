@@ -12,7 +12,7 @@ const Gh3036RpcList: React.FC = () => {
   const { token } = useToken();
   const { executeRpc, txChannel } = useGh3036Store();
 
-  const [workMode, setWorkMode] = useState<string>('mcuOnline');
+  const [workMode, setWorkMode] = useState<string>('0');
   const [version, setVersion] = useState<string>(t('gh3036.versionNone'));
   const [command, setCommand] = useState<string>('idle');
   const [writeRegAddr, setWriteRegAddr] = useState<string>('0000');
@@ -25,10 +25,9 @@ const Gh3036RpcList: React.FC = () => {
   const [isRunning, setIsRunning] = useState<boolean>(false);
 
   const workModeOptions = [
-    { value: 'mcuOnline', label: t('gh3036.workModes.mcuOnline') },
-    { value: 'mcuOffline', label: t('gh3036.workModes.mcuOffline') },
-    { value: 'dspOnline', label: t('gh3036.workModes.dspOnline') },
-    { value: 'dspOffline', label: t('gh3036.workModes.dspOffline') },
+    { value: '0', label: t('gh3036.workModes.mcuOnline') },
+    { value: '1', label: t('gh3036.workModes.mcuOffline') },
+    { value: '2', label: t('gh3036.workModes.mptTest') },
   ];
 
   const commandOptions = [

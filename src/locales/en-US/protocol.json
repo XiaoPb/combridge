@@ -189,10 +189,9 @@
     "extendedCommandPlaceholder": "Enter extended command",
     "send": "Send",
     "workModes": {
-      "mcuOnline": "Mcu Online Work Mode",
-      "mcuOffline": "Mcu Offline Work Mode",
-      "dspOnline": "Dsp Online Work Mode",
-      "dspOffline": "Dsp Offline Work Mode"
+      "mcuOnline": "MCU Online Mode",
+      "mcuOffline": "MCU Offline Mode",
+      "mptTest": "MPT Test Mode"
     },
     "commands": {
       "idle": "IDLE",

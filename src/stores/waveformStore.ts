@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import type { ParserConfig, WaveformBufferConfig, WaveformData, WaveformStatus } from '../api/waveform';
 import { waveformApi } from '../api/waveform';
+import { preferencesApi, type WaveformPreferences } from '../api/tauri';
+
+interface WaveformPreferencesState {
+  displayRows: number;
+  refreshInterval: number;
+  sidebarCollapsed: boolean;
+}
 
 interface WaveformState {
   buffers: string[];
@@ -12,6 +19,7 @@ interface WaveformState {
   displayRows: number;
   refreshInterval: number;
   isRunning: boolean;
+  preferences: WaveformPreferencesState;
 }
 
 interface WaveformActions {
@@ -29,6 +37,8 @@ interface WaveformActions {
   startRefresh: () => void;
   stopRefresh: () => void;
   clearError: () => void;
+  loadPreferences: () => Promise<void>;
+  updatePreferences: (updates: Partial<WaveformPreferencesState>) => Promise<void>;
 }
 
 export type WaveformStore = WaveformState & WaveformActions;
@@ -46,6 +56,12 @@ const DEFAULT_PARSER_CONFIG: ParserConfig = {
   trim_whitespace: true,
 };
 
+const DEFAULT_PREFERENCES: WaveformPreferencesState = {
+  displayRows: 20,
+  refreshInterval: 100,
+  sidebarCollapsed: false,
+};
+
 export const useWaveformStore = create<WaveformStore>((set, get) => ({
   buffers: [],
   currentBuffer: null,
@@ -56,6 +72,7 @@ export const useWaveformStore = create<WaveformStore>((set, get) => ({
   displayRows: 500,
   refreshInterval: 33,
   isRunning: false,
+  preferences: DEFAULT_PREFERENCES,
 
   createBuffer: async (bufferId: string, config: WaveformBufferConfig) => {
     set({ isLoading: true, error: null });
@@ -169,6 +186,46 @@ export const useWaveformStore = create<WaveformStore>((set, get) => ({
 
   clearError: () => {
     set({ error: null });
+  },
+
+  loadPreferences: async () => {
+    try {
+      const prefs = await preferencesApi.get();
+      if (prefs.waveform) {
+        const waveformPrefs: WaveformPreferencesState = {
+          displayRows: prefs.waveform.display_rows,
+          refreshInterval: prefs.waveform.refresh_interval,
+          sidebarCollapsed: prefs.waveform.sidebar_collapsed,
+        };
+        set({
+          preferences: waveformPrefs,
+          displayRows: waveformPrefs.displayRows,
+          refreshInterval: waveformPrefs.refreshInterval,
+        });
+      }
+    } catch (err) {
+      console.error('加载波形偏好设置失败:', err);
+    }
+  },
+
+  updatePreferences: async (updates: Partial<WaveformPreferencesState>) => {
+    const state = get();
+    const newPreferences = { ...state.preferences, ...updates };
+    set({
+      preferences: newPreferences,
+      displayRows: newPreferences.displayRows,
+      refreshInterval: newPreferences.refreshInterval,
+    });
+    try {
+      const apiPrefs: WaveformPreferences = {
+        display_rows: newPreferences.displayRows,
+        refresh_interval: newPreferences.refreshInterval,
+        sidebar_collapsed: newPreferences.sidebarCollapsed,
+      };
+      await preferencesApi.updateWaveform(apiPrefs);
+    } catch (err) {
+      console.error('保存波形偏好设置失败:', err);
+    }
   },
 }));
 

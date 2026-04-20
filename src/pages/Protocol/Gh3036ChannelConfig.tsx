@@ -8,6 +8,9 @@ import { open } from '@tauri-apps/plugin-dialog';
 
 const { Text } = Typography;
 
+const DEFAULT_TX_UUID = '00000004-0000-1000-8000-00805f9b34fb';
+const DEFAULT_RX_UUID = '00000003-0000-1000-8000-00805f9b34fb';
+
 const Gh3036ChannelConfig: React.FC = () => {
   const { t } = useTranslation('protocol');
   const { token } = theme.useToken();
@@ -28,8 +31,8 @@ const Gh3036ChannelConfig: React.FC = () => {
   const [serialPort, setSerialPort] = useState<string>('');
   
   const [bleDevice, setBleDevice] = useState<string>('');
-  const [txChar, setTxChar] = useState(txChannel?.characteristic_uuid || '');
-  const [rxChar, setRxChar] = useState(rxChannel?.characteristic_uuid || '');
+  const [txChar, setTxChar] = useState(txChannel?.characteristic_uuid || DEFAULT_TX_UUID);
+  const [rxChar, setRxChar] = useState(rxChannel?.characteristic_uuid || DEFAULT_RX_UUID);
 
   const [csvEnabled, setCsvEnabled] = useState(csvConfig.enabled);
   const [csvDir, setCsvDir] = useState(csvConfig.output_dir);
@@ -44,13 +47,13 @@ const Gh3036ChannelConfig: React.FC = () => {
       setConnectionType('ble');
       if (txChannel?.channel_type === 'Ble') {
         setBleDevice(txChannel.device_id);
-        setTxChar(txChannel.characteristic_uuid || '');
+        setTxChar(txChannel.characteristic_uuid || DEFAULT_TX_UUID);
       }
       if (rxChannel?.channel_type === 'Ble') {
         if (!txChannel || txChannel.channel_type !== 'Ble') {
           setBleDevice(rxChannel.device_id);
         }
-        setRxChar(rxChannel.characteristic_uuid || '');
+        setRxChar(rxChannel.characteristic_uuid || DEFAULT_RX_UUID);
       }
     }
   }, [txChannel, rxChannel]);

@@ -25,6 +25,8 @@ use websocket::ConnectionPool;
 use crate::commands::waveform::WaveformManager;
 
 fn init_logger() {
+    tracing_log::LogTracer::init().expect("Failed to initialize LogTracer");
+    
     let exe_path = std::env::current_exe()
         .unwrap_or_else(|_| std::path::PathBuf::from("."));
     let exe_dir = exe_path.parent()

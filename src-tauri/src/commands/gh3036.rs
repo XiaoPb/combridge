@@ -158,3 +158,14 @@ pub async fn gh3036_get_library_status(
 ) -> Result<(bool, bool), ErrorResponse> {
     Ok(manager.get_library_status())
 }
+
+#[tauri::command]
+pub async fn gh3036_load_config_file(
+    file_path: String,
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<Vec<String>, ErrorResponse> {
+    manager
+        .load_config_file(&file_path)
+        .await
+        .map_err(|e| ComBridgeError::protocol(e).to_error_response())
+}

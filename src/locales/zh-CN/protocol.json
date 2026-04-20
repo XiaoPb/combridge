@@ -220,6 +220,8 @@
     "factorySet": "设置",
     "factoryResult": "产测结果",
     "factoryGet": "获取",
-    "factoryResultSuccess": "产测结果: {{value}}"
+    "factoryResultSuccess": "产测结果: {{value}}",
+    "configParsed": "解析到 {{count}} 个寄存器",
+    "configParseFailed": "配置解析失败: {{error}}"
   }
 }

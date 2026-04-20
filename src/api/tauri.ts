@@ -248,9 +248,25 @@ export const protocolApi = {
   },
 };
 
+export interface WaveformPreferences {
+  display_rows: number;
+  refresh_interval: number;
+  sidebar_collapsed: boolean;
+}
+
+export interface Gh3036ChannelPreferences {
+  connection_type: string;
+  serial_port: string;
+  ble_device: string;
+  tx_char: string;
+  rx_char: string;
+}
+
 export interface Preferences {
   serial: SerialPreferences;
   ble: BlePreferences;
+  waveform?: WaveformPreferences;
+  gh3036_channel?: Gh3036ChannelPreferences;
 }
 
 export const preferencesApi = {
@@ -282,6 +298,24 @@ export const preferencesApi = {
       configCollapsed: prefs.configCollapsed,
       gattCollapsed: prefs.gattCollapsed,
       panelCollapsed: prefs.panelCollapsed,
+    });
+  },
+
+  async updateWaveform(prefs: WaveformPreferences): Promise<void> {
+    await invoke<void>('update_waveform_preferences', {
+      displayRows: prefs.display_rows,
+      refreshInterval: prefs.refresh_interval,
+      sidebarCollapsed: prefs.sidebar_collapsed,
+    });
+  },
+
+  async updateGh3036Channel(prefs: Gh3036ChannelPreferences): Promise<void> {
+    await invoke<void>('update_gh3036_channel_preferences', {
+      connectionType: prefs.connection_type,
+      serialPort: prefs.serial_port,
+      bleDevice: prefs.ble_device,
+      txChar: prefs.tx_char,
+      rxChar: prefs.rx_char,
     });
   },
 };

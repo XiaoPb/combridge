@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { Card, Button, Space, InputNumber, Alert, Statistic, Switch, Layout, Tooltip } from 'antd';
 import {
   PlayCircleOutlined,
@@ -21,11 +21,6 @@ const { Sider, Content } = Layout;
 
 const RealtimeDataTab: React.FC = () => {
   const { t } = useTranslation('waveform');
-  const [displayRows, setDisplayRows] = useState(500);
-  const [refreshInterval, setRefreshInterval] = useState(33);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
-  const store = useWaveformStore();
 
   const {
     currentBuffer,
@@ -38,9 +33,14 @@ const RealtimeDataTab: React.FC = () => {
     clearBuffer,
     readData,
     refreshBuffers,
-    setDisplayRows: setStoreDisplayRows,
-    setRefreshInterval: setStoreRefreshInterval,
-  } = store;
+    displayRows,
+    refreshInterval,
+    preferences,
+    loadPreferences,
+    updatePreferences,
+    startRefresh,
+    stopRefresh,
+  } = useWaveformStore();
 
   const handleParserConfigChange = useCallback(
     async (config: ParserConfig) => {
@@ -59,15 +59,16 @@ const RealtimeDataTab: React.FC = () => {
 
   const toggleRunning = () => {
     if (isRunning) {
-      store.stopRefresh();
+      stopRefresh();
     } else {
-      store.startRefresh();
+      startRefresh();
     }
   };
 
   useEffect(() => {
+    loadPreferences();
     refreshBuffers();
-  }, [refreshBuffers]);
+  }, [loadPreferences, refreshBuffers]);
 
   useEffect(() => {
     if (currentBuffer && isRunning) {
@@ -94,15 +95,15 @@ const RealtimeDataTab: React.FC = () => {
       <Layout style={{ flex: '1 1 0', minHeight: 0, background: 'transparent' }}>
         <Sider
           collapsible
-          collapsed={sidebarCollapsed}
-          onCollapse={setSidebarCollapsed}
+          collapsed={preferences.sidebarCollapsed}
+          onCollapse={(collapsed) => updatePreferences({ sidebarCollapsed: collapsed })}
           width={280}
           collapsedWidth={0}
           trigger={null}
           style={{
             background: 'var(--bg-secondary)',
             borderRadius: '8px',
-            marginRight: sidebarCollapsed ? 0 : 8,
+            marginRight: preferences.sidebarCollapsed ? 0 : 8,
             overflow: 'hidden',
             transition: 'all 0.2s',
           }}
@@ -126,11 +127,11 @@ const RealtimeDataTab: React.FC = () => {
             styles={{ body: { padding: 8, display: 'flex', flexDirection: 'column', height: 'calc(100% - 40px)' } }}
             title={
               <Space>
-                <Tooltip title={sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}>
+                <Tooltip title={preferences.sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}>
                   <Button
                     type="text"
-                    icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                    icon={preferences.sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                    onClick={() => updatePreferences({ sidebarCollapsed: !preferences.sidebarCollapsed })}
                     style={{ marginRight: 4 }}
                   />
                 </Tooltip>
@@ -154,8 +155,7 @@ const RealtimeDataTab: React.FC = () => {
                   value={displayRows}
                   onChange={(v) => {
                     const rows = v || 500;
-                    setDisplayRows(rows);
-                    setStoreDisplayRows(rows);
+                    updatePreferences({ displayRows: rows });
                   }}
                   style={{ width: 80 }}
                 />
@@ -166,8 +166,7 @@ const RealtimeDataTab: React.FC = () => {
                   value={refreshInterval}
                   onChange={(v) => {
                     const ms = v || 33;
-                    setRefreshInterval(ms);
-                    setStoreRefreshInterval(ms);
+                    updatePreferences({ refreshInterval: ms });
                   }}
                   style={{ width: 80 }}
                 />

@@ -206,6 +206,20 @@
       "hrv": "HRV",
       "hsm": "HSM",
       "fpbp": "FPBP"
-    }
+    },
+    "factoryModes": {
+      "chipInit": "CHIP_INIT",
+      "chipUid": "CHIP_UID",
+      "baseNoise": "BASE_NOISE",
+      "ppgNoise": "PPG_NOISE",
+      "lpctr": "LPCTR",
+      "lplctr": "LPLCTR"
+    },
+    "factoryMode": "Factory Mode",
+    "factoryModeSelectPlaceholder": "Select factory mode",
+    "factorySet": "Set",
+    "factoryResult": "Factory Result",
+    "factoryGet": "Get",
+    "factoryResultSuccess": "Factory result: {{value}}"
   }
 }

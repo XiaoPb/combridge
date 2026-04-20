@@ -1,5 +1,5 @@
 serial:
-  displayFormat: hex
+  displayFormat: text
   displayMode: all
   sendFormat: text
   appendNewline: true

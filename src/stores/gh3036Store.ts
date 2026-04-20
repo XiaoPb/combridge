@@ -6,6 +6,7 @@ import type {
   Gh3036RpcCommand 
 } from '../api/types';
 import { gh3036Api } from '../api/gh3036';
+import { preferencesApi, type Gh3036ChannelPreferences } from '../api/tauri';
 import { decodePayload, type EventBusEvent } from '../utils/msgpack';
 import type { Gh3036FramePayload, Gh3036FramesPayload } from '../api/events';
 
@@ -17,10 +18,20 @@ export type Gh3036EventData = {
 
 export type Gh3036FrameEventData = Gh3036FramePayload;
 
+export type Gh3036ChannelConfigState = {
+  connectionType: string;
+  serialPort: string;
+  bleDevice: string;
+  txChar: string;
+  rxChar: string;
+};
+
 interface Gh3036State {
   isInitialized: boolean;
   isLoading: boolean;
   error: string | null;
+  
+  channelConfig: Gh3036ChannelConfigState;
   
   txChannel: Gh3036ChannelConfig | null;
   rxChannel: Gh3036ChannelConfig | null;
@@ -115,6 +126,9 @@ interface Gh3036State {
   loadCsvConfig: () => Promise<void>;
   loadRpcCommands: () => Promise<void>;
   
+  loadChannelConfig: () => Promise<void>;
+  updateChannelConfig: (config: Partial<Gh3036ChannelConfigState>) => Promise<void>;
+  
   configureTxChannel: (channelType: 'serial' | 'ble', deviceId: string, characteristicUuid?: string) => Promise<boolean>;
   configureRxChannel: (channelType: 'serial' | 'ble', deviceId: string, characteristicUuid?: string) => Promise<boolean>;
   
@@ -138,6 +152,14 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   isInitialized: false,
   isLoading: false,
   error: null,
+  
+  channelConfig: {
+    connectionType: 'serial',
+    serialPort: '',
+    bleDevice: '',
+    txChar: '00000004-0000-1000-8000-00805f9b34fb',
+    rxChar: '00000003-0000-1000-8000-00805f9b34fb',
+  },
   
   txChannel: null,
   rxChannel: null,
@@ -366,6 +388,46 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
       set({ rpcCommands: commands });
     } catch (err) {
       console.error('加载RPC命令失败:', err);
+    }
+  },
+  
+  loadChannelConfig: async () => {
+    try {
+      const prefs = await preferencesApi.get();
+      const gh3036Channel = prefs.gh3036_channel;
+      if (gh3036Channel) {
+        set({
+          channelConfig: {
+            connectionType: gh3036Channel.connection_type || 'serial',
+            serialPort: gh3036Channel.serial_port || '',
+            bleDevice: gh3036Channel.ble_device || '',
+            txChar: gh3036Channel.tx_char || '00000004-0000-1000-8000-00805f9b34fb',
+            rxChar: gh3036Channel.rx_char || '00000003-0000-1000-8000-00805f9b34fb',
+          },
+        });
+      }
+    } catch (err) {
+      console.error('加载通道配置失败:', err);
+    }
+  },
+  
+  updateChannelConfig: async (config) => {
+    try {
+      const currentConfig = get().channelConfig;
+      const newConfig = { ...currentConfig, ...config };
+      
+      const prefs: Gh3036ChannelPreferences = {
+        connection_type: newConfig.connectionType,
+        serial_port: newConfig.serialPort,
+        ble_device: newConfig.bleDevice,
+        tx_char: newConfig.txChar,
+        rx_char: newConfig.rxChar,
+      };
+      
+      await preferencesApi.updateGh3036Channel(prefs);
+      set({ channelConfig: newConfig });
+    } catch (err) {
+      console.error('保存通道配置失败:', err);
     }
   },
   

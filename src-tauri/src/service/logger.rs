@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use tracing::Level;
 use tracing_subscriber::{
     fmt::{self, format::FmtSpan},
@@ -36,17 +36,27 @@ impl Default for LoggerConfig {
 
 pub struct LoggerService {
     config: LoggerConfig,
-    _guard: Option<tracing_appender::non_blocking::WorkerGuard>,
+    log_path: Option<PathBuf>,
 }
 
 impl LoggerService {
     pub fn init(config: LoggerConfig) -> Result<&'static LoggerService, Box<dyn std::error::Error>> {
-        let _ = tracing_log::LogTracer::init();
+        if LOGGER.get().is_some() {
+            return Err("Logger already initialized".into());
+        }
         
-        let service = Self::create_service(config.clone())?;
+        let (service, log_path) = Self::create_service(config.clone())?;
+        
         LOGGER
             .set(service)
             .map_err(|_| "Logger already initialized")?;
+        
+        let _ = tracing_log::LogTracer::init();
+        
+        if let Some(path) = log_path {
+            tracing::info!("日志系统初始化完成，日志文件: {}", path.display());
+        }
+        
         Ok(LOGGER.get().expect("LOGGER must be initialized after set"))
     }
 
@@ -54,7 +64,7 @@ impl LoggerService {
         Self::init(LoggerConfig::default())
     }
 
-    fn create_service(config: LoggerConfig) -> Result<Self, Box<dyn std::error::Error>> {
+    fn create_service(config: LoggerConfig) -> Result<(Self, Option<PathBuf>), Box<dyn std::error::Error>> {
         let level = Self::parse_level(&config.level);
         let mut layers = Vec::new();
 
@@ -68,7 +78,8 @@ impl LoggerService {
             layers.push(console_layer.boxed());
         }
 
-        let mut guard = None;
+        let mut log_path = None;
+        
         if config.file_enabled {
             let log_dir = config.file_path.parent().unwrap_or(&PathBuf::from(".")).to_path_buf();
             
@@ -79,27 +90,23 @@ impl LoggerService {
             let now = chrono::Local::now();
             let timestamp = now.format("%Y-%m-%d-%H-%M-%S");
             let log_filename = format!("combridge_system_{}.log", timestamp);
-            let log_path = log_dir.join(&log_filename);
+            let path = log_dir.join(&log_filename);
+            log_path = Some(path.clone());
 
             let file = std::fs::OpenOptions::new()
                 .create(true)
                 .write(true)
                 .truncate(true)
-                .open(&log_path)?;
+                .open(&path)?;
             
-            let (non_blocking, worker_guard) = tracing_appender::non_blocking(file);
-            guard = Some(worker_guard);
-
             let file_layer = fmt::layer()
                 .with_span_events(FmtSpan::CLOSE)
                 .with_target(true)
                 .with_thread_ids(true)
                 .with_line_number(true)
                 .with_ansi(false)
-                .with_writer(non_blocking);
+                .with_writer(Mutex::new(file));
             layers.push(file_layer.boxed());
-            
-            tracing::info!("日志文件已创建: {}", log_path.display());
         }
 
         let env_filter = EnvFilter::builder()
@@ -111,10 +118,13 @@ impl LoggerService {
             .with(layers)
             .try_init()?;
 
-        Ok(Self {
-            config,
-            _guard: guard,
-        })
+        Ok((
+            Self {
+                config,
+                log_path: log_path.clone(),
+            },
+            log_path,
+        ))
     }
 
     fn parse_level(level: &str) -> Level {
@@ -135,13 +145,17 @@ impl LoggerService {
     pub fn config(&self) -> &LoggerConfig {
         &self.config
     }
+    
+    pub fn log_path(&self) -> Option<&PathBuf> {
+        self.log_path.as_ref()
+    }
 }
 
 impl std::fmt::Debug for LoggerService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LoggerService")
             .field("config", &self.config)
-            .field("_guard", &"WorkerGuard")
+            .field("log_path", &self.log_path)
             .finish()
     }
 }

@@ -694,3 +694,68 @@ impl Gh3036FramesEvent {
         self.led_drv_fs.clear();
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FactoryTestStep {
+    Idle,
+    Prepare,
+    ChipInit,
+    Uuid,
+    BaseNoise,
+    PpgNoise,
+    Lpctr,
+    EnvironmentSwitch,
+    Lplctr,
+    Cleanup,
+    Completed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FactoryTestStatus {
+    Idle,
+    Running,
+    WaitingForEnvironmentSwitch,
+    Completed,
+    Failed,
+    Stopped,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FactoryTestStepResult {
+    pub step: FactoryTestStep,
+    pub success: bool,
+    pub message: String,
+    pub data: Vec<u16>,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FactoryTestResult {
+    pub chip_init_status: u16,
+    pub uuid: Vec<u8>,
+    pub base_noise: Vec<u16>,
+    pub ppg_noise: Vec<u16>,
+    pub lpctr: Vec<u16>,
+    pub lplctr: Vec<u16>,
+    pub overall_result: String,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigValidationResult {
+    pub base_noise_config: Option<String>,
+    pub ppg_noise_config: Option<String>,
+    pub lpctr_config: Option<String>,
+    pub lplctr_config: Option<String>,
+    pub errors: Vec<String>,
+    pub is_valid: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FactoryTestProgressEvent {
+    pub current_step: FactoryTestStep,
+    pub status: FactoryTestStatus,
+    pub step_result: Option<FactoryTestStepResult>,
+    pub progress: f32,
+    pub message: String,
+}

@@ -88,6 +88,42 @@ impl GattClient {
         }
     }
 
+    pub fn reset_state(&self) {
+        if let Ok(mut monitor) = self.connection_monitor_handle.lock() {
+            if let Some(handle) = monitor.take() {
+                handle.abort();
+            }
+        }
+
+        if let Ok(mut device_guard) = self.device.write() {
+            *device_guard = None;
+        }
+
+        if let Ok(mut services) = self.services.write() {
+            services.clear();
+        }
+
+        if let Ok(mut characteristics) = self.characteristics.write() {
+            characteristics.clear();
+        }
+
+        if let Ok(mut caches) = self.caches.write() {
+            caches.clear();
+        }
+
+        if let Ok(mut handles) = self.notify_handles.lock() {
+            for (_, handle) in handles.drain() {
+                handle.abort();
+            }
+        }
+
+        if let Ok(mut callbacks) = self.notify_callbacks.lock() {
+            callbacks.clear();
+        }
+
+        info!("[{}] GattClient 状态已重置", extract_short_mac(&self.address));
+    }
+
     pub fn set_device(&self, device: Arc<Device>, adapter: Arc<bluest::Adapter>) -> Result<()> {
         *self.device.write()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))? = Some(device);
@@ -165,7 +201,7 @@ impl GattClient {
         let callback_arc = self.disconnect_callback.clone();
 
         let handle = tokio::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
             info!("[{}] 连接监控任务已启动", extract_short_mac(&address));
             
             let mut disconnect_count = 0;
@@ -175,7 +211,7 @@ impl GattClient {
                 let connected = device.is_connected().await;
                 if !connected {
                     disconnect_count += 1;
-                    if disconnect_count >= 3 {
+                    if disconnect_count >= 2 {
                         info!("[{}] 检测到设备断开连接（连续{}次确认）", extract_short_mac(&address), disconnect_count);
                         if let Ok(cb_guard) = callback_arc.read() {
                             if let Some(cb) = cb_guard.as_ref() {

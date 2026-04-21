@@ -92,6 +92,7 @@ function handleBleDisconnected(payload: BleDisconnectedPayload) {
   const wasCurrentDevice = store.currentDevice === deviceId;
   
   store.removeConnection(deviceId);
+  store.removeDeviceTab(deviceId);
   
   if (wasCurrentDevice) {
     store.setCurrentDevice(null);

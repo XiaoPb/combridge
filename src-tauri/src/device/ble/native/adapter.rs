@@ -178,7 +178,9 @@ impl BleAdapter {
 
         if let Some(event_bus) = &self.event_bus {
             let event_bus = event_bus.clone();
+            let client_clone = client.clone();
             let callback: DisconnectCallback = Arc::new(move |addr: &str| {
+                client_clone.reset_state();
                 let event = BleConnectionEvent::new(addr, None);
                 event_bus.publish_typed(topics::BLE_DISCONNECTED, &event);
                 info!("BLE设备被动断开: {}", addr);

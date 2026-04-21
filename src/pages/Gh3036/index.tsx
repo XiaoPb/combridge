@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
 import { usePageTabsStore } from '../../stores/pageTabsStore';
 import ConfigTab from './ConfigTab';
+import FactoryTestTab from './FactoryTestTab';
 import MonitorTab from './MonitorTab';
 import VersionTab from './VersionTab';
 
@@ -62,6 +63,8 @@ const Gh3036Page: React.FC = () => {
     switch (gh3036ActiveTab) {
       case 'config':
         return <ConfigTab />;
+      case 'factory':
+        return <FactoryTestTab />;
       case 'monitor':
         return <MonitorTab />;
       case 'version':

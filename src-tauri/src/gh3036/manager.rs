@@ -20,7 +20,9 @@ use tracing::{debug, error, info, warn};
 use crate::device::DeviceManager;
 use crate::service::{EventBus, topics, SerialDataEvent, BleDataEvent, SerialDisconnectedEvent, BleConnectionEvent};
 use super::csv_writer::CsvWriter;
-use super::types::{Gh3036EventData, Gh3036FrameData, FuncFrame, FrameDecoder, Gh3036FramesEvent, GhFuncFixIdx};
+use super::factory_test::FactoryTestManager;
+use super::types::{Gh3036EventData, Gh3036FrameData, FuncFrame, FrameDecoder, Gh3036FramesEvent, GhFuncFixIdx,
+    FactoryTestStep, FactoryTestStatus, FactoryTestResult, ConfigValidationResult};
 
 use gh_rpc::cmd::{CMD_GET_VERSION, CMD_REGS_WRITE, CMD_REGS_READ, CMD_CHIP_CTRL, 
                   CMD_SW_FUNCTION, CMD_DOWNLOAD_CONFIG, CMD_TIMESTAMP_SET, 
@@ -308,6 +310,7 @@ pub struct Gh3036Manager {
     thread_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
     rpc_thread_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
     rpc: Mutex<Option<Arc<std::sync::Mutex<RpcCore<16, Box<dyn Fn(&[u8]) + Send + Sync>>>>>>,
+    factory_test_manager: FactoryTestManager,
 }
 
 unsafe impl Send for Gh3036Manager {}
@@ -315,6 +318,7 @@ unsafe impl Sync for Gh3036Manager {}
 
 impl Gh3036Manager {
     pub fn new(device_manager: Arc<DeviceManager>, event_bus: Arc<EventBus>) -> Self {
+        let factory_test_manager = FactoryTestManager::new(Arc::clone(&event_bus));
         Self {
             device_manager,
             event_bus,
@@ -323,6 +327,7 @@ impl Gh3036Manager {
             thread_handle: Mutex::new(None),
             rpc_thread_handle: Mutex::new(None),
             rpc: Mutex::new(None),
+            factory_test_manager,
         }
     }
 
@@ -1230,6 +1235,40 @@ impl Gh3036Manager {
         }
 
         Ok(regs)
+    }
+
+    pub async fn factory_test_start(&self) -> Result<(), String> {
+        self.factory_test_manager.start_test(self)
+    }
+
+    pub async fn factory_test_stop(&self) -> Result<(), String> {
+        self.factory_test_manager.stop_test()
+    }
+
+    pub fn factory_test_status(&self) -> (FactoryTestStatus, FactoryTestStep) {
+        (
+            self.factory_test_manager.get_status(),
+            self.factory_test_manager.get_current_step(),
+        )
+    }
+
+    pub fn factory_test_continue(&self) -> Result<(), String> {
+        self.factory_test_manager.continue_test()
+    }
+
+    pub fn factory_test_set_config_dir(&self, config_dir: &str) -> Result<(), String> {
+        let path = std::path::PathBuf::from(config_dir);
+        self.factory_test_manager.set_config_dir(path);
+        info!("GH3036 产测配置目录设置为: {}", config_dir);
+        Ok(())
+    }
+
+    pub fn factory_test_validate_config(&self) -> ConfigValidationResult {
+        self.factory_test_manager.validate_config_dir()
+    }
+
+    pub fn factory_test_get_result(&self) -> Option<FactoryTestResult> {
+        self.factory_test_manager.get_result()
     }
 }
 

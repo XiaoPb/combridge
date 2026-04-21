@@ -2,8 +2,9 @@ use tauri::{AppHandle, State};
 
 use crate::error::{ComBridgeError, ErrorResponse};
 use crate::gh3036::{
-    ChannelConfig, ChannelType, CsvConfig, Gh3036ManagerRef, RpcCommand,
-    VersionTypeConfig,
+    ChannelConfig, ChannelType, CsvConfig, FactoryTestResult,
+    FactoryTestStep, FactoryTestStatus, Gh3036ManagerRef, RpcCommand, VersionTypeConfig,
+    ConfigValidationResult,
 };
 
 #[tauri::command]
@@ -168,4 +169,64 @@ pub async fn gh3036_load_config_file(
         .load_config_file(&file_path)
         .await
         .map_err(|e| ComBridgeError::protocol(e).to_error_response())
+}
+
+#[tauri::command]
+pub async fn gh3036_factory_test_start(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(), ErrorResponse> {
+    manager
+        .factory_test_start()
+        .await
+        .map_err(|e| ComBridgeError::protocol(e).to_error_response())
+}
+
+#[tauri::command]
+pub async fn gh3036_factory_test_stop(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(), ErrorResponse> {
+    manager
+        .factory_test_stop()
+        .await
+        .map_err(|e| ComBridgeError::protocol(e).to_error_response())
+}
+
+#[tauri::command]
+pub async fn gh3036_factory_test_status(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(FactoryTestStatus, FactoryTestStep), ErrorResponse> {
+    Ok(manager.factory_test_status())
+}
+
+#[tauri::command]
+pub async fn gh3036_factory_test_continue(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(), ErrorResponse> {
+    manager
+        .factory_test_continue()
+        .map_err(|e| ComBridgeError::protocol(e).to_error_response())
+}
+
+#[tauri::command]
+pub async fn gh3036_factory_test_set_config_dir(
+    config_dir: String,
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(), ErrorResponse> {
+    manager
+        .factory_test_set_config_dir(&config_dir)
+        .map_err(|e| ComBridgeError::protocol(e).to_error_response())
+}
+
+#[tauri::command]
+pub async fn gh3036_factory_test_validate_config(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<ConfigValidationResult, ErrorResponse> {
+    Ok(manager.factory_test_validate_config())
+}
+
+#[tauri::command]
+pub async fn gh3036_factory_test_get_result(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<Option<FactoryTestResult>, ErrorResponse> {
+    Ok(manager.factory_test_get_result())
 }

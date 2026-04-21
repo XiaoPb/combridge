@@ -3,9 +3,15 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { 
   Gh3036ChannelConfig, 
   Gh3036CsvConfig, 
-  Gh3036RpcCommand 
+  Gh3036RpcCommand,
+  FactoryTestStep, 
+  FactoryTestStatus, 
+  FactoryTestStepResult,
+  FactoryTestResult,
+  ConfigValidationResult,
+  FactoryTestProgressEvent 
 } from '../api/types';
-import { gh3036Api } from '../api/gh3036';
+import { gh3036Api, factoryTestApi } from '../api/gh3036';
 import { preferencesApi, type Gh3036ChannelPreferences } from '../api/tauri';
 import { decodePayload, type EventBusEvent } from '../utils/msgpack';
 import type { Gh3036FramePayload, Gh3036FramesPayload } from '../api/events';
@@ -76,6 +82,7 @@ interface Gh3036State {
     event?: UnlistenFn;
     frame?: UnlistenFn;
     deviceDisconnected?: UnlistenFn;
+    factoryTest?: UnlistenFn;
   };
   
   rpcConfig: {
@@ -91,6 +98,18 @@ interface Gh3036State {
     factoryMode: string;
     factoryResult: string;
     version: string;
+  };
+  
+  factoryTest: {
+    status: FactoryTestStatus;
+    currentStep: FactoryTestStep;
+    progress: number;
+    message: string;
+    configDir: string;
+    configValidation: ConfigValidationResult | null;
+    stepResults: FactoryTestStepResult[];
+    result: FactoryTestResult | null;
+    isRunning: boolean;
   };
   
   setIsInitialized: (value: boolean) => void;
@@ -140,6 +159,22 @@ interface Gh3036State {
   subscribeEvents: () => Promise<void>;
   unsubscribeEvents: () => void;
   loadLibraryStatus: () => Promise<void>;
+  
+  setFactoryTestStatus: (status: FactoryTestStatus) => void;
+  setFactoryTestStep: (step: FactoryTestStep) => void;
+  setFactoryTestProgress: (progress: number, message: string) => void;
+  setFactoryTestConfigDir: (configDir: string) => void;
+  setFactoryTestConfigValidation: (validation: ConfigValidationResult | null) => void;
+  addFactoryTestStepResult: (result: FactoryTestStepResult) => void;
+  setFactoryTestResult: (result: FactoryTestResult | null) => void;
+  resetFactoryTest: () => void;
+  startFactoryTest: () => Promise<void>;
+  stopFactoryTest: () => Promise<void>;
+  continueFactoryTest: () => Promise<void>;
+  setFactoryTestConfigDirAsync: (configDir: string) => Promise<void>;
+  validateFactoryTestConfig: () => Promise<void>;
+  subscribeFactoryTestEvents: () => Promise<void>;
+  unsubscribeFactoryTestEvents: () => void;
 }
 
 interface ChartGroupConfig {
@@ -218,6 +253,18 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     factoryMode: '',
     factoryResult: '-',
     version: '-',
+  },
+  
+  factoryTest: {
+    status: 'idle',
+    currentStep: 'idle',
+    progress: 0,
+    message: '',
+    configDir: '',
+    configValidation: null,
+    stepResults: [],
+    result: null,
+    isRunning: false,
   },
   
   setIsInitialized: (value) => set({ isInitialized: value }),
@@ -618,6 +665,241 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
       });
     } catch (err) {
       console.error('加载库状态失败:', err);
+    }
+  },
+  
+  setFactoryTestStatus: (status) => set((state) => ({
+    factoryTest: { ...state.factoryTest, status },
+  })),
+  
+  setFactoryTestStep: (step) => set((state) => ({
+    factoryTest: { ...state.factoryTest, currentStep: step },
+  })),
+  
+  setFactoryTestProgress: (progress, message) => set((state) => ({
+    factoryTest: { ...state.factoryTest, progress, message },
+  })),
+  
+  setFactoryTestConfigDir: (configDir) => set((state) => ({
+    factoryTest: { ...state.factoryTest, configDir },
+  })),
+  
+  setFactoryTestConfigValidation: (validation) => set((state) => ({
+    factoryTest: { ...state.factoryTest, configValidation: validation },
+  })),
+  
+  addFactoryTestStepResult: (result) => set((state) => ({
+    factoryTest: {
+      ...state.factoryTest,
+      stepResults: [...state.factoryTest.stepResults, result],
+    },
+  })),
+  
+  setFactoryTestResult: (result) => set((state) => ({
+    factoryTest: { ...state.factoryTest, result },
+  })),
+  
+  resetFactoryTest: () => set((state) => ({
+    factoryTest: {
+      ...state.factoryTest,
+      status: 'idle',
+      currentStep: 'idle',
+      progress: 0,
+      message: '',
+      stepResults: [],
+      result: null,
+      isRunning: false,
+    },
+  })),
+  
+  startFactoryTest: async () => {
+    set((state) => ({
+      factoryTest: {
+        ...state.factoryTest,
+        status: 'running',
+        isRunning: true,
+        stepResults: [],
+        result: null,
+        message: '正在启动产测...',
+      },
+    }));
+    
+    try {
+      await factoryTestApi.start();
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '启动产测失败';
+      set((state) => ({
+        factoryTest: {
+          ...state.factoryTest,
+          status: 'failed',
+          isRunning: false,
+          message: errorMsg,
+        },
+      }));
+    }
+  },
+  
+  stopFactoryTest: async () => {
+    try {
+      await factoryTestApi.stop();
+      set((state) => ({
+        factoryTest: {
+          ...state.factoryTest,
+          status: 'stopped',
+          isRunning: false,
+          message: '产测已停止',
+        },
+      }));
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '停止产测失败';
+      set((state) => ({
+        factoryTest: {
+          ...state.factoryTest,
+          message: errorMsg,
+        },
+      }));
+    }
+  },
+  
+  continueFactoryTest: async () => {
+    try {
+      await factoryTestApi.continue();
+      set((state) => ({
+        factoryTest: {
+          ...state.factoryTest,
+          status: 'running',
+          message: '继续产测...',
+        },
+      }));
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '继续产测失败';
+      set((state) => ({
+        factoryTest: {
+          ...state.factoryTest,
+          status: 'failed',
+          message: errorMsg,
+        },
+      }));
+    }
+  },
+  
+  setFactoryTestConfigDirAsync: async (configDir) => {
+    try {
+      await factoryTestApi.setConfigDir(configDir);
+      set((state) => ({
+        factoryTest: { ...state.factoryTest, configDir },
+      }));
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '设置配置目录失败';
+      set((state) => ({
+        factoryTest: {
+          ...state.factoryTest,
+          message: errorMsg,
+        },
+      }));
+    }
+  },
+  
+  validateFactoryTestConfig: async () => {
+    try {
+      const validation = await factoryTestApi.validateConfig();
+      set((state) => ({
+        factoryTest: { ...state.factoryTest, configValidation: validation },
+      }));
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '验证配置失败';
+      set((state) => ({
+        factoryTest: {
+          ...state.factoryTest,
+          configValidation: {
+            base_noise_config: null,
+            ppg_noise_config: null,
+            lpctr_config: null,
+            lplctr_config: null,
+            errors: [errorMsg],
+            is_valid: false,
+          },
+        },
+      }));
+    }
+  },
+  
+  subscribeFactoryTestEvents: async () => {
+    const { eventListeners } = get();
+    
+    if (eventListeners.factoryTest) {
+      console.debug('[Gh3036Store] 产测事件已订阅，跳过重复订阅');
+      return;
+    }
+    
+    try {
+      const factoryTestUnlisten = await listen<EventBusEvent>('event-bus', (event) => {
+        if (event.payload.topic === 'gh3036:factory_test_progress') {
+          try {
+            const progressEvent = decodePayload<FactoryTestProgressEvent>(event.payload);
+            
+            set((state) => ({
+              factoryTest: {
+                ...state.factoryTest,
+                currentStep: progressEvent.current_step,
+                status: progressEvent.status,
+                progress: progressEvent.progress,
+                message: progressEvent.message,
+              },
+            }));
+            
+            if (progressEvent.step_result) {
+              get().addFactoryTestStepResult(progressEvent.step_result);
+            }
+            
+            if (progressEvent.status === 'completed' || progressEvent.status === 'failed') {
+              set((state) => ({
+                factoryTest: {
+                  ...state.factoryTest,
+                  isRunning: false,
+                },
+              }));
+              
+              if (progressEvent.status === 'completed') {
+                factoryTestApi.getResult().then((result) => {
+                  if (result) {
+                    set((state) => ({
+                      factoryTest: { ...state.factoryTest, result },
+                    }));
+                  }
+                }).catch((err) => {
+                  console.error('[Gh3036Store] 获取产测结果失败:', err);
+                });
+              }
+            }
+          } catch (err) {
+            console.error('[Gh3036Store] Failed to decode factory test progress:', err);
+          }
+        }
+      });
+      
+      set((state) => ({
+        eventListeners: {
+          ...state.eventListeners,
+          factoryTest: factoryTestUnlisten,
+        },
+      }));
+    } catch (err) {
+      console.error('订阅产测事件失败:', err);
+    }
+  },
+  
+  unsubscribeFactoryTestEvents: () => {
+    const { eventListeners } = get();
+    
+    if (eventListeners.factoryTest) {
+      eventListeners.factoryTest();
+      set((state) => ({
+        eventListeners: {
+          ...state.eventListeners,
+          factoryTest: undefined,
+        },
+      }));
     }
   },
 }));

@@ -175,7 +175,8 @@ pub async fn gh3036_load_config_file(
 pub async fn gh3036_factory_test_start(
     manager: State<'_, Gh3036ManagerRef>,
 ) -> Result<(), ErrorResponse> {
-    manager
+    let manager_clone = manager.inner().clone();
+    manager_clone
         .factory_test_start()
         .await
         .map_err(|e| ComBridgeError::protocol(e).to_error_response())

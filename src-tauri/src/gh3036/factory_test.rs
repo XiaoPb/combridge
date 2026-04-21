@@ -12,9 +12,9 @@ use std::thread;
 use std::time::Duration;
 
 use chrono::Local;
-use crossbeam_channel::{Receiver, Sender, unbounded};
 use parking_lot::Mutex;
-use tracing::{error, info};
+use tokio::runtime::Runtime;
+use tracing::{error, info, warn};
 
 use crate::service::EventBus;
 use super::manager::Gh3036Manager;
@@ -23,11 +23,6 @@ use super::types::{
     FactoryTestProgressEvent, ConfigValidationResult,
 };
 
-struct FactoryRpcRequest {
-    command: String,
-    params: Vec<String>,
-}
-
 pub struct FactoryTestManager {
     config_dir: Mutex<PathBuf>,
     status: Mutex<FactoryTestStatus>,
@@ -35,8 +30,8 @@ pub struct FactoryTestManager {
     result: Mutex<Option<FactoryTestResult>>,
     running: Arc<AtomicBool>,
     event_bus: Arc<EventBus>,
-    rpc_sender: Mutex<Option<Sender<FactoryRpcRequest>>>,
     thread_handle: Mutex<Option<thread::JoinHandle<()>>>,
+    status_clone: Arc<Mutex<FactoryTestStatus>>,
 }
 
 unsafe impl Send for FactoryTestManager {}
@@ -47,8 +42,8 @@ impl FactoryTestManager {
         let config_dir = std::env::current_exe()
             .ok()
             .and_then(|exe_path| exe_path.parent().map(|p| p.to_path_buf()))
-            .map(|exe_dir| exe_dir.join("data").join("factory"))
-            .unwrap_or_else(|| PathBuf::from("data/factory"));
+            .map(|exe_dir| exe_dir.join("config").join("factory"))
+            .unwrap_or_else(|| PathBuf::from("config/factory"));
 
         Self {
             config_dir: Mutex::new(config_dir),
@@ -57,12 +52,13 @@ impl FactoryTestManager {
             result: Mutex::new(None),
             running: Arc::new(AtomicBool::new(false)),
             event_bus,
-            rpc_sender: Mutex::new(None),
             thread_handle: Mutex::new(None),
+            status_clone: Arc::new(Mutex::new(FactoryTestStatus::Idle)),
         }
     }
 
     pub fn set_config_dir(&self, dir: PathBuf) {
+        info!("[FactoryTest] 配置目录设置为: {}", dir.display());
         let mut config_dir = self.config_dir.lock();
         *config_dir = dir;
     }
@@ -96,6 +92,8 @@ impl FactoryTestManager {
         let entries = std::fs::read_dir(dir)
             .map_err(|e| format!("读取目录失败: {}", e))?;
 
+        let mut matches: Vec<PathBuf> = Vec::new();
+        
         for entry in entries {
             if let Ok(entry) = entry {
                 let path = entry.path();
@@ -104,8 +102,8 @@ impl FactoryTestManager {
                     if file_name_str.contains(&pattern_lower) {
                         if let Some(ext) = path.extension() {
                             let ext_str = ext.to_string_lossy().to_lowercase();
-                            if ext_str == "config" || ext_str == "ini" {
-                                return Ok(Some(path));
+                            if ext_str.ends_with("config") || ext_str == "ini" {
+                                matches.push(path);
                             }
                         }
                     }
@@ -113,7 +111,11 @@ impl FactoryTestManager {
             }
         }
 
-        Ok(None)
+        if matches.len() > 1 {
+            return Err(format!("找到多个 {} 配置文件: {:?}", pattern, matches));
+        }
+
+        Ok(matches.into_iter().next())
     }
 
     pub fn validate_config_dir(&self) -> ConfigValidationResult {
@@ -189,7 +191,7 @@ impl FactoryTestManager {
         result
     }
 
-    pub fn start_test(&self, _gh3036_manager: &Gh3036Manager) -> Result<(), String> {
+    pub fn start_test(&self, gh3036_manager: Arc<Gh3036Manager>) -> Result<(), String> {
         if self.running.load(Ordering::SeqCst) {
             return Err("产测流程已在运行中".to_string());
         }
@@ -202,6 +204,10 @@ impl FactoryTestManager {
         self.running.store(true, Ordering::SeqCst);
         {
             let mut status = self.status.lock();
+            *status = FactoryTestStatus::Running;
+        }
+        {
+            let mut status = self.status_clone.lock();
             *status = FactoryTestStatus::Running;
         }
         {
@@ -220,22 +226,22 @@ impl FactoryTestManager {
             "产测流程开始",
         );
 
-        let (rpc_sender, rpc_receiver) = unbounded();
-        {
-            let mut sender = self.rpc_sender.lock();
-            *sender = Some(rpc_sender);
-        }
-
         let running = self.running.clone();
         let event_bus = self.event_bus.clone();
         let config_dir = self.config_dir.lock().clone();
-
-        let status_clone = Arc::new(Mutex::new(FactoryTestStatus::Running));
-        let current_step_clone = Arc::new(Mutex::new(FactoryTestStep::Prepare));
-        let result_clone = Arc::new(Mutex::new(None::<FactoryTestResult>));
+        let status_clone = self.status_clone.clone();
+        let manager = gh3036_manager;
 
         let thread_handle = thread::spawn(move || {
             info!("[FactoryTest] 产测流程线程启动");
+
+            let rt = match Runtime::new() {
+                Ok(rt) => rt,
+                Err(e) => {
+                    error!("[FactoryTest] 创建 Tokio runtime 失败: {}", e);
+                    return;
+                }
+            };
 
             let mut test_result = FactoryTestResult {
                 chip_init_status: 0,
@@ -251,7 +257,7 @@ impl FactoryTestManager {
                     .unwrap_or(0),
             };
 
-            let steps = [
+            let steps: [(FactoryTestStep, f32, f32); 10] = [
                 (FactoryTestStep::Prepare, 0.0, 0.05),
                 (FactoryTestStep::ChipInit, 0.05, 0.15),
                 (FactoryTestStep::Uuid, 0.15, 0.25),
@@ -270,27 +276,21 @@ impl FactoryTestManager {
                     break;
                 }
 
-                {
-                    let mut current = current_step_clone.lock();
-                    *current = *step;
-                }
-
-                let progress = (progress_start + progress_end) / 2.0;
                 Self::publish_progress_static(
                     &event_bus,
                     *step,
                     FactoryTestStatus::Running,
-                    progress,
+                    *progress_start,
                     &format!("执行步骤: {:?}", step),
                 );
 
-                let step_result = Self::execute_step(
+                let step_result = rt.block_on(Self::execute_step(
                     *step,
-                    &rpc_receiver,
                     &config_dir,
                     &mut test_result,
                     &event_bus,
-                );
+                    &manager,
+                ));
 
                 match step_result {
                     Ok(step_result_opt) => {
@@ -304,6 +304,7 @@ impl FactoryTestManager {
                                     *progress_end,
                                     &step_result.message,
                                 );
+                                running.store(false, Ordering::SeqCst);
                                 break;
                             }
                         }
@@ -318,6 +319,7 @@ impl FactoryTestManager {
                             *progress_end,
                             &e,
                         );
+                        running.store(false, Ordering::SeqCst);
                         break;
                     }
                 }
@@ -354,11 +356,6 @@ impl FactoryTestManager {
             }
 
             if running.load(Ordering::SeqCst) {
-                {
-                    let mut result = result_clone.lock();
-                    *result = Some(test_result.clone());
-                }
-
                 Self::publish_progress_static(
                     &event_bus,
                     FactoryTestStep::Completed,
@@ -398,6 +395,10 @@ impl FactoryTestManager {
             let mut status = self.status.lock();
             *status = FactoryTestStatus::Stopped;
         }
+        {
+            let mut status = self.status_clone.lock();
+            *status = FactoryTestStatus::Stopped;
+        }
 
         self.publish_progress(
             FactoryTestStep::Idle,
@@ -424,6 +425,10 @@ impl FactoryTestManager {
             let mut status = self.status.lock();
             *status = FactoryTestStatus::Running;
         }
+        {
+            let mut status = self.status_clone.lock();
+            *status = FactoryTestStatus::Running;
+        }
 
         self.publish_progress(
             FactoryTestStep::Lplctr,
@@ -435,30 +440,30 @@ impl FactoryTestManager {
         Ok(())
     }
 
-    fn execute_step(
+    async fn execute_step(
         step: FactoryTestStep,
-        rpc_receiver: &Receiver<FactoryRpcRequest>,
         config_dir: &Path,
         test_result: &mut FactoryTestResult,
         event_bus: &Arc<EventBus>,
+        manager: &Gh3036Manager,
     ) -> Result<Option<FactoryTestStepResult>, String> {
         match step {
-            FactoryTestStep::Prepare => Self::execute_prepare_step(rpc_receiver, event_bus),
-            FactoryTestStep::ChipInit => Self::execute_chip_init_step(rpc_receiver, test_result, event_bus),
-            FactoryTestStep::Uuid => Self::execute_uuid_step(rpc_receiver, test_result, event_bus),
-            FactoryTestStep::BaseNoise => Self::execute_base_noise_step(rpc_receiver, config_dir, test_result, event_bus),
-            FactoryTestStep::PpgNoise => Self::execute_ppg_noise_step(rpc_receiver, config_dir, test_result, event_bus),
-            FactoryTestStep::Lpctr => Self::execute_lpctr_step(rpc_receiver, config_dir, test_result, event_bus),
+            FactoryTestStep::Prepare => Self::execute_prepare_step(event_bus, manager).await,
+            FactoryTestStep::ChipInit => Self::execute_chip_init_step(event_bus, test_result, manager).await,
+            FactoryTestStep::Uuid => Self::execute_uuid_step(event_bus, test_result, manager).await,
+            FactoryTestStep::BaseNoise => Self::execute_base_noise_step(event_bus, config_dir, test_result, manager).await,
+            FactoryTestStep::PpgNoise => Self::execute_ppg_noise_step(event_bus, config_dir, test_result, manager).await,
+            FactoryTestStep::Lpctr => Self::execute_lpctr_step(event_bus, config_dir, test_result, manager).await,
             FactoryTestStep::EnvironmentSwitch => Ok(None),
-            FactoryTestStep::Lplctr => Self::execute_lplctr_step(rpc_receiver, config_dir, test_result, event_bus),
-            FactoryTestStep::Cleanup => Self::execute_cleanup_step(rpc_receiver, event_bus),
+            FactoryTestStep::Lplctr => Self::execute_lplctr_step(event_bus, config_dir, test_result, manager).await,
+            FactoryTestStep::Cleanup => Self::execute_cleanup_step(event_bus, manager).await,
             FactoryTestStep::Idle | FactoryTestStep::Completed => Ok(None),
         }
     }
 
-    fn execute_prepare_step(
-        _rpc_receiver: &Receiver<FactoryRpcRequest>,
+    async fn execute_prepare_step(
         event_bus: &Arc<EventBus>,
+        manager: &Gh3036Manager,
     ) -> Result<Option<FactoryTestStepResult>, String> {
         info!("[FactoryTest] 执行准备步骤: 切换工作模式为 2");
 
@@ -470,7 +475,12 @@ impl FactoryTestManager {
             "切换工作模式为 2",
         );
 
-        thread::sleep(Duration::from_millis(500));
+        manager.execute_rpc("M", &["2".to_string()]).await
+            .map_err(|e| format!("设置工作模式失败: {}", e))?;
+        
+        info!("[FactoryTest] 工作模式已切换为 2");
+
+        thread::sleep(Duration::from_millis(100));
 
         Self::publish_progress_static(
             event_bus,
@@ -480,7 +490,10 @@ impl FactoryTestManager {
             "关闭全部功能",
         );
 
-        thread::sleep(Duration::from_millis(500));
+        manager.execute_rpc("S", &["0x0".to_string(), "0".to_string()]).await
+            .map_err(|e| format!("关闭功能失败: {}", e))?;
+        
+        info!("[FactoryTest] 全部功能已关闭");
 
         Ok(Some(FactoryTestStepResult {
             step: FactoryTestStep::Prepare,
@@ -494,10 +507,10 @@ impl FactoryTestManager {
         }))
     }
 
-    fn execute_chip_init_step(
-        _rpc_receiver: &Receiver<FactoryRpcRequest>,
-        test_result: &mut FactoryTestResult,
+    async fn execute_chip_init_step(
         event_bus: &Arc<EventBus>,
+        test_result: &mut FactoryTestResult,
+        manager: &Gh3036Manager,
     ) -> Result<Option<FactoryTestStepResult>, String> {
         info!("[FactoryTest] 执行芯片初始化步骤: CMD_FACTORY_SET_MODE 0x01");
 
@@ -505,19 +518,40 @@ impl FactoryTestManager {
             event_bus,
             FactoryTestStep::ChipInit,
             FactoryTestStatus::Running,
-            0.10,
-            "发送芯片初始化命令",
+            0.08,
+            "发送芯片初始化命令 FS 0x01",
         );
 
-        thread::sleep(Duration::from_millis(1000));
+        manager.execute_rpc("FS", &["0x01".to_string()]).await
+            .map_err(|e| format!("设置产测模式 0x01 失败: {}", e))?;
 
-        test_result.chip_init_status = 1;
+        thread::sleep(Duration::from_millis(100));
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::ChipInit,
+            FactoryTestStatus::Running,
+            0.10,
+            "获取芯片初始化结果 FG 0x01",
+        );
+
+        let result = manager.execute_rpc("FG", &["0x01".to_string()]).await
+            .map_err(|e| format!("获取产测模式 0x01 结果失败: {}", e))?;
+
+        let status = if !result.is_empty() {
+            result[0] as u16
+        } else {
+            0
+        };
+
+        test_result.chip_init_status = status;
+        info!("[FactoryTest] 芯片初始化状态: {}", status);
 
         Ok(Some(FactoryTestStepResult {
             step: FactoryTestStep::ChipInit,
             success: true,
-            message: "芯片初始化完成".to_string(),
-            data: vec![1],
+            message: format!("芯片初始化完成, status={}", status),
+            data: vec![status],
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -525,10 +559,10 @@ impl FactoryTestManager {
         }))
     }
 
-    fn execute_uuid_step(
-        _rpc_receiver: &Receiver<FactoryRpcRequest>,
-        test_result: &mut FactoryTestResult,
+    async fn execute_uuid_step(
         event_bus: &Arc<EventBus>,
+        test_result: &mut FactoryTestResult,
+        manager: &Gh3036Manager,
     ) -> Result<Option<FactoryTestStepResult>, String> {
         info!("[FactoryTest] 执行 UUID 读取步骤: CMD_FACTORY_SET_MODE 0x02");
 
@@ -536,19 +570,37 @@ impl FactoryTestManager {
             event_bus,
             FactoryTestStep::Uuid,
             FactoryTestStatus::Running,
-            0.20,
-            "读取芯片 UUID",
+            0.18,
+            "发送 UUID 读取命令 FS 0x02",
         );
 
-        thread::sleep(Duration::from_millis(1000));
+        manager.execute_rpc("FS", &["0x02".to_string()]).await
+            .map_err(|e| format!("设置产测模式 0x02 失败: {}", e))?;
 
-        test_result.uuid = vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
+        thread::sleep(Duration::from_millis(100));
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::Uuid,
+            FactoryTestStatus::Running,
+            0.20,
+            "获取 UUID 结果 FG 0x02",
+        );
+
+        let result = manager.execute_rpc("FG", &["0x02".to_string()]).await
+            .map_err(|e| format!("获取产测模式 0x02 结果失败: {}", e))?;
+
+        let uuid: Vec<u8> = result.iter().map(|&b| b as u8).collect();
+        test_result.uuid = uuid.clone();
+
+        let uuid_str: String = uuid.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(":");
+        info!("[FactoryTest] UUID: {}", uuid_str);
 
         Ok(Some(FactoryTestStepResult {
             step: FactoryTestStep::Uuid,
             success: true,
-            message: format!("UUID: {:02X?}", test_result.uuid),
-            data: test_result.uuid.iter().map(|&b| b as u16).collect(),
+            message: format!("UUID: {}", uuid_str),
+            data: uuid.iter().map(|&b| b as u16).collect(),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -556,11 +608,11 @@ impl FactoryTestManager {
         }))
     }
 
-    fn execute_base_noise_step(
-        _rpc_receiver: &Receiver<FactoryRpcRequest>,
+    async fn execute_base_noise_step(
+        event_bus: &Arc<EventBus>,
         config_dir: &Path,
         test_result: &mut FactoryTestResult,
-        event_bus: &Arc<EventBus>,
+        manager: &Gh3036Manager,
     ) -> Result<Option<FactoryTestStepResult>, String> {
         info!("[FactoryTest] 执行基底噪声测试: CMD_FACTORY_SET_MODE 0x04");
 
@@ -571,11 +623,63 @@ impl FactoryTestManager {
             event_bus,
             FactoryTestStep::BaseNoise,
             FactoryTestStatus::Running,
-            0.30,
+            0.26,
             &format!("加载配置文件: {}", config_file.display()),
         );
 
-        thread::sleep(Duration::from_millis(500));
+        let config_content = std::fs::read_to_string(&config_file)
+            .map_err(|e| format!("读取配置文件失败: {}", e))?;
+
+        let reg_values = Self::parse_config_file(&config_content)?;
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::BaseNoise,
+            FactoryTestStatus::Running,
+            0.28,
+            "发送产测模式命令 FS 0x04",
+        );
+
+        manager.execute_rpc("FS", &["0x04".to_string()]).await
+            .map_err(|e| format!("设置产测模式 0x04 失败: {}", e))?;
+
+        thread::sleep(Duration::from_millis(100));
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::BaseNoise,
+            FactoryTestStatus::Running,
+            0.29,
+            "下载配置 D 0",
+        );
+
+        manager.execute_rpc("D", &["0".to_string()]).await
+            .map_err(|e| format!("下载配置阶段 0 失败: {}", e))?;
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::BaseNoise,
+            FactoryTestStatus::Running,
+            0.30,
+            &format!("写入寄存器列表 ({} 个)", reg_values.len()),
+        );
+
+        let params: Vec<String> = reg_values.iter()
+            .map(|v| format!("0x{:04X}", v))
+            .collect();
+        manager.execute_rpc("L", &params).await
+            .map_err(|e| format!("写入寄存器列表失败: {}", e))?;
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::BaseNoise,
+            FactoryTestStatus::Running,
+            0.31,
+            "下载配置 D 1",
+        );
+
+        manager.execute_rpc("D", &["1".to_string()]).await
+            .map_err(|e| format!("下载配置阶段 1 失败: {}", e))?;
 
         Self::publish_progress_static(
             event_bus,
@@ -585,7 +689,8 @@ impl FactoryTestManager {
             "启动 TEST1 功能",
         );
 
-        thread::sleep(Duration::from_millis(1000));
+        manager.execute_rpc("S", &["0x1".to_string(), "1".to_string()]).await
+            .map_err(|e| format!("启动 TEST1 失败: {}", e))?;
 
         Self::publish_progress_static(
             event_bus,
@@ -597,13 +702,50 @@ impl FactoryTestManager {
 
         thread::sleep(Duration::from_secs(3));
 
-        test_result.base_noise = vec![100, 105, 98, 102, 99];
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::BaseNoise,
+            FactoryTestStatus::Running,
+            0.38,
+            "停止 TEST1 功能",
+        );
+
+        manager.execute_rpc("S", &["0x1".to_string(), "0".to_string()]).await
+            .map_err(|e| format!("停止 TEST1 失败: {}", e))?;
+
+        thread::sleep(Duration::from_secs(1));
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::BaseNoise,
+            FactoryTestStatus::Running,
+            0.39,
+            "获取底噪结果 FG 0x04",
+        );
+
+        let result = manager.execute_rpc("FG", &["0x04".to_string()]).await
+            .map_err(|e| format!("获取产测模式 0x04 结果失败: {}", e))?;
+
+        let base_noise: Vec<u16> = result.chunks(2)
+            .map(|chunk| {
+                if chunk.len() == 2 {
+                    u16::from_le_bytes([chunk[0], chunk[1]])
+                } else if chunk.len() == 1 {
+                    chunk[0] as u16
+                } else {
+                    0
+                }
+            })
+            .collect();
+
+        test_result.base_noise = base_noise.clone();
+        info!("[FactoryTest] 底噪数据: {:?}", base_noise);
 
         Ok(Some(FactoryTestStepResult {
             step: FactoryTestStep::BaseNoise,
             success: true,
-            message: format!("基底噪声: {:?}", test_result.base_noise),
-            data: test_result.base_noise.clone(),
+            message: format!("底噪测试完成, {} 个通道", base_noise.len()),
+            data: base_noise,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -611,11 +753,11 @@ impl FactoryTestManager {
         }))
     }
 
-    fn execute_ppg_noise_step(
-        _rpc_receiver: &Receiver<FactoryRpcRequest>,
+    async fn execute_ppg_noise_step(
+        event_bus: &Arc<EventBus>,
         config_dir: &Path,
         test_result: &mut FactoryTestResult,
-        event_bus: &Arc<EventBus>,
+        manager: &Gh3036Manager,
     ) -> Result<Option<FactoryTestStepResult>, String> {
         info!("[FactoryTest] 执行 PPG 噪声测试: CMD_FACTORY_SET_MODE 0x08");
 
@@ -626,29 +768,97 @@ impl FactoryTestManager {
             event_bus,
             FactoryTestStep::PpgNoise,
             FactoryTestStatus::Running,
-            0.45,
+            0.42,
             &format!("加载配置文件: {}", config_file.display()),
         );
 
-        thread::sleep(Duration::from_millis(500));
+        let config_content = std::fs::read_to_string(&config_file)
+            .map_err(|e| format!("读取配置文件失败: {}", e))?;
+
+        let reg_values = Self::parse_config_file(&config_content)?;
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::PpgNoise,
+            FactoryTestStatus::Running,
+            0.44,
+            "发送产测模式命令 FS 0x08",
+        );
+
+        manager.execute_rpc("FS", &["0x08".to_string()]).await
+            .map_err(|e| format!("设置产测模式 0x08 失败: {}", e))?;
+
+        thread::sleep(Duration::from_millis(100));
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::PpgNoise,
+            FactoryTestStatus::Running,
+            0.45,
+            "下载配置并写入寄存器",
+        );
+
+        manager.execute_rpc("D", &["0".to_string()]).await
+            .map_err(|e| format!("下载配置阶段 0 失败: {}", e))?;
+
+        let params: Vec<String> = reg_values.iter()
+            .map(|v| format!("0x{:04X}", v))
+            .collect();
+        manager.execute_rpc("L", &params).await
+            .map_err(|e| format!("写入寄存器列表失败: {}", e))?;
+
+        manager.execute_rpc("D", &["1".to_string()]).await
+            .map_err(|e| format!("下载配置阶段 1 失败: {}", e))?;
 
         Self::publish_progress_static(
             event_bus,
             FactoryTestStep::PpgNoise,
             FactoryTestStatus::Running,
             0.48,
-            "采集数据中 (3秒)",
+            "启动 TEST1 并采集数据 (3秒)",
         );
+
+        manager.execute_rpc("S", &["0x1".to_string(), "1".to_string()]).await
+            .map_err(|e| format!("启动 TEST1 失败: {}", e))?;
 
         thread::sleep(Duration::from_secs(3));
 
-        test_result.ppg_noise = vec![50, 52, 48, 51, 49];
+        manager.execute_rpc("S", &["0x1".to_string(), "0".to_string()]).await
+            .map_err(|e| format!("停止 TEST1 失败: {}", e))?;
+
+        thread::sleep(Duration::from_secs(1));
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::PpgNoise,
+            FactoryTestStatus::Running,
+            0.53,
+            "获取 PPG 噪声结果 FG 0x08",
+        );
+
+        let result = manager.execute_rpc("FG", &["0x08".to_string()]).await
+            .map_err(|e| format!("获取产测模式 0x08 结果失败: {}", e))?;
+
+        let ppg_noise: Vec<u16> = result.chunks(2)
+            .map(|chunk| {
+                if chunk.len() == 2 {
+                    u16::from_le_bytes([chunk[0], chunk[1]])
+                } else if chunk.len() == 1 {
+                    chunk[0] as u16
+                } else {
+                    0
+                }
+            })
+            .collect();
+
+        test_result.ppg_noise = ppg_noise.clone();
+        info!("[FactoryTest] PPG 噪声数据: {:?}", ppg_noise);
 
         Ok(Some(FactoryTestStepResult {
             step: FactoryTestStep::PpgNoise,
             success: true,
-            message: format!("PPG 噪声: {:?}", test_result.ppg_noise),
-            data: test_result.ppg_noise.clone(),
+            message: format!("PPG 噪声测试完成, {} 个通道", ppg_noise.len()),
+            data: ppg_noise,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -656,11 +866,11 @@ impl FactoryTestManager {
         }))
     }
 
-    fn execute_lpctr_step(
-        _rpc_receiver: &Receiver<FactoryRpcRequest>,
+    async fn execute_lpctr_step(
+        event_bus: &Arc<EventBus>,
         config_dir: &Path,
         test_result: &mut FactoryTestResult,
-        event_bus: &Arc<EventBus>,
+        manager: &Gh3036Manager,
     ) -> Result<Option<FactoryTestStepResult>, String> {
         info!("[FactoryTest] 执行 LPCTR 测试: CMD_FACTORY_SET_MODE 0x10");
 
@@ -671,29 +881,97 @@ impl FactoryTestManager {
             event_bus,
             FactoryTestStep::Lpctr,
             FactoryTestStatus::Running,
-            0.60,
+            0.58,
             &format!("加载配置文件: {}", config_file.display()),
         );
 
-        thread::sleep(Duration::from_millis(500));
+        let config_content = std::fs::read_to_string(&config_file)
+            .map_err(|e| format!("读取配置文件失败: {}", e))?;
+
+        let reg_values = Self::parse_config_file(&config_content)?;
 
         Self::publish_progress_static(
             event_bus,
             FactoryTestStep::Lpctr,
             FactoryTestStatus::Running,
-            0.63,
-            "采集数据中 (3秒)",
+            0.60,
+            "发送产测模式命令 FS 0x10",
         );
+
+        manager.execute_rpc("FS", &["0x10".to_string()]).await
+            .map_err(|e| format!("设置产测模式 0x10 失败: {}", e))?;
+
+        thread::sleep(Duration::from_millis(100));
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::Lpctr,
+            FactoryTestStatus::Running,
+            0.62,
+            "下载配置并写入寄存器",
+        );
+
+        manager.execute_rpc("D", &["0".to_string()]).await
+            .map_err(|e| format!("下载配置阶段 0 失败: {}", e))?;
+
+        let params: Vec<String> = reg_values.iter()
+            .map(|v| format!("0x{:04X}", v))
+            .collect();
+        manager.execute_rpc("L", &params).await
+            .map_err(|e| format!("写入寄存器列表失败: {}", e))?;
+
+        manager.execute_rpc("D", &["1".to_string()]).await
+            .map_err(|e| format!("下载配置阶段 1 失败: {}", e))?;
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::Lpctr,
+            FactoryTestStatus::Running,
+            0.65,
+            "启动 TEST1 并采集数据 (3秒)",
+        );
+
+        manager.execute_rpc("S", &["0x1".to_string(), "1".to_string()]).await
+            .map_err(|e| format!("启动 TEST1 失败: {}", e))?;
 
         thread::sleep(Duration::from_secs(3));
 
-        test_result.lpctr = vec![200, 205, 198, 202, 199];
+        manager.execute_rpc("S", &["0x1".to_string(), "0".to_string()]).await
+            .map_err(|e| format!("停止 TEST1 失败: {}", e))?;
+
+        thread::sleep(Duration::from_secs(1));
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::Lpctr,
+            FactoryTestStatus::Running,
+            0.68,
+            "获取 LPCTR 结果 FG 0x10",
+        );
+
+        let result = manager.execute_rpc("FG", &["0x10".to_string()]).await
+            .map_err(|e| format!("获取产测模式 0x10 结果失败: {}", e))?;
+
+        let lpctr: Vec<u16> = result.chunks(2)
+            .map(|chunk| {
+                if chunk.len() == 2 {
+                    u16::from_le_bytes([chunk[0], chunk[1]])
+                } else if chunk.len() == 1 {
+                    chunk[0] as u16
+                } else {
+                    0
+                }
+            })
+            .collect();
+
+        test_result.lpctr = lpctr.clone();
+        info!("[FactoryTest] LPCTR 数据: {:?}", lpctr);
 
         Ok(Some(FactoryTestStepResult {
             step: FactoryTestStep::Lpctr,
             success: true,
-            message: format!("LPCTR: {:?}", test_result.lpctr),
-            data: test_result.lpctr.clone(),
+            message: format!("LPCTR 测试完成, {} 个通道", lpctr.len()),
+            data: lpctr,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -701,11 +979,11 @@ impl FactoryTestManager {
         }))
     }
 
-    fn execute_lplctr_step(
-        _rpc_receiver: &Receiver<FactoryRpcRequest>,
+    async fn execute_lplctr_step(
+        event_bus: &Arc<EventBus>,
         config_dir: &Path,
         test_result: &mut FactoryTestResult,
-        event_bus: &Arc<EventBus>,
+        manager: &Gh3036Manager,
     ) -> Result<Option<FactoryTestStepResult>, String> {
         info!("[FactoryTest] 执行 LPLCTR 测试: CMD_FACTORY_SET_MODE 0x20");
 
@@ -716,29 +994,97 @@ impl FactoryTestManager {
             event_bus,
             FactoryTestStep::Lplctr,
             FactoryTestStatus::Running,
-            0.80,
+            0.78,
             &format!("加载配置文件: {}", config_file.display()),
         );
 
-        thread::sleep(Duration::from_millis(500));
+        let config_content = std::fs::read_to_string(&config_file)
+            .map_err(|e| format!("读取配置文件失败: {}", e))?;
+
+        let reg_values = Self::parse_config_file(&config_content)?;
 
         Self::publish_progress_static(
             event_bus,
             FactoryTestStep::Lplctr,
             FactoryTestStatus::Running,
-            0.83,
-            "采集数据中 (3秒)",
+            0.80,
+            "发送产测模式命令 FS 0x20",
         );
+
+        manager.execute_rpc("FS", &["0x20".to_string()]).await
+            .map_err(|e| format!("设置产测模式 0x20 失败: {}", e))?;
+
+        thread::sleep(Duration::from_millis(100));
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::Lplctr,
+            FactoryTestStatus::Running,
+            0.82,
+            "下载配置并写入寄存器",
+        );
+
+        manager.execute_rpc("D", &["0".to_string()]).await
+            .map_err(|e| format!("下载配置阶段 0 失败: {}", e))?;
+
+        let params: Vec<String> = reg_values.iter()
+            .map(|v| format!("0x{:04X}", v))
+            .collect();
+        manager.execute_rpc("L", &params).await
+            .map_err(|e| format!("写入寄存器列表失败: {}", e))?;
+
+        manager.execute_rpc("D", &["1".to_string()]).await
+            .map_err(|e| format!("下载配置阶段 1 失败: {}", e))?;
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::Lplctr,
+            FactoryTestStatus::Running,
+            0.85,
+            "启动 TEST1 并采集数据 (3秒)",
+        );
+
+        manager.execute_rpc("S", &["0x1".to_string(), "1".to_string()]).await
+            .map_err(|e| format!("启动 TEST1 失败: {}", e))?;
 
         thread::sleep(Duration::from_secs(3));
 
-        test_result.lplctr = vec![150, 155, 148, 152, 149];
+        manager.execute_rpc("S", &["0x1".to_string(), "0".to_string()]).await
+            .map_err(|e| format!("停止 TEST1 失败: {}", e))?;
+
+        thread::sleep(Duration::from_secs(1));
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::Lplctr,
+            FactoryTestStatus::Running,
+            0.88,
+            "获取 LPLCTR 结果 FG 0x20",
+        );
+
+        let result = manager.execute_rpc("FG", &["0x20".to_string()]).await
+            .map_err(|e| format!("获取产测模式 0x20 结果失败: {}", e))?;
+
+        let lplctr: Vec<u16> = result.chunks(2)
+            .map(|chunk| {
+                if chunk.len() == 2 {
+                    u16::from_le_bytes([chunk[0], chunk[1]])
+                } else if chunk.len() == 1 {
+                    chunk[0] as u16
+                } else {
+                    0
+                }
+            })
+            .collect();
+
+        test_result.lplctr = lplctr.clone();
+        info!("[FactoryTest] LPLCTR 数据: {:?}", lplctr);
 
         Ok(Some(FactoryTestStepResult {
             step: FactoryTestStep::Lplctr,
             success: true,
-            message: format!("LPLCTR: {:?}", test_result.lplctr),
-            data: test_result.lplctr.clone(),
+            message: format!("LPLCTR 测试完成, {} 个通道", lplctr.len()),
+            data: lplctr,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -746,9 +1092,9 @@ impl FactoryTestManager {
         }))
     }
 
-    fn execute_cleanup_step(
-        _rpc_receiver: &Receiver<FactoryRpcRequest>,
+    async fn execute_cleanup_step(
         event_bus: &Arc<EventBus>,
+        manager: &Gh3036Manager,
     ) -> Result<Option<FactoryTestStepResult>, String> {
         info!("[FactoryTest] 执行清理步骤: 切换工作模式回 0");
 
@@ -757,20 +1103,26 @@ impl FactoryTestManager {
             FactoryTestStep::Cleanup,
             FactoryTestStatus::Running,
             0.92,
-            "切换工作模式为 0",
+            "关闭全部功能",
         );
 
-        thread::sleep(Duration::from_millis(500));
+        manager.execute_rpc("S", &["0x0".to_string(), "0".to_string()]).await
+            .map_err(|e| format!("关闭功能失败: {}", e))?;
+
+        thread::sleep(Duration::from_millis(100));
 
         Self::publish_progress_static(
             event_bus,
             FactoryTestStep::Cleanup,
             FactoryTestStatus::Running,
             0.94,
-            "关闭测试功能",
+            "切换工作模式为 0",
         );
 
-        thread::sleep(Duration::from_millis(500));
+        manager.execute_rpc("M", &["0".to_string()]).await
+            .map_err(|e| format!("设置工作模式失败: {}", e))?;
+
+        info!("[FactoryTest] 工作模式已切换回 0");
 
         Ok(Some(FactoryTestStepResult {
             step: FactoryTestStep::Cleanup,
@@ -782,6 +1134,40 @@ impl FactoryTestManager {
                 .map(|d| d.as_millis() as u64)
                 .unwrap_or(0),
         }))
+    }
+
+    fn parse_config_file(content: &str) -> Result<Vec<u16>, String> {
+        let mut values = Vec::new();
+        
+        for line in content.lines() {
+            let line = line.trim();
+            
+            if line.is_empty() || line.starts_with("//") || line.starts_with("#") || line.starts_with("[") {
+                continue;
+            }
+
+            if line.starts_with("{") && line.ends_with("}") {
+                let inner = &line[1..line.len()-1];
+                let parts: Vec<&str> = inner.split(',').collect();
+                
+                if parts.len() >= 2 {
+                    let addr_str = parts[0].trim().trim_start_matches("0x").trim_start_matches("0X");
+                    let val_str = parts[1].trim().trim_start_matches("0x").trim_start_matches("0X");
+                    
+                    if let Ok(_addr) = u16::from_str_radix(addr_str, 16) {
+                        if let Ok(val) = u16::from_str_radix(val_str, 16) {
+                            values.push(val);
+                        }
+                    }
+                }
+            }
+        }
+
+        if values.is_empty() {
+            warn!("[FactoryTest] 配置文件解析结果为空");
+        }
+
+        Ok(values)
     }
 
     fn save_result_to_csv(result: &FactoryTestResult) -> Result<(), String> {

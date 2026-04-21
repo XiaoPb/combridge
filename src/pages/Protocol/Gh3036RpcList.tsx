@@ -49,6 +49,18 @@ const Gh3036RpcList: React.FC = () => {
     { value: 'lplctr', label: t('gh3036.factoryModes.lplctr') },
   ];
 
+  const bitMap: Record<string, number> = {
+        adt: 0x01,
+        hr: 0x02,
+        spo2: 0x04,
+        hrv: 0x08,
+        gnadt: 0x10,
+        irnadt: 0x20,
+        test1: 0x40,
+        test2: 0x80,
+        slot: 0x100,
+      };
+
   const handleExecuteRpc = async (commandKey: string, params: string[]) => {
     if (!txChannel) {
       message.error(t('gh3036.noTxChannel'));
@@ -127,28 +139,24 @@ const Gh3036RpcList: React.FC = () => {
       return;
     }
     const funcBits = rpcConfig.selectedFunctions.reduce((acc, func) => {
-      const bitMap: Record<string, number> = {
-        adt: 0x01,
-        hr: 0x02,
-        spo2: 0x04,
-        hrv: 0x08,
-        gnadt: 0x10,
-        irnadt: 0x20,
-        test1: 0x40,
-        test2: 0x80,
-        slot: 0x100,
-      };
       return acc | (bitMap[func] || 0);
     }, 0);
     
-    const success = await handleExecuteRpc('S', [funcBits.toString(), '1']);
+    const success = await handleExecuteRpc('S', [funcBits.toString(), '0']);
     if (success) {
       setRpcConfig({ isRunning: true });
     }
   };
 
   const handleStopFunction = async () => {
-    const success = await handleExecuteRpc('S', ['0', '0']);
+    if (rpcConfig.selectedFunctions.length === 0) {
+      message.error(t('gh3036.functionSelectPlaceholder'));
+      return;
+    }
+    const funcBits = rpcConfig.selectedFunctions.reduce((acc, func) => {
+      return acc | (bitMap[func] || 0);
+    }, 0);
+    const success = await handleExecuteRpc('S', [funcBits.toString(), '1']);
     if (success) {
       setRpcConfig({ isRunning: false });
     }

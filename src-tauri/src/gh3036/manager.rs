@@ -310,7 +310,7 @@ pub struct Gh3036Manager {
     thread_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
     rpc_thread_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
     rpc: Mutex<Option<Arc<std::sync::Mutex<RpcCore<16, Box<dyn Fn(&[u8]) + Send + Sync>>>>>>,
-    factory_test_manager: FactoryTestManager,
+    factory_test_manager: Arc<FactoryTestManager>,
 }
 
 unsafe impl Send for Gh3036Manager {}
@@ -318,7 +318,7 @@ unsafe impl Sync for Gh3036Manager {}
 
 impl Gh3036Manager {
     pub fn new(device_manager: Arc<DeviceManager>, event_bus: Arc<EventBus>) -> Self {
-        let factory_test_manager = FactoryTestManager::new(Arc::clone(&event_bus));
+        let factory_test_manager = Arc::new(FactoryTestManager::new(Arc::clone(&event_bus)));
         Self {
             device_manager,
             event_bus,
@@ -1237,8 +1237,8 @@ impl Gh3036Manager {
         Ok(regs)
     }
 
-    pub async fn factory_test_start(&self) -> Result<(), String> {
-        self.factory_test_manager.start_test(self)
+    pub async fn factory_test_start(self: Arc<Self>) -> Result<(), String> {
+        Arc::clone(&self.factory_test_manager).start_test(self)
     }
 
     pub async fn factory_test_stop(&self) -> Result<(), String> {

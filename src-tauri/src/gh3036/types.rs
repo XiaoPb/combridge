@@ -24,12 +24,12 @@ pub use rpc::PackHeader;
 pub const GH_ACC_AXIS_NUM: usize = 3;
 pub const GH_GYRO_AXIS_NUM: usize = 3;
 
-pub const FACTORY_TEST_MODE_CHIP_INIT_OFFSET: u8 = 1;
-pub const FACTORY_TEST_MODE_CHIP_UID_OFFSET: u8 = 2;
-pub const FACTORY_TEST_MODE_BASE_NOISE_OFFSET: u8 = 3;
-pub const FACTORY_TEST_MODE_PPG_NOISE_OFFSET: u8 = 4;
-pub const FACTORY_TEST_MODE_LPCTR_OFFSET: u8 = 5;
-pub const FACTORY_TEST_MODE_LPLCTR_OFFSET: u8 = 6;
+pub const FACTORY_TEST_MODE_CHIP_INIT_OFFSET: u8 = 0;
+pub const FACTORY_TEST_MODE_CHIP_UID_OFFSET: u8 = 1;
+pub const FACTORY_TEST_MODE_BASE_NOISE_OFFSET: u8 = 2;
+pub const FACTORY_TEST_MODE_PPG_NOISE_OFFSET: u8 = 3;
+pub const FACTORY_TEST_MODE_LPCTR_OFFSET: u8 = 4;
+pub const FACTORY_TEST_MODE_LPLCTR_OFFSET: u8 = 5;
 
 pub const FACTORY_TEST_MODE_NONE: u8 = 0;
 pub const FACTORY_TEST_MODE_CHIP_INIT: u8 = 1 << FACTORY_TEST_MODE_CHIP_INIT_OFFSET;
@@ -447,7 +447,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
                 RpcParam {
                     name: "factoryMode".to_string(),
                     param_type: "u8".to_string(),
-                    description: "产测模式（位掩码：0x02=CHIP_INIT, 0x04=CHIP_UID, 0x08=BASE_NOISE, 0x10=PPG_NOISE, 0x20=LPCTR, 0x40=LPLCTR）".to_string(),
+                    description: "产测模式（位掩码：0x01=CHIP_INIT, 0x02=CHIP_UID, 0x04=BASE_NOISE, 0x08=PPG_NOISE, 0x10=LPCTR, 0x20=LPLCTR）".to_string(),
                     default_value: None,
                 },
             ],

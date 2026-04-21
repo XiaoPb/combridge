@@ -167,12 +167,12 @@ const Gh3036RpcList: React.FC = () => {
       return;
     }
     const bitMap: Record<string, number> = {
-      chipInit: 0x02,
-      chipUid: 0x04,
-      baseNoise: 0x08,
-      ppgNoise: 0x10,
-      lpctr: 0x20,
-      lplctr: 0x40,
+      chipInit: 0x01,
+      chipUid: 0x02,
+      baseNoise: 0x04,
+      ppgNoise: 0x08,
+      lpctr: 0x10,
+      lplctr: 0x20,
     };
     const modeBits = bitMap[rpcConfig.factoryMode] || 0;
     await handleExecuteRpc('FS', [modeBits.toString()]);
@@ -184,19 +184,26 @@ const Gh3036RpcList: React.FC = () => {
       return;
     }
     const bitMap: Record<string, number> = {
-      chipInit: 0x02,
-      chipUid: 0x04,
-      baseNoise: 0x08,
-      ppgNoise: 0x10,
-      lpctr: 0x20,
-      lplctr: 0x40,
+      chipInit: 0x01,
+      chipUid: 0x02,
+      baseNoise: 0x04,
+      ppgNoise: 0x08,
+      lpctr: 0x10,
+      lplctr: 0x20,
     };
     const modeBits = bitMap[rpcConfig.factoryMode] || 0;
     const result = await executeRpc('FG', [modeBits.toString()]);
     if (result && result.length >= 2) {
-      const value = (result[1] << 8) | result[0];
-      setRpcConfig({ factoryResult: `0x${value.toString(16).toUpperCase().padStart(4, '0')}` });
-      message.success(t('gh3036.factoryResultSuccess', { value: `0x${value.toString(16).toUpperCase().padStart(4, '0')}` }));
+      const values: string[] = [];
+      for (let i = 0; i < result.length; i += 2) {
+        if (i + 1 < result.length) {
+          const value = (result[i + 1] << 8) | result[i];
+          values.push(`0x${value.toString(16).toUpperCase().padStart(4, '0')}`);
+        }
+      }
+      const displayValue = values.length > 1 ? values.join(', ') : values[0] || '-';
+      setRpcConfig({ factoryResult: displayValue });
+      message.success(t('gh3036.factoryResultSuccess', { value: displayValue }));
     }
   };
 

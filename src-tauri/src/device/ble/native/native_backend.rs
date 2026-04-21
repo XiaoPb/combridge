@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use tracing::info;
 
 use crate::error::{ComBridgeError, Result};
+use crate::service::event_bus::EventBus;
 use super::super::ble_traits::{
     BleBackend, BleCharacteristic, BleConnection, BleDevice, BleService, NotifyCallback,
 };
@@ -12,6 +13,7 @@ use super::adapter::BleAdapter;
 pub struct NativeBleBackend {
     adapter: Option<Arc<BleAdapter>>,
     configured: bool,
+    event_bus: Option<Arc<EventBus>>,
 }
 
 impl NativeBleBackend {
@@ -19,6 +21,15 @@ impl NativeBleBackend {
         Self {
             adapter: None,
             configured: false,
+            event_bus: None,
+        }
+    }
+
+    pub fn with_event_bus(event_bus: Arc<EventBus>) -> Self {
+        Self {
+            adapter: None,
+            configured: false,
+            event_bus: Some(event_bus),
         }
     }
 }
@@ -34,7 +45,7 @@ impl BleBackend for NativeBleBackend {
     async fn configure(&mut self) -> Result<()> {
         info!("配置原生BLE后端");
 
-        let adapter = BleAdapter::new().await?;
+        let adapter = BleAdapter::with_event_bus(self.event_bus.clone()).await?;
         adapter.power_on().await?;
 
         self.adapter = Some(Arc::new(adapter));

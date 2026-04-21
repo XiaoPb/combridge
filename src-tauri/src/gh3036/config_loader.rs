@@ -103,6 +103,8 @@ impl ConfigLoader {
 
     fn parse_register_line(&self, line: &str, line_num: usize) -> Option<RegisterItem> {
         let line = line.split("//").next()?.trim();
+        
+        let line = line.trim_end_matches(',');
 
         if !line.starts_with('{') || !line.ends_with('}') {
             return None;

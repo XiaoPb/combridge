@@ -62,7 +62,7 @@ pub struct GattClient {
     notify_callbacks: Mutex<HashMap<String, NotifyCallback>>,
     notify_handles: Mutex<HashMap<String, tokio::task::JoinHandle<()>>>,
     caches: RwLock<HashMap<String, CharacteristicCache>>,
-    disconnect_callback: RwLock<Option<DisconnectCallback>>,
+    disconnect_callback: Arc<RwLock<Option<DisconnectCallback>>>,
     connection_monitor_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
@@ -77,7 +77,7 @@ impl GattClient {
             notify_callbacks: Mutex::new(HashMap::new()),
             notify_handles: Mutex::new(HashMap::new()),
             caches: RwLock::new(HashMap::new()),
-            disconnect_callback: RwLock::new(None),
+            disconnect_callback: Arc::new(RwLock::new(None)),
             connection_monitor_handle: Mutex::new(None),
         }
     }
@@ -155,7 +155,7 @@ impl GattClient {
         };
 
         let address = self.address.clone();
-        let callback = self.disconnect_callback.read().ok().and_then(|cb| cb.clone());
+        let callback_arc = self.disconnect_callback.clone();
 
         let handle = tokio::spawn(async move {
             loop {
@@ -164,8 +164,10 @@ impl GattClient {
                 let connected = device.is_connected().await;
                 if !connected {
                     info!("[{}] 检测到设备断开连接", extract_short_mac(&address));
-                    if let Some(cb) = &callback {
-                        cb(&address);
+                    if let Ok(cb_guard) = callback_arc.read() {
+                        if let Some(cb) = cb_guard.as_ref() {
+                            cb(&address);
+                        }
                     }
                     break;
                 }

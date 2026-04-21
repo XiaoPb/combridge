@@ -85,16 +85,24 @@ function handleBleConnected(payload: BleConnectedPayload) {
 }
 
 function handleBleDisconnected(payload: BleDisconnectedPayload) {
+  console.log('[EventListeners] handleBleDisconnected called with payload:', payload);
   const store = useBleStore.getState();
   const deviceId = payload.address;
+  
+  const wasCurrentDevice = store.currentDevice === deviceId;
+  
   store.removeConnection(deviceId);
-  if (store.currentDevice === deviceId) {
+  
+  if (wasCurrentDevice) {
     store.setCurrentDevice(null);
     store.clearServices();
     store.clearCharacteristics();
+    store.clearNotifications();
   }
-  useLogStore.getState().addLog('info', 'BleManager', `设备 ${payload.address} 已断开`);
-  useNotificationStore.getState().addNotification('info', `设备 ${payload.address} 已断开`);
+  
+  const deviceName = store.connections.find(c => c.address === deviceId)?.name || deviceId;
+  useLogStore.getState().addLog('info', 'BleManager', `设备 ${deviceName} 已断开`);
+  useNotificationStore.getState().addNotification('warning', `设备 ${deviceName} 已断开`);
 }
 
 function handleGh3036Frames(payload: Gh3036FramesPayload) {

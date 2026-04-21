@@ -317,6 +317,13 @@ pub fn run() {
             dashboard::save_json_file,
             dashboard::delete_json_file,
             dashboard::load_json_file,
+            commands::gh3036::gh3036_factory_test_start,
+            commands::gh3036::gh3036_factory_test_stop,
+            commands::gh3036::gh3036_factory_test_status,
+            commands::gh3036::gh3036_factory_test_continue,
+            commands::gh3036::gh3036_factory_test_set_config_dir,
+            commands::gh3036::gh3036_factory_test_validate_config,
+            commands::gh3036::gh3036_factory_test_get_result,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

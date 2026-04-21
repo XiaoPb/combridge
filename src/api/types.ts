@@ -172,3 +172,60 @@ export interface Gh3036VersionTypeConfig {
   name: string;
   description: string;
 }
+
+export type FactoryTestStep = 
+  | 'idle' 
+  | 'prepare' 
+  | 'chip_init' 
+  | 'uuid' 
+  | 'base_noise' 
+  | 'ppg_noise' 
+  | 'lpctr' 
+  | 'environment_switch' 
+  | 'lplctr' 
+  | 'cleanup' 
+  | 'completed';
+
+export type FactoryTestStatus = 
+  | 'idle' 
+  | 'running' 
+  | 'waiting_for_environment_switch' 
+  | 'completed' 
+  | 'failed' 
+  | 'stopped';
+
+export interface FactoryTestStepResult {
+  step: FactoryTestStep;
+  success: boolean;
+  message: string;
+  data: number[];
+  timestamp: number;
+}
+
+export interface FactoryTestResult {
+  chip_init_status: number;
+  uuid: number[];
+  base_noise: number[];
+  ppg_noise: number[];
+  lpctr: number[];
+  lplctr: number[];
+  overall_result: string;
+  timestamp: number;
+}
+
+export interface ConfigValidationResult {
+  base_noise_config: string | null;
+  ppg_noise_config: string | null;
+  lpctr_config: string | null;
+  lplctr_config: string | null;
+  errors: string[];
+  is_valid: boolean;
+}
+
+export interface FactoryTestProgressEvent {
+  current_step: FactoryTestStep;
+  status: FactoryTestStatus;
+  step_result: FactoryTestStepResult | null;
+  progress: number;
+  message: string;
+}

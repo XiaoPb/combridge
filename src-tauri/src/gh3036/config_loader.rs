@@ -37,6 +37,12 @@ impl ConfigLoader {
         Ok(loader)
     }
 
+    pub fn from_content(content: &str) -> Result<Self, String> {
+        let mut loader = Self::new();
+        loader.parse_register_list(content)?;
+        Ok(loader)
+    }
+
     pub fn load<P: AsRef<Path>>(&mut self, path: P) -> Result<(), String> {
         let path = path.as_ref();
         
@@ -148,6 +154,15 @@ impl ConfigLoader {
     }
 
     pub fn format_for_download(&self) -> Vec<String> {
+        let mut result = Vec::with_capacity(self.register_list.len() * 2);
+        for r in &self.register_list {
+            result.push(format!("0x{:04X}", r.addr));
+            result.push(format!("0x{:04X}", r.value));
+        }
+        result
+    }
+
+    pub fn format_values_only(&self) -> Vec<String> {
         self.register_list
             .iter()
             .map(|r| format!("0x{:04X}", r.value))
@@ -201,5 +216,17 @@ addr, value, default
         let mut loader = ConfigLoader::new();
         loader.parse_register_list(content).unwrap();
         assert_eq!(loader.len(), 2);
+    }
+
+    #[test]
+    fn test_format_for_download() {
+        let content = r#"
+[Register_List]
+{0x0016,0x001f},
+{0x0020,0x2919},
+"#;
+        let loader = ConfigLoader::from_content(content).unwrap();
+        let params = loader.format_for_download();
+        assert_eq!(params, vec!["0x0016", "0x001F", "0x0020", "0x2919"]);
     }
 }

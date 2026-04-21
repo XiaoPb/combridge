@@ -14,9 +14,10 @@ use std::time::Duration;
 use chrono::Local;
 use parking_lot::Mutex;
 use tokio::runtime::Runtime;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use crate::service::EventBus;
+use super::config_loader::ConfigLoader;
 use super::manager::Gh3036Manager;
 use super::types::{
     FactoryTestStep, FactoryTestStatus, FactoryTestResult, FactoryTestStepResult,
@@ -627,10 +628,14 @@ impl FactoryTestManager {
             &format!("加载配置文件: {}", config_file.display()),
         );
 
-        let config_content = std::fs::read_to_string(&config_file)
-            .map_err(|e| format!("读取配置文件失败: {}", e))?;
-
-        let reg_values = Self::parse_config_file(&config_content)?;
+        let config_loader = ConfigLoader::from_file(&config_file)?;
+        let reg_values = config_loader.get_values();
+        
+        info!("[FactoryTest] 解析到 {} 个寄存器", reg_values.len());
+        
+        if reg_values.is_empty() {
+            return Err("寄存器列表为空".to_string());
+        }
 
         Self::publish_progress_static(
             event_bus,
@@ -664,9 +669,7 @@ impl FactoryTestManager {
             &format!("写入寄存器列表 ({} 个)", reg_values.len()),
         );
 
-        let params: Vec<String> = reg_values.iter()
-            .map(|v| format!("0x{:04X}", v))
-            .collect();
+        let params = config_loader.format_for_download();
         manager.execute_rpc("L", &params).await
             .map_err(|e| format!("写入寄存器列表失败: {}", e))?;
 
@@ -772,10 +775,14 @@ impl FactoryTestManager {
             &format!("加载配置文件: {}", config_file.display()),
         );
 
-        let config_content = std::fs::read_to_string(&config_file)
-            .map_err(|e| format!("读取配置文件失败: {}", e))?;
-
-        let reg_values = Self::parse_config_file(&config_content)?;
+        let config_loader = ConfigLoader::from_file(&config_file)?;
+        let reg_values = config_loader.get_values();
+        
+        info!("[FactoryTest] 解析到 {} 个寄存器", reg_values.len());
+        
+        if reg_values.is_empty() {
+            return Err("寄存器列表为空".to_string());
+        }
 
         Self::publish_progress_static(
             event_bus,
@@ -801,9 +808,7 @@ impl FactoryTestManager {
         manager.execute_rpc("D", &["0".to_string()]).await
             .map_err(|e| format!("下载配置阶段 0 失败: {}", e))?;
 
-        let params: Vec<String> = reg_values.iter()
-            .map(|v| format!("0x{:04X}", v))
-            .collect();
+        let params = config_loader.format_for_download();
         manager.execute_rpc("L", &params).await
             .map_err(|e| format!("写入寄存器列表失败: {}", e))?;
 
@@ -885,10 +890,14 @@ impl FactoryTestManager {
             &format!("加载配置文件: {}", config_file.display()),
         );
 
-        let config_content = std::fs::read_to_string(&config_file)
-            .map_err(|e| format!("读取配置文件失败: {}", e))?;
-
-        let reg_values = Self::parse_config_file(&config_content)?;
+        let config_loader = ConfigLoader::from_file(&config_file)?;
+        let reg_values = config_loader.get_values();
+        
+        info!("[FactoryTest] 解析到 {} 个寄存器", reg_values.len());
+        
+        if reg_values.is_empty() {
+            return Err("寄存器列表为空".to_string());
+        }
 
         Self::publish_progress_static(
             event_bus,
@@ -914,9 +923,7 @@ impl FactoryTestManager {
         manager.execute_rpc("D", &["0".to_string()]).await
             .map_err(|e| format!("下载配置阶段 0 失败: {}", e))?;
 
-        let params: Vec<String> = reg_values.iter()
-            .map(|v| format!("0x{:04X}", v))
-            .collect();
+        let params = config_loader.format_for_download();
         manager.execute_rpc("L", &params).await
             .map_err(|e| format!("写入寄存器列表失败: {}", e))?;
 
@@ -998,10 +1005,14 @@ impl FactoryTestManager {
             &format!("加载配置文件: {}", config_file.display()),
         );
 
-        let config_content = std::fs::read_to_string(&config_file)
-            .map_err(|e| format!("读取配置文件失败: {}", e))?;
-
-        let reg_values = Self::parse_config_file(&config_content)?;
+        let config_loader = ConfigLoader::from_file(&config_file)?;
+        let reg_values = config_loader.get_values();
+        
+        info!("[FactoryTest] 解析到 {} 个寄存器", reg_values.len());
+        
+        if reg_values.is_empty() {
+            return Err("寄存器列表为空".to_string());
+        }
 
         Self::publish_progress_static(
             event_bus,
@@ -1027,9 +1038,7 @@ impl FactoryTestManager {
         manager.execute_rpc("D", &["0".to_string()]).await
             .map_err(|e| format!("下载配置阶段 0 失败: {}", e))?;
 
-        let params: Vec<String> = reg_values.iter()
-            .map(|v| format!("0x{:04X}", v))
-            .collect();
+        let params = config_loader.format_for_download();
         manager.execute_rpc("L", &params).await
             .map_err(|e| format!("写入寄存器列表失败: {}", e))?;
 
@@ -1134,40 +1143,6 @@ impl FactoryTestManager {
                 .map(|d| d.as_millis() as u64)
                 .unwrap_or(0),
         }))
-    }
-
-    fn parse_config_file(content: &str) -> Result<Vec<u16>, String> {
-        let mut values = Vec::new();
-        
-        for line in content.lines() {
-            let line = line.trim();
-            
-            if line.is_empty() || line.starts_with("//") || line.starts_with("#") || line.starts_with("[") {
-                continue;
-            }
-
-            if line.starts_with("{") && line.ends_with("}") {
-                let inner = &line[1..line.len()-1];
-                let parts: Vec<&str> = inner.split(',').collect();
-                
-                if parts.len() >= 2 {
-                    let addr_str = parts[0].trim().trim_start_matches("0x").trim_start_matches("0X");
-                    let val_str = parts[1].trim().trim_start_matches("0x").trim_start_matches("0X");
-                    
-                    if let Ok(_addr) = u16::from_str_radix(addr_str, 16) {
-                        if let Ok(val) = u16::from_str_radix(val_str, 16) {
-                            values.push(val);
-                        }
-                    }
-                }
-            }
-        }
-
-        if values.is_empty() {
-            warn!("[FactoryTest] 配置文件解析结果为空");
-        }
-
-        Ok(values)
     }
 
     fn save_result_to_csv(result: &FactoryTestResult) -> Result<(), String> {

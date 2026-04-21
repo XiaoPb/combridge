@@ -5,12 +5,15 @@
 //! - 数据类型定义
 //! - CSV 写入器
 //! - 产测流程管理
+//! - 配置文件加载
 
+pub mod config_loader;
 pub mod csv_writer;
 pub mod factory_test;
 pub mod manager;
 pub mod types;
 
+pub use config_loader::{ConfigLoader, RegisterItem};
 pub use factory_test::FactoryTestManager;
 pub use manager::{ChannelConfig, ChannelType, CsvConfig, Gh3036Manager};
 pub use types::{

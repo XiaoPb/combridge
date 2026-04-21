@@ -6,7 +6,17 @@ import { useLogStore } from '../stores/logStore';
 import type { BleScanOptions, BleConnection } from '../types';
 
 const handleBleError = (operation: string, params: Record<string, unknown>, error: unknown): string => {
-  const errorMsg = error instanceof Error ? error.message : String(error);
+  let errorMsg: string;
+  if (error instanceof Error) {
+    errorMsg = error.message;
+  } else if (typeof error === 'string') {
+    errorMsg = error;
+  } else if (error && typeof error === 'object') {
+    const errObj = error as Record<string, unknown>;
+    errorMsg = (errObj.message as string) || (errObj.error as string) || JSON.stringify(error);
+  } else {
+    errorMsg = String(error);
+  }
   if (import.meta.env.DEV) {
     console.error(`[useBle] ${operation} 失败:`, { params, error: errorMsg });
   }

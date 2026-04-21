@@ -50,6 +50,7 @@ export default defineConfig(async () => ({
     },
   },
   optimizeDeps: {
+    entries: ["index.html"],
     include: ["react", "react-dom", "antd", "@ant-design/icons", "react-router-dom"],
     exclude: ["@tauri-apps/api", "@tauri-apps/plugin-dialog", "@tauri-apps/plugin-fs", "@tauri-apps/plugin-opener"],
     esbuildOptions: {

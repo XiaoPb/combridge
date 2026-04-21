@@ -33,8 +33,11 @@ const Gh3036RpcList: React.FC = () => {
     { value: 'hr', label: t('gh3036.functions.hr') },
     { value: 'spo2', label: t('gh3036.functions.spo2') },
     { value: 'hrv', label: t('gh3036.functions.hrv') },
-    { value: 'hsm', label: t('gh3036.functions.hsm') },
-    { value: 'fpbp', label: t('gh3036.functions.fpbp') },
+    { value: 'gnadt', label: t('gh3036.functions.gnadt') },
+    { value: 'irnadt', label: t('gh3036.functions.irnadt') },
+    { value: 'test1', label: t('gh3036.functions.test1') },
+    { value: 'test2', label: t('gh3036.functions.test2') },
+    { value: 'slot', label: t('gh3036.functions.slot') },
   ];
 
   const factoryModeOptions = [
@@ -125,12 +128,15 @@ const Gh3036RpcList: React.FC = () => {
     }
     const funcBits = rpcConfig.selectedFunctions.reduce((acc, func) => {
       const bitMap: Record<string, number> = {
-        adt: 1,
-        hr: 2,
-        spo2: 4,
-        hrv: 8,
-        hsm: 16,
-        fpbp: 32,
+        adt: 0x01,
+        hr: 0x02,
+        spo2: 0x04,
+        hrv: 0x08,
+        gnadt: 0x10,
+        irnadt: 0x20,
+        test1: 0x40,
+        test2: 0x80,
+        slot: 0x100,
       };
       return acc | (bitMap[func] || 0);
     }, 0);

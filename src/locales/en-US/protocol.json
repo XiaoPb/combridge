@@ -200,12 +200,15 @@
       "wakeup": "WAKEUP"
     },
     "functions": {
-      "adt": "ADT",
-      "hr": "HR",
-      "spo2": "SPO2",
-      "hrv": "HRV",
-      "hsm": "HSM",
-      "fpbp": "FPBP"
+      "adt": "ADT (Wear Detection)",
+      "hr": "HR (Heart Rate)",
+      "spo2": "SPO2 (Blood Oxygen)",
+      "hrv": "HRV (Heart Rate Variability)",
+      "gnadt": "GNADT (Green Liveness Detection)",
+      "irnadt": "IRNADT (IR Liveness Detection)",
+      "test1": "TEST1",
+      "test2": "TEST2",
+      "slot": "SLOT"
     },
     "factoryModes": {
       "chipInit": "CHIP_INIT",

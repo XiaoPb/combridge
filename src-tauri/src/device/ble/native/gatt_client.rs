@@ -137,6 +137,13 @@ impl GattClient {
     }
 
     fn start_connection_monitor(&self) {
+        if let Ok(mut monitor) = self.connection_monitor_handle.lock() {
+            if let Some(handle) = monitor.take() {
+                handle.abort();
+                info!("[{}] 已停止旧的连接监控任务", extract_short_mac(&self.address));
+            }
+        }
+
         let device = {
             let device_guard = self.device.read()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)));
@@ -158,6 +165,7 @@ impl GattClient {
         let callback_arc = self.disconnect_callback.clone();
 
         let handle = tokio::spawn(async move {
+            info!("[{}] 连接监控任务已启动", extract_short_mac(&address));
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 

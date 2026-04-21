@@ -7,10 +7,8 @@ import type {
   Gh3036VersionTypeConfig,
   FactoryTestStep,
   FactoryTestStatus,
-  FactoryTestStepResult,
   FactoryTestResult,
-  ConfigValidationResult,
-  FactoryTestProgressEvent
+  ConfigValidationResult
 } from './types';
 
 export interface LibraryStatus {

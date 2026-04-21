@@ -141,14 +141,14 @@ const Gh3036RpcList: React.FC = () => {
       return acc | (bitMap[func] || 0);
     }, 0);
     
-    const success = await handleExecuteRpc('S', [funcBits.toString(), '0']);
+    const success = await handleExecuteRpc('S', [funcBits.toString(), '1']);
     if (success) {
       setRpcConfig({ isRunning: true });
     }
   };
 
   const handleStopFunction = async () => {
-    const success = await handleExecuteRpc('S', ['0', '1']);
+    const success = await handleExecuteRpc('S', ['0', '0']);
     if (success) {
       setRpcConfig({ isRunning: false });
     }

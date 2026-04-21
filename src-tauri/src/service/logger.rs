@@ -41,6 +41,8 @@ pub struct LoggerService {
 
 impl LoggerService {
     pub fn init(config: LoggerConfig) -> Result<&'static LoggerService, Box<dyn std::error::Error>> {
+        let _ = tracing_log::LogTracer::init();
+        
         let service = Self::create_service(config.clone())?;
         LOGGER
             .set(service)
@@ -81,7 +83,8 @@ impl LoggerService {
 
             let file = std::fs::OpenOptions::new()
                 .create(true)
-                .append(true)
+                .write(true)
+                .truncate(true)
                 .open(&log_path)?;
             
             let (non_blocking, worker_guard) = tracing_appender::non_blocking(file);
@@ -95,6 +98,8 @@ impl LoggerService {
                 .with_ansi(false)
                 .with_writer(non_blocking);
             layers.push(file_layer.boxed());
+            
+            tracing::info!("日志文件已创建: {}", log_path.display());
         }
 
         let env_filter = EnvFilter::builder()

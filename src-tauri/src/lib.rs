@@ -25,8 +25,6 @@ use websocket::ConnectionPool;
 use crate::commands::waveform::WaveformManager;
 
 fn init_logger() {
-    tracing_log::LogTracer::init().expect("Failed to initialize LogTracer");
-    
     let exe_path = std::env::current_exe()
         .unwrap_or_else(|_| std::path::PathBuf::from("."));
     let exe_dir = exe_path.parent()
@@ -51,8 +49,9 @@ fn init_logger() {
         max_files: 10,
     };
     
-    let _guard = service::logger::LoggerService::init(config);
-    std::mem::forget(_guard);
+    if let Err(e) = service::logger::LoggerService::init(config) {
+        eprintln!("日志系统初始化失败: {}", e);
+    }
     info!("ComBridge Rust 应用启动");
     info!("日志文件: {}", log_path.display());
 }

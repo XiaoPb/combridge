@@ -165,19 +165,27 @@ impl GattClient {
         let callback_arc = self.disconnect_callback.clone();
 
         let handle = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             info!("[{}] 连接监控任务已启动", extract_short_mac(&address));
+            
+            let mut disconnect_count = 0;
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
                 let connected = device.is_connected().await;
                 if !connected {
-                    info!("[{}] 检测到设备断开连接", extract_short_mac(&address));
-                    if let Ok(cb_guard) = callback_arc.read() {
-                        if let Some(cb) = cb_guard.as_ref() {
-                            cb(&address);
+                    disconnect_count += 1;
+                    if disconnect_count >= 3 {
+                        info!("[{}] 检测到设备断开连接（连续{}次确认）", extract_short_mac(&address), disconnect_count);
+                        if let Ok(cb_guard) = callback_arc.read() {
+                            if let Some(cb) = cb_guard.as_ref() {
+                                cb(&address);
+                            }
                         }
+                        break;
                     }
-                    break;
+                } else {
+                    disconnect_count = 0;
                 }
             }
         });

@@ -164,7 +164,7 @@ impl BleManager {
     }
 
     pub async fn configure_native(&self) -> Result<()> {
-        let mut backend = NativeBleBackend::new();
+        let mut backend = NativeBleBackend::with_event_bus(self.event_bus.clone());
         backend.configure().await?;
         
         let mut backend_guard = self.backend.write().await;

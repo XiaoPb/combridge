@@ -6,18 +6,25 @@ use futures::StreamExt;
 use tracing::info;
 
 use crate::error::{ComBridgeError, LockResultExt, Result};
+use crate::service::event_bus::{EventBus, BleConnectionEvent};
+use crate::service::event_bus::topics;
 use super::super::ble_traits::BleDevice;
-use super::gatt_client::GattClient;
+use super::gatt_client::{GattClient, DisconnectCallback};
 
 pub struct BleAdapter {
     adapter: Arc<Adapter>,
     scanned_devices: Arc<RwLock<HashMap<DeviceId, (Arc<Device>, Option<i16>)>>>,
     clients: RwLock<HashMap<String, Arc<GattClient>>>,
     scan_cancelled: Arc<AtomicBool>,
+    event_bus: Option<Arc<EventBus>>,
 }
 
 impl BleAdapter {
     pub async fn new() -> Result<Self> {
+        Self::with_event_bus(None).await
+    }
+
+    pub async fn with_event_bus(event_bus: Option<Arc<EventBus>>) -> Result<Self> {
         info!("初始化蓝牙适配器");
 
         let adapter = Adapter::default()
@@ -30,6 +37,7 @@ impl BleAdapter {
             scanned_devices: Arc::new(RwLock::new(HashMap::new())),
             clients: RwLock::new(HashMap::new()),
             scan_cancelled: Arc::new(AtomicBool::new(false)),
+            event_bus,
         })
     }
 
@@ -167,6 +175,16 @@ impl BleAdapter {
         let client = self.get_or_create_client(address);
         client.set_device(device, self.adapter.clone())?;
         client.connect().await?;
+
+        if let Some(event_bus) = &self.event_bus {
+            let event_bus = event_bus.clone();
+            let callback: DisconnectCallback = Arc::new(move |addr: &str| {
+                let event = BleConnectionEvent::new(addr, None);
+                event_bus.publish_typed(topics::BLE_DISCONNECTED, &event);
+                info!("BLE设备被动断开: {}", addr);
+            });
+            client.set_disconnect_callback(callback);
+        }
 
         Ok(client)
     }

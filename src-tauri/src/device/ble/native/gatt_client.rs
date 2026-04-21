@@ -11,6 +11,8 @@ use super::super::ble_traits::{
 };
 use crate::device::cache::{ChannelCache, RingBufferRef, create_ring_buffer};
 
+pub type DisconnectCallback = Arc<dyn Fn(&str) + Send + Sync>;
+
 fn extract_short_mac(address: &str) -> String {
     if let Some(pos) = address.rfind('-') {
         let mac = &address[pos + 1..];
@@ -60,6 +62,8 @@ pub struct GattClient {
     notify_callbacks: Mutex<HashMap<String, NotifyCallback>>,
     notify_handles: Mutex<HashMap<String, tokio::task::JoinHandle<()>>>,
     caches: RwLock<HashMap<String, CharacteristicCache>>,
+    disconnect_callback: RwLock<Option<DisconnectCallback>>,
+    connection_monitor_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl GattClient {
@@ -73,6 +77,14 @@ impl GattClient {
             notify_callbacks: Mutex::new(HashMap::new()),
             notify_handles: Mutex::new(HashMap::new()),
             caches: RwLock::new(HashMap::new()),
+            disconnect_callback: RwLock::new(None),
+            connection_monitor_handle: Mutex::new(None),
+        }
+    }
+
+    pub fn set_disconnect_callback(&self, callback: DisconnectCallback) {
+        if let Ok(mut cb) = self.disconnect_callback.write() {
+            *cb = Some(callback);
         }
     }
 
@@ -118,11 +130,60 @@ impl GattClient {
             .await
             .map_err(|e| ComBridgeError::ble(format!("连接失败: {}", e)))?;
 
+        self.start_connection_monitor();
+
         info!("设备连接成功: {}", self.address);
         Ok(())
     }
 
+    fn start_connection_monitor(&self) {
+        let device = {
+            let device_guard = self.device.read()
+                .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)));
+            match device_guard {
+                Ok(guard) => match guard.as_ref() {
+                    Some(d) => Some(d.clone()),
+                    None => None,
+                },
+                Err(_) => None,
+            }
+        };
+
+        let device = match device {
+            Some(d) => d,
+            None => return,
+        };
+
+        let address = self.address.clone();
+        let callback = self.disconnect_callback.read().ok().and_then(|cb| cb.clone());
+
+        let handle = tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+                let connected = device.is_connected().await;
+                if !connected {
+                    info!("[{}] 检测到设备断开连接", extract_short_mac(&address));
+                    if let Some(cb) = &callback {
+                        cb(&address);
+                    }
+                    break;
+                }
+            }
+        });
+
+        if let Ok(mut monitor) = self.connection_monitor_handle.lock() {
+            *monitor = Some(handle);
+        }
+    }
+
     pub async fn disconnect(&self) -> Result<()> {
+        if let Ok(mut monitor) = self.connection_monitor_handle.lock() {
+            if let Some(handle) = monitor.take() {
+                handle.abort();
+            }
+        }
+
         let (device, adapter) = {
             let device = self.device.read()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;

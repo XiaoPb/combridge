@@ -4,7 +4,13 @@ import type {
   Gh3036CsvConfig, 
   Gh3036FrameData, 
   Gh3036RpcCommand,
-  Gh3036VersionTypeConfig
+  Gh3036VersionTypeConfig,
+  FactoryTestStep,
+  FactoryTestStatus,
+  FactoryTestStepResult,
+  FactoryTestResult,
+  ConfigValidationResult,
+  FactoryTestProgressEvent
 } from './types';
 
 export interface LibraryStatus {
@@ -89,6 +95,36 @@ export const gh3036Api = {
 
   async loadConfigFile(filePath: string): Promise<string[]> {
     return invoke<string[]>('gh3036_load_config_file', { filePath });
+  },
+};
+
+export const factoryTestApi = {
+  async start(): Promise<void> {
+    await invoke<void>('gh3036_factory_test_start');
+  },
+
+  async stop(): Promise<void> {
+    await invoke<void>('gh3036_factory_test_stop');
+  },
+
+  async getStatus(): Promise<{ status: FactoryTestStatus; currentStep: FactoryTestStep }> {
+    return invoke<{ status: FactoryTestStatus; currentStep: FactoryTestStep }>('gh3036_factory_test_status');
+  },
+
+  async continue(): Promise<void> {
+    await invoke<void>('gh3036_factory_test_continue');
+  },
+
+  async setConfigDir(configDir: string): Promise<void> {
+    await invoke<void>('gh3036_factory_test_set_config_dir', { configDir });
+  },
+
+  async validateConfig(): Promise<ConfigValidationResult> {
+    return invoke<ConfigValidationResult>('gh3036_factory_test_validate_config');
+  },
+
+  async getResult(): Promise<FactoryTestResult | null> {
+    return invoke<FactoryTestResult | null>('gh3036_factory_test_get_result');
   },
 };
 

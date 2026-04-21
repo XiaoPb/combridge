@@ -755,14 +755,18 @@ impl Gh3036Manager {
 
         let max_retries = 501;
         for _retry in 0..max_retries {
-            {
+            let check_result = {
                 let mut rpc_guard = rpc.lock().map_err(|e| format!("RPC 锁定失败: {}", e))?;
-                if let Some(result) = rpc_guard.check_call_result(key) {
-                    return result
-                        .map(|r| r.to_vec())
-                        .map_err(|e| format!("RPC 错误: {:?}", e));
-                }
+                rpc_guard.check_call_result(key)
+            };
+            
+            if let Some(result) = check_result {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                return result
+                    .map(|r| r.to_vec())
+                    .map_err(|e| format!("RPC 错误: {:?}", e));
             }
+            
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
         
@@ -781,6 +785,26 @@ impl Gh3036Manager {
             let mut rpc_guard = rpc.lock().map_err(|e| format!("RPC 锁定失败: {}", e))?;
             rpc_guard.send(key, data).map_err(|e| format!("RPC send 失败: {:?}", e))?;
         }
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        Ok(vec![])
+    }
+
+    async fn send_command_multi(&self, key: &str, data: &[u8]) -> Result<Vec<u8>, String> {
+        let rpc = {
+            let rpc_guard = self.rpc.lock();
+            rpc_guard.as_ref()
+                .ok_or("RPC 核心未初始化")?
+                .clone()
+        };
+
+        {
+            let mut rpc_guard = rpc.lock().map_err(|e| format!("RPC 锁定失败: {}", e))?;
+            rpc_guard.send_multi(key, data).map_err(|e| format!("RPC send_multi 失败: {:?}", e))?;
+        }
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         Ok(vec![])
     }
@@ -994,7 +1018,7 @@ impl Gh3036Manager {
             data.extend_from_slice(&val.to_le_bytes());
         }
         
-        self.send_command("GH3X_RegsListWriteCmd", &data).await?;
+        self.send_command_multi("GH3X_RegsListWriteCmd", &data).await?;
         Ok(vec![])
     }
 

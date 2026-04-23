@@ -1098,10 +1098,10 @@ impl Gh3036Manager {
     async fn execute_factory_set_mode_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let factory_mode: u8 = params
             .first()
-            .and_then(|s| u8::from_str_radix(s.trim_start_matches("0x"), 16).ok())
+            .and_then(|s| s.parse().ok())
             .ok_or("缺少产测模式参数")?;
 
-        info!("产测模式设置: mode=0x{:02X}", factory_mode);
+        info!("产测模式设置: mode={}", factory_mode);
 
         self.send_command(KEY_F_SET_MODE, FMT_F_SET_MODE, &[factory_mode]).await?;
         Ok(vec![])
@@ -1110,10 +1110,10 @@ impl Gh3036Manager {
     async fn execute_factory_get_mode_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let factory_mode: u8 = params
             .first()
-            .and_then(|s| u8::from_str_radix(s.trim_start_matches("0x"), 16).ok())
+            .and_then(|s| s.parse().ok())
             .ok_or("缺少产测模式参数")?;
 
-        info!("产测模式结果获取: mode=0x{:02X}", factory_mode);
+        info!("产测模式结果获取: mode={}", factory_mode);
 
         let param_data = self.call_command(KEY_F_GET_MODE, FMT_F_GET_MODE, &[factory_mode]).await?;
         info!("产测模式结果响应: {:04X?}", param_data);

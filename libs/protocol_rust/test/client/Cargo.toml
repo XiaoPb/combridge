@@ -1,0 +1,12 @@
+[package]
+name = "client"
+version = "0.1.0"
+edition = "2021"
+description = "GH Protocol Client Test Program"
+
+[dependencies]
+rpc = { path = "../../rpc" }
+gh-rpc = { path = "../../gh-rpc" }
+tokio = { version = "1", features = ["full"] }
+chrono = "0.4"
+serialport = "4"

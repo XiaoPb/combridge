@@ -145,11 +145,14 @@ impl Gh3036FrameData {
         let phy_value: Vec<i32> = frame.data.iter().map(|d| d.ipd_pa).collect();
         
         let agc_info: Vec<i32> = frame.data.iter()
-            .flat_map(|d| {
-                let bytes = d.agc_info.to_bytes(frame.led_drv_fs[0]);
-                let low = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as i32;
-                let high = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as i32;
-                [low, high]
+            .map(|d| {
+                let word0 = (d.agc_info.gain_code as u32)
+                    | ((d.agc_info.bg_cancel_range as u32) << 4)
+                    | ((d.agc_info.dc_cancel_range as u32) << 6)
+                    | ((d.agc_info.dc_cancel_code as u32) << 8)
+                    | ((d.agc_info.led_drv0 as u32) << 16)
+                    | ((d.agc_info.led_drv1 as u32) << 24);
+                word0 as i32
             })
             .collect();
         
@@ -607,9 +610,13 @@ impl Gh3036FramesEvent {
                 if ch_data.flag.skip_ok_flag { flag_val |= 16; }
                 self.flags[i].push(flag_val);
                 
-                let bytes = ch_data.agc_info.to_bytes(frame.led_drv_fs[0]);
-                self.agc_info[i].push(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as i32);
-                self.agc_info[i].push(u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as i32);
+                let word0 = (ch_data.agc_info.gain_code as u32)
+                    | ((ch_data.agc_info.bg_cancel_range as u32) << 4)
+                    | ((ch_data.agc_info.dc_cancel_range as u32) << 6)
+                    | ((ch_data.agc_info.dc_cancel_code as u32) << 8)
+                    | ((ch_data.agc_info.led_drv0 as u32) << 16)
+                    | ((ch_data.agc_info.led_drv1 as u32) << 24);
+                self.agc_info[i].push(word0 as i32);
             }
         }
         

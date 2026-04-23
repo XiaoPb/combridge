@@ -58,12 +58,8 @@ impl CommandExecutor {
         self.frame_callback = Some(callback);
     }
 
-    fn log(&self, level: LogLevel, msg: &str) {
-        self.logger.log(level, "gh-rpc", msg);
-    }
-
     pub async fn handle_frame_data(&self, data: &[u8]) -> Result<Vec<GhFuncFrame>, DecodeError> {
-        let mut decoder = self.frame_decoder.lock().await;
+        let decoder = self.frame_decoder.lock().await;
         let frames = decoder.decode_frames(data)?;
 
         if let Some(ref callback) = self.frame_callback {

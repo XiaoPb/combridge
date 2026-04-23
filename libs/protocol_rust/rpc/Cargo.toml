@@ -1,0 +1,14 @@
+[package]
+name = "rpc"
+version = "0.1.0"
+edition = "2021"
+description = "GH Protocol RPC Core Library"
+
+[dependencies]
+tokio = { version = "1", features = ["sync", "time", "rt"] }
+log = "0.4"
+bitflags = "2.4"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+env_logger = "0.11"

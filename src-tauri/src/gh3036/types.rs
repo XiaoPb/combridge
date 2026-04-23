@@ -4,22 +4,46 @@
 
 use serde::{Deserialize, Serialize};
 
-pub use gh_rpc::data_package::{FuncFrame, DataFrame, FuncId, ChannelData, GSensorData, AgcInfo, FrameDataFlag, FrameDecoder};
-pub use gh_rpc::cmd::{
-    CMD_GET_VERSION, CMD_REGS_WRITE, CMD_REGS_READ, CMD_REG_BIT_FIELD_WRITE,
-    CMD_CHIP_CTRL, CMD_SW_FUNCTION, CMD_DOWNLOAD_CONFIG, CMD_REGS_LIST_WRITE,
-    CMD_FW_UPDATE, CMD_GET_CHIP_LINK_STATUS, CMD_TIMESTAMP_SET, CMD_TIME_SET,
-    CMD_SET_WORK_MODE, CMD_LOW_POWER, CMD_REGS_BIT_FIELD_WRITE,
-    CMD_FACTORY_SET_MODE, CMD_FACTORY_GET_MODE,
-    VER_TYPE_FW, VER_TYPE_DEMO, VER_TYPE_BOOTLOADER, VER_TYPE_PROTOCOL,
-    VER_TYPE_VIRTUAL_REG, VER_TYPE_DRV, VER_TYPE_CHIP, VER_TYPE_BLE, VER_TYPE_ALGO,
-    VER_TYPE_FUNC_SUPPORT,
-    HR_VERSION_OFFSET, HRV_VERSION_OFFSET, SPO2_VERSION_OFFSET, ADT_VERSION_OFFSET, NADT_VERSION_OFFSET,
-    CHIP_CTRL_HARD_RESET, CHIP_CTRL_RX_RESET, CHIP_CTRL_SOFT_RESET,
-    CHIP_CTRL_WAKEUP, CHIP_CTRL_SLEEP,
+pub use gh_rpc::{
+    GhFuncFrame, GhFrameData, GhFuncFixIdx, GhGsensorData, GhAgcInfo, GhFrameDataFlag,
+    FrameDecoder, DecodeError,
+    KEY_GH3X_GET_VERSION, KEY_GH3X_REGS_WRITE_CMD, KEY_GH3X_REGS_READ_CMD,
+    KEY_GH3X_REG_BIT_FIELD_WRITE_CMD, KEY_GH3X_CHIP_CTRL, KEY_GH3X_SW_FUNCTION_CMD,
+    KEY_DOWNLOAD_CONFIG, KEY_GH3X_REGS_LIST_WRITE_CMD, KEY_GET_CHIP_LINK_STATUS,
+    KEY_GH_TIMESTAMP_SET, KEY_GH_TIME_SET, KEY_GH_SET_WORK_MODE_CMD, KEY_GH_LOW_POWER_CMD,
+    KEY_F_SET_MODE, KEY_F_GET_MODE,
+    FMT_GH3X_GET_VERSION, FMT_GH3X_REGS_WRITE_CMD, FMT_GH3X_REGS_READ_CMD,
+    FMT_GH3X_REG_BIT_FIELD_WRITE_CMD, FMT_GH3X_CHIP_CTRL, FMT_GH3X_SW_FUNCTION_CMD,
+    FMT_DOWNLOAD_CONFIG, FMT_GH3X_REGS_LIST_WRITE_CMD, FMT_GET_CHIP_LINK_STATUS,
+    FMT_GH_TIMESTAMP_SET, FMT_GH_TIME_SET, FMT_GH_SET_WORK_MODE_CMD, FMT_GH_LOW_POWER_CMD,
+    FMT_F_SET_MODE, FMT_F_GET_MODE,
+    RET_GH3X_GET_VERSION, RET_GH3X_REGS_READ_CMD, RET_GET_CHIP_LINK_STATUS, RET_F_GET_MODE,
 };
 
-pub use rpc::PackHeader;
+pub use rpc::types::*;
+
+pub const VER_TYPE_FW: u8 = 0;
+pub const VER_TYPE_DEMO: u8 = 1;
+pub const VER_TYPE_BOOTLOADER: u8 = 2;
+pub const VER_TYPE_PROTOCOL: u8 = 3;
+pub const VER_TYPE_VIRTUAL_REG: u8 = 4;
+pub const VER_TYPE_DRV: u8 = 5;
+pub const VER_TYPE_CHIP: u8 = 6;
+pub const VER_TYPE_BLE: u8 = 7;
+pub const VER_TYPE_ALGO: u8 = 8;
+pub const VER_TYPE_FUNC_SUPPORT: u8 = 9;
+
+pub const HR_VERSION_OFFSET: u8 = 0;
+pub const HRV_VERSION_OFFSET: u8 = 1;
+pub const SPO2_VERSION_OFFSET: u8 = 2;
+pub const ADT_VERSION_OFFSET: u8 = 3;
+pub const NADT_VERSION_OFFSET: u8 = 4;
+
+pub const CHIP_CTRL_HARD_RESET: u8 = 0xC0;
+pub const CHIP_CTRL_RX_RESET: u8 = 0xC1;
+pub const CHIP_CTRL_SOFT_RESET: u8 = 0xC2;
+pub const CHIP_CTRL_WAKEUP: u8 = 0xC3;
+pub const CHIP_CTRL_SLEEP: u8 = 0xC4;
 
 pub const GH_ACC_AXIS_NUM: usize = 3;
 pub const GH_GYRO_AXIS_NUM: usize = 3;
@@ -39,31 +63,13 @@ pub const FACTORY_TEST_MODE_PPG_NOISE: u8 = 1 << FACTORY_TEST_MODE_PPG_NOISE_OFF
 pub const FACTORY_TEST_MODE_LPCTR: u8 = 1 << FACTORY_TEST_MODE_LPCTR_OFFSET;
 pub const FACTORY_TEST_MODE_LPLCTR: u8 = 1 << FACTORY_TEST_MODE_LPLCTR_OFFSET;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[repr(i32)]
-pub enum GhFuncFixIdx {
-    Adt = 0,
-    Hr = 1,
-    Spo2 = 2,
-    Hrv = 3,
-    Gnadt = 4,
-    Irnadt = 5,
-    Test1 = 6,
-    Test2 = 7,
-    PpgCfg0 = 8,
-    PpgCfg1 = 9,
-    PpgCfg2 = 10,
-    PpgCfg3 = 11,
-    PpgCfg4 = 12,
-    PpgCfg5 = 13,
-    PpgCfg6 = 14,
-    PpgCfg7 = 15,
-    CapCfg = 16,
-    Max = 17,
+pub trait GhFuncFixIdxExt {
+    fn from_i32(value: i32) -> Option<GhFuncFixIdx>;
+    fn name(&self) -> &'static str;
 }
 
-impl GhFuncFixIdx {
-    pub fn from_i32(value: i32) -> Option<Self> {
+impl GhFuncFixIdxExt for GhFuncFixIdx {
+    fn from_i32(value: i32) -> Option<Self> {
         match value {
             0 => Some(Self::Adt),
             1 => Some(Self::Hr),
@@ -71,7 +77,7 @@ impl GhFuncFixIdx {
             3 => Some(Self::Hrv),
             4 => Some(Self::Gnadt),
             5 => Some(Self::Irnadt),
-            6 => Some(Self::Test1),
+            6 => Some(Self::AlgoMax),
             7 => Some(Self::Test2),
             8 => Some(Self::PpgCfg0),
             9 => Some(Self::PpgCfg1),
@@ -86,7 +92,7 @@ impl GhFuncFixIdx {
         }
     }
     
-    pub fn name(&self) -> &'static str {
+    fn name(&self) -> &'static str {
         match self {
             Self::Adt => "ADT",
             Self::Hr => "HR",
@@ -94,7 +100,7 @@ impl GhFuncFixIdx {
             Self::Hrv => "HRV",
             Self::Gnadt => "GNADT",
             Self::Irnadt => "IRNADT",
-            Self::Test1 => "TEST1",
+            Self::AlgoMax => "TEST1",
             Self::Test2 => "TEST2",
             Self::PpgCfg0 => "PPG_CFG0",
             Self::PpgCfg1 => "PPG_CFG1",
@@ -106,20 +112,6 @@ impl GhFuncFixIdx {
             Self::PpgCfg7 => "PPG_CFG7",
             Self::CapCfg => "CAP_CFG",
             Self::Max => "UNKNOWN",
-        }
-    }
-}
-
-impl From<FuncId> for GhFuncFixIdx {
-    fn from(func_id: FuncId) -> Self {
-        match func_id {
-            FuncId::ADT => Self::Adt,
-            FuncId::HR => Self::Hr,
-            FuncId::SPO2 => Self::Spo2,
-            FuncId::HRV => Self::Hrv,
-            FuncId::GNADT => Self::Gnadt,
-            FuncId::IRNADT => Self::Irnadt,
-            _ => Self::Max,
         }
     }
 }
@@ -139,25 +131,20 @@ pub struct Gh3036FrameData {
 }
 
 impl Gh3036FrameData {
-    pub fn from_func_frame(frame: &FuncFrame) -> Self {
-        let func_id = GhFuncFixIdx::from(frame.id);
+    pub fn from_func_frame(frame: &GhFuncFrame) -> Self {
+        let func_id = GhFuncFixIdx::from(frame.id as u8);
         let function_name = func_id.name().to_string();
         
         let gs_data: Vec<i32> = [
             frame.gsensor_data.acc[0] as i32,
             frame.gsensor_data.acc[1] as i32,
             frame.gsensor_data.acc[2] as i32,
-            frame.gsensor_data.gyro[0] as i32,
-            frame.gsensor_data.gyro[1] as i32,
-            frame.gsensor_data.gyro[2] as i32,
         ].to_vec();
         
-        let rawdata: Vec<i32> = frame.p_data.iter().map(|d| d.rawdata).collect();
-        let phy_value: Vec<i32> = frame.p_data.iter().map(|d| d.ipd_pa).collect();
+        let rawdata: Vec<i32> = frame.data.iter().map(|d| d.rawdata).collect();
+        let phy_value: Vec<i32> = frame.data.iter().map(|d| d.ipd_pa).collect();
         
-        let algo_data: Vec<i32> = frame.p_algo_res.iter().map(|&v| v as i32).collect();
-        
-        let agc_info: Vec<i32> = frame.p_data.iter()
+        let agc_info: Vec<i32> = frame.data.iter()
             .flat_map(|d| {
                 let low = d.agc_info.to_low_u32() as i32;
                 let high = d.agc_info.to_high_u32() as i32;
@@ -165,7 +152,7 @@ impl Gh3036FrameData {
             })
             .collect();
         
-        let flags: Vec<i32> = frame.p_data.iter()
+        let flags: Vec<i32> = frame.data.iter()
             .map(|d| {
                 let mut flag_val = 0i32;
                 if d.flag.led_adj_flag { flag_val |= 1; }
@@ -178,47 +165,16 @@ impl Gh3036FrameData {
             .collect();
         
         Self {
-            function_id: func_id as i32,
+            function_id: frame.id as i32,
             function_name,
             frame_id: frame.frame_cnt as i32,
             timestamp: frame.timestamp,
             gs_data,
             rawdata,
             flags,
-            algo_data,
+            algo_data: Vec::new(),
             agc_info,
             phy_value,
-        }
-    }
-    
-    pub fn from_data_frame(frame: &DataFrame) -> Self {
-        let func_id = GhFuncFixIdx::from_i32(frame.function_id);
-        let function_name = func_id
-            .map(|f| f.name().to_string())
-            .unwrap_or_else(|| format!("UNKNOWN_{}", frame.function_id));
-        
-        let timestamp = ((frame.timestamp_high as u64) << 32) | (frame.timestamp as u64);
-        
-        Self {
-            function_id: frame.function_id,
-            function_name,
-            frame_id: frame.frame_id,
-            timestamp,
-            gs_data: frame.gs_data.iter().copied().collect(),
-            rawdata: frame.rawdata.iter().copied().collect(),
-            flags: frame.flags.iter().map(|&v| v as i32).collect(),
-            algo_data: frame.algo_data.iter().copied().collect(),
-            agc_info: {
-                let mut info = Vec::new();
-                for i in 0..frame.agc_info_size {
-                    if i < frame.agc_info.len() && i < frame.agc_info_high.len() {
-                        info.push(frame.agc_info[i]);
-                        info.push(frame.agc_info_high[i]);
-                    }
-                }
-                info
-            },
-            phy_value: frame.phy_value.iter().copied().collect(),
         }
     }
 }
@@ -243,7 +199,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
     vec![
         RpcCommand {
             key: "V".to_string(),
-            name: CMD_GET_VERSION.to_string(),
+            name: KEY_GH3X_GET_VERSION.to_string(),
             description: "获取芯片版本信息".to_string(),
             params: vec![
                 RpcParam {
@@ -256,7 +212,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "W".to_string(),
-            name: CMD_REGS_WRITE.to_string(),
+            name: KEY_GH3X_REGS_WRITE_CMD.to_string(),
             description: "寄存器写入命令".to_string(),
             params: vec![
                 RpcParam {
@@ -269,7 +225,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "R".to_string(),
-            name: CMD_REGS_READ.to_string(),
+            name: KEY_GH3X_REGS_READ_CMD.to_string(),
             description: "寄存器读取命令".to_string(),
             params: vec![
                 RpcParam {
@@ -288,7 +244,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "B".to_string(),
-            name: CMD_REG_BIT_FIELD_WRITE.to_string(),
+            name: KEY_GH3X_REG_BIT_FIELD_WRITE_CMD.to_string(),
             description: "寄存器位域写入命令".to_string(),
             params: vec![
                 RpcParam {
@@ -319,7 +275,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "C".to_string(),
-            name: CMD_CHIP_CTRL.to_string(),
+            name: KEY_GH3X_CHIP_CTRL.to_string(),
             description: "芯片控制命令（复位、休眠等）".to_string(),
             params: vec![
                 RpcParam {
@@ -332,7 +288,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "D".to_string(),
-            name: CMD_DOWNLOAD_CONFIG.to_string(),
+            name: KEY_DOWNLOAD_CONFIG.to_string(),
             description: "下载配置到芯片".to_string(),
             params: vec![
                 RpcParam {
@@ -345,7 +301,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "L".to_string(),
-            name: CMD_REGS_LIST_WRITE.to_string(),
+            name: KEY_GH3X_REGS_LIST_WRITE_CMD.to_string(),
             description: "寄存器列表批量写入命令".to_string(),
             params: vec![
                 RpcParam {
@@ -358,7 +314,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "S".to_string(),
-            name: CMD_SW_FUNCTION.to_string(),
+            name: KEY_GH3X_SW_FUNCTION_CMD.to_string(),
             description: "软件功能命令".to_string(),
             params: vec![
                 RpcParam {
@@ -377,7 +333,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "P".to_string(),
-            name: CMD_LOW_POWER.to_string(),
+            name: KEY_GH_LOW_POWER_CMD.to_string(),
             description: "低功耗命令".to_string(),
             params: vec![
                 RpcParam {
@@ -396,7 +352,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "M".to_string(),
-            name: CMD_SET_WORK_MODE.to_string(),
+            name: KEY_GH_SET_WORK_MODE_CMD.to_string(),
             description: "设置工作模式".to_string(),
             params: vec![
                 RpcParam {
@@ -409,7 +365,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "TS".to_string(),
-            name: CMD_TIMESTAMP_SET.to_string(),
+            name: KEY_GH_TIMESTAMP_SET.to_string(),
             description: "设置时间戳（32 位）".to_string(),
             params: vec![
                 RpcParam {
@@ -422,7 +378,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "TM".to_string(),
-            name: CMD_TIME_SET.to_string(),
+            name: KEY_GH_TIME_SET.to_string(),
             description: "设置时间（带时区）".to_string(),
             params: vec![
                 RpcParam {
@@ -441,7 +397,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "FS".to_string(),
-            name: CMD_FACTORY_SET_MODE.to_string(),
+            name: KEY_F_SET_MODE.to_string(),
             description: "产测模式设置".to_string(),
             params: vec![
                 RpcParam {
@@ -454,7 +410,7 @@ pub fn get_rpc_commands() -> Vec<RpcCommand> {
         },
         RpcCommand {
             key: "FG".to_string(),
-            name: CMD_FACTORY_GET_MODE.to_string(),
+            name: KEY_F_GET_MODE.to_string(),
             description: "产测模式结果获取".to_string(),
             params: vec![
                 RpcParam {
@@ -624,7 +580,7 @@ impl Gh3036FramesEvent {
         }
     }
 
-    pub fn add_frame(&mut self, frame: &FuncFrame) {
+    pub fn add_frame(&mut self, frame: &GhFuncFrame) {
         self.frame_cnts.push(frame.frame_cnt);
         self.timestamps.push(frame.timestamp);
         self.frame_ids.push(frame.frame_cnt);
@@ -637,7 +593,7 @@ impl Gh3036FramesEvent {
             self.agc_info = vec![Vec::new(); frame.ch_num as usize];
         }
         
-        for (i, ch_data) in frame.p_data.iter().enumerate() {
+        for (i, ch_data) in frame.data.iter().enumerate() {
             if i < self.ipd_pa.len() {
                 self.ipd_pa[i].push(ch_data.ipd_pa);
                 self.rawdata[i].push(ch_data.rawdata);
@@ -658,12 +614,11 @@ impl Gh3036FramesEvent {
         self.acc_x.push(frame.gsensor_data.acc[0]);
         self.acc_y.push(frame.gsensor_data.acc[1]);
         self.acc_z.push(frame.gsensor_data.acc[2]);
-        self.gyro_x.push(frame.gsensor_data.gyro[0]);
-        self.gyro_y.push(frame.gsensor_data.gyro[1]);
-        self.gyro_z.push(frame.gsensor_data.gyro[2]);
+        self.gyro_x.push(0);
+        self.gyro_y.push(0);
+        self.gyro_z.push(0);
         
-        let algo: Vec<i32> = frame.p_algo_res.iter().map(|&v| v as i32).collect();
-        self.algo_results.push(algo);
+        self.algo_results.push(Vec::new());
         
         self.led_drv_fs.push(frame.led_drv_fs);
         

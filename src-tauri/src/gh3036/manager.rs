@@ -453,6 +453,7 @@ impl Gh3036Manager {
         
         let device_manager = Arc::clone(&self.device_manager);
         let handle = Handle::try_current().map_err(|e| format!("获取 Tokio 运行时失败: {}", e))?;
+        let handle_for_send = handle.clone();
         
         let send_fn: SendFunction = Arc::new(move |data: &[u8]| -> Result<(), rpc::RpcError> {
             debug!("[RPC发送] 发送数据: {:02X?}", data);
@@ -470,7 +471,7 @@ impl Gh3036Manager {
             
             let dm = Arc::clone(&device_manager);
             let data_vec = data.to_vec();
-            handle.spawn(async move {
+            handle_for_send.spawn(async move {
                 let result = dm
                     .send_direct(
                         channel_type.into(),

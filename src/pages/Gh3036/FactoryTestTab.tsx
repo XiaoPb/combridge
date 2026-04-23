@@ -117,12 +117,58 @@ const FactoryTestTab: React.FC = () => {
 
   const formatUuid = (uuid: number[]): string => {
     if (!uuid || uuid.length === 0) return '--';
-    return uuid.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(':');
+    
+    const formatSingleUuid = (bytes: number[]): string => {
+      const hex = bytes.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join('');
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+    };
+
+    if (uuid.length === 32) {
+      const uuid1 = formatSingleUuid(uuid.slice(0, 16));
+      const uuid2 = formatSingleUuid(uuid.slice(16, 32));
+      return `${uuid1}\n${uuid2}`;
+    }
+    
+    return formatSingleUuid(uuid);
   };
 
   const formatDataArray = (data: number[]): string => {
     if (!data || data.length === 0) return '--';
     return data.map((v) => v.toFixed(4)).join(', ');
+  };
+
+  const renderChannelData = (label: string, data: number[], color: string) => {
+    if (!data || data.length === 0) return null;
+    
+    return (
+      <Card 
+        size="small" 
+        style={{ marginBottom: 8 }}
+        styles={{
+          body: { padding: '8px 12px' }
+        }}
+      >
+        <Space direction="vertical" size={4} style={{ width: '100%' }}>
+          <Text type="secondary" style={{ fontSize: 14, fontWeight: 500 }}>{label}</Text>
+          <Row gutter={[8, 4]}>
+            {data.map((value, index) => (
+              <Col key={index} span={6}>
+                <div style={{ 
+                  padding: '6px 10px', 
+                  background: token.colorBgContainer,
+                  borderRadius: token.borderRadiusSM,
+                  border: `1px solid ${token.colorBorderSecondary}`
+                }}>
+                  <Text style={{ fontSize: 14, fontFamily: 'monospace', fontWeight: 500 }}>
+                    {value.toFixed(4)}
+                  </Text>
+                </div>
+              </Col>
+            ))}
+          </Row>
+        </Space>
+      </Card>
+    );
   };
 
   const renderStepResult = (result: FactoryTestStepResult) => {
@@ -168,7 +214,7 @@ const FactoryTestTab: React.FC = () => {
             </Tag>
           </Descriptions.Item>
           <Descriptions.Item label={t('factory.chipInitStatus')}>
-            {result.chip_init_status === 0 ? (
+            {result.chip_init_status === 1 ? (
               <CheckCircleOutlined style={{ color: token.colorSuccess }} />
             ) : (
               <CloseCircleOutlined style={{ color: token.colorError }} />
@@ -176,33 +222,20 @@ const FactoryTestTab: React.FC = () => {
           </Descriptions.Item>
           <Descriptions.Item label={t('factory.uuid')}>
             <Paragraph
-              copyable={{ text: formatUuid(result.uuid) }}
-              style={{ marginBottom: 0, fontFamily: 'monospace', fontSize: 12 }}
+              copyable={{ text: formatUuid(result.uuid).replace('\n', '\n') }}
+              style={{ marginBottom: 0, fontFamily: 'monospace', fontSize: 13, whiteSpace: 'pre-wrap' }}
             >
               {formatUuid(result.uuid)}
             </Paragraph>
           </Descriptions.Item>
-          <Descriptions.Item label={t('factory.baseNoiseData')}>
-            <Text code style={{ fontSize: 11 }}>
-              {formatDataArray(result.base_noise)}
-            </Text>
-          </Descriptions.Item>
-          <Descriptions.Item label={t('factory.ppgNoiseData')}>
-            <Text code style={{ fontSize: 11 }}>
-              {formatDataArray(result.ppg_noise)}
-            </Text>
-          </Descriptions.Item>
-          <Descriptions.Item label={t('factory.lpctrData')}>
-            <Text code style={{ fontSize: 11 }}>
-              {formatDataArray(result.lpctr)}
-            </Text>
-          </Descriptions.Item>
-          <Descriptions.Item label={t('factory.lplctrData')}>
-            <Text code style={{ fontSize: 11 }}>
-              {formatDataArray(result.lplctr)}
-            </Text>
-          </Descriptions.Item>
         </Descriptions>
+        
+        <div style={{ marginTop: 12 }}>
+          {renderChannelData(t('factory.baseNoiseData'), result.base_noise, '#1890ff')}
+          {renderChannelData(t('factory.ppgNoiseData'), result.ppg_noise, '#52c41a')}
+          {renderChannelData(t('factory.lpctrData'), result.lpctr, '#faad14')}
+          {renderChannelData(t('factory.lplctrData'), result.lplctr, '#eb2f96')}
+        </div>
       </Card>
     );
   };
@@ -314,23 +347,6 @@ const FactoryTestTab: React.FC = () => {
                 </Text>
               )}
             </Space>
-          </Card>
-        </Col>
-
-        <Col span={24}>
-          <Card size="small" title={t('factory.testSteps')} style={cardStyle}>
-            {factoryTest.stepResults.length > 0 ? (
-              <List
-                size="small"
-                dataSource={factoryTest.stepResults}
-                renderItem={renderStepResult}
-              />
-            ) : (
-              <Empty
-                description={t('factory.statusIdle')}
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-              />
-            )}
           </Card>
         </Col>
 

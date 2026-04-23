@@ -199,6 +199,11 @@ impl FactoryTestManager {
             return Err("产测流程已在运行中".to_string());
         }
 
+        let mut handle = self.thread_handle.lock();
+        if let Some(thread) = handle.take() {
+            let _ = thread.join();
+        }
+
         let validation = self.validate_config_dir();
         if !validation.is_valid {
             return Err(format!("配置文件校验失败: {:?}", validation.errors));
@@ -382,6 +387,8 @@ impl FactoryTestManager {
                 let mut status = status_clone.lock();
                 *status = FactoryTestStatus::Idle;
             }
+
+            running.store(false, Ordering::SeqCst);
 
             info!("[FactoryTest] 产测流程线程结束");
         });

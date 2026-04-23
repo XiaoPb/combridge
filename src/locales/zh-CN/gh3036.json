@@ -72,6 +72,7 @@
     "statusFailed": "失败",
     "statusStopped": "已停止",
     "result": "测试结果",
+    "overallResult": "总体结果",
     "pass": "通过",
     "fail": "失败",
     "environmentSwitchTitle": "环境切换确认",

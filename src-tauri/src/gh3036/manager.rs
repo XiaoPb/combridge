@@ -261,45 +261,18 @@ impl GlobalContext {
         }
     }
 
-    fn send_frame_raw_data(&self, data: Vec<u8>) -> Result<(), crossbeam_channel::SendError<Vec<u8>>> {
-        if let Some(ref sender) = *self.frame_raw_sender.lock() {
-            sender.send(data)
-        } else {
-            Err(crossbeam_channel::SendError(vec![]))
-        }
-    }
 
     fn add_frame_to_aggregator(&self, frame: &GhFuncFrame) -> Option<Gh3036FramesEvent> {
         let mut aggregator = self.frame_aggregator.lock();
         aggregator.add_frame(frame)
     }
 
-    fn flush_aggregator(&self) -> Option<Gh3036FramesEvent> {
-        let mut aggregator = self.frame_aggregator.lock();
-        aggregator.flush()
-    }
 }
 
 static CALLBACK_CONTEXT: once_cell::sync::Lazy<GlobalContext> = once_cell::sync::Lazy::new(GlobalContext::new);
 
-static FRAME_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
 static EVENTS_SUBSCRIBED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-fn data_frame_handler(data: &[u8], size: usize, _ret: Option<&mut [u8]>) -> i32 {
-    let count = FRAME_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
-    
-    info!("[GH3036] RPC 回调接收到数据帧 #{}: {} 字节", count, size);
-    
-    if size > 0 {
-        let data_to_send = data[..size].to_vec();
-        if let Err(e) = CALLBACK_CONTEXT.send_frame_raw_data(data_to_send) {
-            error!("[GH3036] 发送数据到帧处理通道失败: {}", e);
-        }
-    }
-    
-    0
-}
 
 pub struct Gh3036Manager {
     device_manager: Arc<DeviceManager>,
@@ -510,7 +483,7 @@ impl Gh3036Manager {
             }
         }
 
-        let mut executor = CommandExecutor::new(RpcConfig {
+        let executor = CommandExecutor::new(RpcConfig {
             timeout_ms: 1000,
             ..RpcConfig::default()
         }).with_logger(Arc::new(TauriLogger));

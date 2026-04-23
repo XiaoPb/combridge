@@ -144,6 +144,9 @@ function dispatchEvent(event: EventBusEvent) {
       case 'gh3036:frames':
         handleGh3036Frames(decodePayload<Gh3036FramesPayload>(event));
         break;
+      case 'gh3036:factory_test_progress':
+        console.log('[EventListeners] Handling gh3036:factory_test_progress (handled by store)');
+        break;
       default:
         console.log('[EventListeners] Unknown topic:', event.topic);
         break;

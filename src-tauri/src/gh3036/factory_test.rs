@@ -33,6 +33,7 @@ pub struct FactoryTestManager {
     event_bus: Arc<EventBus>,
     thread_handle: Mutex<Option<thread::JoinHandle<()>>>,
     status_clone: Arc<Mutex<FactoryTestStatus>>,
+    result_clone: Arc<Mutex<Option<FactoryTestResult>>>,
 }
 
 unsafe impl Send for FactoryTestManager {}
@@ -55,6 +56,7 @@ impl FactoryTestManager {
             event_bus,
             thread_handle: Mutex::new(None),
             status_clone: Arc::new(Mutex::new(FactoryTestStatus::Idle)),
+            result_clone: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -77,7 +79,7 @@ impl FactoryTestManager {
     }
 
     pub fn get_result(&self) -> Option<FactoryTestResult> {
-        self.result.lock().clone()
+        self.result_clone.lock().clone()
     }
 
     pub fn is_running(&self) -> bool {
@@ -231,6 +233,7 @@ impl FactoryTestManager {
         let event_bus = self.event_bus.clone();
         let config_dir = self.config_dir.lock().clone();
         let status_clone = self.status_clone.clone();
+        let result_clone = self.result_clone.clone();
         let manager = gh3036_manager;
 
         let thread_handle = thread::spawn(move || {
@@ -368,6 +371,11 @@ impl FactoryTestManager {
                 if let Err(e) = Self::save_result_to_csv(&test_result) {
                     error!("[FactoryTest] 保存结果失败: {}", e);
                 }
+
+                {
+                    let mut result = result_clone.lock();
+                    *result = Some(test_result);
+                }
             }
 
             {
@@ -417,7 +425,7 @@ impl FactoryTestManager {
     }
 
     pub fn continue_test(&self) -> Result<(), String> {
-        let current_status = *self.status.lock();
+        let current_status = *self.status_clone.lock();
         if current_status != FactoryTestStatus::WaitingForEnvironmentSwitch {
             return Err("当前不在等待环境切换状态".to_string());
         }

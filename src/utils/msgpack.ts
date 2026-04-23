@@ -101,6 +101,14 @@ function convertArrayToObject(arr: unknown[], topic: string): Record<string, unk
         parsed_data: arr[3],
         timestamp: arr[4] as number,
       };
+    case 'gh3036:factory_test_progress':
+      return {
+        current_step: arr[0] as string,
+        status: arr[1] as string,
+        step_result: arr[2] as unknown,
+        progress: arr[3] as number,
+        message: arr[4] as string,
+      };
     default:
       console.warn('[decodePayload] Unknown topic for array conversion:', topic);
       return { data: arr };

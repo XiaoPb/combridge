@@ -1547,10 +1547,10 @@ dependencies = [
 name = "gh-rpc"
 version = "0.1.0"
 dependencies = [
- "bitflags 2.11.0",
- "heapless",
  "log",
  "rpc",
+ "serde",
+ "tokio",
 ]
 
 [[package]]
@@ -3636,8 +3636,8 @@ name = "rpc"
 version = "0.1.0"
 dependencies = [
  "bitflags 2.11.0",
- "heapless",
  "log",
+ "tokio",
 ]
 
 [[package]]

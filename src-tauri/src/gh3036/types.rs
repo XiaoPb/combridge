@@ -660,6 +660,7 @@ impl Gh3036FramesEvent {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum FactoryTestStep {
     Idle,
     Prepare,
@@ -675,6 +676,7 @@ pub enum FactoryTestStep {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum FactoryTestStatus {
     Idle,
     Running,

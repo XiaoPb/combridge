@@ -510,23 +510,18 @@ impl Gh3036Manager {
             }
         }
 
-        let executor = CommandExecutor::new(RpcConfig {
+        let mut executor = CommandExecutor::new(RpcConfig {
             timeout_ms: 1000,
             ..RpcConfig::default()
         }).with_logger(Arc::new(TauriLogger));
         
+        tokio::task::block_in_place(|| {
+            handle.block_on(executor.set_send_function(Arc::clone(&send_fn)));
+        });
+        
         info!("GH3036 RPC 核心初始化完成");
         
         let executor = Arc::new(tokio::sync::RwLock::new(executor));
-        
-        {
-            let exec = executor.clone();
-            let send_fn_clone = Arc::clone(&send_fn);
-            handle.spawn(async move {
-                let exec_guard = exec.read().await;
-                exec_guard.set_send_function(send_fn_clone).await;
-            });
-        }
         
         *self.executor.lock() = Some(Arc::clone(&executor));
         
@@ -543,6 +538,7 @@ impl Gh3036Manager {
         let running_clone = running.clone();
         let executor = self.executor.lock().as_ref().map(Arc::clone);
         let event_bus = self.event_bus.clone();
+        let tokio_handle = Handle::try_current().map_err(|e| format!("获取 Tokio 运行时失败: {}", e))?;
         
         let thread_handle = std::thread::spawn(move || {
             info!("[GH3036] 处理线程启动");
@@ -567,7 +563,7 @@ impl Gh3036Manager {
                     }
                     recv(rpc_data_receiver) -> result => {
                         if let Ok(rpc_data) = result {
-                            Self::handle_rpc_data(&executor, rpc_data);
+                            Self::handle_rpc_data(&executor, rpc_data, &tokio_handle);
                         }
                     }
                     recv(frame_raw_receiver) -> result => {
@@ -594,30 +590,28 @@ impl Gh3036Manager {
     fn handle_rpc_data(
         executor: &Option<Arc<tokio::sync::RwLock<CommandExecutor>>>,
         request: RpcDataRequest,
+        tokio_handle: &Handle,
     ) {
         debug!("GH3036 handle_rpc_data 处理 RPC 数据: {} bytes", request.data.len());
         
         if let Some(exec) = executor {
-            let rt = tokio::runtime::Handle::try_current();
-            if let Ok(rt) = rt {
-                let exec_clone = Arc::clone(exec);
-                let data = request.data;
-                rt.spawn(async move {
-                    let executor = exec_clone.read().await;
-                    let results = executor.process(&data).await;
-                    for result in results {
-                        match result {
-                            Ok(parse_result) => {
-                                debug!("GH3036 handle_rpc_data 解析成功: key={}, len={}", 
-                                    parse_result.key, parse_result.param.len());
-                            }
-                            Err(e) => {
-                                debug!("GH3036 handle_rpc_data 解析失败: {:?}", e);
-                            }
+            let exec_clone = Arc::clone(exec);
+            let data = request.data;
+            tokio_handle.spawn(async move {
+                let executor = exec_clone.read().await;
+                let results = executor.process(&data).await;
+                for result in results {
+                    match result {
+                        Ok(parse_result) => {
+                            debug!("GH3036 handle_rpc_data 解析成功: key={}, len={}", 
+                                parse_result.key, parse_result.param.len());
+                        }
+                        Err(e) => {
+                            debug!("GH3036 handle_rpc_data 解析失败: {:?}", e);
                         }
                     }
-                });
-            }
+                }
+            });
         } else {
             warn!("GH3036 handle_rpc_data RPC 核心未初始化");
         }

@@ -298,7 +298,7 @@ const FactoryTestTab: React.FC = () => {
           >
             <Space direction="vertical" style={{ width: '100%' }}>
               <Progress
-                percent={factoryTest.progress}
+                percent={Math.round(factoryTest.progress * 100)}
                 status={
                   factoryTest.status === 'failed'
                     ? 'exception'

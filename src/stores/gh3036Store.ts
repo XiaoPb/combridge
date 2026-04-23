@@ -566,7 +566,7 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   subscribeEvents: async () => {
     const { eventListeners } = get();
     
-    if (eventListeners.event || eventListeners.frame) {
+    if (eventListeners.event || eventListeners.frame || eventListeners.deviceDisconnected) {
       console.debug('[Gh3036Store] 事件已订阅，跳过重复订阅');
       return;
     }

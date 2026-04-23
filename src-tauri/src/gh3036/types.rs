@@ -146,8 +146,9 @@ impl Gh3036FrameData {
         
         let agc_info: Vec<i32> = frame.data.iter()
             .flat_map(|d| {
-                let low = d.agc_info.to_low_u32() as i32;
-                let high = d.agc_info.to_high_u32() as i32;
+                let bytes = d.agc_info.to_bytes(frame.led_drv_fs[0]);
+                let low = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as i32;
+                let high = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as i32;
                 [low, high]
             })
             .collect();
@@ -606,8 +607,9 @@ impl Gh3036FramesEvent {
                 if ch_data.flag.skip_ok_flag { flag_val |= 16; }
                 self.flags[i].push(flag_val);
                 
-                self.agc_info[i].push(ch_data.agc_info.to_low_u32() as i32);
-                self.agc_info[i].push(ch_data.agc_info.to_high_u32() as i32);
+                let bytes = ch_data.agc_info.to_bytes(frame.led_drv_fs[0]);
+                self.agc_info[i].push(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as i32);
+                self.agc_info[i].push(u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as i32);
             }
         }
         

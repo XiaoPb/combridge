@@ -36,7 +36,7 @@ use super::types::{Gh3036EventData, Gh3036FrameData, GhFuncFrame, FrameDecoder, 
     RET_GH3X_GET_VERSION, RET_GH3X_REGS_READ_CMD, RET_F_GET_MODE,
     GhFuncFixIdxExt};
 
-use gh_rpc::{CommandExecutor, FrameCallback};
+use gh_rpc::CommandExecutor;
 use rpc::{RpcConfig, SendFunction, LogCallback, LogLevel, unpack, UnpackValue};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -269,7 +269,7 @@ impl GlobalContext {
         }
     }
 
-    fn add_frame_to_aggregator(&self, frame: &FuncFrame) -> Option<Gh3036FramesEvent> {
+    fn add_frame_to_aggregator(&self, frame: &GhFuncFrame) -> Option<Gh3036FramesEvent> {
         let mut aggregator = self.frame_aggregator.lock();
         aggregator.add_frame(frame)
     }
@@ -517,6 +517,16 @@ impl Gh3036Manager {
         info!("GH3036 RPC 核心初始化完成");
         
         let executor = Arc::new(tokio::sync::RwLock::new(executor));
+        
+        {
+            let exec = executor.clone();
+            let send_fn_clone = Arc::clone(&send_fn);
+            handle.spawn(async move {
+                let exec_guard = exec.read().await;
+                exec_guard.set_send_function(send_fn_clone).await;
+            });
+        }
+        
         *self.executor.lock() = Some(Arc::clone(&executor));
         
         Ok(())
@@ -856,12 +866,12 @@ impl Gh3036Manager {
         
         let param_data = self.call_command(KEY_GH3X_GET_VERSION, FMT_GH3X_GET_VERSION, &[ver_type]).await?;
         
-        let values = unpack(&param_data, RET_GH3X_GET_VERSION).map_err(|e| format!("解包失败: {:?}", e))?;
-        match values.values.first() {
-            Some(UnpackValue::U8Array(arr)) => {
-                let version_str = String::from_utf8_lossy(arr).to_string();
+        let value = unpack(&param_data, RET_GH3X_GET_VERSION).map_err(|e| format!("解包失败: {:?}", e))?;
+        match value {
+            UnpackValue::U8Array(arr) => {
+                let version_str = String::from_utf8_lossy(&arr).to_string();
                 info!("获取版本成功: {}", version_str);
-                Ok(arr.to_vec())
+                Ok(arr)
             }
             _ => Err("获取版本失败: 解包结果不是数组".into()),
         }
@@ -908,11 +918,11 @@ impl Gh3036Manager {
         
         let param_data = self.call_command(KEY_GH3X_REGS_READ_CMD, FMT_GH3X_REGS_READ_CMD, &data).await?;
         info!("寄存器读取响应: {:04X?}", param_data);
-        let values = unpack(&param_data, RET_GH3X_REGS_READ_CMD).map_err(|e| format!("解包失败: {:?}", e))?;
-        info!("寄存器读取解包结果: {:?}", values);
+        let value = unpack(&param_data, RET_GH3X_REGS_READ_CMD).map_err(|e| format!("解包失败: {:?}", e))?;
+        info!("寄存器读取解包结果: {:?}", value);
         
-        match values.values.first() {
-            Some(UnpackValue::U16Array(arr)) => {
+        match value {
+            UnpackValue::U16Array(arr) => {
                 let mut result = Vec::new();
                 for &val in arr.iter() {
                     result.extend_from_slice(&val.to_le_bytes());
@@ -1113,11 +1123,11 @@ impl Gh3036Manager {
         let param_data = self.call_command(KEY_F_GET_MODE, FMT_F_GET_MODE, &[factory_mode]).await?;
         info!("产测模式结果响应: {:04X?}", param_data);
         
-        let values = unpack(&param_data, RET_F_GET_MODE).map_err(|e| format!("解包失败: {:?}", e))?;
-        info!("产测模式结果解包: {:?}", values);
+        let value = unpack(&param_data, RET_F_GET_MODE).map_err(|e| format!("解包失败: {:?}", e))?;
+        info!("产测模式结果解包: {:?}", value);
         
-        match values.values.first() {
-            Some(UnpackValue::U16Array(arr)) => {
+        match value {
+            UnpackValue::U16Array(arr) => {
                 let mut result = Vec::new();
                 for &val in arr.iter() {
                     result.extend_from_slice(&val.to_le_bytes());

@@ -67,23 +67,28 @@ impl<R: Runtime> EventBridge<R> {
         let app_handle = self.app_handle.clone();
         let filter = self.filter.clone();
 
-        let (shutdown_tx, mut shutdown_rx) = broadcast::channel::<()>(1);
+        let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
         self.shutdown_tx = Some(shutdown_tx);
-
-        let shutdown_future = async move {
-            let _ = shutdown_rx.recv().await;
-            tracing::info!("EventBridge received shutdown signal");
-        };
 
         tauri::async_runtime::spawn(async move {
             tracing::info!("EventBridge started, listening for events");
             let mut event_count = 0u64;
-            let mut shutdown_future = std::pin::pin!(shutdown_future);
+            let mut shutdown_rx = shutdown_rx;
 
             loop {
                 tokio::select! {
-                    _ = &mut shutdown_future => {
-                        tracing::info!("EventBridge shutdown (processed {} events)", event_count);
+                    result = shutdown_rx.recv() => {
+                        match result {
+                            Ok(_) => {
+                                tracing::info!("EventBridge received shutdown signal (processed {} events)", event_count);
+                            }
+                            Err(broadcast::error::RecvError::Closed) => {
+                                tracing::info!("EventBridge shutdown channel closed (processed {} events)", event_count);
+                            }
+                            Err(broadcast::error::RecvError::Lagged(_)) => {
+                                continue;
+                            }
+                        }
                         break;
                     }
                     result = receiver.recv() => {

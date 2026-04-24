@@ -46,19 +46,34 @@ const FactoryTestTab: React.FC = () => {
 
   const [showEnvSwitchModal, setShowEnvSwitchModal] = useState(false);
   const factoryTestSubscribedRef = useRef(false);
+  const unlistenRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    if (!factoryTestSubscribedRef.current) {
+    let cancelled = false;
+
+    const subscribe = async () => {
+      if (factoryTestSubscribedRef.current) return;
       factoryTestSubscribedRef.current = true;
       console.log('[FactoryTestTab] 订阅产测事件');
-      subscribeFactoryTestEvents();
-    }
-    return () => {
-      if (factoryTestSubscribedRef.current) {
-        factoryTestSubscribedRef.current = false;
-        console.log('[FactoryTestTab] 取消订阅产测事件');
-        unsubscribeFactoryTestEvents();
+      await subscribeFactoryTestEvents();
+      if (!cancelled) {
+        const { eventListeners } = useGh3036Store.getState();
+        unlistenRef.current = eventListeners.factoryTest ?? null;
+        console.log('[FactoryTestTab] 产测事件订阅完成, unlisten=%s', !!unlistenRef.current);
       }
+    };
+
+    subscribe();
+
+    return () => {
+      cancelled = true;
+      factoryTestSubscribedRef.current = false;
+      console.log('[FactoryTestTab] 取消订阅产测事件');
+      if (unlistenRef.current) {
+        unlistenRef.current();
+        unlistenRef.current = null;
+      }
+      unsubscribeFactoryTestEvents();
     };
   }, []);
 

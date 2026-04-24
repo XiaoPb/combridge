@@ -113,46 +113,41 @@ function handleGh3036Frames(payload: Gh3036FramesPayload) {
 }
 
 function dispatchEvent(event: EventBusEvent) {
-  console.log('[EventListeners] Received event-bus event:', event.topic, event);
+  const ts = new Date().toISOString().substr(11, 12);
+  console.log(`[${ts}] [EventListeners] Received event-bus event: topic=${event.topic}, encoding=${event.encoding}`);
   
   try {
     switch (event.topic) {
       case 'serial:data':
-        console.log('[EventListeners] Handling serial:data');
         handleSerialData(decodePayload<SerialDataPayload>(event));
         break;
       case 'serial:connected':
-        console.log('[EventListeners] Handling serial:connected');
         handleSerialConnected(decodePayload<SerialConnectedPayload>(event));
         break;
       case 'serial:disconnected':
-        console.log('[EventListeners] Handling serial:disconnected');
         handleSerialDisconnected(decodePayload<SerialDisconnectedPayload>(event));
         break;
       case 'ble:data':
-        console.log('[EventListeners] Handling ble:data');
         handleBleData(decodePayload<BleDataPayload>(event));
         break;
       case 'ble:connected':
-        console.log('[EventListeners] Handling ble:connected');
         handleBleConnected(decodePayload<BleConnectedPayload>(event));
         break;
       case 'ble:disconnected':
-        console.log('[EventListeners] Handling ble:disconnected');
         handleBleDisconnected(decodePayload<BleDisconnectedPayload>(event));
         break;
       case 'gh3036:frames':
         handleGh3036Frames(decodePayload<Gh3036FramesPayload>(event));
         break;
       case 'gh3036:factory_test_progress':
-        console.log('[EventListeners] Handling gh3036:factory_test_progress (handled by store)');
+        console.log(`[${ts}] [EventListeners] gh3036:factory_test_progress received (handled by store)`);
         break;
       default:
-        console.log('[EventListeners] Unknown topic:', event.topic);
+        console.log(`[${ts}] [EventListeners] Unknown topic: ${event.topic}`);
         break;
     }
   } catch (err) {
-    console.error(`[EventListeners] Failed to decode payload for topic "${event.topic}":`, err);
+    console.error(`[${ts}] [EventListeners] Failed to decode payload for topic "${event.topic}":`, err);
   }
 }
 

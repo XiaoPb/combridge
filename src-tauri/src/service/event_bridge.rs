@@ -71,8 +71,11 @@ impl<R: Runtime> EventBridge<R> {
         self.shutdown_tx = Some(shutdown_tx);
 
         tauri::async_runtime::spawn(async move {
-            tracing::info!("EventBridge started, listening for events");
+            tracing::info!("[EventBridge] Started, listening for events (filter prefixes: {:?})", filter.prefixes);
             let mut event_count = 0u64;
+            let mut forwarded_count = 0u64;
+            let mut filtered_count = 0u64;
+            let error_count = 0u64;
             let mut shutdown_rx = shutdown_rx;
 
             loop {
@@ -80,10 +83,16 @@ impl<R: Runtime> EventBridge<R> {
                     result = shutdown_rx.recv() => {
                         match result {
                             Ok(_) => {
-                                tracing::info!("EventBridge received shutdown signal (processed {} events)", event_count);
+                                tracing::info!(
+                                    "[EventBridge] Shutdown signal received (total: {} received, {} forwarded, {} filtered, {} errors)",
+                                    event_count, forwarded_count, filtered_count, error_count
+                                );
                             }
                             Err(broadcast::error::RecvError::Closed) => {
-                                tracing::info!("EventBridge shutdown channel closed (processed {} events)", event_count);
+                                tracing::info!(
+                                    "[EventBridge] Shutdown channel closed (total: {} received, {} forwarded, {} filtered, {} errors)",
+                                    event_count, forwarded_count, filtered_count, error_count
+                                );
                             }
                             Err(broadcast::error::RecvError::Lagged(_)) => {
                                 continue;
@@ -96,9 +105,10 @@ impl<R: Runtime> EventBridge<R> {
                             Ok(event) => {
                                 event_count += 1;
                                 let matches = filter.matches(&event.topic);
-                                
+
                                 if !matches {
-                                    tracing::trace!(
+                                    filtered_count += 1;
+                                    tracing::debug!(
                                         "[EventBridge] Event #{} filtered out: topic={}",
                                         event_count,
                                         event.topic
@@ -115,25 +125,42 @@ impl<R: Runtime> EventBridge<R> {
                                 );
 
                                 let app_handle = app_handle.clone();
-                                let event = event.clone();
-                                tokio::spawn(async move {
-                                    if let Err(e) = Self::emit_to_frontend(&app_handle, &event) {
-                                        tracing::error!(
-                                            "[EventBridge] Failed to emit event to frontend: topic={}, error={}",
-                                            event.topic,
-                                            e
-                                        );
-                                    } else {
-                                        tracing::info!(
-                                            "[EventBridge] Event forwarded to frontend: topic={}, timestamp={}",
-                                            event.topic,
-                                            event.timestamp
-                                        );
+                                let event_clone = event.clone();
+                                let topic_for_log = event.topic.clone();
+
+                                tokio::task::spawn_blocking(move || {
+                                    match Self::emit_to_frontend(&app_handle, &event_clone) {
+                                        Ok(()) => {
+                                            tracing::info!(
+                                                "[EventBridge] Forwarded to frontend: topic={}, timestamp={}",
+                                                topic_for_log,
+                                                event_clone.timestamp
+                                            );
+                                        }
+                                        Err(e) => {
+                                            tracing::error!(
+                                                "[EventBridge] Failed to emit to frontend: topic={}, error={}",
+                                                topic_for_log,
+                                                e
+                                            );
+                                        }
                                     }
                                 });
+
+                                forwarded_count += 1;
+
+                                if forwarded_count % 100 == 0 {
+                                    tracing::info!(
+                                        "[EventBridge] Stats: {} received, {} forwarded, {} filtered, {} errors",
+                                        event_count, forwarded_count, filtered_count, error_count
+                                    );
+                                }
                             }
                             Err(broadcast::error::RecvError::Closed) => {
-                                tracing::info!("EventBus channel closed, stopping EventBridge (processed {} events)", event_count);
+                                tracing::info!(
+                                    "[EventBridge] EventBus channel closed, stopping (total: {} received, {} forwarded)",
+                                    event_count, forwarded_count
+                                );
                                 break;
                             }
                             Err(broadcast::error::RecvError::Lagged(n)) => {
@@ -148,14 +175,14 @@ impl<R: Runtime> EventBridge<R> {
                 }
             }
 
-            tracing::info!("EventBridge stopped");
+            tracing::info!("[EventBridge] Stopped (total: {} received, {} forwarded)", event_count, forwarded_count);
         });
     }
 
     pub fn stop(&mut self) {
         if let Some(tx) = &self.shutdown_tx {
             if let Err(e) = tx.send(()) {
-                tracing::warn!("Failed to send shutdown signal to EventBridge: {}", e);
+                tracing::warn!("[EventBridge] Failed to send shutdown signal: {}", e);
             }
             self.shutdown_tx = None;
         }
@@ -218,5 +245,19 @@ mod tests {
         filter.add_prefix("serial:");
         assert!(filter.matches("serial:data"));
         assert!(!filter.matches("ble:data"));
+    }
+
+    #[test]
+    fn test_event_filter_gh3036() {
+        let filter = EventFilter::with_prefixes(vec![
+            "serial:".to_string(),
+            "ble:".to_string(),
+            "gh3036:".to_string(),
+            "protocol:".to_string(),
+        ]);
+        assert!(filter.matches("gh3036:factory_test_progress"));
+        assert!(filter.matches("gh3036:frame"));
+        assert!(filter.matches("serial:data"));
+        assert!(!filter.matches("system:error"));
     }
 }

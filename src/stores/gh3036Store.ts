@@ -828,24 +828,31 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   },
   
   subscribeFactoryTestEvents: async () => {
-    console.log('[Gh3036Store] subscribeFactoryTestEvents called');
+    const ts = () => new Date().toISOString().substr(11, 12);
+    console.log(`[${ts()}] [Gh3036Store] subscribeFactoryTestEvents called`);
     const { eventListeners } = get();
     
     if (eventListeners.factoryTest) {
-      console.log('[Gh3036Store] 产测事件已订阅，跳过重复订阅');
+      console.log(`[${ts()}] [Gh3036Store] 产测事件已订阅，跳过重复订阅`);
       return;
     }
     
     try {
-      console.log('[Gh3036Store] 开始订阅产测事件...');
+      console.log(`[${ts()}] [Gh3036Store] 开始订阅产测事件...`);
       const factoryTestUnlisten = await listen<EventBusEvent>('event-bus', (event) => {
-        console.log('[Gh3036Store] 收到 event-bus 事件:', event.payload.topic);
+        const recvTs = new Date().toISOString().substr(11, 12);
+        const topic = event.payload.topic;
+        const encoding = event.payload.encoding;
         
-        if (event.payload.topic === 'gh3036:factory_test_progress') {
-          console.log('[Gh3036Store] 收到产测进度事件:', event.payload);
+        if (topic === 'gh3036:factory_test_progress') {
+          console.log(
+            `[${recvTs}] [Gh3036Store] 收到产测进度事件, encoding=${encoding}, payload_len=${event.payload.payload?.length ?? 'N/A'}`
+          );
           try {
             const progressEvent = decodePayload<FactoryTestProgressEvent>(event.payload);
-            console.log('[Gh3036Store] 解码后的进度事件:', progressEvent);
+            console.log(
+              `[${recvTs}] [Gh3036Store] 进度事件解码成功: step=${progressEvent.current_step}, status=${progressEvent.status}, progress=${progressEvent.progress.toFixed(3)}, msg=${progressEvent.message}`
+            );
             
             set((state) => ({
               factoryTest: {
@@ -872,22 +879,25 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
               if (progressEvent.status === 'completed') {
                 factoryTestApi.getResult().then((result) => {
                   if (result) {
+                    console.log(`[${ts()}] [Gh3036Store] 获取产测结果成功: overall=${result.overall_result}`);
                     set((state) => ({
                       factoryTest: { ...state.factoryTest, result },
                     }));
                   }
                 }).catch((err) => {
-                  console.error('[Gh3036Store] 获取产测结果失败:', err);
+                  console.error(`[${ts()}] [Gh3036Store] 获取产测结果失败:`, err);
                 });
               }
             }
           } catch (err) {
-            console.error('[Gh3036Store] Failed to decode factory test progress:', err);
+            console.error(`[${recvTs}] [Gh3036Store] 产测进度事件解码失败:`, err, 'raw payload:', event.payload);
           }
+        } else if (topic.startsWith('gh3036:')) {
+          console.log(`[${recvTs}] [Gh3036Store] 收到 gh3036 事件: topic=${topic}`);
         }
       });
       
-      console.log('[Gh3036Store] 产测事件订阅成功');
+      console.log(`[${ts()}] [Gh3036Store] 产测事件订阅成功, unlisten=${typeof factoryTestUnlisten}`);
       set((state) => ({
         eventListeners: {
           ...state.eventListeners,
@@ -895,14 +905,16 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
         },
       }));
     } catch (err) {
-      console.error('[Gh3036Store] 订阅产测事件失败:', err);
+      console.error(`[${ts()}] [Gh3036Store] 订阅产测事件失败:`, err);
     }
   },
   
   unsubscribeFactoryTestEvents: () => {
+    const ts = () => new Date().toISOString().substr(11, 12);
     const { eventListeners } = get();
     
     if (eventListeners.factoryTest) {
+      console.log(`[${ts()}] [Gh3036Store] 取消产测事件订阅`);
       eventListeners.factoryTest();
       set((state) => ({
         eventListeners: {

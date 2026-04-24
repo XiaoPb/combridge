@@ -72,19 +72,28 @@ impl<R: Runtime> EventBridge<R> {
 
         tauri::async_runtime::spawn(async move {
             tracing::info!("EventBridge started, listening for events");
+            let mut event_count = 0u64;
 
             loop {
                 tokio::select! {
                     result = receiver.recv() => {
                         match result {
                             Ok(event) => {
-                                if !filter.matches(&event.topic) {
-                                    tracing::debug!("[EventBridge] Event filtered out: topic={}", event.topic);
+                                event_count += 1;
+                                let matches = filter.matches(&event.topic);
+                                
+                                if !matches {
+                                    tracing::trace!(
+                                        "[EventBridge] Event #{} filtered out: topic={}",
+                                        event_count,
+                                        event.topic
+                                    );
                                     continue;
                                 }
 
                                 tracing::info!(
-                                    "[EventBridge] Received event: topic={}, encoding={:?}, payload_len={}",
+                                    "[EventBridge] Received event #{}: topic={}, encoding={:?}, payload_len={}",
+                                    event_count,
                                     event.topic,
                                     event.encoding,
                                     event.payload.len()
@@ -109,19 +118,20 @@ impl<R: Runtime> EventBridge<R> {
                                 });
                             }
                             Err(broadcast::error::RecvError::Closed) => {
-                                tracing::info!("EventBus channel closed, stopping EventBridge");
+                                tracing::info!("EventBus channel closed, stopping EventBridge (processed {} events)", event_count);
                                 break;
                             }
                             Err(broadcast::error::RecvError::Lagged(n)) => {
                                 tracing::warn!(
-                                    "EventBridge lagged behind by {} messages, continuing",
-                                    n
+                                    "[EventBridge] Lagged behind by {} messages (processed {} events), continuing",
+                                    n,
+                                    event_count
                                 );
                             }
                         }
                     }
                     _ = shutdown_rx.recv() => {
-                        tracing::info!("EventBridge received shutdown signal");
+                        tracing::info!("EventBridge received shutdown signal (processed {} events)", event_count);
                         break;
                     }
                 }

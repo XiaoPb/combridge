@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Card,
   Button,
@@ -45,13 +45,22 @@ const FactoryTestTab: React.FC = () => {
   } = useGh3036Store();
 
   const [showEnvSwitchModal, setShowEnvSwitchModal] = useState(false);
+  const factoryTestSubscribedRef = useRef(false);
 
   useEffect(() => {
-    subscribeFactoryTestEvents();
+    if (!factoryTestSubscribedRef.current) {
+      factoryTestSubscribedRef.current = true;
+      console.log('[FactoryTestTab] 订阅产测事件');
+      subscribeFactoryTestEvents();
+    }
     return () => {
-      unsubscribeFactoryTestEvents();
+      if (factoryTestSubscribedRef.current) {
+        factoryTestSubscribedRef.current = false;
+        console.log('[FactoryTestTab] 取消订阅产测事件');
+        unsubscribeFactoryTestEvents();
+      }
     };
-  }, [subscribeFactoryTestEvents, unsubscribeFactoryTestEvents]);
+  }, []);
 
   useEffect(() => {
     if (factoryTest.status === 'waiting_for_environment_switch') {

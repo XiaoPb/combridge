@@ -141,10 +141,11 @@ impl EventBus {
                 let encoding = event.encoding;
 
                 tracing::info!(
-                    "[EventBus] Publishing msgpack event: topic={}, payload_len={}, subscriber_count={}",
+                    "[EventBus] Publishing msgpack event: topic={}, payload_len={}, sync_subscribers={}, broadcast_receivers={}",
                     topic,
                     event.payload.len(),
-                    self.subscriber_count_sync(&topic)
+                    self.subscriber_count_sync(&topic),
+                    self.sender.receiver_count()
                 );
 
                 if let Err(e) = self.sender.send(event.clone()) {

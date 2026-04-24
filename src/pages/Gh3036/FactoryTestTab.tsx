@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Card,
   Button,
@@ -45,34 +45,10 @@ const FactoryTestTab: React.FC = () => {
   } = useGh3036Store();
 
   const [showEnvSwitchModal, setShowEnvSwitchModal] = useState(false);
-  const factoryTestSubscribedRef = useRef(false);
-  const unlistenRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const subscribe = async () => {
-      if (factoryTestSubscribedRef.current) return;
-      factoryTestSubscribedRef.current = true;
-      console.log('[FactoryTestTab] 订阅产测事件');
-      await subscribeFactoryTestEvents();
-      if (!cancelled) {
-        const { eventListeners } = useGh3036Store.getState();
-        unlistenRef.current = eventListeners.factoryTest ?? null;
-        console.log('[FactoryTestTab] 产测事件订阅完成, unlisten=%s', !!unlistenRef.current);
-      }
-    };
-
-    subscribe();
-
+    subscribeFactoryTestEvents();
     return () => {
-      cancelled = true;
-      factoryTestSubscribedRef.current = false;
-      console.log('[FactoryTestTab] 取消订阅产测事件');
-      if (unlistenRef.current) {
-        unlistenRef.current();
-        unlistenRef.current = null;
-      }
       unsubscribeFactoryTestEvents();
     };
   }, []);

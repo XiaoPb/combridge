@@ -85,6 +85,8 @@ interface Gh3036State {
     factoryTest?: UnlistenFn;
   };
   
+  _factoryTestSubscribing: boolean;
+  
   rpcConfig: {
     workMode: string;
     command: string;
@@ -239,6 +241,8 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   isLinked: false,
   
   eventListeners: {},
+  
+  _factoryTestSubscribing: false,
   
   rpcConfig: {
     workMode: '0',
@@ -829,13 +833,19 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   
   subscribeFactoryTestEvents: async () => {
     const ts = () => new Date().toISOString().substr(11, 12);
-    console.log(`[${ts()}] [Gh3036Store] subscribeFactoryTestEvents called`);
-    const { eventListeners } = get();
+    const { eventListeners, _factoryTestSubscribing } = get();
     
     if (eventListeners.factoryTest) {
       console.log(`[${ts()}] [Gh3036Store] 产测事件已订阅，跳过重复订阅`);
       return;
     }
+    
+    if (_factoryTestSubscribing) {
+      console.log(`[${ts()}] [Gh3036Store] 产测事件正在订阅中，跳过并发订阅`);
+      return;
+    }
+    
+    set({ _factoryTestSubscribing: true });
     
     try {
       console.log(`[${ts()}] [Gh3036Store] 开始订阅产测事件...`);
@@ -897,14 +907,22 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
         }
       });
       
+      if (!get()._factoryTestSubscribing) {
+        console.log(`[${ts()}] [Gh3036Store] 订阅期间组件已卸载，清理刚完成的订阅`);
+        factoryTestUnlisten();
+        return;
+      }
+      
       console.log(`[${ts()}] [Gh3036Store] 产测事件订阅成功, unlisten=${typeof factoryTestUnlisten}`);
       set((state) => ({
         eventListeners: {
           ...state.eventListeners,
           factoryTest: factoryTestUnlisten,
         },
+        _factoryTestSubscribing: false,
       }));
     } catch (err) {
+      set({ _factoryTestSubscribing: false });
       console.error(`[${ts()}] [Gh3036Store] 订阅产测事件失败:`, err);
     }
   },
@@ -912,6 +930,8 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   unsubscribeFactoryTestEvents: () => {
     const ts = () => new Date().toISOString().substr(11, 12);
     const { eventListeners } = get();
+    
+    set({ _factoryTestSubscribing: false });
     
     if (eventListeners.factoryTest) {
       console.log(`[${ts()}] [Gh3036Store] 取消产测事件订阅`);

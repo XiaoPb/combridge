@@ -8,7 +8,6 @@ use super::event_bus::{Event, EventBus, EventEncoding};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
-const RECV_TIMEOUT_SECS: u64 = 3;
 const HEARTBEAT_INTERVAL_SECS: u64 = 10;
 
 #[derive(Debug, Clone)]
@@ -94,145 +93,123 @@ impl<R: Runtime> EventBridge<R> {
         let mut event_count = 0u64;
         let mut forwarded_count = 0u64;
         let mut filtered_count = 0u64;
-        let mut last_heartbeat = std::time::Instant::now();
-        let mut consecutive_timeouts = 0u32;
+        let mut heartbeat_interval = tokio::time::interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
+        heartbeat_interval.tick().await;
 
         while running.load(Ordering::SeqCst) {
-            let recv_result = tokio::time::timeout(
-                Duration::from_secs(RECV_TIMEOUT_SECS),
-                receiver.recv(),
-            ).await;
+            tokio::select! {
+                recv_result = receiver.recv() => {
+                    match recv_result {
+                        Ok(event) => {
+                            event_count += 1;
 
-            match recv_result {
-                Ok(Ok(event)) => {
-                    consecutive_timeouts = 0;
-                    event_count += 1;
+                            if !filter.matches(&event.topic) {
+                                filtered_count += 1;
+                                if filtered_count <= 5 || filtered_count % 100 == 0 {
+                                    tracing::debug!(
+                                        "[EventBridge] Event #{} filtered out: topic={}",
+                                        event_count,
+                                        event.topic
+                                    );
+                                }
+                                continue;
+                            }
 
-                    if !filter.matches(&event.topic) {
-                        filtered_count += 1;
-                        if filtered_count <= 5 || filtered_count % 100 == 0 {
-                            tracing::debug!(
-                                "[EventBridge] Event #{} filtered out: topic={}",
+                            tracing::info!(
+                                "[EventBridge] Received event #{}: topic={}, encoding={:?}, payload_len={}",
                                 event_count,
-                                event.topic
+                                event.topic,
+                                event.encoding,
+                                event.payload.len()
                             );
-                        }
-                        continue;
-                    }
 
-                    tracing::info!(
-                        "[EventBridge] Received event #{}: topic={}, encoding={:?}, payload_len={}",
-                        event_count,
-                        event.topic,
-                        event.encoding,
-                        event.payload.len()
-                    );
-
-                    let app_handle = app_handle.clone();
-                    let event_clone = event.clone();
-                    let topic_for_log = event.topic.clone();
-
-                    tokio::task::spawn_blocking(move || {
-                        match Self::emit_to_frontend(&app_handle, &event_clone) {
-                            Ok(()) => {
-                                tracing::info!(
-                                    "[EventBridge] Forwarded to frontend: topic={}, timestamp={}",
-                                    topic_for_log,
-                                    event_clone.timestamp
-                                );
-                            }
-                            Err(e) => {
-                                tracing::error!(
-                                    "[EventBridge] Failed to emit to frontend: topic={}, error={}",
-                                    topic_for_log,
-                                    e
-                                );
-                            }
-                        }
-                    });
-
-                    forwarded_count += 1;
-
-                    if forwarded_count % 50 == 0 {
-                        tracing::info!(
-                            "[EventBridge] Stats: {} received, {} forwarded, {} filtered",
-                            event_count,
-                            forwarded_count,
-                            filtered_count
-                        );
-                    }
-                }
-                Ok(Err(broadcast::error::RecvError::Closed)) => {
-                    tracing::info!(
-                        "[EventBridge] EventBus channel closed, stopping (total: {} received, {} forwarded)",
-                        event_count,
-                        forwarded_count
-                    );
-                    break;
-                }
-                Ok(Err(broadcast::error::RecvError::Lagged(n))) => {
-                    consecutive_timeouts = 0;
-                    tracing::warn!(
-                        "[EventBridge] Lagged behind by {} messages (processed {} events), continuing",
-                        n,
-                        event_count
-                    );
-                }
-                Err(_) => {
-                    consecutive_timeouts += 1;
-
-                    while let Ok(event) = receiver.try_recv() {
-                        event_count += 1;
-                        consecutive_timeouts = 0;
-
-                        if !filter.matches(&event.topic) {
-                            filtered_count += 1;
-                            continue;
-                        }
-
-                        tracing::info!(
-                            "[EventBridge] Recovered event #{} via try_recv: topic={}",
-                            event_count,
-                            event.topic
-                        );
-
-                        let app_handle = app_handle.clone();
-                        let event_clone = event.clone();
-                        let topic_for_log = event.topic.clone();
-
-                        tokio::task::spawn_blocking(move || {
-                            match Self::emit_to_frontend(&app_handle, &event_clone) {
+                            match Self::emit_to_frontend(&app_handle, &event) {
                                 Ok(()) => {
                                     tracing::info!(
                                         "[EventBridge] Forwarded to frontend: topic={}, timestamp={}",
-                                        topic_for_log,
-                                        event_clone.timestamp
+                                        event.topic,
+                                        event.timestamp
                                     );
                                 }
                                 Err(e) => {
                                     tracing::error!(
                                         "[EventBridge] Failed to emit to frontend: topic={}, error={}",
-                                        topic_for_log,
+                                        event.topic,
                                         e
                                     );
                                 }
                             }
-                        });
 
-                        forwarded_count += 1;
-                    }
+                            forwarded_count += 1;
 
-                    if last_heartbeat.elapsed() >= Duration::from_secs(HEARTBEAT_INTERVAL_SECS) {
-                        tracing::info!(
-                            "[EventBridge] Heartbeat: alive, waiting for events... (total: {} received, {} forwarded, {} filtered, consecutive_timeouts={})",
-                            event_count,
-                            forwarded_count,
-                            filtered_count,
-                            consecutive_timeouts
-                        );
-                        last_heartbeat = std::time::Instant::now();
+                            if forwarded_count % 50 == 0 {
+                                tracing::info!(
+                                    "[EventBridge] Stats: {} received, {} forwarded, {} filtered",
+                                    event_count,
+                                    forwarded_count,
+                                    filtered_count
+                                );
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Closed) => {
+                            tracing::info!(
+                                "[EventBridge] EventBus channel closed, stopping (total: {} received, {} forwarded)",
+                                event_count,
+                                forwarded_count
+                            );
+                            break;
+                        }
+                        Err(broadcast::error::RecvError::Lagged(n)) => {
+                            tracing::warn!(
+                                "[EventBridge] Lagged behind by {} messages (processed {} events), continuing",
+                                n,
+                                event_count
+                            );
+                        }
                     }
                 }
+                _ = heartbeat_interval.tick() => {
+                    tracing::info!(
+                        "[EventBridge] Heartbeat: alive (total: {} received, {} forwarded, {} filtered)",
+                        event_count,
+                        forwarded_count,
+                        filtered_count
+                    );
+                }
+            }
+
+            while let Ok(event) = receiver.try_recv() {
+                event_count += 1;
+
+                if !filter.matches(&event.topic) {
+                    filtered_count += 1;
+                    continue;
+                }
+
+                tracing::info!(
+                    "[EventBridge] Recovered event #{} via try_recv: topic={}",
+                    event_count,
+                    event.topic
+                );
+
+                match Self::emit_to_frontend(&app_handle, &event) {
+                    Ok(()) => {
+                        tracing::info!(
+                            "[EventBridge] Forwarded to frontend: topic={}, timestamp={}",
+                            event.topic,
+                            event.timestamp
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "[EventBridge] Failed to emit to frontend: topic={}, error={}",
+                            event.topic,
+                            e
+                        );
+                    }
+                }
+
+                forwarded_count += 1;
             }
         }
 

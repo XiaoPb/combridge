@@ -652,6 +652,9 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     if (eventListeners.deviceDisconnected) {
       eventListeners.deviceDisconnected();
     }
+    if (eventListeners.factoryTest) {
+      eventListeners.factoryTest();
+    }
     
     set({ eventListeners: {} });
   },
@@ -836,6 +839,8 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     try {
       console.log('[Gh3036Store] 开始订阅产测事件...');
       const factoryTestUnlisten = await listen<EventBusEvent>('event-bus', (event) => {
+        console.log('[Gh3036Store] 收到 event-bus 事件:', event.payload.topic);
+        
         if (event.payload.topic === 'gh3036:factory_test_progress') {
           console.log('[Gh3036Store] 收到产测进度事件:', event.payload);
           try {

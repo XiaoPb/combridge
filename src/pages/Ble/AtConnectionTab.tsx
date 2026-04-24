@@ -140,7 +140,7 @@ const AtConnectionTab: React.FC<AtConnectionTabProps> = ({ tab }) => {
         size="small"
       >
         <Panel header="UUID配置" key="uuid">
-          <Space direction="vertical" style={{ width: '100%' }}>
+          <Space orientation="vertical" style={{ width: '100%' }}>
             <div>
               <Text style={{ width: 80, display: 'inline-block' }}>TX UUID:</Text>
               <Input

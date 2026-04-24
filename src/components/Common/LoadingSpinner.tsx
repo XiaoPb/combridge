@@ -35,7 +35,7 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
           zIndex: 9999,
         }}
       >
-        <Spin indicator={spinIcon} tip={displayTip} size={size} />
+        <Spin indicator={spinIcon} size={size}><div>{displayTip}</div></Spin>
       </div>
     );
   }
@@ -49,7 +49,7 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
         padding: '40px 0',
       }}
     >
-      <Spin indicator={spinIcon} tip={displayTip} size={size} />
+      <Spin indicator={spinIcon} size={size}><div>{displayTip}</div></Spin>
     </div>
   );
 };

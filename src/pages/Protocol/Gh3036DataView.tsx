@@ -120,7 +120,7 @@ const Gh3036DataView: React.FC = () => {
       style={{ height: '100%' }}
       styles={{ body: { padding: 8, height: 'calc(100% - 40px)', overflow: 'auto' } }}
     >
-      <Space direction="vertical" style={{ width: '100%' }} size="small">
+      <Space orientation="vertical" style={{ width: '100%' }} size="small">
         <Row gutter={8}>
           {[0, 1].map(chartIndex => (
             <Col span={12} key={chartIndex}>

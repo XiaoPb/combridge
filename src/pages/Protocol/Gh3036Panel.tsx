@@ -48,7 +48,7 @@ const Gh3036Panel: React.FC = () => {
   if (isLoading && !isInitialized) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-        <Spin tip={t('gh3036.initializing')} />
+        <Spin><div>{t('gh3036.initializing')}</div></Spin>
       </div>
     );
   }

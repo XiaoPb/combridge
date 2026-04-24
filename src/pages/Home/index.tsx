@@ -119,7 +119,7 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
               marginTop: 12,
             }}
           >
-            <Space direction="vertical" style={{ width: '100%' }} size={8}>
+            <Space orientation="vertical" style={{ width: '100%' }} size={8}>
               {subTabs.map((tab) => (
                 <Button
                   key={tab.key}

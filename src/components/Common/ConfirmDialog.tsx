@@ -78,7 +78,7 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         </Space>
       }
       centered
-      maskClosable={!loading}
+      mask={{ closable: !loading }}
       closable={!loading}
     >
       {typeof content === 'string' ? <Text>{content}</Text> : content}

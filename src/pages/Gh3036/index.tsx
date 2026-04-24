@@ -54,7 +54,7 @@ const Gh3036Page: React.FC = () => {
   if (isLoading && !isInitialized) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-        <Spin tip={t('initializing')} />
+        <Spin><div>{t('initializing')}</div></Spin>
       </div>
     );
   }

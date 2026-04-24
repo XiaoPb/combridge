@@ -189,7 +189,7 @@ const VersionTab: React.FC = () => {
         title={t('version.libraryInfo')}
         style={{ ...cardStyle, marginTop: 8 }}
       >
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <Space orientation="vertical" style={{ width: '100%' }}>
           <div>
             <Tag color="green">{t('version.linked')}</Tag>
             <Tag color="blue">{t('version.ready')}</Tag>

@@ -80,7 +80,7 @@ const GattBrowser: React.FC<GattBrowserProps> = ({
     return (
       <Card title="GATT 服务浏览器" size="small">
         <div style={{ textAlign: 'center', padding: '40px 0' }}>
-          <Spin tip="正在发现服务..." />
+          <Spin><div>正在发现服务...</div></Spin>
         </div>
       </Card>
     );

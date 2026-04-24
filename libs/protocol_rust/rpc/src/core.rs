@@ -738,9 +738,9 @@ impl RpcCore {
                 }
             } else {
                 self.logger.log(
-                    crate::types::LogLevel::Warn,
+                    crate::types::LogLevel::Debug,
                     "RpcCore",
-                    &format!("Command not found: {}", key),
+                    &format!("Command not found: {} (response already consumed or unexpected ACK)", key),
                 );
             }
         }
@@ -829,9 +829,9 @@ impl RpcCore {
                 let _ = pending.tx.send(Ok(all_data));
             } else {
                 self.logger.log(
-                    crate::types::LogLevel::Warn,
+                    crate::types::LogLevel::Debug,
                     "RpcCore",
-                    &format!("[RECV] No pending call found for key={}", key),
+                    &format!("[RECV] No pending call found for key={} (response already consumed or unexpected ACK)", key),
                 );
             }
         }

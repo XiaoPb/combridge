@@ -117,7 +117,7 @@ const Gh3036ChannelConfig: React.FC = () => {
       <Col span={16}>
         <div style={sectionStyle}>
           <div style={labelStyle}>{t('gh3036.connectionType')}</div>
-          <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <Space orientation="vertical" style={{ width: '100%' }} size={12}>
             <Select
               size="small"
               value={channelConfig.connectionType}
@@ -130,7 +130,7 @@ const Gh3036ChannelConfig: React.FC = () => {
             />
             
             {channelConfig.connectionType === 'serial' ? (
-              <Space direction="vertical" style={{ width: '100%' }} size={8}>
+              <Space orientation="vertical" style={{ width: '100%' }} size={8}>
                 <Text type="secondary" style={{ fontSize: 12 }}>
                   {t('gh3036.serialHint')}
                 </Text>
@@ -147,7 +147,7 @@ const Gh3036ChannelConfig: React.FC = () => {
                 </Button>
               </Space>
             ) : (
-              <Space direction="vertical" style={{ width: '100%' }} size={8}>
+              <Space orientation="vertical" style={{ width: '100%' }} size={8}>
                 <Text type="secondary" style={{ fontSize: 12 }}>
                   {t('gh3036.bleHint')}
                 </Text>
@@ -192,7 +192,7 @@ const Gh3036ChannelConfig: React.FC = () => {
       <Col span={8}>
         <div style={sectionStyle}>
           <div style={labelStyle}>{t('gh3036.csvSave')}</div>
-          <Space direction="vertical" style={{ width: '100%' }} size={8}>
+          <Space orientation="vertical" style={{ width: '100%' }} size={8}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Text style={{ fontSize: 12 }}>{t('gh3036.enableCsv')}</Text>
               <Switch size="small" checked={csvEnabled} onChange={setCsvEnabled} />

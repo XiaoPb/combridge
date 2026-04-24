@@ -157,7 +157,7 @@ const FactoryTestTab: React.FC = () => {
           body: { padding: '8px 12px' }
         }}
       >
-        <Space direction="vertical" size={4} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={4} style={{ width: '100%' }}>
           <Text type="secondary" style={{ fontSize: 14, fontWeight: 500 }}>{label}</Text>
           <Row gutter={[8, 4]}>
             {data.map((value, index) => (
@@ -259,7 +259,7 @@ const FactoryTestTab: React.FC = () => {
       <Row gutter={[8, 8]}>
         <Col span={24}>
           <Card size="small" title={t('factory.configDir')} style={cardStyle}>
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               <Space.Compact style={{ width: '100%' }}>
                 <Text
                   code
@@ -338,7 +338,7 @@ const FactoryTestTab: React.FC = () => {
             }
             style={cardStyle}
           >
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               <Progress
                 percent={Math.round(factoryTest.progress * 100)}
                 status={
@@ -371,7 +371,7 @@ const FactoryTestTab: React.FC = () => {
         onCancel={() => setShowEnvSwitchModal(false)}
         okText={t('factory.confirmSwitch')}
         cancelText={t('common:cancel')}
-        maskClosable={false}
+        mask={{ closable: false }}
       >
         <Text>{t('factory.environmentSwitchMessage')}</Text>
       </Modal>

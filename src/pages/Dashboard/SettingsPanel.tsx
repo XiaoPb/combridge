@@ -185,7 +185,7 @@ const SettingsPanel: React.FC = () => {
         <div style={{ marginBottom: 8, fontWeight: 500 }}>
           {t('settings.connectionStatus') || '连接状态'}
         </div>
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <Space orientation="vertical" style={{ width: '100%' }}>
           <Button
             type={isRunning ? 'default' : 'primary'}
             icon={isRunning ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
@@ -215,7 +215,7 @@ const SettingsPanel: React.FC = () => {
         <div style={{ marginBottom: 8, fontWeight: 500 }}>
           {t('settings.dataExport') || '数据导出'}
         </div>
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <Space orientation="vertical" style={{ width: '100%' }}>
           <div style={{ fontSize: 12, color: token.colorTextTertiary }}>
             {t('settings.dataPoints') || '数据点'}: {parsedDataBuffer.length}
           </div>

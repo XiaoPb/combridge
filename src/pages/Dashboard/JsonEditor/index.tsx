@@ -152,7 +152,7 @@ const JsonEditor: React.FC = () => {
         style={{ borderRight: `1px solid ${token.colorBorderSecondary}` }}
       >
         <div style={{ padding: 12 }}>
-          <Space direction="vertical" style={{ width: '100%' }}>
+          <Space orientation="vertical" style={{ width: '100%' }}>
             <Button
               type="primary"
               icon={<PlusOutlined />}

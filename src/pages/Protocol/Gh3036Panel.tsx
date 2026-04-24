@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Collapse, Alert, Spin } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { SettingOutlined, CodeOutlined } from '@ant-design/icons';
@@ -22,6 +22,7 @@ const Gh3036Panel: React.FC = () => {
   } = useGh3036Store();
 
   const [activeKeys, setActiveKeys] = useState<string[]>(['channel', 'commands']);
+  const subscribedRef = useRef(false);
 
   useEffect(() => {
     if (!isInitialized) {
@@ -30,12 +31,19 @@ const Gh3036Panel: React.FC = () => {
     loadChannels();
     loadCsvConfig();
     loadRpcCommands();
-    subscribeEvents();
+
+    if (!subscribedRef.current) {
+      subscribedRef.current = true;
+      subscribeEvents();
+    }
 
     return () => {
-      unsubscribeEvents();
+      if (subscribedRef.current) {
+        subscribedRef.current = false;
+        unsubscribeEvents();
+      }
     };
-  }, [isInitialized, initialize, loadChannels, loadCsvConfig, loadRpcCommands, subscribeEvents, unsubscribeEvents]);
+  }, []);
 
   if (isLoading && !isInitialized) {
     return (

@@ -399,6 +399,12 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   })),
   
   initialize: async () => {
+    const { isInitialized, isLoading } = get();
+    if (isInitialized || isLoading) {
+      console.log('[Gh3036Store] 已初始化或正在初始化，跳过');
+      return;
+    }
+    
     set({ isLoading: true, error: null });
     try {
       await gh3036Api.init();
@@ -572,12 +578,6 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     }
     
     try {
-      const status = await gh3036Api.getLibraryStatus();
-      if (!status.isInitialized) {
-        console.debug('[Gh3036Store] 库未初始化，跳过订阅');
-        return;
-      }
-      
       const eventUnlisten = await listen<EventBusEvent>('event-bus', (event) => {
         if (event.payload.topic === 'gh3036:event') {
           try {
@@ -825,18 +825,22 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   },
   
   subscribeFactoryTestEvents: async () => {
+    console.log('[Gh3036Store] subscribeFactoryTestEvents called');
     const { eventListeners } = get();
     
     if (eventListeners.factoryTest) {
-      console.debug('[Gh3036Store] 产测事件已订阅，跳过重复订阅');
+      console.log('[Gh3036Store] 产测事件已订阅，跳过重复订阅');
       return;
     }
     
     try {
+      console.log('[Gh3036Store] 开始订阅产测事件...');
       const factoryTestUnlisten = await listen<EventBusEvent>('event-bus', (event) => {
         if (event.payload.topic === 'gh3036:factory_test_progress') {
+          console.log('[Gh3036Store] 收到产测进度事件:', event.payload);
           try {
             const progressEvent = decodePayload<FactoryTestProgressEvent>(event.payload);
+            console.log('[Gh3036Store] 解码后的进度事件:', progressEvent);
             
             set((state) => ({
               factoryTest: {
@@ -878,6 +882,7 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
         }
       });
       
+      console.log('[Gh3036Store] 产测事件订阅成功');
       set((state) => ({
         eventListeners: {
           ...state.eventListeners,
@@ -885,7 +890,7 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
         },
       }));
     } catch (err) {
-      console.error('订阅产测事件失败:', err);
+      console.error('[Gh3036Store] 订阅产测事件失败:', err);
     }
   },
   

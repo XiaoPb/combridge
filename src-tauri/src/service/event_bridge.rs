@@ -79,6 +79,7 @@ impl<R: Runtime> EventBridge<R> {
                         match result {
                             Ok(event) => {
                                 if !filter.matches(&event.topic) {
+                                    tracing::debug!("[EventBridge] Event filtered out: topic={}", event.topic);
                                     continue;
                                 }
 
@@ -88,25 +89,24 @@ impl<R: Runtime> EventBridge<R> {
                                     event.encoding,
                                     event.payload.len()
                                 );
-                                
-                                if !filter.matches(&event.topic) {
-                                    tracing::debug!("[EventBridge] Event filtered out: topic={}", event.topic);
-                                    continue;
-                                }
 
-                                if let Err(e) = Self::emit_to_frontend(&app_handle, &event) {
-                                    tracing::error!(
-                                        "[EventBridge] Failed to emit event to frontend: topic={}, error={}",
-                                        event.topic,
-                                        e
-                                    );
-                                } else {
-                                    tracing::info!(
-                                        "[EventBridge] Event forwarded to frontend: topic={}, timestamp={}",
-                                        event.topic,
-                                        event.timestamp
-                                    );
-                                }
+                                let app_handle = app_handle.clone();
+                                let event = event.clone();
+                                tokio::spawn(async move {
+                                    if let Err(e) = Self::emit_to_frontend(&app_handle, &event) {
+                                        tracing::error!(
+                                            "[EventBridge] Failed to emit event to frontend: topic={}, error={}",
+                                            event.topic,
+                                            e
+                                        );
+                                    } else {
+                                        tracing::info!(
+                                            "[EventBridge] Event forwarded to frontend: topic={}, timestamp={}",
+                                            event.topic,
+                                            event.timestamp
+                                        );
+                                    }
+                                });
                             }
                             Err(broadcast::error::RecvError::Closed) => {
                                 tracing::info!("EventBus channel closed, stopping EventBridge");

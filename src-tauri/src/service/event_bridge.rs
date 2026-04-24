@@ -76,6 +76,22 @@ impl<R: Runtime> EventBridge<R> {
 
             loop {
                 tokio::select! {
+                    biased;
+                    result = shutdown_rx.recv() => {
+                        match result {
+                            Ok(_) => {
+                                tracing::info!("EventBridge received shutdown signal (processed {} events)", event_count);
+                                break;
+                            }
+                            Err(broadcast::error::RecvError::Closed) => {
+                                tracing::info!("EventBridge shutdown channel closed (processed {} events)", event_count);
+                                break;
+                            }
+                            Err(broadcast::error::RecvError::Lagged(_)) => {
+                                continue;
+                            }
+                        }
+                    }
                     result = receiver.recv() => {
                         match result {
                             Ok(event) => {
@@ -129,10 +145,6 @@ impl<R: Runtime> EventBridge<R> {
                                 );
                             }
                         }
-                    }
-                    _ = shutdown_rx.recv() => {
-                        tracing::info!("EventBridge received shutdown signal (processed {} events)", event_count);
-                        break;
                     }
                 }
             }

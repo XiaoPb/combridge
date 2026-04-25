@@ -35,7 +35,6 @@ API 层封装了所有 Tauri 命令调用和事件监听，提供类型安全的
 | `getOpenPorts()` | `get_open_ports` | 获取已打开的端口列表 |
 | `isConnected(portName)` | `is_port_open` | 检查端口是否已打开 |
 | `exportData(portName, allData, rxData)` | `export_serial_data` | 导出串口数据 |
-| `getCache(portName)` | `get_serial_cache` | 获取串口缓存数据 |
 
 ### BleApi
 
@@ -56,7 +55,7 @@ BLE 相关 API，源码位于 [tauri.ts](file:///e:/Code/CPP/combridge-rust/src/
 | `writeBleWithoutResponse(deviceId, charUuid, data)` | `write_ble_without_response` | 无响应写入 |
 | `subscribeBleNotify(deviceId, charUuid)` | `subscribe_ble_notify` | 订阅通知 |
 | `unsubscribeBleNotify(deviceId, charUuid)` | `unsubscribe_ble_notify` | 取消订阅 |
-| `getRssi(deviceId)` | `get_ble_rssi` | 获取 RSSI |
+| `getRssi(deviceId)` | `get_ble_rssi` | 获取 RSSI（前端使用 deviceId，后端使用 address） |
 | `setBleMtu(deviceId, mtu)` | `set_ble_mtu` | 设置 MTU |
 | `getMode()` | `get_ble_mode` | 获取 BLE 模式 |
 | `isConfigured()` | `is_ble_configured` | 检查是否已配置 |
@@ -387,7 +386,7 @@ const unlisten = await onSerialData((event) => {
 });
 
 const unlistenBle = await onBleData((event) => {
-  console.log(`设备 ${event.deviceId} 特征 ${event.characteristicUuid}:`, event.data);
+  console.log(`设备 ${event.device_id} 特征 ${event.characteristic_uuid}:`, event.data);
 });
 
 unlisten();

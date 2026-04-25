@@ -479,7 +479,7 @@ function useSerial() {
       });
 
       listeners.serialError = await onSerialError((event) => {
-        console.error(`串口错误 [${event.portName}]: ${event.error}`);
+        console.error(`串口错误 [${event.port_name}]: ${event.error}`);
       });
     };
 

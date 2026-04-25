@@ -310,35 +310,57 @@ classDiagram
         +SERIAL_DATA: &str = "serial:data"
         +SERIAL_CONNECTED: &str = "serial:connected"
         +SERIAL_DISCONNECTED: &str = "serial:disconnected"
+        +SERIAL_ERROR: &str = "serial:error"
         +BLE_DATA: &str = "ble:data"
         +BLE_CONNECTED: &str = "ble:connected"
         +BLE_DISCONNECTED: &str = "ble:disconnected"
+        +BLE_DISCOVERED: &str = "ble:discovered"
+        +BLE_SCAN_STATUS: &str = "ble:scan:status"
+        +BLE_ERROR: &str = "ble:error"
         +GH3036_FRAME: &str = "gh3036:frame"
+        +GH3036_EVENT: &str = "gh3036:event"
+        +GH3036_CHANNEL_CHANGED: &str = "gh3036:channel:changed"
         +PROTOCOL_PARSED: &str = "protocol:parsed"
+        +PROTOCOL_ERROR: &str = "protocol:error"
+        +WAVEFORM_DATA: &str = "waveform:data"
+        +WAVEFORM_STATUS: &str = "waveform:status"
+        +DASHBOARD_PARSER_UPDATED: &str = "dashboard:parser:updated"
+        +DASHBOARD_JSON_UPDATED: &str = "dashboard:json:updated"
+        +SYSTEM_STARTED: &str = "system:started"
+        +SYSTEM_SHUTDOWN: &str = "system:shutdown"
+        +SYSTEM_CONFIG_CHANGED: &str = "system:config:changed"
+        +SYSTEM_ERROR: &str = "system:error"
     }
 
     class SerialManager {
         +publishes: serial:data
         +publishes: serial:connected
         +publishes: serial:disconnected
+        +publishes: serial:error
     }
 
     class BleManager {
         +publishes: ble:data
         +publishes: ble:connected
         +publishes: ble:disconnected
+        +publishes: ble:discovered
+        +publishes: ble:scan:status
+        +publishes: ble:error
     }
 
     class Gh3036Manager {
         +subscribes: serial:data
         +subscribes: ble:data
         +publishes: gh3036:frame
+        +publishes: gh3036:event
+        +publishes: gh3036:channel:changed
     }
 
     class ProtocolManager {
         +subscribes: serial:data
         +subscribes: ble:data
         +publishes: protocol:parsed
+        +publishes: protocol:error
     }
 
     topics <.. SerialManager : uses
@@ -611,6 +633,17 @@ pub struct BleDataEvent {
 }
 ```
 
+**TypeScript 接口**：
+```typescript
+interface BleDataEvent {
+  device_id: string;
+  address: string;
+  characteristic_uuid: string;
+  data: number[];
+  timestamp: number;
+}
+```
+
 #### 5.3.3 Gh3036FrameEvent
 
 ```rust
@@ -625,6 +658,18 @@ pub struct Gh3036FrameEvent {
 }
 ```
 
+**TypeScript 接口**：
+```typescript
+interface Gh3036FrameEvent {
+  function_id: number;
+  function_name: string;
+  frame_id: number;
+  timestamp: number;
+  channel_count: number;
+  channels: number[];
+}
+```
+
 #### 5.3.4 ProtocolParsedEvent
 
 ```rust
@@ -635,6 +680,57 @@ pub struct ProtocolParsedEvent {
     pub original_data: Vec<u8>,     // 原始数据
     pub parsed_data: Value,         // 解析后数据（JSON）
     pub timestamp: u64,             // 时间戳
+}
+```
+
+**TypeScript 接口**：
+```typescript
+interface ProtocolParsedEvent {
+  plugin_id: string;
+  device_id: string;
+  original_data: number[];
+  parsed_data: unknown;
+  timestamp: number;
+}
+```
+
+#### 5.3.5 SerialConnectedEvent
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerialConnectedEvent {
+    pub port_name: String,      // 端口名称
+    pub timestamp: u64,         // 时间戳（毫秒）
+}
+```
+
+#### 5.3.6 SerialDisconnectedEvent
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerialDisconnectedEvent {
+    pub port_name: String,      // 端口名称
+    pub timestamp: u64,         // 时间戳（毫秒）
+}
+```
+
+#### 5.3.7 BleConnectionEvent
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BleConnectionEvent {
+    pub address: String,            // 设备地址
+    pub name: Option<String>,       // 设备名称（可选）
+    pub timestamp: u64,             // 时间戳（毫秒）
+}
+```
+
+**TypeScript 接口**：
+```typescript
+interface BleConnectionEvent {
+  address: string;
+  name?: string;
+  timestamp: number;
 }
 ```
 
@@ -1427,35 +1523,25 @@ async fn test_serial_to_gh3036_flow() {
 | `serial:connected` | SerialConnectedEvent | SerialManager | 串口连接成功 |
 | `serial:disconnected` | SerialDisconnectedEvent | SerialManager | 串口断开连接 |
 | `serial:error` | SerialErrorEvent | SerialManager | 串口错误 |
-| `serial:sent` | SerialSentEvent | SerialManager | 串口发送数据 |
 | `ble:data` | BleDataEvent | BleManager | BLE接收数据 |
 | `ble:connected` | BleConnectionEvent | BleManager | BLE连接成功 |
 | `ble:disconnected` | BleConnectionEvent | BleManager | BLE断开连接 |
-| `ble:scan_result` | BleScanResultEvent | BleManager | BLE扫描结果 |
+| `ble:discovered` | BleDiscoveredEvent | BleManager | BLE设备发现 |
+| `ble:scan:status` | BleScanStatusEvent | BleManager | BLE扫描状态 |
 | `ble:error` | BleErrorEvent | BleManager | BLE错误 |
-| `ble:mode_changed` | BleModeChangedEvent | BleManager | BLE模式变更 |
 | `gh3036:frame` | Gh3036FrameEvent | Gh3036Manager | GH3036帧数据 |
 | `gh3036:event` | Gh3036Event | Gh3036Manager | GH3036事件 |
-| `gh3036:error` | Gh3036ErrorEvent | Gh3036Manager | GH3036错误 |
-| `protocol:loaded` | ProtocolLoadedEvent | ProtocolManager | 协议加载 |
-| `protocol:unloaded` | ProtocolUnloadedEvent | ProtocolManager | 协议卸载 |
-| `protocol:enabled` | ProtocolEnabledEvent | ProtocolManager | 协议启用 |
-| `protocol:disabled` | ProtocolDisabledEvent | ProtocolManager | 协议禁用 |
-| `protocol:parsed` | ProtocolParsedEvent | ProtocolManager | 协议解析结果 |
-| `protocol:error` | ProtocolErrorEvent | ProtocolManager | 协议错误 |
-| `waveform:created` | WaveformCreatedEvent | WaveformManager | 缓冲区创建 |
-| `waveform:removed` | WaveformRemovedEvent | WaveformManager | 缓冲区移除 |
+| `gh3036:channel:changed` | Gh3036ChannelChangedEvent | Gh3036Manager | GH3036通道变更 |
+| `protocol:parsed` | ProtocolParsedEvent | PluginManager | 协议解析结果 |
+| `protocol:error` | ProtocolErrorEvent | PluginManager | 协议错误 |
 | `waveform:data` | WaveformDataEvent | WaveformManager | 波形数据更新 |
-| `waveform:cleared` | WaveformClearedEvent | WaveformManager | 缓冲区清空 |
-| `ws:status` | WsStatusEvent | WebSocketManager | 连接状态变更 |
-| `ws:message` | WsMessageEvent | WebSocketManager | 接收消息 |
-| `ws:error` | WsErrorEvent | WebSocketManager | 连接错误 |
-| `state:change` | StateChangeEvent | StateDispatcher | 状态变更 |
-| `state:saved` | StateSavedEvent | StateDispatcher | 状态保存 |
-| `state:restored` | StateRestoredEvent | StateDispatcher | 状态恢复 |
-| `system:status` | SystemStatusEvent | SystemManager | 系统状态 |
+| `waveform:status` | WaveformStatusEvent | WaveformManager | 缓冲区状态 |
+| `dashboard:parser:updated` | DashboardParserUpdatedEvent | DashboardManager | 解析脚本更新 |
+| `dashboard:json:updated` | DashboardJsonUpdatedEvent | DashboardManager | JSON配置更新 |
+| `system:started` | SystemStartedEvent | SystemManager | 系统启动 |
+| `system:shutdown` | SystemShutdownEvent | SystemManager | 系统关闭 |
+| `system:config:changed` | SystemConfigChangedEvent | SystemManager | 配置变更 |
 | `system:error` | SystemErrorEvent | SystemManager | 系统错误 |
-| `system:log` | SystemLogEvent | SystemManager | 系统日志 |
 
 ---
 

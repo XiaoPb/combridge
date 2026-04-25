@@ -79,5 +79,20 @@
       "clear": "Clear",
       "export": "Export"
     }
+  },
+  "timezone": {
+    "Asia/Shanghai": "China Standard Time (UTC+8)",
+    "Asia/Tokyo": "Japan Standard Time (UTC+9)",
+    "Asia/Seoul": "Korea Standard Time (UTC+9)",
+    "Asia/Singapore": "Singapore Standard Time (UTC+8)",
+    "Asia/Hong_Kong": "Hong Kong Standard Time (UTC+8)",
+    "Asia/Taipei": "Taipei Standard Time (UTC+8)",
+    "America/New_York": "US Eastern Time (UTC-5/-4)",
+    "America/Los_Angeles": "US Pacific Time (UTC-8/-7)",
+    "America/Chicago": "US Central Time (UTC-6/-5)",
+    "Europe/London": "London Time (UTC+0/+1)",
+    "Europe/Paris": "Paris Time (UTC+1/+2)",
+    "Europe/Berlin": "Berlin Time (UTC+1/+2)",
+    "UTC": "Coordinated Universal Time (UTC)"
   }
 }

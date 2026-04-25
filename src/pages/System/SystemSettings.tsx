@@ -7,20 +7,20 @@ import { systemApi } from '../../api/tauri';
 
 const { Text } = Typography;
 
-const TIMEZONE_OPTIONS = [
-  { value: 'Asia/Shanghai', label: '中国标准时间 (UTC+8)' },
-  { value: 'Asia/Tokyo', label: '日本标准时间 (UTC+9)' },
-  { value: 'Asia/Seoul', label: '韩国标准时间 (UTC+9)' },
-  { value: 'Asia/Singapore', label: '新加坡标准时间 (UTC+8)' },
-  { value: 'Asia/Hong_Kong', label: '香港标准时间 (UTC+8)' },
-  { value: 'Asia/Taipei', label: '台北标准时间 (UTC+8)' },
-  { value: 'America/New_York', label: '美国东部时间 (UTC-5/-4)' },
-  { value: 'America/Los_Angeles', label: '美国太平洋时间 (UTC-8/-7)' },
-  { value: 'America/Chicago', label: '美国中部时间 (UTC-6/-5)' },
-  { value: 'Europe/London', label: '伦敦时间 (UTC+0/+1)' },
-  { value: 'Europe/Paris', label: '巴黎时间 (UTC+1/+2)' },
-  { value: 'Europe/Berlin', label: '柏林时间 (UTC+1/+2)' },
-  { value: 'UTC', label: '协调世界时 (UTC)' },
+const TIMEZONE_VALUES = [
+  'Asia/Shanghai',
+  'Asia/Tokyo',
+  'Asia/Seoul',
+  'Asia/Singapore',
+  'Asia/Hong_Kong',
+  'Asia/Taipei',
+  'America/New_York',
+  'America/Los_Angeles',
+  'America/Chicago',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'UTC',
 ];
 
 const SystemSettings: React.FC = () => {
@@ -30,6 +30,11 @@ const SystemSettings: React.FC = () => {
   const updateConfig = useConfigStore((s) => s.updateConfig);
   const resetConfig = useConfigStore((s) => s.resetConfig);
   const getConfig = useConfigStore((s) => s.getConfig);
+
+  const timezoneOptions = TIMEZONE_VALUES.map((tz) => ({
+    value: tz,
+    label: t(`timezone.${tz}`, { defaultValue: tz }),
+  }));
 
   useEffect(() => {
     form.setFieldsValue(settings);
@@ -200,7 +205,7 @@ const SystemSettings: React.FC = () => {
                 label={t('label.timezone')}
               >
                 <Select
-                  options={TIMEZONE_OPTIONS}
+                  options={timezoneOptions}
                   showSearch
                   optionFilterProp="label"
                 />

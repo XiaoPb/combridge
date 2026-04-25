@@ -22,6 +22,7 @@ interface ConfigState {
   serialConfig: SerialConfig;
   bleConfig: BleModeConfig;
   recentConnections: RecentConnection[];
+  _hasHydrated: boolean;
 
   getConfig: () => AppSettings;
   updateConfig: (partial: Partial<AppSettings>) => void;
@@ -34,6 +35,7 @@ interface ConfigState {
   addRecentConnection: (connection: RecentConnection) => void;
   removeRecentConnection: (identifier: string) => void;
   clearRecentConnections: () => void;
+  setHasHydrated: (state: boolean) => void;
 }
 
 const DEFAULT_SERIAL_CONFIG: SerialConfig = {
@@ -57,6 +59,7 @@ export const useConfigStore = create<ConfigState>()(
       serialConfig: { ...DEFAULT_SERIAL_CONFIG },
       bleConfig: { ...DEFAULT_BLE_CONFIG },
       recentConnections: [],
+      _hasHydrated: false,
 
       getConfig: () => get().settings,
 
@@ -105,6 +108,10 @@ export const useConfigStore = create<ConfigState>()(
       clearRecentConnections: () => {
         set({ recentConnections: [] });
       },
+
+      setHasHydrated: (state: boolean) => {
+        set({ _hasHydrated: state });
+      },
     }),
     {
       name: 'combridge-config',
@@ -114,6 +121,9 @@ export const useConfigStore = create<ConfigState>()(
         bleConfig: state.bleConfig,
         recentConnections: state.recentConnections,
       }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     }
   )
 );

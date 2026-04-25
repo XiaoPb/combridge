@@ -79,5 +79,20 @@
       "clear": "清空",
       "export": "导出"
     }
+  },
+  "timezone": {
+    "Asia/Shanghai": "中国标准时间 (UTC+8)",
+    "Asia/Tokyo": "日本标准时间 (UTC+9)",
+    "Asia/Seoul": "韩国标准时间 (UTC+9)",
+    "Asia/Singapore": "新加坡标准时间 (UTC+8)",
+    "Asia/Hong_Kong": "香港标准时间 (UTC+8)",
+    "Asia/Taipei": "台北标准时间 (UTC+8)",
+    "America/New_York": "美国东部时间 (UTC-5/-4)",
+    "America/Los_Angeles": "美国太平洋时间 (UTC-8/-7)",
+    "America/Chicago": "美国中部时间 (UTC-6/-5)",
+    "Europe/London": "伦敦时间 (UTC+0/+1)",
+    "Europe/Paris": "巴黎时间 (UTC+1/+2)",
+    "Europe/Berlin": "柏林时间 (UTC+1/+2)",
+    "UTC": "协调世界时 (UTC)"
   }
 }

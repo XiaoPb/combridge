@@ -324,6 +324,9 @@ pub fn run() {
             commands::gh3036::gh3036_factory_test_set_config_dir,
             commands::gh3036::gh3036_factory_test_validate_config,
             commands::gh3036::gh3036_factory_test_get_result,
+            commands::gh3036::gh3036_validate_threshold_config,
+            commands::gh3036::gh3036_get_threshold_config,
+            commands::gh3036::gh3036_get_evaluation_result,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

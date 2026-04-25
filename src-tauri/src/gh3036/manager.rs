@@ -1241,6 +1241,18 @@ impl Gh3036Manager {
     pub fn factory_test_get_result(&self) -> Option<FactoryTestResult> {
         self.factory_test_manager.get_result()
     }
+
+    pub fn validate_threshold_config(&self) -> super::ThresholdConfigValidation {
+        self.factory_test_manager.validate_threshold_config()
+    }
+
+    pub fn get_threshold_config(&self) -> Option<super::FactoryThresholdConfig> {
+        self.factory_test_manager.get_threshold_config()
+    }
+
+    pub fn get_evaluation_result(&self) -> Option<super::FactoryEvaluationResult> {
+        self.factory_test_manager.get_evaluation_result()
+    }
 }
 
 impl Drop for Gh3036Manager {

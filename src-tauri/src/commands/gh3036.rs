@@ -4,7 +4,8 @@ use crate::error::{ComBridgeError, ErrorResponse};
 use crate::gh3036::{
     ChannelConfig, ChannelType, CsvConfig, FactoryTestResult,
     FactoryTestStep, FactoryTestStatus, Gh3036ManagerRef, RpcCommand, VersionTypeConfig,
-    ConfigValidationResult,
+    ConfigValidationResult, ThresholdConfigValidation, FactoryThresholdConfig,
+    FactoryEvaluationResult,
 };
 
 #[tauri::command]
@@ -230,4 +231,25 @@ pub async fn gh3036_factory_test_get_result(
     manager: State<'_, Gh3036ManagerRef>,
 ) -> Result<Option<FactoryTestResult>, ErrorResponse> {
     Ok(manager.factory_test_get_result())
+}
+
+#[tauri::command]
+pub async fn gh3036_validate_threshold_config(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<ThresholdConfigValidation, ErrorResponse> {
+    Ok(manager.validate_threshold_config())
+}
+
+#[tauri::command]
+pub async fn gh3036_get_threshold_config(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<Option<FactoryThresholdConfig>, ErrorResponse> {
+    Ok(manager.get_threshold_config())
+}
+
+#[tauri::command]
+pub async fn gh3036_get_evaluation_result(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<Option<FactoryEvaluationResult>, ErrorResponse> {
+    Ok(manager.get_evaluation_result())
 }

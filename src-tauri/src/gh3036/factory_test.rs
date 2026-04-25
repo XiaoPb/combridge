@@ -19,6 +19,10 @@ use tracing::{error, info};
 use crate::service::EventBus;
 use super::config_loader::ConfigLoader;
 use super::manager::Gh3036Manager;
+use super::threshold_config::{
+    FactoryThresholdConfig, FactoryEvaluationResult, ThresholdConfigValidation,
+    evaluate_test_data, validate_threshold_config_file,
+};
 use super::types::{
     FactoryTestStep, FactoryTestStatus, FactoryTestResult, FactoryTestStepResult,
     FactoryTestProgressEvent, ConfigValidationResult,
@@ -34,6 +38,8 @@ pub struct FactoryTestManager {
     thread_handle: Mutex<Option<thread::JoinHandle<()>>>,
     status_clone: Arc<Mutex<FactoryTestStatus>>,
     result_clone: Arc<Mutex<Option<FactoryTestResult>>>,
+    threshold_config: Mutex<Option<FactoryThresholdConfig>>,
+    evaluation_result: Arc<Mutex<Option<FactoryEvaluationResult>>>,
 }
 
 unsafe impl Send for FactoryTestManager {}
@@ -57,13 +63,44 @@ impl FactoryTestManager {
             thread_handle: Mutex::new(None),
             status_clone: Arc::new(Mutex::new(FactoryTestStatus::Idle)),
             result_clone: Arc::new(Mutex::new(None)),
+            threshold_config: Mutex::new(None),
+            evaluation_result: Arc::new(Mutex::new(None)),
         }
     }
 
     pub fn set_config_dir(&self, dir: PathBuf) {
         info!("[FactoryTest] 配置目录设置为: {}", dir.display());
         let mut config_dir = self.config_dir.lock();
-        *config_dir = dir;
+        *config_dir = dir.clone();
+        drop(config_dir);
+
+        if let Some(config_file) = FactoryThresholdConfig::find_config_file(&dir, "GH3036") {
+            match FactoryThresholdConfig::from_file(&config_file) {
+                Ok(config) => {
+                    info!("[FactoryTest] 加载卡控配置成功: {}", config.project);
+                    let mut threshold_config = self.threshold_config.lock();
+                    *threshold_config = Some(config);
+                }
+                Err(e) => {
+                    error!("[FactoryTest] 加载卡控配置失败: {}", e);
+                }
+            }
+        } else {
+            info!("[FactoryTest] 未找到卡控配置文件");
+        }
+    }
+
+    pub fn get_threshold_config(&self) -> Option<FactoryThresholdConfig> {
+        self.threshold_config.lock().clone()
+    }
+
+    pub fn get_evaluation_result(&self) -> Option<FactoryEvaluationResult> {
+        self.evaluation_result.lock().clone()
+    }
+
+    pub fn validate_threshold_config(&self) -> ThresholdConfigValidation {
+        let config_dir = self.config_dir.lock();
+        validate_threshold_config_file(&config_dir, "GH3036")
     }
 
     pub fn get_config_dir(&self) -> PathBuf {
@@ -202,11 +239,14 @@ impl FactoryTestManager {
             return Err("产测流程已在运行中".to_string());
         }
 
-        let mut handle = self.thread_handle.lock();
-        if let Some(thread) = handle.take() {
-            info!("[FactoryTest] 等待之前的线程结束...");
-            let _ = thread.join();
-            info!("[FactoryTest] 之前的线程已结束");
+        {
+            let mut handle = self.thread_handle.lock();
+            if let Some(thread) = handle.take() {
+                info!("[FactoryTest] 等待之前的线程结束...");
+                drop(handle);
+                let _ = thread.join();
+                info!("[FactoryTest] 之前的线程已结束");
+            }
         }
 
         let validation = self.validate_config_dir();
@@ -248,6 +288,8 @@ impl FactoryTestManager {
         let status_clone = self.status_clone.clone();
         let result_clone = self.result_clone.clone();
         let manager = gh3036_manager;
+        let threshold_config = self.threshold_config.lock().clone();
+        let evaluation_result_clone = self.evaluation_result.clone();
 
         let thread_handle = thread::spawn(move || {
             info!("[FactoryTest] 产测流程线程启动");
@@ -383,6 +425,27 @@ impl FactoryTestManager {
 
                 if let Err(e) = Self::save_result_to_csv(&test_result) {
                     error!("[FactoryTest] 保存结果失败: {}", e);
+                }
+
+                if let Some(ref config) = threshold_config {
+                    info!("[FactoryTest] 执行卡控判断...");
+                    let eval_result = evaluate_test_data(
+                        config,
+                        &test_result.base_noise,
+                        &test_result.ppg_noise,
+                        &test_result.lpctr,
+                        &test_result.lplctr,
+                    );
+                    info!("[FactoryTest] 卡控判断结果: overall_pass={}", eval_result.overall_pass);
+                    
+                    if !eval_result.overall_pass {
+                        test_result.overall_result = "FAIL".to_string();
+                    }
+                    
+                    {
+                        let mut eval = evaluation_result_clone.lock();
+                        *eval = Some(eval_result);
+                    }
                 }
 
                 {

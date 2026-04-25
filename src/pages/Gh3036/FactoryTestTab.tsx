@@ -13,7 +13,6 @@ import {
   theme,
   Divider,
   Table,
-  Alert,
   Collapse,
 } from 'antd';
 import {
@@ -88,6 +87,9 @@ const FactoryTestTab: React.FC = () => {
     });
     if (selected && typeof selected === 'string') {
       await setFactoryTestConfigDirAsync(selected);
+      validateFactoryTestConfig();
+      validateThresholdConfig();
+      loadThresholdConfig();
     }
   };
 
@@ -149,244 +151,129 @@ const FactoryTestTab: React.FC = () => {
     return formatSingleUuid(uuid);
   };
 
-  const renderChannelData = (label: string, data: number[], _color: string) => {
-    if (!data || data.length === 0) return null;
-    
-    return (
-      <Card 
-        size="small" 
-        style={{ marginBottom: 8 }}
-        styles={{
-          body: { padding: '8px 12px' }
-        }}
-      >
-        <Space orientation="vertical" size={4} style={{ width: '100%' }}>
-          <Text type="secondary" style={{ fontSize: 14, fontWeight: 500 }}>{label}</Text>
-          <Row gutter={[8, 4]}>
-            {data.map((value, index) => (
-              <Col key={index} span={6}>
-                <div style={{ 
-                  padding: '6px 10px', 
-                  background: token.colorBgContainer,
-                  borderRadius: token.borderRadiusSM,
-                  border: `1px solid ${token.colorBorderSecondary}`
-                }}>
-                  <Text style={{ fontSize: 14, fontFamily: 'monospace', fontWeight: 500 }}>
-                    {value.toFixed(4)}
-                  </Text>
-                </div>
-              </Col>
-            ))}
-          </Row>
-        </Space>
-      </Card>
-    );
-  };
+  const renderTestResult = (testResult: TestEvaluationResult) => {
+    const columns = [
+      {
+        title: t('factory.channel'),
+        dataIndex: 'channel_index',
+        key: 'channel_index',
+        width: 80,
+        render: (idx: number) => `CH${idx}`,
+      },
+      {
+        title: t('factory.value'),
+        dataIndex: 'value',
+        key: 'value',
+        width: 100,
+        render: (val: number, record: ChannelEvaluationResult) => (
+          <Text style={{ color: record.pass ? token.colorText : token.colorError, fontWeight: 500 }}>
+            {val} {testResult.unit || ''}
+          </Text>
+        ),
+      },
+      {
+        title: t('factory.condition'),
+        dataIndex: 'threshold_display',
+        key: 'threshold_display',
+        render: (display: string) => <Text code style={{ fontSize: 11 }}>{display}</Text>,
+      },
+      {
+        title: t('factory.result'),
+        dataIndex: 'pass',
+        key: 'pass',
+        width: 80,
+        render: (pass: boolean) => pass ? (
+          <Tag color="success" icon={<CheckCircleOutlined />}>{t('factory.pass')}</Tag>
+        ) : (
+          <Tag color="error" icon={<CloseCircleOutlined />}>{t('factory.fail')}</Tag>
+        ),
+      },
+    ];
 
-  const renderResultDetails = () => {
-    const { result } = factoryTest;
-    if (!result) return null;
-
     return (
-      <Card size="small" title={t('factory.result')} style={{ marginTop: 8 }}>
-        <Descriptions size="small" column={1} bordered>
-          <Descriptions.Item label={t('factory.overallResult')}>
-            <Tag color={result.overall_result === 'PASS' ? 'success' : 'error'}>
-              {result.overall_result}
-            </Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label={t('factory.chipInitStatus')}>
-            {result.chip_init_status === 1 ? (
+      <Collapse.Panel
+        key={testResult.test_name}
+        header={
+          <Space>
+            {testResult.pass ? (
               <CheckCircleOutlined style={{ color: token.colorSuccess }} />
             ) : (
               <CloseCircleOutlined style={{ color: token.colorError }} />
             )}
-          </Descriptions.Item>
-          <Descriptions.Item label={t('factory.uuid')}>
-            <Paragraph
-              copyable={{ text: formatUuid(result.uuid).replace('\n', '\n') }}
-              style={{ marginBottom: 0, fontFamily: 'monospace', fontSize: 13, whiteSpace: 'pre-wrap' }}
-            >
-              {formatUuid(result.uuid)}
-            </Paragraph>
-          </Descriptions.Item>
-        </Descriptions>
-        
-        <div style={{ marginTop: 12 }}>
-          {renderChannelData(t('factory.baseNoiseData'), result.base_noise, '#1890ff')}
-          {renderChannelData(t('factory.ppgNoiseData'), result.ppg_noise, '#52c41a')}
-          {renderChannelData(t('factory.lpctrData'), result.lpctr, '#faad14')}
-          {renderChannelData(t('factory.lplctrData'), result.lplctr, '#eb2f96')}
-        </div>
-      </Card>
-    );
-  };
-
-  const renderThresholdValidation = () => {
-    const { thresholdValidation } = factoryTest;
-    if (!thresholdValidation) return null;
-
-    return (
-      <Card size="small" title={t('factory.thresholdConfig')} style={{ marginTop: 8 }}>
-        {thresholdValidation.is_valid ? (
-          <Alert
-            type="success"
-            message={t('factory.thresholdConfigValid')}
-            showIcon
-            style={{ marginBottom: 8 }}
+            <Text strong>{testResult.description || testResult.test_name}</Text>
+            <Tag color={testResult.pass ? 'success' : 'error'}>
+              {testResult.pass ? t('factory.pass') : t('factory.fail')}
+            </Tag>
+          </Space>
+        }
+      >
+        {testResult.enabled ? (
+          <Table
+            dataSource={testResult.channel_results}
+            columns={columns}
+            size="small"
+            pagination={false}
+            rowKey="channel_index"
+            scroll={{ x: 'max-content' }}
           />
         ) : (
-          <Alert
-            type="error"
-            message={t('factory.thresholdConfigInvalid')}
-            description={thresholdValidation.errors.join('; ')}
-            showIcon
-            style={{ marginBottom: 8 }}
-          />
+          <Text type="secondary">{t('factory.testDisabled')}</Text>
         )}
-        
-        {thresholdValidation.warnings.length > 0 && (
-          <Alert
-            type="warning"
-            message={t('factory.warnings')}
-            description={thresholdValidation.warnings.join('; ')}
-            showIcon
-            style={{ marginBottom: 8 }}
-          />
-        )}
-
-        {thresholdValidation.project && (
-          <Descriptions size="small" column={2} style={{ marginTop: 8 }}>
-            <Descriptions.Item label={t('factory.projectName')}>
-              {thresholdValidation.project}
-            </Descriptions.Item>
-            <Descriptions.Item label={t('factory.configVersion')}>
-              {thresholdValidation.version}
-            </Descriptions.Item>
-          </Descriptions>
-        )}
-
-        <Divider style={{ margin: '8px 0' }} />
-        
-        <Row gutter={[8, 8]}>
-          {Object.entries(thresholdValidation.tests_status).map(([key, status]) => (
-            <Col span={12} key={key}>
-              <Card size="small" styles={{ body: { padding: '8px 12px' } }}>
-                <Space>
-                  {status.enabled ? (
-                    <CheckCircleOutlined style={{ color: token.colorSuccess }} />
-                  ) : (
-                    <CloseCircleOutlined style={{ color: token.colorTextDisabled }} />
-                  )}
-                  <Text>{t(`factory.test_${key}`)}</Text>
-                  {status.enabled && (
-                    <Tag color="blue" style={{ marginLeft: 4 }}>
-                      {status.channel_rules_count} {t('factory.rules')}
-                    </Tag>
-                  )}
-                </Space>
-              </Card>
-            </Col>
-          ))}
-        </Row>
-      </Card>
+      </Collapse.Panel>
     );
   };
 
-  const renderEvaluationResult = () => {
-    const { evaluationResult } = factoryTest;
-    if (!evaluationResult) return null;
+  const renderResultAndEvaluation = () => {
+    const { result, evaluationResult } = factoryTest;
+    if (!result && !evaluationResult) return null;
 
-    const renderTestResult = (testResult: TestEvaluationResult) => {
-      const columns = [
-        {
-          title: t('factory.channel'),
-          dataIndex: 'channel_index',
-          key: 'channel_index',
-          width: 80,
-          render: (idx: number) => `CH${idx}`,
-        },
-        {
-          title: t('factory.value'),
-          dataIndex: 'value',
-          key: 'value',
-          width: 100,
-          render: (val: number, record: ChannelEvaluationResult) => (
-            <Text style={{ color: record.pass ? token.colorText : token.colorError, fontWeight: 500 }}>
-              {val} {testResult.unit || ''}
-            </Text>
-          ),
-        },
-        {
-          title: t('factory.condition'),
-          dataIndex: 'threshold_display',
-          key: 'threshold_display',
-          render: (display: string) => <Text code style={{ fontSize: 11 }}>{display}</Text>,
-        },
-        {
-          title: t('factory.result'),
-          dataIndex: 'pass',
-          key: 'pass',
-          width: 80,
-          render: (pass: boolean) => pass ? (
-            <Tag color="success" icon={<CheckCircleOutlined />}>{t('factory.pass')}</Tag>
-          ) : (
-            <Tag color="error" icon={<CloseCircleOutlined />}>{t('factory.fail')}</Tag>
-          ),
-        },
-      ];
-
-      return (
-        <Collapse.Panel
-          key={testResult.test_name}
-          header={
-            <Space>
-              {testResult.pass ? (
-                <CheckCircleOutlined style={{ color: token.colorSuccess }} />
-              ) : (
-                <CloseCircleOutlined style={{ color: token.colorError }} />
-              )}
-              <Text strong>{testResult.description || testResult.test_name}</Text>
-              <Tag color={testResult.pass ? 'success' : 'error'}>
-                {testResult.pass ? t('factory.pass') : t('factory.fail')}
-              </Tag>
-            </Space>
-          }
-        >
-          {testResult.enabled ? (
-            <Table
-              dataSource={testResult.channel_results}
-              columns={columns}
-              size="small"
-              pagination={false}
-              rowKey="channel_index"
-              scroll={{ x: 'max-content' }}
-            />
-          ) : (
-            <Text type="secondary">{t('factory.testDisabled')}</Text>
-          )}
-        </Collapse.Panel>
-      );
-    };
+    const overallPass = evaluationResult?.overall_pass ?? (result?.overall_result === 'PASS');
 
     return (
-      <Card size="small" style={{ marginTop: 8 }}>
+      <Card size="small" title={t('factory.result')} style={{ marginTop: 8 }}>
         <div style={{ marginBottom: 8 }}>
           <Space>
-            {evaluationResult.overall_pass ? (
+            {overallPass ? (
               <CheckCircleOutlined style={{ color: token.colorSuccess, fontSize: 20 }} />
             ) : (
               <CloseCircleOutlined style={{ color: token.colorError, fontSize: 20 }} />
             )}
             <Text strong style={{ fontSize: 16 }}>
-              {evaluationResult.overall_pass ? t('factory.allTestsPassed') : t('factory.someTestsFailed')}
+              {overallPass ? t('factory.allTestsPassed') : t('factory.someTestsFailed')}
             </Text>
+            <Tag color={overallPass ? 'success' : 'error'} style={{ marginLeft: 8 }}>
+              {overallPass ? t('factory.pass') : t('factory.fail')}
+            </Tag>
           </Space>
         </div>
-        
-        <Collapse size="small" bordered={false}>
-          {evaluationResult.test_results.map(renderTestResult)}
-        </Collapse>
+
+        {result && (
+          <>
+            <Descriptions size="small" column={1} bordered>
+              <Descriptions.Item label={t('factory.chipInitStatus')}>
+                {result.chip_init_status === 1 ? (
+                  <CheckCircleOutlined style={{ color: token.colorSuccess }} />
+                ) : (
+                  <CloseCircleOutlined style={{ color: token.colorError }} />
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label={t('factory.uuid')}>
+                <Paragraph
+                  copyable={{ text: formatUuid(result.uuid).replace('\n', '\n') }}
+                  style={{ marginBottom: 0, fontFamily: 'monospace', fontSize: 13, whiteSpace: 'pre-wrap' }}
+                >
+                  {formatUuid(result.uuid)}
+                </Paragraph>
+              </Descriptions.Item>
+            </Descriptions>
+            
+            <Divider style={{ margin: '12px 0' }} />
+            
+            <Collapse size="small" bordered={false} defaultActiveKey={evaluationResult?.test_results.map(r => r.test_name)}>
+              {evaluationResult?.test_results.map(renderTestResult)}
+            </Collapse>
+          </>
+        )}
       </Card>
     );
   };
@@ -501,16 +388,8 @@ const FactoryTestTab: React.FC = () => {
           </Card>
         </Col>
 
-        {factoryTest.result && (
-          <Col span={24}>{renderResultDetails()}</Col>
-        )}
-
-        {factoryTest.thresholdValidation && (
-          <Col span={24}>{renderThresholdValidation()}</Col>
-        )}
-
-        {factoryTest.evaluationResult && (
-          <Col span={24}>{renderEvaluationResult()}</Col>
+        {(factoryTest.result || factoryTest.evaluationResult) && (
+          <Col span={24}>{renderResultAndEvaluation()}</Col>
         )}
       </Row>
 

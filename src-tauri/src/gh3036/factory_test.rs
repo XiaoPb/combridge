@@ -74,6 +74,11 @@ impl FactoryTestManager {
         *config_dir = dir.clone();
         drop(config_dir);
 
+        {
+            let mut threshold_config = self.threshold_config.lock();
+            *threshold_config = None;
+        }
+
         match FactoryThresholdConfig::find_config_file(&dir) {
             Some(config_file) => {
                 match FactoryThresholdConfig::from_file(&config_file) {

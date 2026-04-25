@@ -822,7 +822,12 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     try {
       await factoryTestApi.setConfigDir(configDir);
       set((state) => ({
-        factoryTest: { ...state.factoryTest, configDir },
+        factoryTest: { 
+          ...state.factoryTest, 
+          configDir,
+          thresholdConfig: null,
+          thresholdValidation: null,
+        },
       }));
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '设置配置目录失败';

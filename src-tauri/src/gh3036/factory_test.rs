@@ -1320,13 +1320,7 @@ impl FactoryTestManager {
 
         for i in 0..32 {
             headers.push(Box::leak(format!("ppg_noise_{}", i).into_boxed_str()));
-        }
-
-        for i in 0..32 {
             headers.push(Box::leak(format!("lpctr_{}", i).into_boxed_str()));
-        }
-
-        for i in 0..32 {
             headers.push(Box::leak(format!("lplctr_{}", i).into_boxed_str()));
         }
 
@@ -1359,9 +1353,12 @@ impl FactoryTestManager {
         ];
 
         row.extend(base_noise);
-        row.extend(ppg_noise);
-        row.extend(lpctr);
-        row.extend(lplctr);
+
+        for i in 0..32 {
+            row.push(ppg_noise[i].clone());
+            row.push(lpctr[i].clone());
+            row.push(lplctr[i].clone());
+        }
 
         row.join(",") + "\n"
     }

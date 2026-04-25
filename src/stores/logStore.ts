@@ -52,15 +52,16 @@ export const formatLogTimestamp = (timestamp: number, timezone?: string): string
   
   if (timezone) {
     try {
-      const formatted = date.toLocaleString('zh-CN', {
+      const options: Intl.DateTimeFormatOptions = {
         timeZone: timezone,
         hour12: false,
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-      } as Intl.DateTimeFormatOptions);
+      };
+      const timeStr = date.toLocaleTimeString('zh-CN', options);
       const ms = date.getMilliseconds().toString().padStart(3, '0');
-      return `${formatted}.${ms}`;
+      return `${timeStr}.${ms}`;
     } catch {
       // 如果时区无效，使用本地时区
     }

@@ -210,7 +210,7 @@ export const systemApi = {
   },
 
   async setTimezone(timezone: string): Promise<void> {
-    await invoke<void>('set_timezone_config', { timezone });
+    await invoke<void>('set_timezone_config', { config: { timezone } });
   },
 
   async getTimezone(): Promise<string> {

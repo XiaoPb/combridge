@@ -195,19 +195,27 @@ impl FactoryTestManager {
     }
 
     pub fn start_test(&self, gh3036_manager: Arc<Gh3036Manager>) -> Result<(), String> {
+        info!("[FactoryTest] start_test 被调用, running={}", self.running.load(Ordering::SeqCst));
+        
         if self.running.load(Ordering::SeqCst) {
+            error!("[FactoryTest] 产测流程已在运行中，拒绝启动");
             return Err("产测流程已在运行中".to_string());
         }
 
         let mut handle = self.thread_handle.lock();
         if let Some(thread) = handle.take() {
+            info!("[FactoryTest] 等待之前的线程结束...");
             let _ = thread.join();
+            info!("[FactoryTest] 之前的线程已结束");
         }
 
         let validation = self.validate_config_dir();
         if !validation.is_valid {
+            error!("[FactoryTest] 配置文件校验失败: {:?}", validation.errors);
             return Err(format!("配置文件校验失败: {:?}", validation.errors));
         }
+
+        info!("[FactoryTest] 配置校验通过，开始启动产测流程");
 
         self.running.store(true, Ordering::SeqCst);
         {
@@ -389,8 +397,8 @@ impl FactoryTestManager {
             }
 
             running.store(false, Ordering::SeqCst);
+            info!("[FactoryTest] 产测流程线程结束, running 已重置为 false");
 
-            info!("[FactoryTest] 产测流程线程结束");
         });
 
         {

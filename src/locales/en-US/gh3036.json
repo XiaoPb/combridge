@@ -84,6 +84,23 @@
     "baseNoiseData": "Base Noise Data",
     "ppgNoiseData": "PPG Noise Data",
     "lpctrData": "LPCTR Data",
-    "lplctrData": "LPLCTR Data"
+    "lplctrData": "LPLCTR Data",
+    "thresholdConfig": "Threshold Config",
+    "thresholdConfigValid": "Threshold config is valid",
+    "thresholdConfigInvalid": "Threshold config is invalid",
+    "warnings": "Warnings",
+    "projectName": "Project Name",
+    "configVersion": "Config Version",
+    "test_base_noise": "Base Noise Test",
+    "test_ppg_noise": "PPG Noise Test",
+    "test_lpctr": "LPCTR Test",
+    "test_lplctr": "LPLCTR Test",
+    "rules": "rules",
+    "channel": "Channel",
+    "value": "Value",
+    "condition": "Condition",
+    "testDisabled": "Test disabled",
+    "allTestsPassed": "All tests passed",
+    "someTestsFailed": "Some tests failed"
   }
 }

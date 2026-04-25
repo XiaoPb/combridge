@@ -8,7 +8,10 @@ import type {
   FactoryTestStep,
   FactoryTestStatus,
   FactoryTestResult,
-  ConfigValidationResult
+  ConfigValidationResult,
+  FactoryThresholdConfig,
+  FactoryEvaluationResult,
+  ThresholdConfigValidation
 } from './types';
 
 export interface LibraryStatus {
@@ -131,6 +134,18 @@ export const factoryTestApi = {
 
   async getResult(): Promise<FactoryTestResult | null> {
     return invoke<FactoryTestResult | null>('gh3036_factory_test_get_result');
+  },
+
+  async validateThresholdConfig(): Promise<ThresholdConfigValidation> {
+    return invoke<ThresholdConfigValidation>('gh3036_validate_threshold_config');
+  },
+
+  async getThresholdConfig(): Promise<FactoryThresholdConfig | null> {
+    return invoke<FactoryThresholdConfig | null>('gh3036_get_threshold_config');
+  },
+
+  async getEvaluationResult(): Promise<FactoryEvaluationResult | null> {
+    return invoke<FactoryEvaluationResult | null>('gh3036_get_evaluation_result');
   },
 };
 

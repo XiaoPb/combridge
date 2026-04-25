@@ -9,7 +9,10 @@ import type {
   FactoryTestStepResult,
   FactoryTestResult,
   ConfigValidationResult,
-  FactoryTestProgressEvent 
+  FactoryTestProgressEvent,
+  FactoryThresholdConfig,
+  FactoryEvaluationResult,
+  ThresholdConfigValidation
 } from '../api/types';
 import { gh3036Api, factoryTestApi } from '../api/gh3036';
 import { preferencesApi, type Gh3036ChannelPreferences } from '../api/tauri';
@@ -113,6 +116,9 @@ interface Gh3036State {
     stepResults: FactoryTestStepResult[];
     result: FactoryTestResult | null;
     isRunning: boolean;
+    thresholdConfig: FactoryThresholdConfig | null;
+    thresholdValidation: ThresholdConfigValidation | null;
+    evaluationResult: FactoryEvaluationResult | null;
   };
   
   setIsInitialized: (value: boolean) => void;
@@ -178,6 +184,12 @@ interface Gh3036State {
   validateFactoryTestConfig: () => Promise<void>;
   subscribeFactoryTestEvents: (listenerId?: number) => Promise<void>;
   unsubscribeFactoryTestEvents: (listenerId?: number) => void;
+  setThresholdConfig: (config: FactoryThresholdConfig | null) => void;
+  setThresholdValidation: (validation: ThresholdConfigValidation | null) => void;
+  setEvaluationResult: (result: FactoryEvaluationResult | null) => void;
+  loadThresholdConfig: () => Promise<void>;
+  validateThresholdConfig: () => Promise<void>;
+  loadEvaluationResult: () => Promise<void>;
 }
 
 interface ChartGroupConfig {
@@ -271,6 +283,9 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     stepResults: [],
     result: null,
     isRunning: false,
+    thresholdConfig: null,
+    thresholdValidation: null,
+    evaluationResult: null,
   },
   
   setIsInitialized: (value) => set({ isInitialized: value }),
@@ -962,6 +977,67 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
         },
         factoryTestListenerId: 0,
       }));
+    }
+  },
+  
+  setThresholdConfig: (config) => set((state) => ({
+    factoryTest: { ...state.factoryTest, thresholdConfig: config },
+  })),
+  
+  setThresholdValidation: (validation) => set((state) => ({
+    factoryTest: { ...state.factoryTest, thresholdValidation: validation },
+  })),
+  
+  setEvaluationResult: (result) => set((state) => ({
+    factoryTest: { ...state.factoryTest, evaluationResult: result },
+  })),
+  
+  loadThresholdConfig: async () => {
+    try {
+      const config = await factoryTestApi.getThresholdConfig();
+      set((state) => ({
+        factoryTest: { ...state.factoryTest, thresholdConfig: config },
+      }));
+    } catch (err) {
+      console.error('[Gh3036Store] 加载卡控配置失败:', err);
+    }
+  },
+  
+  validateThresholdConfig: async () => {
+    try {
+      const validation = await factoryTestApi.validateThresholdConfig();
+      set((state) => ({
+        factoryTest: { ...state.factoryTest, thresholdValidation: validation },
+      }));
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '校验卡控配置失败';
+      set((state) => ({
+        factoryTest: {
+          ...state.factoryTest,
+          thresholdValidation: {
+            is_valid: false,
+            errors: [errorMsg],
+            warnings: [],
+            tests_status: {
+              base_noise: { enabled: false, has_global_threshold: false, channel_rules_count: 0 },
+              ppg_noise: { enabled: false, has_global_threshold: false, channel_rules_count: 0 },
+              lpctr: { enabled: false, has_global_threshold: false, channel_rules_count: 0 },
+              lplctr: { enabled: false, has_global_threshold: false, channel_rules_count: 0 },
+            },
+          },
+        },
+      }));
+    }
+  },
+  
+  loadEvaluationResult: async () => {
+    try {
+      const result = await factoryTestApi.getEvaluationResult();
+      set((state) => ({
+        factoryTest: { ...state.factoryTest, evaluationResult: result },
+      }));
+    } catch (err) {
+      console.error('[Gh3036Store] 加载判断结果失败:', err);
     }
   },
 }));

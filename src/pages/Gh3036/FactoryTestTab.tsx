@@ -6,14 +6,15 @@ import {
   Tag,
   Modal,
   Descriptions,
-  List,
   Space,
   Typography,
   Row,
   Col,
   theme,
-  Empty,
   Divider,
+  Table,
+  Alert,
+  Collapse,
 } from 'antd';
 import {
   PlayCircleOutlined,
@@ -25,7 +26,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useGh3036Store } from '../../stores/gh3036Store';
-import type { FactoryTestStep, FactoryTestStepResult } from '../../api/types';
+import type { TestEvaluationResult, ChannelEvaluationResult } from '../../api/types';
 
 const { Text, Paragraph } = Typography;
 
@@ -42,6 +43,9 @@ const FactoryTestTab: React.FC = () => {
     subscribeFactoryTestEvents,
     unsubscribeFactoryTestEvents,
     resetFactoryTest,
+    validateThresholdConfig,
+    loadThresholdConfig,
+    loadEvaluationResult,
   } = useGh3036Store();
 
   const factoryTestListenerIdRef = React.useRef<number | null>(null);
@@ -66,8 +70,16 @@ const FactoryTestTab: React.FC = () => {
   useEffect(() => {
     if (factoryTest.configDir) {
       validateFactoryTestConfig();
+      validateThresholdConfig();
+      loadThresholdConfig();
     }
-  }, [factoryTest.configDir, validateFactoryTestConfig]);
+  }, [factoryTest.configDir, validateFactoryTestConfig, validateThresholdConfig, loadThresholdConfig]);
+
+  useEffect(() => {
+    if (factoryTest.status === 'completed' || factoryTest.status === 'failed') {
+      loadEvaluationResult();
+    }
+  }, [factoryTest.status, loadEvaluationResult]);
 
   const handleSelectDir = async () => {
     const selected = await open({
@@ -98,12 +110,6 @@ const FactoryTestTab: React.FC = () => {
   const handleContinue = async () => {
     setShowEnvSwitchModal(false);
     await continueFactoryTest();
-  };
-
-  const getStepLabel = (step: FactoryTestStep): string => {
-    const key = step.replace(/_/g, '');
-    const stepKey = `step${key.charAt(0).toUpperCase()}${key.slice(1)}` as keyof typeof t;
-    return t(`factory.${stepKey}`);
   };
 
   const getStatusTag = () => {
@@ -143,12 +149,7 @@ const FactoryTestTab: React.FC = () => {
     return formatSingleUuid(uuid);
   };
 
-  const formatDataArray = (data: number[]): string => {
-    if (!data || data.length === 0) return '--';
-    return data.map((v) => v.toFixed(4)).join(', ');
-  };
-
-  const renderChannelData = (label: string, data: number[], color: string) => {
+  const renderChannelData = (label: string, data: number[], _color: string) => {
     if (!data || data.length === 0) return null;
     
     return (
@@ -179,36 +180,6 @@ const FactoryTestTab: React.FC = () => {
           </Row>
         </Space>
       </Card>
-    );
-  };
-
-  const renderStepResult = (result: FactoryTestStepResult) => {
-    const icon = result.success ? (
-      <CheckCircleOutlined style={{ color: token.colorSuccess }} />
-    ) : (
-      <CloseCircleOutlined style={{ color: token.colorError }} />
-    );
-
-    return (
-      <List.Item>
-        <List.Item.Meta
-          avatar={icon}
-          title={
-            <Space>
-              <Text>{getStepLabel(result.step)}</Text>
-              <Tag color={result.success ? 'success' : 'error'}>
-                {result.success ? t('factory.pass') : t('factory.fail')}
-              </Tag>
-            </Space>
-          }
-          description={result.message}
-        />
-        {result.data.length > 0 && (
-          <Text code style={{ fontSize: 11 }}>
-            {formatDataArray(result.data)}
-          </Text>
-        )}
-      </List.Item>
     );
   };
 
@@ -247,6 +218,175 @@ const FactoryTestTab: React.FC = () => {
           {renderChannelData(t('factory.lpctrData'), result.lpctr, '#faad14')}
           {renderChannelData(t('factory.lplctrData'), result.lplctr, '#eb2f96')}
         </div>
+      </Card>
+    );
+  };
+
+  const renderThresholdValidation = () => {
+    const { thresholdValidation } = factoryTest;
+    if (!thresholdValidation) return null;
+
+    return (
+      <Card size="small" title={t('factory.thresholdConfig')} style={{ marginTop: 8 }}>
+        {thresholdValidation.is_valid ? (
+          <Alert
+            type="success"
+            message={t('factory.thresholdConfigValid')}
+            showIcon
+            style={{ marginBottom: 8 }}
+          />
+        ) : (
+          <Alert
+            type="error"
+            message={t('factory.thresholdConfigInvalid')}
+            description={thresholdValidation.errors.join('; ')}
+            showIcon
+            style={{ marginBottom: 8 }}
+          />
+        )}
+        
+        {thresholdValidation.warnings.length > 0 && (
+          <Alert
+            type="warning"
+            message={t('factory.warnings')}
+            description={thresholdValidation.warnings.join('; ')}
+            showIcon
+            style={{ marginBottom: 8 }}
+          />
+        )}
+
+        {thresholdValidation.project && (
+          <Descriptions size="small" column={2} style={{ marginTop: 8 }}>
+            <Descriptions.Item label={t('factory.projectName')}>
+              {thresholdValidation.project}
+            </Descriptions.Item>
+            <Descriptions.Item label={t('factory.configVersion')}>
+              {thresholdValidation.version}
+            </Descriptions.Item>
+          </Descriptions>
+        )}
+
+        <Divider style={{ margin: '8px 0' }} />
+        
+        <Row gutter={[8, 8]}>
+          {Object.entries(thresholdValidation.tests_status).map(([key, status]) => (
+            <Col span={12} key={key}>
+              <Card size="small" styles={{ body: { padding: '8px 12px' } }}>
+                <Space>
+                  {status.enabled ? (
+                    <CheckCircleOutlined style={{ color: token.colorSuccess }} />
+                  ) : (
+                    <CloseCircleOutlined style={{ color: token.colorTextDisabled }} />
+                  )}
+                  <Text>{t(`factory.test_${key}`)}</Text>
+                  {status.enabled && (
+                    <Tag color="blue" style={{ marginLeft: 4 }}>
+                      {status.channel_rules_count} {t('factory.rules')}
+                    </Tag>
+                  )}
+                </Space>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+      </Card>
+    );
+  };
+
+  const renderEvaluationResult = () => {
+    const { evaluationResult } = factoryTest;
+    if (!evaluationResult) return null;
+
+    const renderTestResult = (testResult: TestEvaluationResult) => {
+      const columns = [
+        {
+          title: t('factory.channel'),
+          dataIndex: 'channel_index',
+          key: 'channel_index',
+          width: 80,
+          render: (idx: number) => `CH${idx}`,
+        },
+        {
+          title: t('factory.value'),
+          dataIndex: 'value',
+          key: 'value',
+          width: 100,
+          render: (val: number, record: ChannelEvaluationResult) => (
+            <Text style={{ color: record.pass ? token.colorText : token.colorError, fontWeight: 500 }}>
+              {val} {testResult.unit || ''}
+            </Text>
+          ),
+        },
+        {
+          title: t('factory.condition'),
+          dataIndex: 'threshold_display',
+          key: 'threshold_display',
+          render: (display: string) => <Text code style={{ fontSize: 11 }}>{display}</Text>,
+        },
+        {
+          title: t('factory.result'),
+          dataIndex: 'pass',
+          key: 'pass',
+          width: 80,
+          render: (pass: boolean) => pass ? (
+            <Tag color="success" icon={<CheckCircleOutlined />}>{t('factory.pass')}</Tag>
+          ) : (
+            <Tag color="error" icon={<CloseCircleOutlined />}>{t('factory.fail')}</Tag>
+          ),
+        },
+      ];
+
+      return (
+        <Collapse.Panel
+          key={testResult.test_name}
+          header={
+            <Space>
+              {testResult.pass ? (
+                <CheckCircleOutlined style={{ color: token.colorSuccess }} />
+              ) : (
+                <CloseCircleOutlined style={{ color: token.colorError }} />
+              )}
+              <Text strong>{testResult.description || testResult.test_name}</Text>
+              <Tag color={testResult.pass ? 'success' : 'error'}>
+                {testResult.pass ? t('factory.pass') : t('factory.fail')}
+              </Tag>
+            </Space>
+          }
+        >
+          {testResult.enabled ? (
+            <Table
+              dataSource={testResult.channel_results}
+              columns={columns}
+              size="small"
+              pagination={false}
+              rowKey="channel_index"
+              scroll={{ x: 'max-content' }}
+            />
+          ) : (
+            <Text type="secondary">{t('factory.testDisabled')}</Text>
+          )}
+        </Collapse.Panel>
+      );
+    };
+
+    return (
+      <Card size="small" style={{ marginTop: 8 }}>
+        <div style={{ marginBottom: 8 }}>
+          <Space>
+            {evaluationResult.overall_pass ? (
+              <CheckCircleOutlined style={{ color: token.colorSuccess, fontSize: 20 }} />
+            ) : (
+              <CloseCircleOutlined style={{ color: token.colorError, fontSize: 20 }} />
+            )}
+            <Text strong style={{ fontSize: 16 }}>
+              {evaluationResult.overall_pass ? t('factory.allTestsPassed') : t('factory.someTestsFailed')}
+            </Text>
+          </Space>
+        </div>
+        
+        <Collapse size="small" bordered={false}>
+          {evaluationResult.test_results.map(renderTestResult)}
+        </Collapse>
       </Card>
     );
   };
@@ -363,6 +503,14 @@ const FactoryTestTab: React.FC = () => {
 
         {factoryTest.result && (
           <Col span={24}>{renderResultDetails()}</Col>
+        )}
+
+        {factoryTest.thresholdValidation && (
+          <Col span={24}>{renderThresholdValidation()}</Col>
+        )}
+
+        {factoryTest.evaluationResult && (
+          <Col span={24}>{renderEvaluationResult()}</Col>
         )}
       </Row>
 

@@ -84,6 +84,23 @@
     "baseNoiseData": "底噪数据",
     "ppgNoiseData": "PPG噪声数据",
     "lpctrData": "LPCTR数据",
-    "lplctrData": "LPLCTR数据"
+    "lplctrData": "LPLCTR数据",
+    "thresholdConfig": "卡控配置",
+    "thresholdConfigValid": "卡控配置有效",
+    "thresholdConfigInvalid": "卡控配置无效",
+    "warnings": "警告",
+    "projectName": "项目名称",
+    "configVersion": "配置版本",
+    "test_base_noise": "底噪测试",
+    "test_ppg_noise": "PPG噪声测试",
+    "test_lpctr": "LPCTR测试",
+    "test_lplctr": "LPLCTR测试",
+    "rules": "条规则",
+    "channel": "通道",
+    "value": "数值",
+    "condition": "判断条件",
+    "testDisabled": "测试已禁用",
+    "allTestsPassed": "所有测试通过",
+    "someTestsFailed": "部分测试未通过"
   }
 }

@@ -9,6 +9,7 @@ use super::event_bus::{Event, EventBus, EventEncoding};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 const HEARTBEAT_INTERVAL_SECS: u64 = 10;
+const EMIT_CHANNEL_CAPACITY: usize = 256;
 
 #[derive(Debug, Clone)]
 pub struct EventFilter {
@@ -90,6 +91,14 @@ impl<R: Runtime> EventBridge<R> {
             filter.prefixes
         );
 
+        let (emit_tx, mut emit_rx) = tokio::sync::mpsc::channel::<Event>(EMIT_CHANNEL_CAPACITY);
+
+        let emit_app_handle = app_handle.clone();
+        let emit_running = running.clone();
+        let emit_task = tauri::async_runtime::spawn(async move {
+            Self::emit_loop(&mut emit_rx, &emit_app_handle, &emit_running).await;
+        });
+
         let mut event_count = 0u64;
         let mut forwarded_count = 0u64;
         let mut filtered_count = 0u64;
@@ -112,43 +121,15 @@ impl<R: Runtime> EventBridge<R> {
                                         event.topic
                                     );
                                 }
-                                continue;
-                            }
-
-                            tracing::info!(
-                                "[EventBridge] Received event #{}: topic={}, encoding={:?}, payload_len={}",
-                                event_count,
-                                event.topic,
-                                event.encoding,
-                                event.payload.len()
-                            );
-
-                            match Self::emit_to_frontend(&app_handle, &event) {
-                                Ok(()) => {
-                                    tracing::info!(
-                                        "[EventBridge] Forwarded to frontend: topic={}, timestamp={}",
-                                        event.topic,
-                                        event.timestamp
-                                    );
-                                }
-                                Err(e) => {
+                            } else {
+                                if let Err(e) = emit_tx.send(event).await {
                                     tracing::error!(
-                                        "[EventBridge] Failed to emit to frontend: topic={}, error={}",
-                                        event.topic,
+                                        "[EventBridge] Failed to send event to emit channel: {}",
                                         e
                                     );
+                                } else {
+                                    forwarded_count += 1;
                                 }
-                            }
-
-                            forwarded_count += 1;
-
-                            if forwarded_count % 50 == 0 {
-                                tracing::info!(
-                                    "[EventBridge] Stats: {} received, {} forwarded, {} filtered",
-                                    event_count,
-                                    forwarded_count,
-                                    filtered_count
-                                );
                             }
                         }
                         Err(broadcast::error::RecvError::Closed) => {
@@ -177,41 +158,10 @@ impl<R: Runtime> EventBridge<R> {
                     );
                 }
             }
-
-            while let Ok(event) = receiver.try_recv() {
-                event_count += 1;
-
-                if !filter.matches(&event.topic) {
-                    filtered_count += 1;
-                    continue;
-                }
-
-                tracing::info!(
-                    "[EventBridge] Recovered event #{} via try_recv: topic={}",
-                    event_count,
-                    event.topic
-                );
-
-                match Self::emit_to_frontend(&app_handle, &event) {
-                    Ok(()) => {
-                        tracing::info!(
-                            "[EventBridge] Forwarded to frontend: topic={}, timestamp={}",
-                            event.topic,
-                            event.timestamp
-                        );
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            "[EventBridge] Failed to emit to frontend: topic={}, error={}",
-                            event.topic,
-                            e
-                        );
-                    }
-                }
-
-                forwarded_count += 1;
-            }
         }
+
+        drop(emit_tx);
+        let _ = emit_task.await;
 
         running.store(false, Ordering::SeqCst);
         tracing::info!(
@@ -219,6 +169,56 @@ impl<R: Runtime> EventBridge<R> {
             event_count,
             forwarded_count,
             filtered_count
+        );
+    }
+
+    async fn emit_loop(
+        rx: &mut tokio::sync::mpsc::Receiver<Event>,
+        app_handle: &AppHandle<R>,
+        running: &AtomicBool,
+    ) {
+        let mut emitted_count = 0u64;
+        let mut failed_count = 0u64;
+
+        while running.load(Ordering::SeqCst) {
+            match rx.recv().await {
+                Some(event) => {
+                    match Self::emit_to_frontend(app_handle, &event) {
+                        Ok(()) => {
+                            emitted_count += 1;
+                            if emitted_count <= 5 || emitted_count % 50 == 0 {
+                                tracing::info!(
+                                    "[EventBridge] Forwarded to frontend: topic={}, timestamp={}",
+                                    event.topic,
+                                    event.timestamp
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            failed_count += 1;
+                            tracing::error!(
+                                "[EventBridge] Failed to emit to frontend: topic={}, error={}",
+                                event.topic,
+                                e
+                            );
+                        }
+                    }
+                }
+                None => {
+                    tracing::info!(
+                        "[EventBridge] Emit channel closed, stopping (emitted: {}, failed: {})",
+                        emitted_count,
+                        failed_count
+                    );
+                    break;
+                }
+            }
+        }
+
+        tracing::info!(
+            "[EventBridge] Emit loop stopped (emitted: {}, failed: {})",
+            emitted_count,
+            failed_count
         );
     }
 

@@ -95,6 +95,7 @@ graph TB
 | 波形模块 | [waveform-module.md](./backend/waveform-module.md) | 波形数据缓冲和解析 |
 | 命令层 | [commands-module.md](./backend/commands-module.md) | Tauri 命令定义 |
 | 错误处理 | [error-handling.md](./backend/error-handling.md) | 统一错误处理机制 |
+| 工厂测试 | [factory-test-module.md](./backend/factory-test-module.md) | GH3036 工厂测试功能 |
 
 ### 前端模块
 
@@ -156,11 +157,14 @@ combridge-rust/
 │   │   ├── json_parser.lua
 │   │   └── nmea_parser.lua
 │   ├── libs/
-│   │   └── gh-rpc/               # GH3036 RPC 通信库
+│   │   └── protocol_rust/        # 协议通信库
+│   │       ├── gh-rpc/           # GH3036 RPC 通信库
+│   │       └── rpc/              # 通用 RPC 框架
 │   └── Cargo.toml
 │
 ├── src/                          # 前端源码 (React + TS)
 │   ├── api/                      # API 层
+│   ├── assets/                   # 静态资源
 │   ├── components/               # 公共组件
 │   ├── hooks/                    # 自定义 Hooks
 │   ├── i18n/                     # 国际化配置
@@ -170,6 +174,7 @@ combridge-rust/
 │   ├── pages/                    # 页面组件
 │   │   ├── Ble/                  # BLE 页面
 │   │   ├── Dashboard/            # Dashboard 页面
+│   │   ├── Gh3036/               # GH3036 页面
 │   │   ├── Home/                 # 首页
 │   │   ├── Protocol/             # 协议页面
 │   │   ├── Serial/               # 串口页面
@@ -177,6 +182,7 @@ combridge-rust/
 │   │   └── Waveform/             # 波形页面
 │   ├── services/                 # 服务层
 │   ├── stores/                   # Zustand Store
+│   ├── styles/                   # 全局样式
 │   ├── types/                    # 类型定义
 │   └── utils/                    # 工具函数
 │

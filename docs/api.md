@@ -2072,7 +2072,7 @@ const buffers = await invoke<string[]>('waveform_list_buffers');
 
 ### dispatch_action
 
-分发状态变更动作。
+分发一个动作到状态管理器。
 
 **后端命令**: `dispatch_action`
 
@@ -2080,19 +2080,33 @@ const buffers = await invoke<string[]>('waveform_list_buffers');
 
 | 参数名 | 类型 | 必填 | 描述 |
 |--------|------|------|------|
-| action | Action | 是 | 动作对象 |
+| action | object | 是 | 动作对象 |
+| action.action_type | string | 是 | 动作类型（CONNECT_SERIAL/DISCONNECT_SERIAL/SEND_SERIAL_DATA 等）|
+| action.port_name | string | 否 | 串口名称 |
+| action.config | object | 否 | 配置对象 |
+| action.data | number[] | 否 | 数据字节数组 |
+| action.device_type | string | 否 | 设备类型（serial/ble）|
+| action.device_id | string | 否 | 设备 ID |
+| action.save_state | boolean | 否 | 是否保存状态 |
 
-**返回**: `ActionResult`
+**返回**: `StateResult`
 
 ```typescript
-const result = await invoke<ActionResult>('dispatch_action', { action: { ... } });
+await invoke('dispatch_action', {
+  action: {
+    actionType: 'CONNECT_SERIAL',
+    portName: 'COM1',
+    config: { baudRate: '115200' },
+    saveState: true
+  }
+});
 ```
 
 ---
 
 ### get_state
 
-获取完整应用状态。
+获取当前应用状态。
 
 **后端命令**: `get_state`
 
@@ -2108,7 +2122,7 @@ const state = await invoke<AppState>('get_state');
 
 ### get_channel_data
 
-获取通道数据。
+获取指定通道的数据。
 
 **后端命令**: `get_channel_data`
 
@@ -2116,50 +2130,48 @@ const state = await invoke<AppState>('get_state');
 
 | 参数名 | 类型 | 必填 | 描述 |
 |--------|------|------|------|
-| device_id | string | 是 | 设备 ID |
 | channel_id | string | 是 | 通道 ID |
-| limit | number | 否 | 返回条目数限制 |
 
-**返回**: `ChannelDataValue`
+**返回**: `ChannelData | null`
 
 ```typescript
-const data = await invoke('get_channel_data', {
-  deviceId: 'COM1',
-  channelId: 'ch1',
-  limit: 100,
-});
+const data = await invoke<ChannelData | null>('get_channel_data', { channelId: 'tx' });
 ```
 
 ---
 
 ### restore_state
 
-从持久化存储恢复状态。
+恢复应用状态。
 
 **后端命令**: `restore_state`
 
-**参数**: 无
+**参数**:
+
+| 参数名 | 类型 | 必填 | 描述 |
+|--------|------|------|------|
+| state | AppState | 是 | 要恢复的状态对象 |
 
 **返回**: `void`
 
 ```typescript
-await invoke('restore_state');
+await invoke('restore_state', { state: savedState });
 ```
 
 ---
 
 ### save_state
 
-手动保存状态到持久化存储。
+保存当前应用状态。
 
 **后端命令**: `save_state`
 
 **参数**: 无
 
-**返回**: `void`
+**返回**: `AppState`
 
 ```typescript
-await invoke('save_state');
+const savedState = await invoke<AppState>('save_state');
 ```
 
 ---
@@ -2172,10 +2184,10 @@ await invoke('save_state');
 
 **参数**: 无
 
-**返回**: `Device[]`
+**返回**: `ConnectedDevice[]`
 
 ```typescript
-const devices = await invoke<Device[]>('get_connected_devices');
+const devices = await invoke<ConnectedDevice[]>('get_connected_devices');
 ```
 
 ---
@@ -2200,7 +2212,7 @@ const windowState = await invoke<WindowState>('get_window_state');
 
 ### get_preferences
 
-获取偏好设置。
+获取所有偏好设置。
 
 **后端命令**: `get_preferences`
 
@@ -2224,12 +2236,12 @@ const prefs = await invoke<Preferences>('get_preferences');
 
 | 参数名 | 类型 | 必填 | 描述 |
 |--------|------|------|------|
-| prefs | Preferences | 是 | 偏好设置对象 |
+| preferences | object | 是 | 偏好设置对象 |
 
 **返回**: `void`
 
 ```typescript
-await invoke('save_preferences', { prefs: { ... } });
+await invoke('save_preferences', { preferences: { theme: 'dark', language: 'zh-CN' } });
 ```
 
 ---
@@ -2244,23 +2256,15 @@ await invoke('save_preferences', { prefs: { ... } });
 
 | 参数名 | 类型 | 必填 | 描述 |
 |--------|------|------|------|
-| display_format | string | 是 | 显示格式 |
-| display_mode | string | 是 | 显示模式 |
-| send_format | string | 是 | 发送格式 |
-| append_newline | boolean | 是 | 是否追加换行 |
-| newline_type | string | 是 | 换行类型 |
-| auto_scroll | boolean | 是 | 是否自动滚动 |
+| port_name | string | 是 | 端口名称 |
+| preferences | object | 是 | 串口偏好设置 |
 
 **返回**: `void`
 
 ```typescript
 await invoke('update_serial_preferences', {
-  displayFormat: 'hex',
-  displayMode: 'text',
-  sendFormat: 'hex',
-  appendNewline: true,
-  newlineType: 'lf',
-  autoScroll: true,
+  portName: 'COM1',
+  preferences: { defaultBaudRate: '115200' }
 });
 ```
 
@@ -2276,26 +2280,12 @@ await invoke('update_serial_preferences', {
 
 | 参数名 | 类型 | 必填 | 描述 |
 |--------|------|------|------|
-| display_format | string | 是 | 显示格式 |
-| auto_scroll | boolean | 是 | 是否自动滚动 |
-| input_format | string | 是 | 输入格式 |
-| without_response | boolean | 是 | 是否无响应写入 |
-| config_collapsed | boolean | 是 | 配置面板是否折叠 |
-| gatt_collapsed | boolean | 是 | GATT 面板是否折叠 |
-| panel_collapsed | boolean | 是 | 操作面板是否折叠 |
+| preferences | object | 是 | BLE 偏好设置 |
 
 **返回**: `void`
 
 ```typescript
-await invoke('update_ble_preferences', {
-  displayFormat: 'hex',
-  autoScroll: true,
-  inputFormat: 'hex',
-  withoutResponse: false,
-  configCollapsed: false,
-  gattCollapsed: false,
-  panelCollapsed: false,
-});
+await invoke('update_ble_preferences', { preferences: { defaultTimeout: 5000 } });
 ```
 
 ---

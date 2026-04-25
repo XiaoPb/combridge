@@ -8,14 +8,19 @@ ComBridge 是一个基于 Tauri 2.0 构建的跨平台桌面应用，用于串�
 
 | 层级 | 技术栈 | 说明 |
 |------|--------|------|
-| **前端框架** | React 18 + TypeScript | UI 构建 |
+| **前端框架** | React 19 + TypeScript | UI 构建 |
+| **路由** | React Router v7 | 页面路由管理 |
 | **状态管理** | Zustand | 轻量级状态管理 |
 | **UI 组件库** | Ant Design v6.3.5 | UI 组件（唯一指定组件库） |
+| **国际化** | react-i18next | 多语言支持 |
+| **图表库** | ECharts + Recharts | 数据可视化 |
 | **构建工具** | Vite | 快速开发构建 |
 | **后端框架** | Tauri 2.0 (Rust) | 跨平台桌面应用 |
 | **异步运行时** | Tokio | Rust 异步运行时 |
-| **序列化** | Serde + Serde JSON | Rust 数据序列化 |
+| **日志系统** | tracing + tracing-subscriber | 结构化日志记录 |
+| **序列化** | Serde + Serde JSON + CSV | Rust 数据序列化 |
 | **串口通信** | serialport-rs | 跨平台串口库 |
+| **BLE 通信** | bluest | Rust 蓝牙低功耗库 |
 | **脚本引擎** | mlua | Lua 脚本支持 |
 
 ## Tauri 插件注册

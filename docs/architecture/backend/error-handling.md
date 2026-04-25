@@ -2,7 +2,7 @@
 
 ## 概述
 
-错误处理模块定义了统一的错误类型和错误码体系，提供一致的错误处理和响应格式。当前实现采用**手动实现 `std::error::Error` trait**，未使用 `thiserror` 库。
+错误处理模块定义了统一的错误类型和错误码体系，提供一致的错误处理和响应格式。当前实现采用 **`thiserror` 库** 简化错误类型定义。
 
 ## 模块位置
 
@@ -10,7 +10,7 @@
 
 ## 重要说明
 
-> **当前实现未使用 `thiserror` 库**。`ComBridgeError` 的 `Display` 和 `Error` trait 均为手动实现。未来如有需要，可考虑迁移至 `thiserror` 以减少样板代码。
+> **当前实现使用 `thiserror` 库**。`ComBridgeError` 使用 `#[derive(thiserror::Error)]` 自动实现 `Error` trait 和 `Display` trait。
 
 ## 核心组件
 
@@ -51,33 +51,28 @@ impl fmt::Display for ErrorCode {
 
 ### ComBridgeError
 
-统一错误类型，手动实现 `Display` 和 `Error` trait：
+统一错误类型，使用 `thiserror` 库自动实现 `Display` 和 `Error` trait：
 
 ```rust
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum ComBridgeError {
+    #[error("[E1000] {0}")]
     SerialError(String),
+    #[error("[E2000] {0}")]
     BleError(String),
+    #[error("[E3000] {0}")]
     ProtocolError(String),
+    #[error("[E4000] {0}")]
     WebSocketError(String),
+    #[error("[E5000] {0}")]
     ConfigError(String),
+    #[error("[E6000] {0}")]
     IoError(String),
+    #[error("[E7000] {0}")]
     ParseError(String),
+    #[error("[E8000] {message}")]
+    DeviceError { code: ErrorCode, message: String },
 }
-```
-
-`Display` 实现输出格式为 `[Exxxx] 错误消息`：
-
-```rust
-impl fmt::Display for ComBridgeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let code = self.error_code();
-        let msg = self.message();
-        write!(f, "[{}] {}", code, msg)
-    }
-}
-
-impl Error for ComBridgeError {}
 ```
 
 ### ErrorResponse
@@ -122,6 +117,7 @@ pub type Result<T> = std::result::Result<T, ComBridgeError>;
 | E5000 | ConfigError | 5000-5999 | 配置相关错误 |
 | E6000 | IoError | 6000-6999 | IO 相关错误 |
 | E7000 | ParseError | 7000-7999 | 解析相关错误 |
+| E8000 | DeviceError | 8000-8999 | 设备管理错误 |
 
 ## 核心功能
 
@@ -136,6 +132,7 @@ impl ComBridgeError {
     pub fn config<T: Into<String>>(msg: T) -> Self { ComBridgeError::ConfigError(msg.into()) }
     pub fn io<T: Into<String>>(msg: T) -> Self { ComBridgeError::IoError(msg.into()) }
     pub fn parse<T: Into<String>>(msg: T) -> Self { ComBridgeError::ParseError(msg.into()) }
+    pub fn device<T: Into<String>>(msg: T) -> Self { ComBridgeError::DeviceError { code: ErrorCode::DeviceError, message: msg.into() } }
 }
 ```
 
@@ -206,22 +203,28 @@ pub async fn save_parser_script(
 }
 ```
 
-## DeviceError 变体规划
+## DeviceError 变体说明
 
-当前 `ComBridgeError` 中设备相关错误分散在 `SerialError` 和 `BleError` 中。未来可考虑新增 `DeviceError` 变体，用于统一设备管理层面的错误：
+`DeviceError` 已实现，用于统一设备管理层面的错误：
 
 ```rust
-pub enum ComBridgeError {
-    // ... 现有变体 ...
-    DeviceError(String),  // 设备管理错误 (8000-8999)
-}
+#[error("[E8000] {message}")]
+DeviceError { code: ErrorCode, message: String },
 ```
 
 适用场景：
 - 设备不存在
 - 设备已连接/已断开
 - 设备类型不匹配
-- 通道不存在
+- 锁获取失败（如 `PoisonError`）
+
+`LockResultExt` trait 提供了锁错误的便捷转换：
+
+```rust
+pub trait LockResultExt<T> {
+    fn lock_err(self, context: &str) -> Result<T>;
+}
+```
 
 ## 错误响应格式
 

@@ -22,16 +22,16 @@ pub use gh_rpc::{
 
 pub use rpc::types::*;
 
-pub const VER_TYPE_FW: u8 = 0;
-pub const VER_TYPE_DEMO: u8 = 1;
-pub const VER_TYPE_BOOTLOADER: u8 = 2;
-pub const VER_TYPE_PROTOCOL: u8 = 3;
-pub const VER_TYPE_VIRTUAL_REG: u8 = 4;
-pub const VER_TYPE_DRV: u8 = 5;
-pub const VER_TYPE_CHIP: u8 = 6;
-pub const VER_TYPE_BLE: u8 = 7;
-pub const VER_TYPE_ALGO: u8 = 8;
-pub const VER_TYPE_FUNC_SUPPORT: u8 = 9;
+pub const VER_TYPE_FW: u8 = 1;
+pub const VER_TYPE_DEMO: u8 = 10;
+pub const VER_TYPE_BOOTLOADER: u8 = 4;
+pub const VER_TYPE_PROTOCOL: u8 = 5;
+pub const VER_TYPE_VIRTUAL_REG: u8 = 3;
+pub const VER_TYPE_DRV: u8 = 7;
+pub const VER_TYPE_CHIP: u8 = 8;
+pub const VER_TYPE_BLE: u8 = 9;
+pub const VER_TYPE_ALGO: u8 = 32;
+pub const VER_TYPE_FUNC_SUPPORT: u8 = 6;
 
 pub const HR_VERSION_OFFSET: u8 = 0;
 pub const HRV_VERSION_OFFSET: u8 = 1;

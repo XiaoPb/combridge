@@ -574,3 +574,61 @@ pub fn evaluate_test_data(
 
     result
 }
+
+pub const ERROR_CODE_CHIP_INIT: &str = "0x1001";
+pub const ERROR_CODE_UUID: &str = "0x2001";
+pub const ERROR_CODE_BASE_NOISE_BASE: u32 = 0x3000;
+pub const ERROR_CODE_PPG_NOISE_BASE: u32 = 0x4000;
+pub const ERROR_CODE_LPCTR_BASE: u32 = 0x5000;
+pub const ERROR_CODE_LPLCTR_BASE: u32 = 0x6000;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FactoryErrorResult {
+    pub error_codes: Vec<String>,
+    pub has_error: bool,
+}
+
+pub fn generate_error_codes(
+    chip_init_status: u16,
+    uuid: &[u8],
+    evaluation_result: &FactoryEvaluationResult,
+) -> FactoryErrorResult {
+    let mut error_codes = Vec::new();
+    let mut has_error = false;
+
+    if chip_init_status != 1 {
+        error_codes.push(ERROR_CODE_CHIP_INIT.to_string());
+        has_error = true;
+    }
+
+    let uuid_valid = !uuid.is_empty() && !uuid.iter().all(|&b| b == 0);
+    if !uuid_valid {
+        error_codes.push(ERROR_CODE_UUID.to_string());
+        has_error = true;
+    }
+
+    for test_result in &evaluation_result.test_results {
+        if !test_result.pass && test_result.enabled {
+            let base_code = match test_result.test_name.as_str() {
+                "base_noise" => ERROR_CODE_BASE_NOISE_BASE,
+                "ppg_noise" => ERROR_CODE_PPG_NOISE_BASE,
+                "lpctr" => ERROR_CODE_LPCTR_BASE,
+                "lplctr" => ERROR_CODE_LPLCTR_BASE,
+                _ => continue,
+            };
+
+            for channel_result in &test_result.channel_results {
+                if !channel_result.pass {
+                    let error_code = format!("0x{:04X}", base_code + channel_result.channel_index as u32 + 1);
+                    error_codes.push(error_code);
+                }
+            }
+            has_error = true;
+        }
+    }
+
+    FactoryErrorResult {
+        error_codes,
+        has_error,
+    }
+}

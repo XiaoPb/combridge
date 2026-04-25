@@ -43,14 +43,16 @@ data_flow_events:
       description: "串口接收原始数据事件"
       publisher: "SerialManager"
       payload:
-        port_name:
+        device_id:
           type: "string"
+          description: "设备ID（端口名称）"
           example: "COM1"
         data:
           type: "array<number>"
           description: "接收数据（字节数组）"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
     serial_connected:
       topic: "serial:connected"
@@ -59,15 +61,10 @@ data_flow_events:
       payload:
         port_name:
           type: "string"
-        config:
-          type: "object"
-          properties:
-            baud_rate: { type: "number" }
-            data_bits: { type: "number" }
-            parity: { type: "string" }
-            stop_bits: { type: "number" }
+          description: "端口名称"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
     serial_disconnected:
       topic: "serial:disconnected"
@@ -76,10 +73,10 @@ data_flow_events:
       payload:
         port_name:
           type: "string"
-        reason:
-          type: "string"
+          description: "端口名称"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
     serial_error:
       topic: "serial:error"
@@ -101,17 +98,21 @@ data_flow_events:
       description: "BLE特征值数据事件"
       publisher: "BleManager"
       payload:
+        device_id:
+          type: "string"
+          description: "设备ID"
         address:
           type: "string"
-        name:
-          type: "string"
-          optional: true
+          description: "设备MAC地址"
         characteristic_uuid:
           type: "string"
+          description: "特征UUID"
         data:
           type: "array<number>"
+          description: "接收数据（字节数组）"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
     ble_connected:
       topic: "ble:connected"
@@ -120,14 +121,14 @@ data_flow_events:
       payload:
         address:
           type: "string"
+          description: "设备MAC地址"
         name:
           type: "string"
-        rssi:
-          type: "number"
-        services:
-          type: "array<string>"
+          optional: true
+          description: "设备名称"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
     ble_disconnected:
       topic: "ble:disconnected"
@@ -136,40 +137,50 @@ data_flow_events:
       payload:
         address:
           type: "string"
+          description: "设备MAC地址"
         name:
           type: "string"
-        reason:
-          type: "string"
+          optional: true
+          description: "设备名称"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
     ble_discovered:
-      topic: "ble/discovered"
+      topic: "ble:discovered"
       description: "BLE设备发现事件（扫描期间）"
       publisher: "BleManager"
       payload:
         address:
           type: "string"
+          description: "设备MAC地址"
         name:
           type: "string"
+          description: "设备名称"
         rssi:
           type: "number"
+          description: "信号强度"
         advertised_data:
           type: "object"
+          description: "广播数据"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
     ble_scan_status:
-      topic: "ble/scan/status"
+      topic: "ble:scan:status"
       description: "BLE扫描状态事件"
       publisher: "BleManager"
       payload:
         scanning:
           type: "boolean"
+          description: "是否正在扫描"
         devices_found:
           type: "number"
+          description: "已发现设备数量"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
     ble_error:
       topic: "ble:error"
@@ -190,54 +201,67 @@ data_flow_events:
 
   gh3036_events:
     gh3036_frame:
-      topic: "gh3036/frame"
+      topic: "gh3036:frame"
       description: "GH3036帧数据事件"
       publisher: "Gh3036Manager"
       payload:
         function_id:
           type: "number"
+          description: "功能ID"
         function_name:
           type: "string"
+          description: "功能名称"
         frame_id:
           type: "number"
+          description: "帧ID"
         channel_count:
           type: "number"
+          description: "通道数量"
         channels:
           type: "array<number>"
+          description: "通道数据"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
     gh3036_event:
-      topic: "gh3036/event"
+      topic: "gh3036:event"
       description: "GH3036通用事件"
       publisher: "Gh3036Manager"
       payload:
         event_type:
           type: "string"
           enum: ["initialized", "started", "stopped", "error"]
+          description: "事件类型"
         data:
           type: "object"
+          description: "事件数据"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
     gh3036_channel_changed:
-      topic: "gh3036/channel/changed"
+      topic: "gh3036:channel:changed"
       description: "TX/RX通道变更事件"
       publisher: "Gh3036Manager"
       payload:
         channel_type:
           type: "string"
           enum: ["tx", "rx"]
+          description: "通道类型"
         device_id:
           type: "string"
+          description: "设备ID"
         channel_config:
           type: "object"
+          description: "通道配置"
           properties:
             channel_type: { type: "string" }
             device_id: { type: "string" }
             characteristic_uuid: { type: "string", optional: true }
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
   protocol_events:
     protocol_parsed:
@@ -247,14 +271,19 @@ data_flow_events:
       payload:
         plugin_id:
           type: "string"
+          description: "插件ID"
         device_id:
           type: "string"
+          description: "设备ID"
         original_data:
           type: "array<number>"
+          description: "原始数据（字节数组）"
         parsed_data:
           type: "object"
+          description: "解析后数据（JSON对象）"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
     protocol_error:
       topic: "protocol:error"
@@ -263,15 +292,20 @@ data_flow_events:
       payload:
         plugin_id:
           type: "string"
+          description: "插件ID"
         device_id:
           type: "string"
           optional: true
+          description: "设备ID"
         error_code:
           type: "string"
+          description: "错误代码"
         error_message:
           type: "string"
+          description: "错误消息"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
   waveform_events:
     waveform_data:
@@ -281,12 +315,16 @@ data_flow_events:
       payload:
         buffer_id:
           type: "string"
+          description: "缓冲区ID"
         columns:
           type: "array<string>"
+          description: "列名数组"
         rows:
           type: "array<array<number>>"
+          description: "数据行数组"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
     waveform_status:
       topic: "waveform:status"
@@ -295,14 +333,19 @@ data_flow_events:
       payload:
         buffer_id:
           type: "string"
+          description: "缓冲区ID"
         row_count:
           type: "number"
+          description: "行数"
         column_count:
           type: "number"
+          description: "列数"
         capacity:
           type: "number"
+          description: "缓冲区容量"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
   dashboard_events:
     dashboard_parser_updated:
@@ -312,10 +355,13 @@ data_flow_events:
       payload:
         script_id:
           type: "string"
+          description: "脚本ID"
         content:
           type: "string"
+          description: "脚本内容"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
     dashboard_json_updated:
       topic: "dashboard:json:updated"
@@ -324,10 +370,13 @@ data_flow_events:
       payload:
         config_id:
           type: "string"
+          description: "配置ID"
         content:
           type: "object"
+          description: "配置内容"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
   system_events:
     system_started:
@@ -337,10 +386,13 @@ data_flow_events:
       payload:
         version:
           type: "string"
+          description: "应用版本"
         startup_time_ms:
           type: "number"
+          description: "启动耗时（毫秒）"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
     system_shutdown:
       topic: "system:shutdown"
@@ -350,8 +402,10 @@ data_flow_events:
         reason:
           type: "string"
           enum: ["user_request", "error", "update", "system"]
+          description: "关闭原因"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
     system_config_changed:
       topic: "system:config:changed"
@@ -360,14 +414,18 @@ data_flow_events:
       payload:
         config_key:
           type: "string"
+          description: "配置键"
         old_value:
           type: "object"
           optional: true
+          description: "旧值"
         new_value:
           type: "object"
           optional: true
+          description: "新值"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
     system_error:
       topic: "system:error"
@@ -376,13 +434,17 @@ data_flow_events:
       payload:
         error_code:
           type: "string"
+          description: "错误代码"
         error_message:
           type: "string"
+          description: "错误消息"
         context:
           type: "object"
           optional: true
+          description: "错误上下文"
         timestamp:
           type: "number"
+          description: "时间戳（毫秒）"
 
 control_flow_commands:
   description: "控制流 - 通过 Tauri Command 实现（点对点）"
@@ -984,7 +1046,7 @@ event_subscriptions:
     subscribes:
       - topic: "protocol:parsed"
         description: "订阅协议解析结果用于波形显示"
-      - topic: "gh3036/frame"
+      - topic: "gh3036:frame"
         description: "订阅GH3036帧数据"
 
 event_publishers:

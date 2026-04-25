@@ -23,30 +23,53 @@ Hooks 层封装了可复用的业务逻辑，将 API 调用、状态管理和事
 | `useNotification.ts` | 通知 Hook |
 | `useDataParser.ts` | 数据解析 Hook |
 | `useDebounce.ts` | 防抖 Hook |
+| `useConnectedDevices.ts` | 已连接设备 Hook |
+| `useModuleSubscribe.ts` | 模块事件订阅 Hook |
 
 ## 核心 Hook
 
 ### useSerial
 
-串口操作 Hook，封装串口扫描、连接、数据收发和事件监听：
+串口操作 Hook，封装串口扫描、连接、数据收发和事件监听，源码位于 [useSerial.ts](file:///e:/Code/CPP/combridge-rust/src/hooks/useSerial.ts)：
 
 ```typescript
 interface UseSerialReturn {
   ports: SerialPortInfo[];
+  tabs: SerialTab[];
+  activeTab: SerialTab | undefined;
+  activeTabKey: string | null;
   isScanning: boolean;
+  error: string | null;
+  preferences: SerialPreferences;
   scanPorts: () => Promise<void>;
-  openPort: (portName: string, config?: SerialConfig) => Promise<void>;
-  closePort: (portName: string) => Promise<void>;
-  sendData: (portName: string, data: number[]) => Promise<void>;
-  isConnected: (portName: string) => boolean;
-  getCache: (portName: string) => Promise<CacheData>;
+  openPort: (portName: string, config?: SerialConfig) => Promise<string | void>;
+  closePort: (tabKey: string) => Promise<void>;
+  sendData: (tabKey: string, data: string, format?: 'hex' | 'text') => Promise<void>;
+  clearTabData: (tabKey: string) => void;
+  updateTabConfig: (tabKey: string, config: Partial<SerialConfig>) => void;
+  toggleTabSettings: (tabKey: string) => void;
+  setActiveTab: (key: string | null) => void;
+  removeTab: (key: string) => void;
+  setError: (error: string | null) => void;
+  hasPortTab: (portName: string) => boolean;
+  updatePreferences: (prefs: Partial<SerialPreferences>) => void;
+  restoreConnectedPorts: () => Promise<void>;
+  startAutoScan: (intervalMs?: number) => void;
+  stopAutoScan: () => void;
 }
 ```
 
 **核心功能**：
-- 组件挂载时自动扫描端口
-- 组件卸载时自动清理事件监听器
-- 串口数据通过 `serialStore` 管理
+
+| 功能 | 说明 |
+|------|------|
+| 端口扫描 | `scanPorts()` 扫描可用串口，`startAutoScan()`/`stopAutoScan()` 定时扫描 |
+| 打开端口 | `openPort()` 打开串口，自动创建 Tab，恢复缓存数据 |
+| 关闭端口 | `closePort()` 关闭串口，更新 Tab 连接状态 |
+| 发送数据 | `sendData()` 发送数据，支持 hex/text 格式 |
+| 状态恢复 | `restoreConnectedPorts()` 恢复已打开的端口状态 |
+| Tab 管理 | `setActiveTab()`/`removeTab()`/`clearTabData()` 管理 Tab 状态 |
+| 偏好设置 | `updatePreferences()` 更新显示格式、自动滚动等偏好 |
 
 ### useBle
 
@@ -109,23 +132,19 @@ interface UseProtocolReturn {
 波形操作 Hook，源码位于 [useWaveform.ts](file:///e:/Code/CPP/combridge-rust/src/hooks/useWaveform.ts)，封装波形缓冲区管理、解析器配置和数据自动刷新：
 
 ```typescript
-interface UseWaveformReturn {
-  buffers: string[];
-  currentBuffer: string | null;
-  status: WaveformStatus | null;
-  data: WaveformData | null;
-  isLoading: boolean;
-  isRunning: boolean;
-  createBuffer: (bufferId: string, config?: WaveformBufferConfig) => Promise<void>;
-  removeBuffer: (bufferId: string) => Promise<void>;
-  setCurrentBuffer: (bufferId: string) => void;
-  configureParser: (bufferId: string, config: ParserConfig) => Promise<void>;
-  startRefresh: () => void;
-  stopRefresh: () => void;
-  clearBuffer: (bufferId: string) => Promise<void>;
-  refreshData: () => Promise<void>;
+function useWaveform(bufferId: string | null): UseWaveformReturn;
+
+interface UseWaveformReturn extends WaveformStoreState {
+  startAutoRefresh: () => void;
+  stopAutoRefresh: () => void;
 }
 ```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `bufferId` | `string \| null` | 波形缓冲区 ID，为 null 时不执行刷新 |
 
 **核心功能**：
 
@@ -133,29 +152,24 @@ interface UseWaveformReturn {
 |------|------|
 | 缓冲区创建 | `createBuffer()` 创建波形缓冲区，自动配置默认解析器（delimiter + 5 通道） |
 | 解析器配置 | `configureParser()` 设置分隔符或正则解析器 |
-| 自动刷新 | `startRefresh()`/`stopRefresh()` 控制定时数据刷新（默认 33ms/30fps） |
+| 自动刷新 | `startAutoRefresh()`/`stopAutoRefresh()` 控制定时数据刷新（默认 33ms/30fps） |
 | 数据读取 | `refreshData()` 读取当前缓冲区的最新数据（默认 500 行） |
 | 状态查询 | 自动获取缓冲区状态（行数、列数、容量） |
-| 串口数据转发 | 组件挂载时监听 `serial-data` 事件，自动调用 `parseAndStore()` 将数据写入缓冲区 |
-| 事件清理 | 组件卸载时自动停止刷新并清理事件监听器 |
+| 事件清理 | 组件卸载时自动停止刷新 |
 
 **数据流**：
 
 ```mermaid
 sequenceDiagram
-    participant Serial as 串口事件
     participant Hook as useWaveform
     participant Store as waveformStore
     participant API as waveformApi
 
-    Serial->>Hook: serial-data 事件
-    Hook->>API: parseAndStore(bufferId, data)
-    API-->>Hook: 解析完成
-
-    loop 定时刷新 (33ms)
-        Hook->>API: readData(bufferId, 500)
-        API-->>Hook: 返回波形数据
-        Hook->>Store: 更新 data 状态
+    loop 定时刷新 (refreshInterval)
+        Hook->>Store: readData(bufferId)
+        Store->>API: readData(bufferId, displayRows)
+        API-->>Store: 返回波形数据
+        Store-->>Hook: 更新 data 状态
     end
 ```
 
@@ -306,6 +320,71 @@ interface UseDataParserReturn {
 function useDebounce<T>(value: T, delay: number): T;
 ```
 
+### useConnectedDevices
+
+已连接设备 Hook，源码位于 [useConnectedDevices.ts](file:///e:/Code/CPP/combridge-rust/src/hooks/useConnectedDevices.ts)，聚合串口和 BLE 已连接设备：
+
+```typescript
+interface ConnectedDevice {
+  id: string;
+  name: string;
+  type: 'serial' | 'ble';
+}
+
+function useConnectedDevices(): ConnectedDevice[];
+
+function getConnectedDevices(): ConnectedDevice[];
+```
+
+**核心功能**：
+
+| 功能 | 说明 |
+|------|------|
+| 设备聚合 | 从 `serialStore` 和 `bleStore` 聚合已连接设备列表 |
+| 串口设备 | 过滤 `tabs` 中 `tabType === 'port' && isConnected` 的设备 |
+| BLE 设备 | 从 `connections` 获取已连接的 BLE 设备 |
+| 响应式 | Hook 版本自动响应 Store 变化，函数版本用于非 React 环境 |
+
+### useModuleSubscribe
+
+模块事件订阅 Hook，源码位于 [useModuleSubscribe.ts](file:///e:/Code/CPP/combridge-rust/src/hooks/useModuleSubscribe.ts)，封装事件总线的订阅和清理：
+
+```typescript
+interface ModuleSubscribeOptions<T> {
+  topic: string;
+  onEvent: (payload: T) => void;
+  enabled?: boolean;
+}
+
+function useModuleSubscribe<T>(options: ModuleSubscribeOptions<T>): {
+  subscribe: () => Promise<void>;
+  unsubscribe: () => void;
+  isSubscribed: () => boolean;
+};
+
+interface MultiModuleSubscribeOptions {
+  topics: string[];
+  onEvent: (topic: string, payload: unknown) => void;
+  enabled?: boolean;
+}
+
+function useMultiModuleSubscribe(options: MultiModuleSubscribeOptions): {
+  subscribe: () => Promise<void>;
+  unsubscribe: () => void;
+  isSubscribed: () => boolean;
+};
+```
+
+**核心功能**：
+
+| 功能 | 说明 |
+|------|------|
+| 单 Topic 订阅 | `useModuleSubscribe()` 订阅单个 topic 的事件 |
+| 多 Topic 订阅 | `useMultiModuleSubscribe()` 同时订阅多个 topic |
+| 自动清理 | 组件卸载时自动取消订阅 |
+| 条件订阅 | `enabled` 参数控制是否启用订阅 |
+| JSON 解析 | 自动解析 JSON 格式的 payload |
+
 ## 架构图
 
 ```mermaid
@@ -323,6 +402,8 @@ graph TB
         useNotification
         useDataParser
         useDebounce
+        useConnectedDevices
+        useModuleSubscribe
     end
 
     subgraph Stores
@@ -336,6 +417,8 @@ graph TB
         dashboardStore
         gh3036Store
         csvChartStore
+        configStore
+        notificationStore
     end
 
     subgraph API
@@ -372,6 +455,9 @@ graph TB
     useLog --> logStore
     useTheme --> serialStore
     useNotification --> AntDesign[Ant Design notification]
+    useConnectedDevices --> serialStore
+    useConnectedDevices --> bleStore
+    useModuleSubscribe --> events
 ```
 
 ## 事件监听生命周期
@@ -474,9 +560,9 @@ function WaveformPanel() {
     isRunning,
     createBuffer,
     configureParser,
-    startRefresh,
-    stopRefresh,
-  } = useWaveform();
+    startAutoRefresh,
+    stopAutoRefresh,
+  } = useWaveform('wave-1');
 
   useEffect(() => {
     createBuffer('wave-1', {
@@ -484,17 +570,17 @@ function WaveformPanel() {
       column_names: ['CH0', 'CH1', 'CH2', 'CH3', 'CH4'],
     });
 
-    return () => stopRefresh();
+    return () => stopAutoRefresh();
   }, []);
 
   const handleStart = () => {
-    startRefresh();
+    startAutoRefresh();
   };
 
   return (
     <div>
       <Button onClick={handleStart}>开始采集</Button>
-      <Button onClick={stopRefresh}>停止</Button>
+      <Button onClick={stopAutoRefresh}>停止</Button>
       {status && <span>行数: {status.row_count}</span>}
     </div>
   );

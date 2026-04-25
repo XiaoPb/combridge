@@ -21,6 +21,8 @@
 | `gh3036Store.ts` | GH3036 协议状态管理（含事件监听） |
 | `csvChartStore.ts` | CSV 图表状态管理 |
 | `waveformStore.ts` | 波形状态管理 |
+| `configStore.ts` | 应用配置状态管理（含 persist 持久化） |
+| `notificationStore.ts` | 通知状态管理 |
 
 ## 核心 Store
 
@@ -286,43 +288,83 @@ interface Gh3036State {
   isInitialized: boolean;
   isLoading: boolean;
   error: string | null;
+  
+  channelConfig: Gh3036ChannelConfigState;
   txChannel: Gh3036ChannelConfig | null;
   rxChannel: Gh3036ChannelConfig | null;
   csvConfig: Gh3036CsvConfig;
+  
   rpcCommands: Gh3036RpcCommand[];
   expandedCommand: string | null;
-  frameData: Gh3036FrameData[];
+  
+  frameData: Gh3036FramePayload[];
   maxFrameCount: number;
+  
   eventData: Gh3036EventData[];
   maxEventCount: number;
+  
+  framesData: Map<number, Gh3036FramesPayload>;
+  maxFramesCount: number;
+  
+  vitalSigns: {
+    hr: number | null;
+    spo2: number | null;
+    adt: string | null;
+    gnadt: string | null;
+  };
+  
+  gsensorData: {
+    acc_x: number[];
+    acc_y: number[];
+    acc_z: number[];
+    gyro_x: number[];
+    gyro_y: number[];
+    gyro_z: number[];
+  };
+  maxGsensorCount: number;
+  
+  chartGroups: ChartGroupConfig[];
+  selectedFunctionId: number | null;
+  
   isLinked: boolean;
-  eventListeners: { event?: UnlistenFn; frame?: UnlistenFn };
-
-  setIsInitialized: (value: boolean) => void;
-  setIsLoading: (value: boolean) => void;
-  setError: (error: string | null) => void;
-  setTxChannel: (config: Gh3036ChannelConfig | null) => void;
-  setRxChannel: (config: Gh3036ChannelConfig | null) => void;
-  setCsvConfig: (config: Gh3036CsvConfig) => void;
-  setRpcCommands: (commands: Gh3036RpcCommand[]) => void;
-  setExpandedCommand: (key: string | null) => void;
-  addFrameData: (frame: Gh3036FrameData) => void;
-  clearFrameData: () => void;
-  addEventData: (event: Gh3036EventData) => void;
-  clearEventData: () => void;
-  setIsLinked: (value: boolean) => void;
-  initialize: () => Promise<void>;
-  loadChannels: () => Promise<void>;
-  loadCsvConfig: () => Promise<void>;
-  loadRpcCommands: () => Promise<void>;
-  configureTxChannel: (channelType, deviceId, charUuid?) => Promise<boolean>;
-  configureRxChannel: (channelType, deviceId, charUuid?) => Promise<boolean>;
-  updateCsvConfig: (enabled, outputDir) => Promise<boolean>;
-  sendData: (data: number[]) => Promise<boolean>;
-  executeRpc: (commandKey, params) => Promise<boolean>;
-  subscribeEvents: () => Promise<void>;
-  unsubscribeEvents: () => void;
-  loadLibraryStatus: () => Promise<void>;
+  
+  eventListeners: {
+    event?: UnlistenFn;
+    frame?: UnlistenFn;
+    deviceDisconnected?: UnlistenFn;
+    factoryTest?: UnlistenFn;
+  };
+  
+  rpcConfig: {
+    workMode: string;
+    command: string;
+    writeRegAddr: string;
+    writeRegValue: string;
+    readRegAddr: string;
+    readRegValue: string;
+    configPath: string;
+    selectedFunctions: string[];
+    isRunning: boolean;
+    factoryMode: string;
+    factoryResult: string;
+    version: string;
+    versionType: number;
+  };
+  
+  factoryTest: {
+    status: FactoryTestStatus;
+    currentStep: FactoryTestStep;
+    progress: number;
+    message: string;
+    configDir: string;
+    configValidation: ConfigValidationResult | null;
+    stepResults: FactoryTestStepResult[];
+    result: FactoryTestResult | null;
+    isRunning: boolean;
+    thresholdConfig: FactoryThresholdConfig | null;
+    thresholdValidation: ThresholdConfigValidation | null;
+    evaluationResult: FactoryEvaluationResult | null;
+  };
 }
 ```
 
@@ -334,10 +376,17 @@ interface Gh3036State {
 | 通道配置 | `configureTxChannel()`/`configureRxChannel()` 配置发送/接收通道（serial/ble） |
 | CSV 配置 | `updateCsvConfig()` 启用/禁用 CSV 输出，设置输出目录 |
 | RPC 命令 | `executeRpc()` 执行 RPC 命令，`loadRpcCommands()` 加载命令列表 |
-| 事件监听 | `subscribeEvents()` 订阅 `gh3036-event` 和 `gh3036-frame` 事件，`unsubscribeEvents()` 清理监听 |
+| 事件监听 | `subscribeEvents()` 订阅 `gh3036:event`、`gh3036:frame`、设备断开事件，`unsubscribeEvents()` 清理监听 |
 | 帧数据缓冲 | `frameData` 数组，超出 `maxFrameCount`(1000) 自动淘汰 |
 | 事件数据缓冲 | `eventData` 数组，超出 `maxEventCount`(500) 自动淘汰 |
+| 波形数据缓冲 | `framesData` Map，按功能 ID 存储多帧数据，超出 `maxFramesCount`(100) 自动淘汰 |
+| 生命体征 | `vitalSigns` 存储 HR/SpO2/ADT/GNADT 算法结果 |
+| 传感器数据 | `gsensorData` 存储加速度计和陀螺仪数据，超出 `maxGsensorCount`(500) 自动淘汰 |
 | 库状态检查 | `loadLibraryStatus()` 检查库是否链接和初始化 |
+| 产测管理 | `startFactoryTest()`/`stopFactoryTest()`/`continueFactoryTest()` 控制产测流程 |
+| 产测事件 | `subscribeFactoryTestEvents()` 订阅产测进度事件 |
+| 卡控配置 | `loadThresholdConfig()`/`validateThresholdConfig()` 加载和验证卡控阈值 |
+| 判断结果 | `loadEvaluationResult()` 加载产测判断结果 |
 
 ### CsvChartStore
 
@@ -450,6 +499,88 @@ const DEFAULT_PARSER_CONFIG: ParserConfig = {
 | 状态查询 | `getStatus()` 获取缓冲区行数、列数、容量等信息 |
 | 显示配置 | `displayRows`(默认 500) 控制读取行数，`refreshInterval`(默认 33ms) 控制刷新频率 |
 
+### ConfigStore
+
+应用配置状态管理，源码位于 [configStore.ts](file:///e:/Code/CPP/combridge-rust/src/stores/configStore.ts)，使用 `persist` 中间件持久化：
+
+```typescript
+interface ConfigState {
+  settings: AppSettings;
+  serialConfig: SerialConfig;
+  bleConfig: BleModeConfig;
+  recentConnections: RecentConnection[];
+  _hasHydrated: boolean;
+
+  getConfig: () => AppSettings;
+  updateConfig: (partial: Partial<AppSettings>) => void;
+  resetConfig: () => void;
+  getSerialConfig: () => SerialConfig;
+  saveSerialConfig: (config: SerialConfig) => void;
+  getBleConfig: () => BleModeConfig;
+  saveBleConfig: (config: BleModeConfig) => void;
+  getRecentConnections: () => RecentConnection[];
+  addRecentConnection: (connection: RecentConnection) => void;
+  removeRecentConnection: (identifier: string) => void;
+  clearRecentConnections: () => void;
+  setHasHydrated: (state: boolean) => void;
+}
+```
+
+**持久化配置**：
+
+```typescript
+persist(
+  (set, get) => ({ /* ... */ }),
+  {
+    name: 'combridge-config',
+    partialize: (state) => ({
+      settings: state.settings,
+      serialConfig: state.serialConfig,
+      bleConfig: state.bleConfig,
+      recentConnections: state.recentConnections,
+    }),
+  }
+)
+```
+
+**核心功能说明**：
+
+| 功能 | 说明 |
+|------|------|
+| 应用设置 | `settings` 存储主题、语言、时区等全局设置 |
+| 串口配置 | `serialConfig` 存储默认串口配置（波特率、数据位等） |
+| BLE 配置 | `bleConfig` 存储 BLE 模式配置（native/at 模式、AT 端口） |
+| 最近连接 | `recentConnections` 存储最近连接的设备列表，最多保留 10 条 |
+| 水合状态 | `_hasHydrated` 标记持久化状态是否已恢复 |
+
+### NotificationStore
+
+通知状态管理，源码位于 [notificationStore.ts](file:///e:/Code/CPP/combridge-rust/src/stores/notificationStore.ts)：
+
+```typescript
+type NotificationType = 'success' | 'error' | 'info' | 'warning';
+
+interface Notification {
+  id: string;
+  type: NotificationType;
+  content: string;
+  timestamp: number;
+}
+
+interface NotificationState {
+  notifications: Notification[];
+  addNotification: (type: NotificationType, content: string) => void;
+  consumeNotifications: () => Notification[];
+}
+```
+
+**核心功能说明**：
+
+| 功能 | 说明 |
+|------|------|
+| 添加通知 | `addNotification()` 添加新通知，自动生成 ID 和时间戳 |
+| 消费通知 | `consumeNotifications()` 获取所有通知并清空列表，用于批量处理 |
+
 ## 架构图
 
 ```mermaid
@@ -465,6 +596,8 @@ graph TB
         Gh3036Store[gh3036Store<br/>事件监听]
         CsvChartStore[csvChartStore]
         WaveformStore[waveformStore]
+        ConfigStore[configStore<br/>persist]
+        NotificationStore[notificationStore]
     end
 
     subgraph Hooks
@@ -493,6 +626,7 @@ graph TB
         WaveformPage
         SystemPage
         HomePage
+        Gh3036Page
     end
 
     Hooks --> Stores
@@ -502,6 +636,7 @@ graph TB
     API -->|事件更新| Stores
     Gh3036Store -->|subscribeEvents| eventApi
     DashboardStore -->|persist| LocalStorage
+    ConfigStore -->|persist| LocalStorage
 ```
 
 ## 数据流

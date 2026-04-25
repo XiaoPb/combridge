@@ -152,18 +152,17 @@ combridge/
 │   │
 │   ├── stores/                         # Zustand 状态管理
 │   │   ├── index.ts                    # Store 统一导出
-│   │   ├── connectionStore.ts          # WebSocket 连接状态：连接配置、连接状态
+│   │   ├── configStore.ts              # 配置状态：系统配置、UI配置、偏好设置
 │   │   ├── serialStore.ts              # 串口状态：端口列表、连接状态、收发数据缓存
 │   │   ├── bleStore.ts                 # BLE 状态：设备列表、连接管理、GATT 缓存
 │   │   ├── protocolStore.ts            # 协议状态：插件列表、绑定关系
-│   │   ├── systemStore.ts              # 系统状态：系统信息、运行状态、日志
-│   │   ├── uiConfigStore.ts            # UI 配置：主题、布局、偏好设置
 │   │   ├── dashboardStore.ts           # Dashboard 状态：解析脚本、数据缓冲、Widget配置
 │   │   ├── gh3036Store.ts              # GH3036 状态：通道配置、RPC命令、CSV配置
 │   │   ├── csvChartStore.ts            # CSV 图表状态：CSV数据、图表渲染配置
 │   │   ├── waveformStore.ts            # 波形状态：缓冲区管理、实时数据
 │   │   ├── logStore.ts                 # 日志状态：日志条目、过滤条件
-│   │   └── pageTabsStore.ts            # 页面标签状态：标签页管理
+│   │   ├── pageTabsStore.ts            # 页面标签状态：标签页管理
+│   │   ├── notificationStore.ts        # 通知状态：系统通知、Toast消息
 │   │
 │   ├── pages/                          # 页面组件
 │   │   ├── Serial/                     # 串口页面
@@ -182,6 +181,36 @@ combridge/
 │   │   │   ├── CharacteristicPanel.tsx # 特征操作：读/写/通知
 │   │   │   └── AtConfigPanel.tsx       # AT 配置：AT 模式专用配置（波特率等）
 │   │   │
+│   │   ├── Dashboard/                  # Dashboard 页面
+│   │   │   ├── index.tsx               # Dashboard 主页面：布局组装
+│   │   │   ├── DashboardToolbar.tsx   # 工具栏：Dashboard选择、数据源、解析器
+│   │   │   ├── DashboardCanvas.tsx    # 画布：Widget 渲染区域
+│   │   │   ├── DashboardPanel.tsx      # 侧边面板：数据视图、原始数据
+│   │   │   ├── DashboardTabs.tsx       # Dashboard 标签页管理
+│   │   │   ├── DataSourceSelector.tsx # 数据源选择：串口/BLE/文件
+│   │   │   ├── ParserSelector.tsx     # 解析器选择：JSON/Lua/分隔符
+│   │   │   ├── ParserScriptManager.tsx # 解析脚本管理：增删改查
+│   │   │   ├── WidgetSelector.tsx     # 组件选择：添加新 Widget
+│   │   │   ├── JsonImportDialog.tsx   # JSON 导入对话框
+│   │   │   ├── JsonMergeDialog.tsx    # JSON 合并对话框
+│   │   │   ├── SettingsPanel.tsx      # 设置面板：组件配置
+│   │   │   ├── ConsolePanel.tsx       # 控制台面板：脚本输出
+│   │   │   ├── widgets/               # Widget 组件
+│   │   │   │   ├── index.ts           # Widget 导出
+│   │   │   │   ├── WidgetRenderer.tsx # Widget 渲染器
+│   │   │   │   ├── LineChartWidget.tsx # 折线图组件
+│   │   │   │   ├── GaugeWidget.tsx    # 仪表盘组件
+│   │   │   │   ├── TextWidget.tsx     # 文本显示组件
+│   │   │   │   ├── LedWidget.tsx      # LED 指示灯组件
+│   │   │   │   ├── CompassWidget.tsx  # 指南针组件
+│   │   │   │   └── AccelerometerWidget.tsx # 三轴加速度组件
+│   │   │   └── JsonEditor/            # JSON 编辑器
+│   │   │       ├── index.tsx          # JSON 编辑器主组件
+│   │   │       ├── DatasetEditor.tsx  # 数据集编辑器
+│   │   │       ├── FrameConfigEditor.tsx # 帧配置编辑器
+│   │   │       ├── GroupEditor.tsx   # 分组编辑器
+│   │   │       └── JsonPreview.tsx    # JSON 预览
+│   │   │
 │   │   ├── Protocol/                   # 协议页面
 │   │   │   ├── index.tsx               # 协议主页面
 │   │   │   ├── ProtocolList.tsx        # 协议列表：已加载协议展示
@@ -199,6 +228,17 @@ combridge/
 │   │   │   ├── MainLayout.tsx          # 主布局：侧边栏 + 内容区
 │   │   │   ├── Sidebar.tsx             # 侧边栏：导航菜单
 │   │   │   └── Header.tsx              # 头部：连接状态、设置入口
+│   │   ├── TitleBar/                   # 标题栏 Tab 组件
+│   │   │   ├── index.ts                # 标题栏导出
+│   │   │   ├── TitleBar.tsx            # 标题栏主组件
+│   │   │   ├── SerialTitleTabs.tsx     # 串口页面标题栏
+│   │   │   ├── BleTitleTabs.tsx        # BLE 页面标题栏
+│   │   │   ├── BleAtTitleTabs.tsx      # BLE AT 模式标题栏
+│   │   │   ├── ProtocolTitleTabs.tsx   # 协议页面标题栏
+│   │   │   ├── DashboardTitleTabs.tsx  # Dashboard 标题栏
+│   │   │   ├── Gh3036TitleTabs.tsx     # GH3036 标题栏
+│   │   │   ├── WaveformTitleTabs.tsx   # 波形页面标题栏
+│   │   │   └── SystemTitleTabs.tsx    # 系统页面标题栏
 │   │   ├── SettingsModal/              # 设置弹窗
 │   │   │   ├── index.tsx               # 设置弹窗主组件
 │   │   │   └── SettingsForm.tsx        # 设置表单：通用配置
@@ -408,18 +448,17 @@ graph TB
 | **事件监听**           | `api/events.ts`                        | Tauri 事件监听封装           |
 | **API 类型**         | `api/types.ts`                         | 请求/响应类型定义              |
 | **Store 导出**       | `stores/index.ts`                      | 统一导出所有 Store           |
-| **连接状态**           | `stores/connectionStore.ts`            | WebSocket 连接状态管理       |
-| **串口状态**           | `stores/serialStore.ts`                | 端口列表、连接状态、数据缓存         |
+| **配置状态**          | `stores/configStore.ts`                  | 系统配置、UI配置、偏好设置         |
+| **串口状态**          | `stores/serialStore.ts`                | 端口列表、连接状态、数据缓存         |
 | **BLE 状态**         | `stores/bleStore.ts`                   | 设备列表、连接管理、GATT 缓存      |
 | **协议状态**           | `stores/protocolStore.ts`              | 插件列表、绑定关系              |
-| **系统状态**           | `stores/systemStore.ts`                | 系统信息、运行状态、日志           |
-| **UI 配置**          | `stores/uiConfigStore.ts`              | 主题、布局、偏好设置             |
 | **Dashboard 状态**   | `stores/dashboardStore.ts`             | 解析脚本、数据缓冲、Widget配置     |
 | **GH3036 状态**      | `stores/gh3036Store.ts`                | 通道配置、RPC命令、CSV配置       |
 | **CSV 图表状态**      | `stores/csvChartStore.ts`              | CSV数据、图表渲染配置           |
 | **波形状态**           | `stores/waveformStore.ts`              | 缓冲区管理、实时数据             |
 | **日志状态**           | `stores/logStore.ts`                   | 日志条目、过滤条件              |
 | **页面标签状态**        | `stores/pageTabsStore.ts`              | 标签页管理                  |
+| **通知状态**          | `stores/notificationStore.ts`          | 系统通知、Toast消息            |
 | **串口页面**           | `pages/Serial/index.tsx`               | 串口功能主页面布局              |
 | **串口工具栏**          | `pages/Serial/SerialToolbar.tsx`       | 端口选择、开关控制              |
 | **数据视图**           | `pages/Serial/SerialDataView.tsx`      | 收发数据展示                 |
@@ -432,6 +471,25 @@ graph TB
 | **GATT 浏览**        | `pages/Ble/GattBrowser.tsx`            | 服务/特征树形浏览              |
 | **特征操作**           | `pages/Ble/CharacteristicPanel.tsx`    | 读/写/通知操作               |
 | **AT 配置**          | `pages/Ble/AtConfigPanel.tsx`          | AT 模式专用配置              |
+| **Dashboard 页面**   | `pages/Dashboard/index.tsx`             | Dashboard 主页面             |
+| **Dashboard 工具栏** | `pages/Dashboard/DashboardToolbar.tsx` | Dashboard选择、数据源、解析器    |
+| **Dashboard 画布**   | `pages/Dashboard/DashboardCanvas.tsx`  | Widget 渲染区域              |
+| **Dashboard 面板**   | `pages/Dashboard/DashboardPanel.tsx`   | 数据视图、原始数据             |
+| **Dashboard 标签**   | `pages/Dashboard/DashboardTabs.tsx`    | Dashboard 标签页管理          |
+| **数据源选择**         | `pages/Dashboard/DataSourceSelector.tsx` | 串口/BLE/文件数据源选择        |
+| **解析器选择**         | `pages/Dashboard/ParserSelector.tsx`   | JSON/Lua/分隔符解析器选择      |
+| **脚本管理**          | `pages/Dashboard/ParserScriptManager.tsx` | 解析脚本增删改查             |
+| **组件选择**          | `pages/Dashboard/WidgetSelector.tsx`   | 添加新 Widget               |
+| **JSON 导入**         | `pages/Dashboard/JsonImportDialog.tsx` | JSON 导入对话框             |
+| **JSON 合并**         | `pages/Dashboard/JsonMergeDialog.tsx`  | JSON 合并对话框             |
+| **Widget 渲染器**    | `pages/Dashboard/widgets/WidgetRenderer.tsx` | Widget 类型路由渲染          |
+| **折线图组件**         | `pages/Dashboard/widgets/LineChartWidget.tsx` | 趋势图 Widget              |
+| **仪表盘组件**         | `pages/Dashboard/widgets/GaugeWidget.tsx` | 仪表盘 Widget              |
+| **文本组件**          | `pages/Dashboard/widgets/TextWidget.tsx` | 文本显示 Widget             |
+| **LED 组件**          | `pages/Dashboard/widgets/LedWidget.tsx` | LED 状态指示 Widget          |
+| **指南针组件**         | `pages/Dashboard/widgets/CompassWidget.tsx` | 方向显示 Widget             |
+| **加速度组件**        | `pages/Dashboard/widgets/AccelerometerWidget.tsx` | 三轴加速度 Widget           |
+| **JSON 编辑器**       | `pages/Dashboard/JsonEditor/index.tsx`  | JSON 结构编辑器             |
 | **协议页面**           | `pages/Protocol/index.tsx`             | 协议管理主页面                |
 | **协议列表**           | `pages/Protocol/ProtocolList.tsx`      | 已加载协议展示                |
 | **脚本编辑器**          | `pages/Protocol/ScriptEditor.tsx`      | Lua 代码编辑               |
@@ -443,6 +501,15 @@ graph TB
 | **主布局**            | `components/Layout/MainLayout.tsx`     | 整体布局框架                 |
 | **侧边栏**            | `components/Layout/Sidebar.tsx`        | 导航菜单                   |
 | **头部**             | `components/Layout/Header.tsx`         | 状态栏、设置入口               |
+| **标题栏**            | `components/TitleBar/TitleBar.tsx`      | 页面标题栏 Tab 容器           |
+| **串口标题栏**          | `components/TitleBar/SerialTitleTabs.tsx` | 串口页面标题栏组件             |
+| **BLE 标题栏**         | `components/TitleBar/BleTitleTabs.tsx`   | BLE 页面标题栏组件            |
+| **BLE AT 标题栏**      | `components/TitleBar/BleAtTitleTabs.tsx`  | BLE AT 模式标题栏组件         |
+| **协议标题栏**         | `components/TitleBar/ProtocolTitleTabs.tsx` | 协议页面标题栏组件            |
+| **Dashboard 标题栏**   | `components/TitleBar/DashboardTitleTabs.tsx` | Dashboard 标题栏组件        |
+| **GH3036 标题栏**     | `components/TitleBar/Gh3036TitleTabs.tsx` | GH3036 标题栏组件            |
+| **波形标题栏**         | `components/TitleBar/WaveformTitleTabs.tsx` | 波形页面标题栏组件            |
+| **系统标题栏**         | `components/TitleBar/SystemTitleTabs.tsx` | 系统页面标题栏组件            |
 | **设置弹窗**           | `components/SettingsModal/index.tsx`   | 应用设置弹窗                 |
 | **数据日志**           | `components/DataLogger/index.tsx`      | 数据日志组件                 |
 | **日志条目**           | `components/DataLogger/LogEntry.tsx`   | 单条数据显示                 |
@@ -737,15 +804,14 @@ flowchart TB
         SerialStore[Serial Store]
         BleStore[Ble Store]
         ProtocolStore[Protocol Store]
-        SystemStore[System Store]
-        ConnectionStore[Connection Store]
-        UIConfigStore[UI Config Store]
+        ConfigStore[Config Store]
         DashboardStore[Dashboard Store]
         Gh3036Store[GH3036 Store]
         CsvChartStore[CSV Chart Store]
         WaveformStore[Waveform Store]
         LogStore[Log Store]
         PageTabsStore[Page Tabs Store]
+        NotificationStore[Notification Store]
     end
     
     subgraph Hook层
@@ -943,11 +1009,16 @@ flowchart TB
 
 ### 7.11 事件（前端监听）
 
-| 事件名                 | 数据格式         | 说明           |
-| ------------------- | ------------ | ------------ |
-| `serial-data`       | `{ port_name, data }` | 串口接收数据通知     |
-| `ble-notify`        | `{ deviceId, characteristicUuid, data, timestamp }` | BLE 数据通知     |
-| `websocket-status`  | `{ id, status }` | WebSocket 连接状态变化 |
+| 事件名                     | 数据格式                                          | 说明              |
+| ----------------------- | --------------------------------------------- | --------------- |
+| `serial:data`           | `{ device_id, data: number[], timestamp }`   | 串口接收数据通知       |
+| `serial:connected`      | `{ port_name, timestamp }`                   | 串口连接事件          |
+| `serial:disconnected`   | `{ port_name, timestamp }`                   | 串口断开连接事件       |
+| `ble:data`             | `{ device_id, address, characteristic_uuid, data: number[], timestamp }` | BLE 数据通知     |
+| `ble:connected`        | `{ address, name?, timestamp }`              | BLE 连接事件        |
+| `ble:disconnected`     | `{ address, name?, timestamp }`              | BLE 断开连接事件      |
+| `gh3036:frame`         | `{ function_id, function_name, frame_id, timestamp, channel_count, channels }` | GH3036 数据帧 |
+| `protocol:parsed`       | `{ plugin_id, device_id, original_data, parsed_data, timestamp }` | 协议解析完成事件   |
 
 ***
 

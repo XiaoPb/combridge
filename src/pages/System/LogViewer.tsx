@@ -24,12 +24,15 @@ const LogViewer: React.FC = () => {
   const logs = useLogStore((state) => state.logs);
   const clearLogs = useLogStore((state) => state.clearLogs);
   const timezone = useConfigStore((state) => state.settings.timezone);
+  const hasHydrated = useConfigStore((state) => state._hasHydrated);
   const [filteredLogs, setFilteredLogs] = useState<LogEntry[]>([]);
   const [levelFilter, setLevelFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('');
   const [searchText, setSearchText] = useState('');
   const [autoScroll, setAutoScroll] = useState(true);
   const tableRef = useRef<HTMLDivElement>(null);
+
+  const effectiveTimezone = hasHydrated ? timezone : 'Asia/Shanghai';
 
   useEffect(() => {
     let filtered: LogEntry[] = logs;
@@ -65,7 +68,7 @@ const LogViewer: React.FC = () => {
 
   const handleExport = () => {
     const content = logs
-      .map((log: LogEntry) => `[${formatLogTimestamp(log.timestamp, timezone)}] [${log.level.toUpperCase()}] [${log.source}] ${log.message}`)
+      .map((log: LogEntry) => `[${formatLogTimestamp(log.timestamp, effectiveTimezone)}] [${log.level.toUpperCase()}] [${log.source}] ${log.message}`)
       .join('\n');
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -83,7 +86,7 @@ const LogViewer: React.FC = () => {
       key: 'timestamp',
       width: 120,
       render: (timestamp: number) => (
-        <Text style={{ fontSize: 12 }}>{formatLogTimestamp(timestamp, timezone)}</Text>
+        <Text style={{ fontSize: 12 }}>{formatLogTimestamp(timestamp, effectiveTimezone)}</Text>
       ),
     },
     {

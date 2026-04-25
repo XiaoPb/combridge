@@ -98,7 +98,15 @@ export const gh3036Api = {
 
 export const factoryTestApi = {
   async start(): Promise<void> {
-    await invoke<void>('gh3036_factory_test_start');
+    const ts = () => new Date().toISOString().substr(11, 12);
+    console.log(`[${ts()}] [factoryTestApi] 调用 gh3036_factory_test_start`);
+    try {
+      await invoke<void>('gh3036_factory_test_start');
+      console.log(`[${ts()}] [factoryTestApi] gh3036_factory_test_start 成功`);
+    } catch (err) {
+      console.error(`[${ts()}] [factoryTestApi] gh3036_factory_test_start 失败:`, err);
+      throw err;
+    }
   },
 
   async stop(): Promise<void> {

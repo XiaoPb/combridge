@@ -86,6 +86,7 @@ interface Gh3036State {
   };
   
   _factoryTestSubscribing: boolean;
+  factoryTestListenerId: number;
   
   rpcConfig: {
     workMode: string;
@@ -175,8 +176,8 @@ interface Gh3036State {
   continueFactoryTest: () => Promise<void>;
   setFactoryTestConfigDirAsync: (configDir: string) => Promise<void>;
   validateFactoryTestConfig: () => Promise<void>;
-  subscribeFactoryTestEvents: () => Promise<void>;
-  unsubscribeFactoryTestEvents: () => void;
+  subscribeFactoryTestEvents: (listenerId?: number) => Promise<void>;
+  unsubscribeFactoryTestEvents: (listenerId?: number) => void;
 }
 
 interface ChartGroupConfig {
@@ -243,6 +244,7 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   eventListeners: {},
   
   _factoryTestSubscribing: false,
+  factoryTestListenerId: 0,
   
   rpcConfig: {
     workMode: '0',
@@ -706,20 +708,28 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     factoryTest: { ...state.factoryTest, result },
   })),
   
-  resetFactoryTest: () => set((state) => ({
-    factoryTest: {
-      ...state.factoryTest,
-      status: 'idle',
-      currentStep: 'idle',
-      progress: 0,
-      message: '',
-      stepResults: [],
-      result: null,
-      isRunning: false,
-    },
-  })),
+  resetFactoryTest: () => {
+    const ts = () => new Date().toISOString().substr(11, 12);
+    console.log(`[${ts()}] [Gh3036Store] resetFactoryTest 被调用`);
+    set((state) => ({
+      factoryTest: {
+        ...state.factoryTest,
+        status: 'idle',
+        currentStep: 'idle',
+        progress: 0,
+        message: '',
+        stepResults: [],
+        result: null,
+        isRunning: false,
+      },
+    }));
+    console.log(`[${ts()}] [Gh3036Store] resetFactoryTest 完成`);
+  },
   
   startFactoryTest: async () => {
+    const ts = () => new Date().toISOString().substr(11, 12);
+    console.log(`[${ts()}] [Gh3036Store] startFactoryTest 被调用`);
+    
     set((state) => ({
       factoryTest: {
         ...state.factoryTest,
@@ -732,9 +742,12 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     }));
     
     try {
+      console.log(`[${ts()}] [Gh3036Store] 调用 factoryTestApi.start()`);
       await factoryTestApi.start();
+      console.log(`[${ts()}] [Gh3036Store] factoryTestApi.start() 调用成功`);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '启动产测失败';
+      console.error(`[${ts()}] [Gh3036Store] 启动产测失败:`, err);
       set((state) => ({
         factoryTest: {
           ...state.factoryTest,
@@ -831,9 +844,10 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     }
   },
   
-  subscribeFactoryTestEvents: async () => {
+  subscribeFactoryTestEvents: async (listenerId?: number) => {
     const ts = () => new Date().toISOString().substr(11, 12);
     const { eventListeners, _factoryTestSubscribing } = get();
+    const subscribeId = listenerId ?? get().factoryTestListenerId + 1;
     
     if (eventListeners.factoryTest) {
       console.log(`[${ts()}] [Gh3036Store] 产测事件已订阅，跳过重复订阅`);
@@ -845,7 +859,7 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
       return;
     }
     
-    set({ _factoryTestSubscribing: true });
+    set({ _factoryTestSubscribing: true, factoryTestListenerId: subscribeId });
     
     try {
       console.log(`[${ts()}] [Gh3036Store] 开始订阅产测事件...`);
@@ -907,8 +921,8 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
         }
       });
       
-      if (!get()._factoryTestSubscribing) {
-        console.log(`[${ts()}] [Gh3036Store] 订阅期间组件已卸载，清理刚完成的订阅`);
+      if (!get()._factoryTestSubscribing || get().factoryTestListenerId !== subscribeId) {
+        console.log(`[${ts()}] [Gh3036Store] 订阅期间组件已卸载或已被更新，清理刚完成的订阅`);
         factoryTestUnlisten();
         return;
       }
@@ -927,10 +941,15 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     }
   },
   
-  unsubscribeFactoryTestEvents: () => {
+  unsubscribeFactoryTestEvents: (listenerId?: number) => {
     const ts = () => new Date().toISOString().substr(11, 12);
-    const { eventListeners } = get();
+    const { eventListeners, factoryTestListenerId } = get();
     
+    if (listenerId !== undefined && listenerId !== factoryTestListenerId) {
+      console.log(`[${ts()}] [Gh3036Store] 跳过过期的产测事件卸载, listenerId=${listenerId}, current=${factoryTestListenerId}`);
+      return;
+    }
+
     set({ _factoryTestSubscribing: false });
     
     if (eventListeners.factoryTest) {
@@ -941,6 +960,7 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
           ...state.eventListeners,
           factoryTest: undefined,
         },
+        factoryTestListenerId: 0,
       }));
     }
   },

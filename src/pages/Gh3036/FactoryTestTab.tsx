@@ -44,12 +44,16 @@ const FactoryTestTab: React.FC = () => {
     resetFactoryTest,
   } = useGh3036Store();
 
+  const factoryTestListenerIdRef = React.useRef<number | null>(null);
   const [showEnvSwitchModal, setShowEnvSwitchModal] = useState(false);
 
   useEffect(() => {
-    subscribeFactoryTestEvents();
+    const listenerId = Date.now() + Math.random();
+    factoryTestListenerIdRef.current = listenerId;
+
+    subscribeFactoryTestEvents(listenerId);
     return () => {
-      unsubscribeFactoryTestEvents();
+      unsubscribeFactoryTestEvents(factoryTestListenerIdRef.current ?? undefined);
     };
   }, []);
 
@@ -76,8 +80,15 @@ const FactoryTestTab: React.FC = () => {
   };
 
   const handleStart = async () => {
+    const ts = () => new Date().toISOString().substr(11, 12);
+    console.log(`[${ts()}] [FactoryTestTab] handleStart 被调用`);
+    console.log(`[${ts()}] [FactoryTestTab] 当前状态: isRunning=${factoryTest.isRunning}, status=${factoryTest.status}`);
+    console.log(`[${ts()}] [FactoryTestTab] configValidation:`, factoryTest.configValidation);
+    
     resetFactoryTest();
+    console.log(`[${ts()}] [FactoryTestTab] resetFactoryTest 完成，准备调用 startFactoryTest`);
     await startFactoryTest();
+    console.log(`[${ts()}] [FactoryTestTab] startFactoryTest 完成`);
   };
 
   const handleStop = async () => {

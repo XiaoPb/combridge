@@ -213,10 +213,16 @@ pub async fn get_app_version() -> Result<String> {
     Ok(env!("CARGO_PKG_VERSION").to_string())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimezoneConfig {
+    pub timezone: String,
+}
+
 #[tauri::command]
-pub async fn set_timezone_config(timezone: String) -> Result<()> {
-    set_timezone(&timezone);
-    info!("时区已设置为: {}", timezone);
+pub async fn set_timezone_config(config: TimezoneConfig) -> Result<()> {
+    set_timezone(&config.timezone);
+    info!("时区已设置为: {}", config.timezone);
     Ok(())
 }
 

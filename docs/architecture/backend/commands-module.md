@@ -82,13 +82,15 @@
     commands::protocol::get_protocol,
     commands::protocol::get_bound_protocols,
 
-    // 系统命令 (10 + 2 feature-gated)
+    // 系统命令 (14 + 2 feature-gated)
     commands::system::get_system_info,
     commands::system::get_system_status,
     commands::system::configure_log,
     commands::system::get_log_config,
     commands::system::get_runtime_status,
     commands::system::get_app_version,
+    commands::system::set_timezone_config,
+    commands::system::get_timezone_config,
     commands::system::get_platform,
     commands::system::open_url,
     commands::system::show_in_folder,
@@ -108,13 +110,15 @@
     commands::state::get_connected_devices,
     commands::state::get_window_state,
 
-    // 偏好设置命令 (4)
+    // 偏好设置命令 (6)
     commands::preferences::get_preferences,
     commands::preferences::save_preferences,
     commands::preferences::update_serial_preferences,
     commands::preferences::update_ble_preferences,
+    commands::preferences::update_waveform_preferences,
+    commands::preferences::update_gh3036_channel_preferences,
 
-    // GH3036 命令 (13)
+    // GH3036 命令 (26)
     commands::gh3036::gh3036_init,
     commands::gh3036::gh3036_is_initialized,
     commands::gh3036::gh3036_configure_tx_channel,
@@ -124,10 +128,21 @@
     commands::gh3036::gh3036_set_csv_config,
     commands::gh3036::gh3036_get_csv_config,
     commands::gh3036::gh3036_get_rpc_commands,
+    commands::gh3036::gh3036_get_version_types,
     commands::gh3036::gh3036_execute_rpc,
     commands::gh3036::gh3036_subscribe_events,
     commands::gh3036::gh3036_get_library_status,
-    commands::gh3036::gh3036_on_rx_data,
+    commands::gh3036::gh3036_load_config_file,
+    commands::gh3036::gh3036_factory_test_start,
+    commands::gh3036::gh3036_factory_test_stop,
+    commands::gh3036::gh3036_factory_test_status,
+    commands::gh3036::gh3036_factory_test_continue,
+    commands::gh3036::gh3036_factory_test_set_config_dir,
+    commands::gh3036::gh3036_factory_test_validate_config,
+    commands::gh3036::gh3036_factory_test_get_result,
+    commands::gh3036::gh3036_validate_threshold_config,
+    commands::gh3036::gh3036_get_threshold_config,
+    commands::gh3036::gh3036_get_evaluation_result,
 
     // 波形命令 (8)
     commands::waveform::waveform_create_buffer,
@@ -239,6 +254,8 @@
 | `get_log_config` | 无 | `LogConfig` | 获取日志配置 |
 | `get_runtime_status` | 无 | `RuntimeStatus` | 获取运行时状态 |
 | `get_app_version` | 无 | `String` | 获取版本 |
+| `set_timezone_config` | `config: TimezoneConfig` | `()` | 设置时区配置 |
+| `get_timezone_config` | 无 | `String` | 获取时区配置 |
 | `get_platform` | 无 | `String` | 获取平台 |
 | `open_url` | `url: String` | `()` | 打开 URL |
 | `show_in_folder` | `path: String` | `()` | 在文件夹显示 |
@@ -267,6 +284,50 @@
 | `save_preferences` | `prefs: Preferences` | `()` | 保存偏好设置 |
 | `update_serial_preferences` | `display_format, display_mode, send_format, append_newline, newline_type, auto_scroll` | `()` | 更新串口偏好 |
 | `update_ble_preferences` | `display_format, auto_scroll, input_format, without_response, config_collapsed, gatt_collapsed, panel_collapsed` | `()` | 更新 BLE 偏好 |
+| `update_waveform_preferences` | `display_rows, refresh_interval, sidebar_collapsed` | `()` | 更新波形偏好 |
+| `update_gh3036_channel_preferences` | `connection_type, serial_port, ble_device, tx_char, rx_char` | `()` | 更新 GH3036 通道偏好 |
+
+## GH3036 命令
+
+| 命令 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `gh3036_init` | 无 | `()` | 初始化 GH3036 |
+| `gh3036_is_initialized` | 无 | `bool` | 检查初始化状态 |
+| `gh3036_configure_tx_channel` | `channel_type, device_id, characteristic_uuid` | `()` | 配置 TX 通道 |
+| `gh3036_configure_rx_channel` | `channel_type, device_id, characteristic_uuid` | `()` | 配置 RX 通道 |
+| `gh3036_get_channels` | 无 | `(Option<ChannelConfig>, Option<ChannelConfig>)` | 获取通道配置 |
+| `gh3036_send_data` | `data: Vec<u8>` | `()` | 发送数据 |
+| `gh3036_set_csv_config` | `enabled, output_dir` | `()` | 设置 CSV 配置 |
+| `gh3036_get_csv_config` | 无 | `CsvConfig` | 获取 CSV 配置 |
+| `gh3036_get_rpc_commands` | 无 | `Vec<RpcCommand>` | 获取 RPC 命令列表 |
+| `gh3036_get_version_types` | 无 | `Vec<VersionTypeConfig>` | 获取版本类型列表 |
+| `gh3036_execute_rpc` | `command_key, params` | `Vec<u8>` | 执行 RPC 命令 |
+| `gh3036_subscribe_events` | 无 | `bool` | 订阅事件 |
+| `gh3036_get_library_status` | 无 | `(bool, bool)` | 获取库状态 |
+| `gh3036_load_config_file` | `file_path: String` | `Vec<String>` | 加载配置文件 |
+| `gh3036_factory_test_start` | 无 | `()` | 启动工厂测试 |
+| `gh3036_factory_test_stop` | 无 | `()` | 停止工厂测试 |
+| `gh3036_factory_test_status` | 无 | `(FactoryTestStatus, FactoryTestStep)` | 获取工厂测试状态 |
+| `gh3036_factory_test_continue` | 无 | `()` | 继续工厂测试 |
+| `gh3036_factory_test_set_config_dir` | `config_dir: String` | `()` | 设置工厂测试配置目录 |
+| `gh3036_factory_test_validate_config` | 无 | `ConfigValidationResult` | 验证工厂测试配置 |
+| `gh3036_factory_test_get_result` | 无 | `Option<FactoryTestResult>` | 获取工厂测试结果 |
+| `gh3036_validate_threshold_config` | 无 | `ThresholdConfigValidation` | 验证阈值配置 |
+| `gh3036_get_threshold_config` | 无 | `Option<FactoryThresholdConfig>` | 获取阈值配置 |
+| `gh3036_get_evaluation_result` | 无 | `Option<FactoryEvaluationResult>` | 获取评估结果 |
+
+## 波形命令
+
+| 命令 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `waveform_create_buffer` | `buffer_id: String, config: WaveformBufferConfig` | `()` | 创建缓冲区 |
+| `waveform_remove_buffer` | `buffer_id: String` | `()` | 移除缓冲区 |
+| `waveform_configure_parser` | `buffer_id: String, config: ParserConfig` | `()` | 配置解析器 |
+| `waveform_parse_and_store` | `buffer_id: String, data: String` | `()` | 解析并存储数据 |
+| `waveform_read_data` | `buffer_id: String, rows: usize` | `WaveformData` | 读取数据 |
+| `waveform_get_status` | `buffer_id: String` | `WaveformStatus` | 获取状态 |
+| `waveform_clear_buffer` | `buffer_id: String` | `()` | 清空缓冲区 |
+| `waveform_list_buffers` | 无 | `Vec<String>` | 列出所有缓冲区 |
 
 ## Dashboard 命令
 
@@ -298,13 +359,13 @@
 | AT 专用 | 7 | AT 模式特有命令 |
 | WebSocket | 6 | WebSocket 客户端 |
 | 协议 | 9 | Lua 协议插件管理 |
-| 系统 | 12 | 系统信息与窗口管理（含 2 个 feature-gated） |
+| 系统 | 16 | 系统信息与窗口管理（含 2 个 feature-gated） |
 | 状态 | 7 | 应用状态管理 |
-| 偏好设置 | 4 | 用户偏好配置 |
-| GH3036 | 13 | GH3036 芯片操作 |
+| 偏好设置 | 6 | 用户偏好配置 |
+| GH3036 | 26 | GH3036 芯片操作（含工厂测试） |
 | 波形 | 8 | 波形数据缓冲 |
 | Dashboard | 14 | 数据仪表盘 |
-| **总计** | **105** | - |
+| **总计** | **124** | - |
 
 ## 命令实现示例
 
@@ -343,3 +404,4 @@ pub async fn open_serial_port(
 - [设备管理](./device-manager.md) - 设备操作
 - [状态管理](./state-module.md) - 状态命令
 - [Dashboard](./dashboard-module.md) - Dashboard 命令详情
+- [波形模块](./waveform-module.md) - 波形命令详情

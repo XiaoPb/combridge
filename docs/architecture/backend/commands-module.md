@@ -25,7 +25,7 @@
 
 ```rust
 .invoke_handler(tauri::generate_handler![
-    // 串口命令 (7)
+    // 串口命令 (8)
     commands::serial::scan_serial_ports,
     commands::serial::open_serial_port,
     commands::serial::close_serial_port,
@@ -33,8 +33,9 @@
     commands::serial::get_open_ports,
     commands::serial::is_port_open,
     commands::serial::export_serial_data,
+    commands::serial::get_serial_cache,
 
-    // BLE 通用命令 (18)
+    // BLE 通用命令 (19)
     commands::ble::configure_ble,
     commands::ble::scan_ble_devices,
     commands::ble::stop_ble_scan,
@@ -53,6 +54,7 @@
     commands::ble::is_ble_configured,
     commands::ble::set_ble_mtu,
     commands::ble::get_ble_subscriptions,
+    commands::ble::get_ble_cache,
 
     // AT 专用 BLE 命令 (7)
     commands::ble::get_at_config,
@@ -177,12 +179,13 @@
 | 命令 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
 | `scan_serial_ports` | 无 | `Vec<PortInfo>` | 扫描可用串口 |
-| `open_serial_port` | `config: SerialPortConfig` | `()` | 打开串口 |
+| `open_serial_port` | `config: SerialPortConfigDto` | `()` | 打开串口 |
 | `close_serial_port` | `port_name: String` | `()` | 关闭串口 |
 | `send_serial_data` | `port_name: String, data: Vec<u8>` | `usize` | 发送数据 |
 | `get_open_ports` | 无 | `Vec<String>` | 获取已打开端口 |
 | `is_port_open` | `port_name: String` | `bool` | 检查端口状态 |
-| `export_serial_data` | `port_name: String, path: String` | `()` | 导出数据 |
+| `export_serial_data` | `port_name: String, all_data: Vec<ExportDataEntry>, rx_data: Vec<u8>` | `ExportResult` | 导出数据到日志文件 |
+| `get_serial_cache` | `port_name: String` | `CacheData` | 获取串口缓存数据 |
 
 ## BLE 通用命令
 
@@ -206,6 +209,7 @@
 | `is_ble_configured` | 无 | `bool` | 检查配置状态 |
 | `set_ble_mtu` | `device_id: String, mtu: u16` | `u16` | 设置 MTU |
 | `get_ble_subscriptions` | `device_id: String` | `Vec<String>` | 获取订阅列表 |
+| `get_ble_cache` | `characteristic_uuid: String` | `CacheData` | 获取 BLE 缓存数据 |
 
 ## AT 专用 BLE 命令
 
@@ -234,15 +238,15 @@
 
 | 命令 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `load_protocol` | `path: String` | `String` | 加载协议 |
-| `unload_protocol` | `id: String` | `()` | 卸载协议 |
-| `enable_protocol` | `id: String` | `()` | 启用协议 |
-| `disable_protocol` | `id: String` | `()` | 禁用协议 |
-| `bind_protocol` | `device_id: String, protocol_id: String` | `()` | 绑定协议 |
-| `unbind_protocol` | `device_id: String` | `()` | 解绑协议 |
+| `load_protocol` | `plugin_id: String, path: String` | `PluginInfo` | 加载协议 |
+| `unload_protocol` | `plugin_id: String` | `()` | 卸载协议 |
+| `enable_protocol` | `plugin_id: String` | `()` | 启用协议 |
+| `disable_protocol` | `plugin_id: String` | `()` | 禁用协议 |
+| `bind_protocol` | `plugin_id: String, device_id: String` | `()` | 绑定协议到设备 |
+| `unbind_protocol` | `plugin_id: String, device_id: String` | `()` | 解绑协议 |
 | `list_protocols` | 无 | `Vec<PluginInfo>` | 列出协议 |
-| `get_protocol` | `id: String` | `Option<PluginInfo>` | 获取协议 |
-| `get_bound_protocols` | 无 | `HashMap<String, String>` | 获取绑定 |
+| `get_protocol` | `plugin_id: String` | `PluginInfo` | 获取协议信息 |
+| `get_bound_protocols` | `device_id: String` | `Vec<PluginInfo>` | 获取设备绑定的协议列表 |
 
 ## 系统命令
 
@@ -354,8 +358,8 @@
 
 | 模块 | 数量 | 说明 |
 |------|------|------|
-| 串口 | 7 | 基础串口操作 |
-| BLE 通用 | 18 | 原生/AT 通用 BLE 操作 |
+| 串口 | 8 | 基础串口操作（含缓存获取） |
+| BLE 通用 | 19 | 原生/AT 通用 BLE 操作（含缓存获取） |
 | AT 专用 | 7 | AT 模式特有命令 |
 | WebSocket | 6 | WebSocket 客户端 |
 | 协议 | 9 | Lua 协议插件管理 |
@@ -365,7 +369,7 @@
 | GH3036 | 26 | GH3036 芯片操作（含工厂测试） |
 | 波形 | 8 | 波形数据缓冲 |
 | Dashboard | 14 | 数据仪表盘 |
-| **总计** | **124** | - |
+| **总计** | **126** | - |
 
 ## 命令实现示例
 

@@ -1,6 +1,6 @@
 # ComBridge API 文档
 
-本文档整理了 ComBridge 项目前后端交互的所有 Tauri 命令格式，采用蛇形命名（snake_case）规范。
+本文档整理了 ComBridge 项目前后端交互的所有 Tauri 命令格式，采用蛇形命名（snake\_case）规范。
 
 ## 目录
 
@@ -18,11 +18,11 @@
 - [类型定义汇总](#类型定义汇总)
 - [命名规范](#命名规范)
 
----
+***
 
 ## 串口模块 (Serial)
 
-### scan_serial_ports
+### scan\_serial\_ports
 
 扫描可用串口列表。
 
@@ -44,9 +44,9 @@ interface PortInfo {
 }
 ```
 
----
+***
 
-### open_serial_port
+### open\_serial\_port
 
 打开指定串口。
 
@@ -54,17 +54,17 @@ interface PortInfo {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| config | object | 是 | 串口配置对象 |
-| config.port_name | string | 是 | 端口名称 |
-| config.baud_rate | string | 否 | 波特率（字符串），如 "9600", "115200" |
-| config.data_bits | number | 否 | 数据位（5, 6, 7, 8），默认 8 |
-| config.parity | string | 否 | 校验位（"none", "odd", "even"），默认 "none" |
-| config.stop_bits | number | 否 | 停止位（1, 2），默认 1 |
-| config.flow_control | string | 否 | 流控制（"none", "hardware", "software"），默认 "none" |
-| config.timeout_ms | number | 否 | 超时时间（毫秒），默认 1000 |
-| config.pack_timeout_ms | number | 否 | 数据包超时（毫秒），默认 50 |
+| 参数名                      | 类型     | 必填 | 描述                                            |
+| ------------------------ | ------ | -- | --------------------------------------------- |
+| config                   | object | 是  | 串口配置对象                                        |
+| config.port\_name        | string | 是  | 端口名称                                          |
+| config.baud\_rate        | string | 否  | 波特率（字符串），如 "9600", "115200"                   |
+| config.data\_bits        | number | 否  | 数据位（5, 6, 7, 8），默认 8                          |
+| config.parity            | string | 否  | 校验位（"none", "odd", "even"），默认 "none"          |
+| config.stop\_bits        | number | 否  | 停止位（1, 2），默认 1                                |
+| config.flow\_control     | string | 否  | 流控制（"none", "hardware", "software"），默认 "none" |
+| config.timeout\_ms       | number | 否  | 超时时间（毫秒），默认 1000                              |
+| config.pack\_timeout\_ms | number | 否  | 数据包超时（毫秒），默认 50                               |
 
 **返回**: `void`
 
@@ -81,9 +81,9 @@ await invoke('open_serial_port', {
 });
 ```
 
----
+***
 
-### close_serial_port
+### close\_serial\_port
 
 关闭指定串口。
 
@@ -91,9 +91,9 @@ await invoke('open_serial_port', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| port_name | string | 是 | 端口名称 |
+| 参数名        | 类型     | 必填 | 描述   |
+| ---------- | ------ | -- | ---- |
+| port\_name | string | 是  | 端口名称 |
 
 **返回**: `void`
 
@@ -101,9 +101,9 @@ await invoke('open_serial_port', {
 await invoke('close_serial_port', { portName: 'COM1' });
 ```
 
----
+***
 
-### send_serial_data
+### send\_serial\_data
 
 向串口发送数据。
 
@@ -111,10 +111,10 @@ await invoke('close_serial_port', { portName: 'COM1' });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| port_name | string | 是 | 端口名称 |
-| data | number[] | 是 | 要发送的字节数据 |
+| 参数名        | 类型        | 必填 | 描述       |
+| ---------- | --------- | -- | -------- |
+| port\_name | string    | 是  | 端口名称     |
+| data       | number\[] | 是  | 要发送的字节数据 |
 
 **返回**: `number` (发送的字节数)
 
@@ -125,9 +125,9 @@ const bytesWritten = await invoke<number>('send_serial_data', {
 });
 ```
 
----
+***
 
-### get_open_ports
+### get\_open\_ports
 
 获取已打开的端口列表。
 
@@ -141,9 +141,9 @@ const bytesWritten = await invoke<number>('send_serial_data', {
 const ports = await invoke<string[]>('get_open_ports');
 ```
 
----
+***
 
-### is_port_open
+### is\_port\_open
 
 检查端口是否已打开。
 
@@ -151,9 +151,9 @@ const ports = await invoke<string[]>('get_open_ports');
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| port_name | string | 是 | 端口名称 |
+| 参数名        | 类型     | 必填 | 描述   |
+| ---------- | ------ | -- | ---- |
+| port\_name | string | 是  | 端口名称 |
 
 **返回**: `boolean`
 
@@ -161,9 +161,9 @@ const ports = await invoke<string[]>('get_open_ports');
 const isOpen = await invoke<boolean>('is_port_open', { portName: 'COM1' });
 ```
 
----
+***
 
-### export_serial_data
+### export\_serial\_data
 
 导出串口数据到文件。
 
@@ -171,11 +171,11 @@ const isOpen = await invoke<boolean>('is_port_open', { portName: 'COM1' });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| port_name | string | 是 | 端口名称 |
-| all_data | ExportDataEntry[] | 是 | 所有数据条目 |
-| rx_data | number[] | 是 | 接收数据原始字节 |
+| 参数名        | 类型                 | 必填 | 描述       |
+| ---------- | ------------------ | -- | -------- |
+| port\_name | string             | 是  | 端口名称     |
+| all\_data  | ExportDataEntry\[] | 是  | 所有数据条目   |
+| rx\_data   | number\[]          | 是  | 接收数据原始字节 |
 
 **返回**: `ExportResult`
 
@@ -198,11 +198,11 @@ interface ExportDataEntry {
 }
 ```
 
----
+***
 
 ## BLE 模块 (BLE)
 
-### configure_ble
+### configure\_ble
 
 配置 BLE 工作模式。
 
@@ -210,16 +210,16 @@ interface ExportDataEntry {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| config | object | 是 | BLE 配置对象 |
-| config.mode | string | 是 | 模式："native" 或 "at" |
-| config.port_name | string | AT 模式必填 | AT 模式下的串口名称 |
-| config.baud_rate | number | 否 | AT 模式波特率，默认 115200 |
-| config.timeout_ms | number | 否 | AT 指令超时，默认 1000 |
-| config.tx_uuid | string | 否 | AT 模式写特征 UUID |
-| config.rx_uuid | string | 否 | AT 模式通知特征 UUID |
-| config.srv_uuid | string | 否 | AT 模式服务 UUID |
+| 参数名                | 类型     | 必填      | 描述                 |
+| ------------------ | ------ | ------- | ------------------ |
+| config             | object | 是       | BLE 配置对象           |
+| config.mode        | string | 是       | 模式："native" 或 "at" |
+| config.port\_name  | string | AT 模式必填 | AT 模式下的串口名称        |
+| config.baud\_rate  | number | 否       | AT 模式波特率，默认 115200 |
+| config.timeout\_ms | number | 否       | AT 指令超时，默认 1000    |
+| config.tx\_uuid    | string | 否       | AT 模式写特征 UUID      |
+| config.rx\_uuid    | string | 否       | AT 模式通知特征 UUID     |
+| config.srv\_uuid   | string | 否       | AT 模式服务 UUID       |
 
 **返回**: `void`
 
@@ -233,9 +233,9 @@ await invoke('configure_ble', {
 });
 ```
 
----
+***
 
-### scan_ble_devices
+### scan\_ble\_devices
 
 扫描周围 BLE 设备。
 
@@ -243,9 +243,9 @@ await invoke('configure_ble', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| duration_ms | number | 是 | 扫描持续时间（毫秒） |
+| 参数名          | 类型     | 必填 | 描述         |
+| ------------ | ------ | -- | ---------- |
+| duration\_ms | number | 是  | 扫描持续时间（毫秒） |
 
 **返回**: `BleDevice[]`
 
@@ -262,9 +262,9 @@ interface BleDevice {
 }
 ```
 
----
+***
 
-### stop_ble_scan
+### stop\_ble\_scan
 
 停止 BLE 扫描。
 
@@ -278,9 +278,9 @@ interface BleDevice {
 const devices = await invoke<BleDevice[]>('stop_ble_scan');
 ```
 
----
+***
 
-### connect_ble
+### connect\_ble
 
 连接 BLE 设备。
 
@@ -288,9 +288,9 @@ const devices = await invoke<BleDevice[]>('stop_ble_scan');
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| device_id | string | 是 | 设备地址 |
+| 参数名        | 类型     | 必填 | 描述   |
+| ---------- | ------ | -- | ---- |
+| device\_id | string | 是  | 设备地址 |
 
 **返回**: `BleConnection`
 
@@ -298,9 +298,9 @@ const devices = await invoke<BleDevice[]>('stop_ble_scan');
 const connection = await invoke<BleConnection>('connect_ble', { deviceId: 'AA:BB:CC:DD:EE:FF' });
 ```
 
----
+***
 
-### disconnect_ble
+### disconnect\_ble
 
 断开 BLE 连接。
 
@@ -308,9 +308,9 @@ const connection = await invoke<BleConnection>('connect_ble', { deviceId: 'AA:BB
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| device_id | string | 是 | 设备地址 |
+| 参数名        | 类型     | 必填 | 描述   |
+| ---------- | ------ | -- | ---- |
+| device\_id | string | 是  | 设备地址 |
 
 **返回**: `void`
 
@@ -318,9 +318,9 @@ const connection = await invoke<BleConnection>('connect_ble', { deviceId: 'AA:BB
 await invoke('disconnect_ble', { deviceId: 'AA:BB:CC:DD:EE:FF' });
 ```
 
----
+***
 
-### get_ble_connections
+### get\_ble\_connections
 
 获取当前已连接的 BLE 设备列表。
 
@@ -334,9 +334,9 @@ await invoke('disconnect_ble', { deviceId: 'AA:BB:CC:DD:EE:FF' });
 const connections = await invoke<BleConnection[]>('get_ble_connections');
 ```
 
----
+***
 
-### discover_ble_services
+### discover\_ble\_services
 
 发现 BLE 设备的所有 GATT 服务。
 
@@ -344,9 +344,9 @@ const connections = await invoke<BleConnection[]>('get_ble_connections');
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| device_id | string | 是 | 设备地址 |
+| 参数名        | 类型     | 必填 | 描述   |
+| ---------- | ------ | -- | ---- |
+| device\_id | string | 是  | 设备地址 |
 
 **返回**: `BleService[]`
 
@@ -356,9 +356,9 @@ const services = await invoke<BleService[]>('discover_ble_services', {
 });
 ```
 
----
+***
 
-### discover_ble_characteristics
+### discover\_ble\_characteristics
 
 发现指定服务的所有 GATT 特征。
 
@@ -366,10 +366,10 @@ const services = await invoke<BleService[]>('discover_ble_services', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| device_id | string | 是 | 设备地址 |
-| service_uuid | string | 是 | 服务 UUID |
+| 参数名           | 类型     | 必填 | 描述      |
+| ------------- | ------ | -- | ------- |
+| device\_id    | string | 是  | 设备地址    |
+| service\_uuid | string | 是  | 服务 UUID |
 
 **返回**: `BleCharacteristic[]`
 
@@ -380,9 +380,9 @@ const chars = await invoke<BleCharacteristic[]>('discover_ble_characteristics', 
 });
 ```
 
----
+***
 
-### read_ble_characteristic
+### read\_ble\_characteristic
 
 读取特征值。
 
@@ -390,10 +390,10 @@ const chars = await invoke<BleCharacteristic[]>('discover_ble_characteristics', 
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| device_id | string | 是 | 设备地址 |
-| characteristic_uuid | string | 是 | 特征 UUID |
+| 参数名                  | 类型     | 必填 | 描述      |
+| -------------------- | ------ | -- | ------- |
+| device\_id           | string | 是  | 设备地址    |
+| characteristic\_uuid | string | 是  | 特征 UUID |
 
 **返回**: `number[]`
 
@@ -404,9 +404,9 @@ const data = await invoke<number[]>('read_ble_characteristic', {
 });
 ```
 
----
+***
 
-### write_ble_characteristic
+### write\_ble\_characteristic
 
 写入特征值（等待响应）。
 
@@ -414,11 +414,11 @@ const data = await invoke<number[]>('read_ble_characteristic', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| device_id | string | 是 | 设备地址 |
-| characteristic_uuid | string | 是 | 特征 UUID |
-| data | number[] | 是 | 要写入的数据 |
+| 参数名                  | 类型        | 必填 | 描述      |
+| -------------------- | --------- | -- | ------- |
+| device\_id           | string    | 是  | 设备地址    |
+| characteristic\_uuid | string    | 是  | 特征 UUID |
+| data                 | number\[] | 是  | 要写入的数据  |
 
 **返回**: `void`
 
@@ -430,9 +430,9 @@ await invoke('write_ble_characteristic', {
 });
 ```
 
----
+***
 
-### write_ble_without_response
+### write\_ble\_without\_response
 
 无响应写入特征值。
 
@@ -440,11 +440,11 @@ await invoke('write_ble_characteristic', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| device_id | string | 是 | 设备地址 |
-| characteristic_uuid | string | 是 | 特征 UUID |
-| data | number[] | 是 | 要写入的数据 |
+| 参数名                  | 类型        | 必填 | 描述      |
+| -------------------- | --------- | -- | ------- |
+| device\_id           | string    | 是  | 设备地址    |
+| characteristic\_uuid | string    | 是  | 特征 UUID |
+| data                 | number\[] | 是  | 要写入的数据  |
 
 **返回**: `void`
 
@@ -456,9 +456,9 @@ await invoke('write_ble_without_response', {
 });
 ```
 
----
+***
 
-### subscribe_ble_notify
+### subscribe\_ble\_notify
 
 订阅特征通知。
 
@@ -466,10 +466,10 @@ await invoke('write_ble_without_response', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| device_id | string | 是 | 设备地址 |
-| characteristic_uuid | string | 是 | 特征 UUID |
+| 参数名                  | 类型     | 必填 | 描述      |
+| -------------------- | ------ | -- | ------- |
+| device\_id           | string | 是  | 设备地址    |
+| characteristic\_uuid | string | 是  | 特征 UUID |
 
 **返回**: `void`
 
@@ -480,9 +480,9 @@ await invoke('subscribe_ble_notify', {
 });
 ```
 
----
+***
 
-### unsubscribe_ble_notify
+### unsubscribe\_ble\_notify
 
 取消订阅特征通知。
 
@@ -490,10 +490,10 @@ await invoke('subscribe_ble_notify', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| device_id | string | 是 | 设备地址 |
-| characteristic_uuid | string | 是 | 特征 UUID |
+| 参数名                  | 类型     | 必填 | 描述      |
+| -------------------- | ------ | -- | ------- |
+| device\_id           | string | 是  | 设备地址    |
+| characteristic\_uuid | string | 是  | 特征 UUID |
 
 **返回**: `void`
 
@@ -504,9 +504,9 @@ await invoke('unsubscribe_ble_notify', {
 });
 ```
 
----
+***
 
-### get_ble_rssi
+### get\_ble\_rssi
 
 获取 BLE 信号强度。
 
@@ -514,9 +514,9 @@ await invoke('unsubscribe_ble_notify', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| address | string | 是 | 设备地址 |
+| 参数名     | 类型     | 必填 | 描述   |
+| ------- | ------ | -- | ---- |
+| address | string | 是  | 设备地址 |
 
 **返回**: `number` (RSSI 值，单位 dBm)
 
@@ -524,9 +524,9 @@ await invoke('unsubscribe_ble_notify', {
 const rssi = await invoke<number>('get_ble_rssi', { address: 'AA:BB:CC:DD:EE:FF' });
 ```
 
----
+***
 
-### get_ble_mode
+### get\_ble\_mode
 
 获取当前 BLE 工作模式。
 
@@ -540,9 +540,9 @@ const rssi = await invoke<number>('get_ble_rssi', { address: 'AA:BB:CC:DD:EE:FF'
 const mode = await invoke<string>('get_ble_mode');
 ```
 
----
+***
 
-### is_ble_configured
+### is\_ble\_configured
 
 检查 BLE 是否已配置。
 
@@ -556,9 +556,9 @@ const mode = await invoke<string>('get_ble_mode');
 const configured = await invoke<boolean>('is_ble_configured');
 ```
 
----
+***
 
-### set_ble_mtu
+### set\_ble\_mtu
 
 设置 BLE MTU 大小。
 
@@ -566,10 +566,10 @@ const configured = await invoke<boolean>('is_ble_configured');
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| device_id | string | 是 | 设备地址 |
-| mtu | number | 是 | 请求的 MTU 大小 |
+| 参数名        | 类型     | 必填 | 描述         |
+| ---------- | ------ | -- | ---------- |
+| device\_id | string | 是  | 设备地址       |
+| mtu        | number | 是  | 请求的 MTU 大小 |
 
 **返回**: `number` (协商后的实际 MTU)
 
@@ -577,9 +577,9 @@ const configured = await invoke<boolean>('is_ble_configured');
 const actualMtu = await invoke<number>('set_ble_mtu', { deviceId: 'AA:BB:CC:DD:EE:FF', mtu: 512 });
 ```
 
----
+***
 
-### get_ble_subscriptions
+### get\_ble\_subscriptions
 
 获取设备已订阅的特征列表。
 
@@ -587,9 +587,9 @@ const actualMtu = await invoke<number>('set_ble_mtu', { deviceId: 'AA:BB:CC:DD:E
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| device_id | string | 是 | 设备地址 |
+| 参数名        | 类型     | 必填 | 描述   |
+| ---------- | ------ | -- | ---- |
+| device\_id | string | 是  | 设备地址 |
 
 **返回**: `string[]` (已订阅的特征 UUID 列表)
 
@@ -599,9 +599,9 @@ const subscriptions = await invoke<string[]>('get_ble_subscriptions', {
 });
 ```
 
----
+***
 
-### get_at_config
+### get\_at\_config
 
 获取 AT 模式配置。
 
@@ -624,9 +624,9 @@ interface AtConfig {
 }
 ```
 
----
+***
 
-### update_at_uuid_config
+### update\_at\_uuid\_config
 
 更新 AT 模式的 UUID 配置。
 
@@ -634,11 +634,11 @@ interface AtConfig {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| tx_uuid | string | 否 | 写特征 UUID |
-| rx_uuid | string | 否 | 通知特征 UUID |
-| srv_uuid | string | 否 | 服务 UUID |
+| 参数名       | 类型     | 必填 | 描述        |
+| --------- | ------ | -- | --------- |
+| tx\_uuid  | string | 否  | 写特征 UUID  |
+| rx\_uuid  | string | 否  | 通知特征 UUID |
+| srv\_uuid | string | 否  | 服务 UUID   |
 
 **返回**: `void`
 
@@ -650,9 +650,9 @@ await invoke('update_at_uuid_config', {
 });
 ```
 
----
+***
 
-### get_at_tabs
+### get\_at\_tabs
 
 获取 AT 模式连接标签页列表。
 
@@ -666,9 +666,9 @@ await invoke('update_at_uuid_config', {
 const tabs = await invoke<AtConnectionTab[]>('get_at_tabs');
 ```
 
----
+***
 
-### get_at_tab
+### get\_at\_tab
 
 获取指定 AT 连接标签页。
 
@@ -676,9 +676,9 @@ const tabs = await invoke<AtConnectionTab[]>('get_at_tabs');
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| tab_id | string | 是 | 标签页 ID |
+| 参数名     | 类型     | 必填 | 描述     |
+| ------- | ------ | -- | ------ |
+| tab\_id | string | 是  | 标签页 ID |
 
 **返回**: `AtConnectionTab | null`
 
@@ -686,9 +686,9 @@ const tabs = await invoke<AtConnectionTab[]>('get_at_tabs');
 const tab = await invoke<AtConnectionTab | null>('get_at_tab', { tabId: 'tab-1' });
 ```
 
----
+***
 
-### clear_at_tab_data
+### clear\_at\_tab\_data
 
 清空 AT 连接标签页数据。
 
@@ -696,9 +696,9 @@ const tab = await invoke<AtConnectionTab | null>('get_at_tab', { tabId: 'tab-1' 
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| tab_id | string | 是 | 标签页 ID |
+| 参数名     | 类型     | 必填 | 描述     |
+| ------- | ------ | -- | ------ |
+| tab\_id | string | 是  | 标签页 ID |
 
 **返回**: `void`
 
@@ -706,9 +706,9 @@ const tab = await invoke<AtConnectionTab | null>('get_at_tab', { tabId: 'tab-1' 
 await invoke('clear_at_tab_data', { tabId: 'tab-1' });
 ```
 
----
+***
 
-### remove_at_tab
+### remove\_at\_tab
 
 移除 AT 连接标签页。
 
@@ -716,9 +716,9 @@ await invoke('clear_at_tab_data', { tabId: 'tab-1' });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| tab_id | string | 是 | 标签页 ID |
+| 参数名     | 类型     | 必填 | 描述     |
+| ------- | ------ | -- | ------ |
+| tab\_id | string | 是  | 标签页 ID |
 
 **返回**: `void`
 
@@ -726,9 +726,9 @@ await invoke('clear_at_tab_data', { tabId: 'tab-1' });
 await invoke('remove_at_tab', { tabId: 'tab-1' });
 ```
 
----
+***
 
-### send_at_data
+### send\_at\_data
 
 通过 AT 透传模式发送数据。
 
@@ -736,10 +736,10 @@ await invoke('remove_at_tab', { tabId: 'tab-1' });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| device_id | string | 是 | 设备地址 |
-| data | number[] | 是 | 要发送的数据 |
+| 参数名        | 类型        | 必填 | 描述     |
+| ---------- | --------- | -- | ------ |
+| device\_id | string    | 是  | 设备地址   |
+| data       | number\[] | 是  | 要发送的数据 |
 
 **返回**: `void`
 
@@ -747,11 +747,11 @@ await invoke('remove_at_tab', { tabId: 'tab-1' });
 await invoke('send_at_data', { deviceId: 'AA:BB:CC:DD:EE:FF', data: [0x01, 0x02] });
 ```
 
----
+***
 
 ## 协议模块 (Protocol)
 
-### load_protocol
+### load\_protocol
 
 加载协议插件。
 
@@ -759,10 +759,10 @@ await invoke('send_at_data', { deviceId: 'AA:BB:CC:DD:EE:FF', data: [0x01, 0x02]
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| plugin_id | string | 是 | 插件 ID |
-| path | string | 是 | 插件脚本路径 |
+| 参数名        | 类型     | 必填 | 描述     |
+| ---------- | ------ | -- | ------ |
+| plugin\_id | string | 是  | 插件 ID  |
+| path       | string | 是  | 插件脚本路径 |
 
 **返回**: `PluginInfo`
 
@@ -773,9 +773,9 @@ const info = await invoke<PluginInfo>('load_protocol', {
 });
 ```
 
----
+***
 
-### unload_protocol
+### unload\_protocol
 
 卸载协议插件。
 
@@ -783,9 +783,9 @@ const info = await invoke<PluginInfo>('load_protocol', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| plugin_id | string | 是 | 插件 ID |
+| 参数名        | 类型     | 必填 | 描述    |
+| ---------- | ------ | -- | ----- |
+| plugin\_id | string | 是  | 插件 ID |
 
 **返回**: `void`
 
@@ -793,9 +793,9 @@ const info = await invoke<PluginInfo>('load_protocol', {
 await invoke('unload_protocol', { pluginId: 'my_protocol' });
 ```
 
----
+***
 
-### enable_protocol
+### enable\_protocol
 
 启用协议插件。
 
@@ -803,9 +803,9 @@ await invoke('unload_protocol', { pluginId: 'my_protocol' });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| plugin_id | string | 是 | 插件 ID |
+| 参数名        | 类型     | 必填 | 描述    |
+| ---------- | ------ | -- | ----- |
+| plugin\_id | string | 是  | 插件 ID |
 
 **返回**: `void`
 
@@ -813,9 +813,9 @@ await invoke('unload_protocol', { pluginId: 'my_protocol' });
 await invoke('enable_protocol', { pluginId: 'my_protocol' });
 ```
 
----
+***
 
-### disable_protocol
+### disable\_protocol
 
 禁用协议插件。
 
@@ -823,9 +823,9 @@ await invoke('enable_protocol', { pluginId: 'my_protocol' });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| plugin_id | string | 是 | 插件 ID |
+| 参数名        | 类型     | 必填 | 描述    |
+| ---------- | ------ | -- | ----- |
+| plugin\_id | string | 是  | 插件 ID |
 
 **返回**: `void`
 
@@ -833,9 +833,9 @@ await invoke('enable_protocol', { pluginId: 'my_protocol' });
 await invoke('disable_protocol', { pluginId: 'my_protocol' });
 ```
 
----
+***
 
-### bind_protocol
+### bind\_protocol
 
 绑定协议到设备。
 
@@ -843,10 +843,10 @@ await invoke('disable_protocol', { pluginId: 'my_protocol' });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| plugin_id | string | 是 | 插件 ID |
-| device_id | string | 是 | 设备 ID |
+| 参数名        | 类型     | 必填 | 描述    |
+| ---------- | ------ | -- | ----- |
+| plugin\_id | string | 是  | 插件 ID |
+| device\_id | string | 是  | 设备 ID |
 
 **返回**: `void`
 
@@ -854,9 +854,9 @@ await invoke('disable_protocol', { pluginId: 'my_protocol' });
 await invoke('bind_protocol', { pluginId: 'my_protocol', deviceId: 'COM1' });
 ```
 
----
+***
 
-### unbind_protocol
+### unbind\_protocol
 
 解绑协议。
 
@@ -864,10 +864,10 @@ await invoke('bind_protocol', { pluginId: 'my_protocol', deviceId: 'COM1' });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| plugin_id | string | 是 | 插件 ID |
-| device_id | string | 是 | 设备 ID |
+| 参数名        | 类型     | 必填 | 描述    |
+| ---------- | ------ | -- | ----- |
+| plugin\_id | string | 是  | 插件 ID |
+| device\_id | string | 是  | 设备 ID |
 
 **返回**: `void`
 
@@ -875,9 +875,9 @@ await invoke('bind_protocol', { pluginId: 'my_protocol', deviceId: 'COM1' });
 await invoke('unbind_protocol', { pluginId: 'my_protocol', deviceId: 'COM1' });
 ```
 
----
+***
 
-### list_protocols
+### list\_protocols
 
 获取已加载的协议列表。
 
@@ -891,9 +891,9 @@ await invoke('unbind_protocol', { pluginId: 'my_protocol', deviceId: 'COM1' });
 const protocols = await invoke<PluginInfo[]>('list_protocols');
 ```
 
----
+***
 
-### get_protocol
+### get\_protocol
 
 获取单个协议信息。
 
@@ -901,9 +901,9 @@ const protocols = await invoke<PluginInfo[]>('list_protocols');
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| plugin_id | string | 是 | 插件 ID |
+| 参数名        | 类型     | 必填 | 描述    |
+| ---------- | ------ | -- | ----- |
+| plugin\_id | string | 是  | 插件 ID |
 
 **返回**: `PluginInfo`
 
@@ -911,9 +911,9 @@ const protocols = await invoke<PluginInfo[]>('list_protocols');
 const info = await invoke<PluginInfo>('get_protocol', { pluginId: 'my_protocol' });
 ```
 
----
+***
 
-### get_bound_protocols
+### get\_bound\_protocols
 
 获取设备绑定的协议。
 
@@ -921,9 +921,9 @@ const info = await invoke<PluginInfo>('get_protocol', { pluginId: 'my_protocol' 
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| device_id | string | 是 | 设备 ID |
+| 参数名        | 类型     | 必填 | 描述    |
+| ---------- | ------ | -- | ----- |
+| device\_id | string | 是  | 设备 ID |
 
 **返回**: `PluginInfo[]`
 
@@ -931,11 +931,11 @@ const info = await invoke<PluginInfo>('get_protocol', { pluginId: 'my_protocol' 
 const protocols = await invoke<PluginInfo[]>('get_bound_protocols', { deviceId: 'COM1' });
 ```
 
----
+***
 
 ## WebSocket 模块 (WebSocket)
 
-### connect_websocket
+### connect\_websocket
 
 连接 WebSocket 服务器。
 
@@ -943,16 +943,16 @@ const protocols = await invoke<PluginInfo[]>('get_bound_protocols', { deviceId: 
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| config | object | 是 | WebSocket 配置对象 |
-| config.id | string | 是 | 连接 ID |
-| config.url | string | 是 | 服务器 URL |
-| config.reconnect | boolean | 否 | 是否自动重连，默认 true |
-| config.reconnect_interval_ms | number | 否 | 重连间隔（毫秒），默认 5000 |
-| config.max_reconnect_attempts | number | 否 | 最大重连次数，默认 10 |
-| config.heartbeat_interval_ms | number | 否 | 心跳间隔（毫秒），默认 30000 |
-| config.connection_timeout_ms | number | 否 | 连接超时（毫秒），默认 10000 |
+| 参数名                             | 类型      | 必填 | 描述                |
+| ------------------------------- | ------- | -- | ----------------- |
+| config                          | object  | 是  | WebSocket 配置对象    |
+| config.id                       | string  | 是  | 连接 ID             |
+| config.url                      | string  | 是  | 服务器 URL           |
+| config.reconnect                | boolean | 否  | 是否自动重连，默认 true    |
+| config.reconnect\_interval\_ms  | number  | 否  | 重连间隔（毫秒），默认 5000  |
+| config.max\_reconnect\_attempts | number  | 否  | 最大重连次数，默认 10      |
+| config.heartbeat\_interval\_ms  | number  | 否  | 心跳间隔（毫秒），默认 30000 |
+| config.connection\_timeout\_ms  | number  | 否  | 连接超时（毫秒），默认 10000 |
 
 **返回**: `string` (连接 ID)
 
@@ -962,9 +962,9 @@ const id = await invoke<string>('connect_websocket', {
 });
 ```
 
----
+***
 
-### send_websocket_message
+### send\_websocket\_message
 
 发送 WebSocket 消息。
 
@@ -972,10 +972,10 @@ const id = await invoke<string>('connect_websocket', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| id | string | 是 | 连接 ID |
-| message | string | 是 | 消息内容 |
+| 参数名     | 类型     | 必填 | 描述    |
+| ------- | ------ | -- | ----- |
+| id      | string | 是  | 连接 ID |
+| message | string | 是  | 消息内容  |
 
 **返回**: `void`
 
@@ -983,9 +983,9 @@ const id = await invoke<string>('connect_websocket', {
 await invoke('send_websocket_message', { id: 'ws1', message: 'Hello, server!' });
 ```
 
----
+***
 
-### disconnect_websocket
+### disconnect\_websocket
 
 断开 WebSocket 连接。
 
@@ -993,9 +993,9 @@ await invoke('send_websocket_message', { id: 'ws1', message: 'Hello, server!' })
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| id | string | 是 | 连接 ID |
+| 参数名 | 类型     | 必填 | 描述    |
+| --- | ------ | -- | ----- |
+| id  | string | 是  | 连接 ID |
 
 **返回**: `void`
 
@@ -1003,9 +1003,9 @@ await invoke('send_websocket_message', { id: 'ws1', message: 'Hello, server!' })
 await invoke('disconnect_websocket', { id: 'ws1' });
 ```
 
----
+***
 
-### get_websocket_status
+### get\_websocket\_status
 
 获取连接状态。
 
@@ -1013,9 +1013,9 @@ await invoke('disconnect_websocket', { id: 'ws1' });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| id | string | 是 | 连接 ID |
+| 参数名 | 类型     | 必填 | 描述    |
+| --- | ------ | -- | ----- |
+| id  | string | 是  | 连接 ID |
 
 **返回**: `ConnectionStatus | null`
 
@@ -1023,9 +1023,9 @@ await invoke('disconnect_websocket', { id: 'ws1' });
 const status = await invoke<ConnectionStatus | null>('get_websocket_status', { id: 'ws1' });
 ```
 
----
+***
 
-### get_all_websocket_connections
+### get\_all\_websocket\_connections
 
 获取所有连接 ID。
 
@@ -1039,9 +1039,9 @@ const status = await invoke<ConnectionStatus | null>('get_websocket_status', { i
 const ids = await invoke<string[]>('get_all_websocket_connections');
 ```
 
----
+***
 
-### get_all_websocket_status
+### get\_all\_websocket\_status
 
 获取所有连接状态。
 
@@ -1055,11 +1055,11 @@ const ids = await invoke<string[]>('get_all_websocket_connections');
 const statuses = await invoke<Record<string, ConnectionStatus>>('get_all_websocket_status');
 ```
 
----
+***
 
 ## 系统模块 (System)
 
-### get_system_info
+### get\_system\_info
 
 获取系统信息。
 
@@ -1083,9 +1083,9 @@ interface SystemInfo {
 }
 ```
 
----
+***
 
-### get_system_status
+### get\_system\_status
 
 获取系统状态。
 
@@ -1116,9 +1116,9 @@ interface DiskUsage {
 }
 ```
 
----
+***
 
-### get_runtime_status
+### get\_runtime\_status
 
 获取运行时状态。
 
@@ -1141,9 +1141,9 @@ interface RuntimeStatus {
 }
 ```
 
----
+***
 
-### get_app_version
+### get\_app\_version
 
 获取应用版本。
 
@@ -1157,9 +1157,9 @@ interface RuntimeStatus {
 const version = await invoke<string>('get_app_version');
 ```
 
----
+***
 
-### get_platform
+### get\_platform
 
 获取平台信息。
 
@@ -1173,9 +1173,9 @@ const version = await invoke<string>('get_app_version');
 const platform = await invoke<string>('get_platform');
 ```
 
----
+***
 
-### open_url
+### open\_url
 
 打开 URL。
 
@@ -1183,9 +1183,9 @@ const platform = await invoke<string>('get_platform');
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| url | string | 是 | 要打开的 URL |
+| 参数名 | 类型     | 必填 | 描述       |
+| --- | ------ | -- | -------- |
+| url | string | 是  | 要打开的 URL |
 
 **返回**: `void`
 
@@ -1193,9 +1193,9 @@ const platform = await invoke<string>('get_platform');
 await invoke('open_url', { url: 'https://github.com' });
 ```
 
----
+***
 
-### show_in_folder
+### show\_in\_folder
 
 在文件管理器中显示文件。
 
@@ -1203,9 +1203,9 @@ await invoke('open_url', { url: 'https://github.com' });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| path | string | 是 | 文件或文件夹路径 |
+| 参数名  | 类型     | 必填 | 描述       |
+| ---- | ------ | -- | -------- |
+| path | string | 是  | 文件或文件夹路径 |
 
 **返回**: `void`
 
@@ -1213,9 +1213,9 @@ await invoke('open_url', { url: 'https://github.com' });
 await invoke('show_in_folder', { path: 'C:\\Users\\data.log' });
 ```
 
----
+***
 
-### configure_log
+### configure\_log
 
 配置日志。
 
@@ -1223,14 +1223,14 @@ await invoke('show_in_folder', { path: 'C:\\Users\\data.log' });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| config | object | 是 | 日志配置对象 |
-| config.level | string | 是 | 日志级别: "trace", "debug", "info", "warn", "error" |
-| config.max_files | number | 否 | 最大日志文件数 |
-| config.max_size_mb | number | 否 | 单个日志文件最大大小（MB） |
-| config.console_enabled | boolean | 否 | 是否启用控制台日志 |
-| config.file_enabled | boolean | 否 | 是否启用文件日志 |
+| 参数名                     | 类型      | 必填 | 描述                                              |
+| ----------------------- | ------- | -- | ----------------------------------------------- |
+| config                  | object  | 是  | 日志配置对象                                          |
+| config.level            | string  | 是  | 日志级别: "trace", "debug", "info", "warn", "error" |
+| config.max\_files       | number  | 否  | 最大日志文件数                                         |
+| config.max\_size\_mb    | number  | 否  | 单个日志文件最大大小（MB）                                  |
+| config.console\_enabled | boolean | 否  | 是否启用控制台日志                                       |
+| config.file\_enabled    | boolean | 否  | 是否启用文件日志                                        |
 
 **返回**: `void`
 
@@ -1240,9 +1240,9 @@ await invoke('configure_log', {
 });
 ```
 
----
+***
 
-### get_log_config
+### get\_log\_config
 
 获取日志配置。
 
@@ -1256,9 +1256,9 @@ await invoke('configure_log', {
 const config = await invoke<LogConfig>('get_log_config');
 ```
 
----
+***
 
-### get_window_status
+### get\_window\_status
 
 获取窗口状态信息。
 
@@ -1286,9 +1286,9 @@ interface WindowStatus {
 }
 ```
 
----
+***
 
-### show_main_window
+### show\_main\_window
 
 显示主窗口（带重试机制）。
 
@@ -1302,9 +1302,9 @@ interface WindowStatus {
 await invoke('show_main_window');
 ```
 
----
+***
 
-### open_devtools
+### open\_devtools
 
 打开开发者工具（仅 devtools 特性启用时可用）。
 
@@ -1318,9 +1318,9 @@ await invoke('show_main_window');
 await invoke('open_devtools');
 ```
 
----
+***
 
-### close_devtools
+### close\_devtools
 
 关闭开发者工具（仅 devtools 特性启用时可用）。
 
@@ -1334,11 +1334,11 @@ await invoke('open_devtools');
 await invoke('close_devtools');
 ```
 
----
+***
 
 ## Dashboard 模块 (Dashboard)
 
-### get_parser_scripts
+### get\_parser\_scripts
 
 获取解析脚本列表。
 
@@ -1352,9 +1352,9 @@ await invoke('close_devtools');
 const scripts = await invoke<ParserScriptInfo[]>('get_parser_scripts');
 ```
 
----
+***
 
-### get_parser_script_content
+### get\_parser\_script\_content
 
 获取解析脚本内容。
 
@@ -1362,9 +1362,9 @@ const scripts = await invoke<ParserScriptInfo[]>('get_parser_scripts');
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| name | string | 是 | 脚本名称 |
+| 参数名  | 类型     | 必填 | 描述   |
+| ---- | ------ | -- | ---- |
+| name | string | 是  | 脚本名称 |
 
 **返回**: `string` (脚本内容)
 
@@ -1372,9 +1372,9 @@ const scripts = await invoke<ParserScriptInfo[]>('get_parser_scripts');
 const content = await invoke<string>('get_parser_script_content', { name: 'my_parser' });
 ```
 
----
+***
 
-### save_parser_script
+### save\_parser\_script
 
 保存解析脚本。
 
@@ -1382,10 +1382,10 @@ const content = await invoke<string>('get_parser_script_content', { name: 'my_pa
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| name | string | 是 | 脚本名称 |
-| content | string | 是 | 脚本内容 |
+| 参数名     | 类型     | 必填 | 描述   |
+| ------- | ------ | -- | ---- |
+| name    | string | 是  | 脚本名称 |
+| content | string | 是  | 脚本内容 |
 
 **返回**: `void`
 
@@ -1393,9 +1393,9 @@ const content = await invoke<string>('get_parser_script_content', { name: 'my_pa
 await invoke('save_parser_script', { name: 'my_parser', content: '...' });
 ```
 
----
+***
 
-### delete_parser_script
+### delete\_parser\_script
 
 删除解析脚本。
 
@@ -1403,9 +1403,9 @@ await invoke('save_parser_script', { name: 'my_parser', content: '...' });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| name | string | 是 | 脚本名称 |
+| 参数名  | 类型     | 必填 | 描述   |
+| ---- | ------ | -- | ---- |
+| name | string | 是  | 脚本名称 |
 
 **返回**: `void`
 
@@ -1413,9 +1413,9 @@ await invoke('save_parser_script', { name: 'my_parser', content: '...' });
 await invoke('delete_parser_script', { name: 'my_parser' });
 ```
 
----
+***
 
-### execute_parser_script
+### execute\_parser\_script
 
 执行解析脚本。
 
@@ -1423,10 +1423,10 @@ await invoke('delete_parser_script', { name: 'my_parser' });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| name | string | 是 | 脚本名称 |
-| data | string | 是 | 要解析的数据 |
+| 参数名  | 类型     | 必填 | 描述     |
+| ---- | ------ | -- | ------ |
+| name | string | 是  | 脚本名称   |
+| data | string | 是  | 要解析的数据 |
 
 **返回**: `Record<string, number>` (解析结果键值对)
 
@@ -1437,9 +1437,9 @@ const result = await invoke<Record<string, number>>('execute_parser_script', {
 });
 ```
 
----
+***
 
-### init_default_parser_scripts
+### init\_default\_parser\_scripts
 
 初始化默认解析脚本。
 
@@ -1453,9 +1453,9 @@ const result = await invoke<Record<string, number>>('execute_parser_script', {
 await invoke('init_default_parser_scripts');
 ```
 
----
+***
 
-### analyze_json_structure
+### analyze\_json\_structure
 
 分析 JSON 结构。
 
@@ -1463,9 +1463,9 @@ await invoke('init_default_parser_scripts');
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| json_content | string | 是 | JSON 内容字符串 |
+| 参数名           | 类型     | 必填 | 描述         |
+| ------------- | ------ | -- | ---------- |
+| json\_content | string | 是  | JSON 内容字符串 |
 
 **返回**: `JsonStructureInfo`
 
@@ -1475,9 +1475,9 @@ const structure = await invoke<JsonStructureInfo>('analyze_json_structure', {
 });
 ```
 
----
+***
 
-### generate_parser_from_json
+### generate\_parser\_from\_json
 
 从 JSON 生成解析脚本。
 
@@ -1485,11 +1485,11 @@ const structure = await invoke<JsonStructureInfo>('analyze_json_structure', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| json_content | string | 是 | JSON 内容字符串 |
-| script_name | string | 是 | 脚本名称 |
-| selected_fields | string[] | 是 | 选择的字段列表 |
+| 参数名              | 类型        | 必填 | 描述         |
+| ---------------- | --------- | -- | ---------- |
+| json\_content    | string    | 是  | JSON 内容字符串 |
+| script\_name     | string    | 是  | 脚本名称       |
+| selected\_fields | string\[] | 是  | 选择的字段列表    |
 
 **返回**: `string` (生成的脚本内容)
 
@@ -1501,9 +1501,9 @@ const script = await invoke<string>('generate_parser_from_json', {
 });
 ```
 
----
+***
 
-### get_parser_defined_fields
+### get\_parser\_defined\_fields
 
 获取解析脚本定义的字段。
 
@@ -1511,9 +1511,9 @@ const script = await invoke<string>('generate_parser_from_json', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| script_name | string | 是 | 脚本名称 |
+| 参数名          | 类型     | 必填 | 描述   |
+| ------------ | ------ | -- | ---- |
+| script\_name | string | 是  | 脚本名称 |
 
 **返回**: `FieldDefinition[]`
 
@@ -1523,9 +1523,9 @@ const fields = await invoke<FieldDefinition[]>('get_parser_defined_fields', {
 });
 ```
 
----
+***
 
-### merge_json_to_parser
+### merge\_json\_to\_parser
 
 合并 JSON 到已有解析脚本。
 
@@ -1533,11 +1533,11 @@ const fields = await invoke<FieldDefinition[]>('get_parser_defined_fields', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| json_content | string | 是 | JSON 内容字符串 |
-| script_name | string | 是 | 目标脚本名称 |
-| selected_fields | string[] | 是 | 要合并的字段列表 |
+| 参数名              | 类型        | 必填 | 描述         |
+| ---------------- | --------- | -- | ---------- |
+| json\_content    | string    | 是  | JSON 内容字符串 |
+| script\_name     | string    | 是  | 目标脚本名称     |
+| selected\_fields | string\[] | 是  | 要合并的字段列表   |
 
 **返回**: `string` (合并后的脚本内容)
 
@@ -1549,9 +1549,9 @@ const script = await invoke<string>('merge_json_to_parser', {
 });
 ```
 
----
+***
 
-### get_json_files
+### get\_json\_files
 
 获取 JSON 配置文件列表。
 
@@ -1565,9 +1565,9 @@ const script = await invoke<string>('merge_json_to_parser', {
 const files = await invoke<string[]>('get_json_files');
 ```
 
----
+***
 
-### save_json_file
+### save\_json\_file
 
 保存 JSON 配置文件。
 
@@ -1575,10 +1575,10 @@ const files = await invoke<string[]>('get_json_files');
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| file_name | string | 是 | 文件名称 |
-| config | DashboardJsonConfig | 是 | Dashboard JSON 配置 |
+| 参数名        | 类型                  | 必填 | 描述                |
+| ---------- | ------------------- | -- | ----------------- |
+| file\_name | string              | 是  | 文件名称              |
+| config     | DashboardJsonConfig | 是  | Dashboard JSON 配置 |
 
 **返回**: `void`
 
@@ -1586,9 +1586,9 @@ const files = await invoke<string[]>('get_json_files');
 await invoke('save_json_file', { fileName: 'dashboard1', config: { ... } });
 ```
 
----
+***
 
-### delete_json_file
+### delete\_json\_file
 
 删除 JSON 配置文件。
 
@@ -1596,9 +1596,9 @@ await invoke('save_json_file', { fileName: 'dashboard1', config: { ... } });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| file_name | string | 是 | 文件名称 |
+| 参数名        | 类型     | 必填 | 描述   |
+| ---------- | ------ | -- | ---- |
+| file\_name | string | 是  | 文件名称 |
 
 **返回**: `void`
 
@@ -1606,9 +1606,9 @@ await invoke('save_json_file', { fileName: 'dashboard1', config: { ... } });
 await invoke('delete_json_file', { fileName: 'dashboard1' });
 ```
 
----
+***
 
-### load_json_file
+### load\_json\_file
 
 加载 JSON 配置文件。
 
@@ -1616,9 +1616,9 @@ await invoke('delete_json_file', { fileName: 'dashboard1' });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| file_name | string | 是 | 文件名称 |
+| 参数名        | 类型     | 必填 | 描述   |
+| ---------- | ------ | -- | ---- |
+| file\_name | string | 是  | 文件名称 |
 
 **返回**: `DashboardJsonConfig`
 
@@ -1626,11 +1626,11 @@ await invoke('delete_json_file', { fileName: 'dashboard1' });
 const config = await invoke<DashboardJsonConfig>('load_json_file', { fileName: 'dashboard1' });
 ```
 
----
+***
 
 ## GH3036 模块 (GH3036)
 
-### gh3036_init
+### gh3036\_init
 
 初始化 GH3036 管理器。
 
@@ -1644,9 +1644,9 @@ const config = await invoke<DashboardJsonConfig>('load_json_file', { fileName: '
 await invoke('gh3036_init');
 ```
 
----
+***
 
-### gh3036_is_initialized
+### gh3036\_is\_initialized
 
 检查 GH3036 是否已初始化。
 
@@ -1660,9 +1660,9 @@ await invoke('gh3036_init');
 const initialized = await invoke<boolean>('gh3036_is_initialized');
 ```
 
----
+***
 
-### gh3036_configure_tx_channel
+### gh3036\_configure\_tx\_channel
 
 配置 TX 通道。
 
@@ -1670,11 +1670,11 @@ const initialized = await invoke<boolean>('gh3036_is_initialized');
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| channel_type | string | 是 | 通道类型："serial" 或 "ble" |
-| device_id | string | 是 | 设备 ID |
-| characteristic_uuid | string | 否 | BLE 特征 UUID（BLE 通道必填） |
+| 参数名                  | 类型     | 必填 | 描述                    |
+| -------------------- | ------ | -- | --------------------- |
+| channel\_type        | string | 是  | 通道类型："serial" 或 "ble" |
+| device\_id           | string | 是  | 设备 ID                 |
+| characteristic\_uuid | string | 否  | BLE 特征 UUID（BLE 通道必填） |
 
 **返回**: `void`
 
@@ -1686,9 +1686,9 @@ await invoke('gh3036_configure_tx_channel', {
 });
 ```
 
----
+***
 
-### gh3036_configure_rx_channel
+### gh3036\_configure\_rx\_channel
 
 配置 RX 通道。
 
@@ -1696,11 +1696,11 @@ await invoke('gh3036_configure_tx_channel', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| channel_type | string | 是 | 通道类型："serial" 或 "ble" |
-| device_id | string | 是 | 设备 ID |
-| characteristic_uuid | string | 否 | BLE 特征 UUID（BLE 通道必填） |
+| 参数名                  | 类型     | 必填 | 描述                    |
+| -------------------- | ------ | -- | --------------------- |
+| channel\_type        | string | 是  | 通道类型："serial" 或 "ble" |
+| device\_id           | string | 是  | 设备 ID                 |
+| characteristic\_uuid | string | 否  | BLE 特征 UUID（BLE 通道必填） |
 
 **返回**: `void`
 
@@ -1712,9 +1712,9 @@ await invoke('gh3036_configure_rx_channel', {
 });
 ```
 
----
+***
 
-### gh3036_get_channels
+### gh3036\_get\_channels
 
 获取当前 TX/RX 通道配置。
 
@@ -1734,9 +1734,9 @@ interface ChannelConfig {
 }
 ```
 
----
+***
 
-### gh3036_send_data
+### gh3036\_send\_data
 
 通过 GH3036 发送数据。
 
@@ -1744,9 +1744,9 @@ interface ChannelConfig {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| data | number[] | 是 | 要发送的字节数据 |
+| 参数名  | 类型        | 必填 | 描述       |
+| ---- | --------- | -- | -------- |
+| data | number\[] | 是  | 要发送的字节数据 |
 
 **返回**: `void`
 
@@ -1754,9 +1754,9 @@ interface ChannelConfig {
 await invoke('gh3036_send_data', { data: [0x01, 0x02, 0x03] });
 ```
 
----
+***
 
-### gh3036_set_csv_config
+### gh3036\_set\_csv\_config
 
 设置 CSV 导出配置。
 
@@ -1764,10 +1764,10 @@ await invoke('gh3036_send_data', { data: [0x01, 0x02, 0x03] });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| enabled | boolean | 是 | 是否启用 CSV 导出 |
-| output_dir | string | 是 | 输出目录路径 |
+| 参数名         | 类型      | 必填 | 描述          |
+| ----------- | ------- | -- | ----------- |
+| enabled     | boolean | 是  | 是否启用 CSV 导出 |
+| output\_dir | string  | 是  | 输出目录路径      |
 
 **返回**: `void`
 
@@ -1775,9 +1775,9 @@ await invoke('gh3036_send_data', { data: [0x01, 0x02, 0x03] });
 await invoke('gh3036_set_csv_config', { enabled: true, outputDir: './output' });
 ```
 
----
+***
 
-### gh3036_get_csv_config
+### gh3036\_get\_csv\_config
 
 获取 CSV 导出配置。
 
@@ -1796,9 +1796,9 @@ interface CsvConfig {
 }
 ```
 
----
+***
 
-### gh3036_get_rpc_commands
+### gh3036\_get\_rpc\_commands
 
 获取 RPC 命令列表。
 
@@ -1812,9 +1812,9 @@ interface CsvConfig {
 const commands = await invoke<RpcCommand[]>('gh3036_get_rpc_commands');
 ```
 
----
+***
 
-### gh3036_execute_rpc
+### gh3036\_execute\_rpc
 
 执行 RPC 命令。
 
@@ -1822,10 +1822,10 @@ const commands = await invoke<RpcCommand[]>('gh3036_get_rpc_commands');
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| command_key | string | 是 | 命令键名 |
-| params | string[] | 是 | 命令参数列表 |
+| 参数名          | 类型        | 必填 | 描述     |
+| ------------ | --------- | -- | ------ |
+| command\_key | string    | 是  | 命令键名   |
+| params       | string\[] | 是  | 命令参数列表 |
 
 **返回**: `number[]` (响应数据)
 
@@ -1836,9 +1836,9 @@ const response = await invoke<number[]>('gh3036_execute_rpc', {
 });
 ```
 
----
+***
 
-### gh3036_subscribe_events
+### gh3036\_subscribe\_events
 
 订阅 GH3036 事件。
 
@@ -1852,9 +1852,9 @@ const response = await invoke<number[]>('gh3036_execute_rpc', {
 const subscribed = await invoke<boolean>('gh3036_subscribe_events');
 ```
 
----
+***
 
-### gh3036_get_library_status
+### gh3036\_get\_library\_status
 
 获取库状态。
 
@@ -1868,9 +1868,9 @@ const subscribed = await invoke<boolean>('gh3036_subscribe_events');
 const [loaded, initialized] = await invoke<[boolean, boolean]>('gh3036_get_library_status');
 ```
 
----
+***
 
-### gh3036_on_rx_data
+### gh3036\_on\_rx\_data
 
 接收 RX 数据回调。
 
@@ -1878,10 +1878,10 @@ const [loaded, initialized] = await invoke<[boolean, boolean]>('gh3036_get_libra
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| device_id | string | 是 | 设备 ID |
-| data | number[] | 是 | 接收到的数据 |
+| 参数名        | 类型        | 必填 | 描述     |
+| ---------- | --------- | -- | ------ |
+| device\_id | string    | 是  | 设备 ID  |
+| data       | number\[] | 是  | 接收到的数据 |
 
 **返回**: `void`
 
@@ -1889,11 +1889,11 @@ const [loaded, initialized] = await invoke<[boolean, boolean]>('gh3036_get_libra
 await invoke('gh3036_on_rx_data', { deviceId: 'COM1', data: [0x01, 0x02] });
 ```
 
----
+***
 
 ## 波形模块 (Waveform)
 
-### waveform_create_buffer
+### waveform\_create\_buffer
 
 创建波形数据缓冲区。
 
@@ -1901,10 +1901,10 @@ await invoke('gh3036_on_rx_data', { deviceId: 'COM1', data: [0x01, 0x02] });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| buffer_id | string | 是 | 缓冲区 ID |
-| config | WaveformBufferConfig | 是 | 缓冲区配置 |
+| 参数名        | 类型                   | 必填 | 描述     |
+| ---------- | -------------------- | -- | ------ |
+| buffer\_id | string               | 是  | 缓冲区 ID |
+| config     | WaveformBufferConfig | 是  | 缓冲区配置  |
 
 **返回**: `void`
 
@@ -1915,9 +1915,9 @@ await invoke('waveform_create_buffer', {
 });
 ```
 
----
+***
 
-### waveform_remove_buffer
+### waveform\_remove\_buffer
 
 移除波形数据缓冲区。
 
@@ -1925,9 +1925,9 @@ await invoke('waveform_create_buffer', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| buffer_id | string | 是 | 缓冲区 ID |
+| 参数名        | 类型     | 必填 | 描述     |
+| ---------- | ------ | -- | ------ |
+| buffer\_id | string | 是  | 缓冲区 ID |
 
 **返回**: `void`
 
@@ -1935,9 +1935,9 @@ await invoke('waveform_create_buffer', {
 await invoke('waveform_remove_buffer', { bufferId: 'wave1' });
 ```
 
----
+***
 
-### waveform_configure_parser
+### waveform\_configure\_parser
 
 配置波形数据解析器。
 
@@ -1945,10 +1945,10 @@ await invoke('waveform_remove_buffer', { bufferId: 'wave1' });
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| buffer_id | string | 是 | 缓冲区 ID |
-| config | ParserConfig | 是 | 解析器配置 |
+| 参数名        | 类型           | 必填 | 描述     |
+| ---------- | ------------ | -- | ------ |
+| buffer\_id | string       | 是  | 缓冲区 ID |
+| config     | ParserConfig | 是  | 解析器配置  |
 
 **返回**: `void`
 
@@ -1959,9 +1959,9 @@ await invoke('waveform_configure_parser', {
 });
 ```
 
----
+***
 
-### waveform_parse_and_store
+### waveform\_parse\_and\_store
 
 解析数据并存储到缓冲区。
 
@@ -1969,10 +1969,10 @@ await invoke('waveform_configure_parser', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| buffer_id | string | 是 | 缓冲区 ID |
-| data | string | 是 | 要解析的数据字符串 |
+| 参数名        | 类型     | 必填 | 描述        |
+| ---------- | ------ | -- | --------- |
+| buffer\_id | string | 是  | 缓冲区 ID    |
+| data       | string | 是  | 要解析的数据字符串 |
 
 **返回**: `void`
 
@@ -1980,9 +1980,9 @@ await invoke('waveform_configure_parser', {
 await invoke('waveform_parse_and_store', { bufferId: 'wave1', data: '1.0,2.0,3.0' });
 ```
 
----
+***
 
-### waveform_read_data
+### waveform\_read\_data
 
 读取波形数据。
 
@@ -1990,10 +1990,10 @@ await invoke('waveform_parse_and_store', { bufferId: 'wave1', data: '1.0,2.0,3.0
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| buffer_id | string | 是 | 缓冲区 ID |
-| rows | number | 是 | 读取的行数 |
+| 参数名        | 类型     | 必填 | 描述     |
+| ---------- | ------ | -- | ------ |
+| buffer\_id | string | 是  | 缓冲区 ID |
+| rows       | number | 是  | 读取的行数  |
 
 **返回**: `WaveformData`
 
@@ -2010,9 +2010,9 @@ interface WaveformData {
 }
 ```
 
----
+***
 
-### waveform_get_status
+### waveform\_get\_status
 
 获取波形缓冲区状态。
 
@@ -2020,9 +2020,9 @@ interface WaveformData {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| buffer_id | string | 是 | 缓冲区 ID |
+| 参数名        | 类型     | 必填 | 描述     |
+| ---------- | ------ | -- | ------ |
+| buffer\_id | string | 是  | 缓冲区 ID |
 
 **返回**: `WaveformStatus`
 
@@ -2030,9 +2030,9 @@ interface WaveformData {
 const status = await invoke<WaveformStatus>('waveform_get_status', { bufferId: 'wave1' });
 ```
 
----
+***
 
-### waveform_clear_buffer
+### waveform\_clear\_buffer
 
 清空波形缓冲区数据。
 
@@ -2040,9 +2040,9 @@ const status = await invoke<WaveformStatus>('waveform_get_status', { bufferId: '
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| buffer_id | string | 是 | 缓冲区 ID |
+| 参数名        | 类型     | 必填 | 描述     |
+| ---------- | ------ | -- | ------ |
+| buffer\_id | string | 是  | 缓冲区 ID |
 
 **返回**: `void`
 
@@ -2050,9 +2050,9 @@ const status = await invoke<WaveformStatus>('waveform_get_status', { bufferId: '
 await invoke('waveform_clear_buffer', { bufferId: 'wave1' });
 ```
 
----
+***
 
-### waveform_list_buffers
+### waveform\_list\_buffers
 
 列出所有波形缓冲区。
 
@@ -2066,11 +2066,11 @@ await invoke('waveform_clear_buffer', { bufferId: 'wave1' });
 const buffers = await invoke<string[]>('waveform_list_buffers');
 ```
 
----
+***
 
 ## 状态模块 (State)
 
-### dispatch_action
+### dispatch\_action
 
 分发一个动作到状态管理器。
 
@@ -2078,16 +2078,16 @@ const buffers = await invoke<string[]>('waveform_list_buffers');
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| action | object | 是 | 动作对象 |
-| action.action_type | string | 是 | 动作类型（CONNECT_SERIAL/DISCONNECT_SERIAL/SEND_SERIAL_DATA 等）|
-| action.port_name | string | 否 | 串口名称 |
-| action.config | object | 否 | 配置对象 |
-| action.data | number[] | 否 | 数据字节数组 |
-| action.device_type | string | 否 | 设备类型（serial/ble）|
-| action.device_id | string | 否 | 设备 ID |
-| action.save_state | boolean | 否 | 是否保存状态 |
+| 参数名                 | 类型        | 必填 | 描述                                                            |
+| ------------------- | --------- | -- | ------------------------------------------------------------- |
+| action              | object    | 是  | 动作对象                                                          |
+| action.action\_type | string    | 是  | 动作类型（CONNECT\_SERIAL/DISCONNECT\_SERIAL/SEND\_SERIAL\_DATA 等） |
+| action.port\_name   | string    | 否  | 串口名称                                                          |
+| action.config       | object    | 否  | 配置对象                                                          |
+| action.data         | number\[] | 否  | 数据字节数组                                                        |
+| action.device\_type | string    | 否  | 设备类型（serial/ble）                                              |
+| action.device\_id   | string    | 否  | 设备 ID                                                         |
+| action.save\_state  | boolean   | 否  | 是否保存状态                                                        |
 
 **返回**: `StateResult`
 
@@ -2102,9 +2102,9 @@ await invoke('dispatch_action', {
 });
 ```
 
----
+***
 
-### get_state
+### get\_state
 
 获取当前应用状态。
 
@@ -2118,9 +2118,9 @@ await invoke('dispatch_action', {
 const state = await invoke<AppState>('get_state');
 ```
 
----
+***
 
-### get_channel_data
+### get\_channel\_data
 
 获取指定通道的数据。
 
@@ -2128,9 +2128,9 @@ const state = await invoke<AppState>('get_state');
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| channel_id | string | 是 | 通道 ID |
+| 参数名         | 类型     | 必填 | 描述    |
+| ----------- | ------ | -- | ----- |
+| channel\_id | string | 是  | 通道 ID |
 
 **返回**: `ChannelData | null`
 
@@ -2138,9 +2138,9 @@ const state = await invoke<AppState>('get_state');
 const data = await invoke<ChannelData | null>('get_channel_data', { channelId: 'tx' });
 ```
 
----
+***
 
-### restore_state
+### restore\_state
 
 恢复应用状态。
 
@@ -2148,9 +2148,9 @@ const data = await invoke<ChannelData | null>('get_channel_data', { channelId: '
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| state | AppState | 是 | 要恢复的状态对象 |
+| 参数名   | 类型       | 必填 | 描述       |
+| ----- | -------- | -- | -------- |
+| state | AppState | 是  | 要恢复的状态对象 |
 
 **返回**: `void`
 
@@ -2158,9 +2158,9 @@ const data = await invoke<ChannelData | null>('get_channel_data', { channelId: '
 await invoke('restore_state', { state: savedState });
 ```
 
----
+***
 
-### save_state
+### save\_state
 
 保存当前应用状态。
 
@@ -2174,9 +2174,9 @@ await invoke('restore_state', { state: savedState });
 const savedState = await invoke<AppState>('save_state');
 ```
 
----
+***
 
-### get_connected_devices
+### get\_connected\_devices
 
 获取已连接的设备列表。
 
@@ -2190,9 +2190,9 @@ const savedState = await invoke<AppState>('save_state');
 const devices = await invoke<ConnectedDevice[]>('get_connected_devices');
 ```
 
----
+***
 
-### get_window_state
+### get\_window\_state
 
 获取窗口状态。
 
@@ -2206,11 +2206,11 @@ const devices = await invoke<ConnectedDevice[]>('get_connected_devices');
 const windowState = await invoke<WindowState>('get_window_state');
 ```
 
----
+***
 
 ## 偏好设置模块 (Preferences)
 
-### get_preferences
+### get\_preferences
 
 获取所有偏好设置。
 
@@ -2224,9 +2224,9 @@ const windowState = await invoke<WindowState>('get_window_state');
 const prefs = await invoke<Preferences>('get_preferences');
 ```
 
----
+***
 
-### save_preferences
+### save\_preferences
 
 保存偏好设置。
 
@@ -2234,9 +2234,9 @@ const prefs = await invoke<Preferences>('get_preferences');
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| preferences | object | 是 | 偏好设置对象 |
+| 参数名         | 类型     | 必填 | 描述     |
+| ----------- | ------ | -- | ------ |
+| preferences | object | 是  | 偏好设置对象 |
 
 **返回**: `void`
 
@@ -2244,9 +2244,9 @@ const prefs = await invoke<Preferences>('get_preferences');
 await invoke('save_preferences', { preferences: { theme: 'dark', language: 'zh-CN' } });
 ```
 
----
+***
 
-### update_serial_preferences
+### update\_serial\_preferences
 
 更新串口偏好设置。
 
@@ -2254,23 +2254,31 @@ await invoke('save_preferences', { preferences: { theme: 'dark', language: 'zh-C
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| port_name | string | 是 | 端口名称 |
-| preferences | object | 是 | 串口偏好设置 |
+| 参数名             | 类型      | 必填 | 描述      |
+| --------------- | ------- | -- | ------- |
+| display\_format | string  | 是  | 显示格式    |
+| display\_mode   | string  | 是  | 显示模式    |
+| send\_format    | string  | 是  | 发送格式    |
+| append\_newline | boolean | 是  | 是否追加换行符 |
+| newline\_type   | string  | 是  | 换行符类型   |
+| auto\_scroll    | boolean | 是  | 是否自动滚动  |
 
 **返回**: `void`
 
 ```typescript
 await invoke('update_serial_preferences', {
-  portName: 'COM1',
-  preferences: { defaultBaudRate: '115200' }
+  displayFormat: 'hex',
+  displayMode: 'text',
+  sendFormat: 'hex',
+  appendNewline: true,
+  newlineType: 'lf',
+  autoScroll: true,
 });
 ```
 
----
+***
 
-### update_ble_preferences
+### update\_ble\_preferences
 
 更新 BLE 偏好设置。
 
@@ -2278,57 +2286,73 @@ await invoke('update_serial_preferences', {
 
 **参数**:
 
-| 参数名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| preferences | object | 是 | BLE 偏好设置 |
+| 参数名               | 类型      | 必填 | 描述          |
+| ----------------- | ------- | -- | ----------- |
+| display\_format   | string  | 是  | 显示格式        |
+| auto\_scroll      | boolean | 是  | 是否自动滚动      |
+| input\_format     | string  | 是  | 输入格式        |
+| without\_response | boolean | 是  | 是否无响应写入     |
+| config\_collapsed | boolean | 是  | 配置面板是否折叠    |
+| gatt\_collapsed   | boolean | 是  | GATT 面板是否折叠 |
+| panel\_collapsed  | boolean | 是  | 侧边面板是否折叠    |
 
 **返回**: `void`
 
 ```typescript
-await invoke('update_ble_preferences', { preferences: { defaultTimeout: 5000 } });
+await invoke('update_ble_preferences', {
+  displayFormat: 'hex',
+  autoScroll: true,
+  inputFormat: 'text',
+  withoutResponse: false,
+  configCollapsed: false,
+  gattCollapsed: false,
+  panelCollapsed: false,
+});
 ```
 
----
+***
 
 ## 事件汇总
 
-### serial-data
+### serial:data
 
 串口接收数据事件。
 
 ```typescript
-interface SerialDataEvent {
-  port_name: string;
-  data: number[];
-}
-
-import { listen } from '@tauri-apps/api/event';
-const unlisten = await listen<SerialDataEvent>('serial-data', (event) => {
-  console.log('串口数据:', event.payload.port_name, event.payload.data);
-});
-```
-
----
-
-### ble-notify
-
-BLE 数据通知事件。
-
-```typescript
-interface BleDataEvent {
-  deviceId: string;
-  characteristicUuid: string;
+interface SerialDataPayload {
+  device_id: string;
   data: number[];
   timestamp: number;
 }
 
 import { listen } from '@tauri-apps/api/event';
-const unlisten = await listen<BleDataEvent>('ble-notify', (event) => {
-  console.log('BLE数据:', event.payload.deviceId, event.payload.characteristicUuid);
+const unlisten = await listen<SerialDataPayload>('serial:data', (event) => {
+  console.log('串口数据:', event.payload.device_id, event.payload.data);
 });
 ```
 
----
+***
+
+### ble:data
+
+BLE 数据通知事件。
+
+```typescript
+interface BleDataPayload {
+  device_id: string;
+  address: string;
+  characteristic_uuid: string;
+  data: number[];
+  timestamp: number;
+}
+
+import { listen } from '@tauri-apps/api/event';
+const unlisten = await listen<BleDataPayload>('ble:data', (event) => {
+  console.log('BLE数据:', event.payload.device_id, event.payload.characteristic_uuid);
+});
+```
+
+***
 
 ### websocket-status
 
@@ -2346,7 +2370,7 @@ const unlisten = await listen<WebSocketStatusEvent>('websocket-status', (event) 
 });
 ```
 
----
+***
 
 ## 类型定义汇总
 
@@ -2564,23 +2588,24 @@ interface WaveformStatus {
 }
 ```
 
----
+***
 
 ## 命名规范
 
 本文档遵循以下命名规范：
 
-| 类型 | 规范 | 示例 |
-|------|------|------|
-| Rust 函数/变量 | snake_case | `open_serial_port`, `port_name` |
-| Rust 结构体/特征 | UpperCamelCase | `SerialManager`, `BleBackend` |
-| TypeScript 变量/函数 | camelCase | `deviceId`, `scanDevices` |
-| Tauri invoke 参数 | camelCase | `{ portName: 'COM1' }` |
-| 数据库/配置 | snake_case | `serial_number`, `baud_rate` |
+| 类型               | 规范             | 示例                              |
+| ---------------- | -------------- | ------------------------------- |
+| Rust 函数/变量       | snake\_case    | `open_serial_port`, `port_name` |
+| Rust 结构体/特征      | UpperCamelCase | `SerialManager`, `BleBackend`   |
+| TypeScript 变量/函数 | camelCase      | `deviceId`, `scanDevices`       |
+| Tauri invoke 参数  | camelCase      | `{ portName: 'COM1' }`          |
+| 数据库/配置           | snake\_case    | `serial_number`, `baud_rate`    |
 
----
+***
 
 ## 更新日志
 
-- **2026-04-13**: 全面重写 API 文档，新增 Dashboard、GH3036、Waveform、State、Preferences 模块；修复 BLE 事件类型命名（BleNotificationEvent → BleDataEvent，char_uuid → characteristicUuid）；补充串口 export_serial_data 命令；补充系统模块 get_window_status、show_main_window 等命令
+- **2026-04-13**: 全面重写 API 文档，新增 Dashboard、GH3036、Waveform、State、Preferences 模块；修复 BLE 事件类型命名（BleNotificationEvent → BleDataEvent，char\_uuid → characteristicUuid）；补充串口 export\_serial\_data 命令；补充系统模块 get\_window\_status、show\_main\_window 等命令
 - **2026-04-02**: 统一使用蛇形命名规范，修复 BLE 和 Serial 模块所有参数不匹配问题
+

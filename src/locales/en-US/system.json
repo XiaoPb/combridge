@@ -5,7 +5,8 @@
     "runtimeStatus": "Runtime Status",
     "diskUsage": "Disk Usage",
     "connectionSettings": "Connection Settings",
-    "soundSettings": "Sound Settings"
+    "soundSettings": "Sound Settings",
+    "timezoneSettings": "Timezone Settings"
   },
   "label": {
     "appName": "App Name",
@@ -28,7 +29,9 @@
     "soundEnabled": "Enable Sound",
     "soundOnConnect": "Sound on Connect",
     "soundOnDisconnect": "Sound on Disconnect",
-    "soundOnData": "Sound on Data Transfer"
+    "soundOnData": "Sound on Data Transfer",
+    "timezone": "Timezone",
+    "timezoneHint": "Log timestamps will use the selected timezone"
   },
   "value": {
     "description": "Serial & Bluetooth Debug Tool",

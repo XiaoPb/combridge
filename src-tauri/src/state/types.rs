@@ -298,6 +298,7 @@ pub struct WindowState {
 pub struct AppSettings {
     pub theme: String,
     pub language: String,
+    pub timezone: String,
     pub auto_reconnect: bool,
     pub log_level: String,
     pub max_buffer_size: usize,
@@ -308,6 +309,7 @@ impl Default for AppSettings {
         Self {
             theme: "dark".to_string(),
             language: "zh-CN".to_string(),
+            timezone: "Asia/Shanghai".to_string(),
             auto_reconnect: true,
             log_level: "info".to_string(),
             max_buffer_size: 4 * 1024 * 1024,

@@ -47,8 +47,25 @@ export const useLogStore = create<LogState>((set, get) => ({
   },
 }));
 
-export const formatLogTimestamp = (timestamp: number): string => {
+export const formatLogTimestamp = (timestamp: number, timezone?: string): string => {
   const date = new Date(timestamp);
+  
+  if (timezone) {
+    try {
+      const formatted = date.toLocaleString('zh-CN', {
+        timeZone: timezone,
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      } as Intl.DateTimeFormatOptions);
+      const ms = date.getMilliseconds().toString().padStart(3, '0');
+      return `${formatted}.${ms}`;
+    } catch {
+      // 如果时区无效，使用本地时区
+    }
+  }
+  
   const hours = date.getHours().toString().padStart(2, '0');
   const minutes = date.getMinutes().toString().padStart(2, '0');
   const seconds = date.getSeconds().toString().padStart(2, '0');

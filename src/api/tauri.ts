@@ -208,6 +208,14 @@ export const systemApi = {
   async getLogConfig(): Promise<{ level: string; filePath: string }> {
     return invoke<{ level: string; filePath: string }>('get_log_config');
   },
+
+  async setTimezone(timezone: string): Promise<void> {
+    await invoke<void>('set_timezone_config', { timezone });
+  },
+
+  async getTimezone(): Promise<string> {
+    return invoke<string>('get_timezone_config');
+  },
 };
 
 export const protocolApi = {

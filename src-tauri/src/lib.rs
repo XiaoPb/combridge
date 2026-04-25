@@ -63,6 +63,13 @@ fn get_app_data_dir() -> std::path::PathBuf {
         .join("combridge")
 }
 
+fn get_exe_dir() -> std::path::PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+}
+
 #[cfg(target_os = "windows")]
 fn downgrade_window_transparency(window: &tauri::WebviewWindow) -> Result<(), String> {
     window.set_decorations(true).map_err(|e| format!("设置窗口装饰失败: {}", e))?;
@@ -95,7 +102,7 @@ pub fn run() {
     );
     
     let parser_script_manager = create_parser_script_manager(app_data_dir.clone());
-    let json_config_manager = create_json_config_manager(app_data_dir);
+    let json_config_manager = create_json_config_manager(get_exe_dir());
 
     info!("服务初始化完成");
 
@@ -259,6 +266,8 @@ pub fn run() {
             commands::system::get_log_config,
             commands::system::get_runtime_status,
             commands::system::get_app_version,
+            commands::system::set_timezone_config,
+            commands::system::get_timezone_config,
             commands::system::get_platform,
             commands::system::open_url,
             commands::system::show_in_folder,

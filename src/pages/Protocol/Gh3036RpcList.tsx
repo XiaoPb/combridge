@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button, Input, Select, Typography, message, Row, Col, theme } from 'antd';
 import { PlayCircleOutlined, ReloadOutlined, FolderOpenOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
 import { gh3036Api } from '../../api/gh3036';
 import { open } from '@tauri-apps/plugin-dialog';
+import type { Gh3036VersionTypeConfig } from '../../api/types';
 
 const { Text } = Typography;
 const { useToken } = theme;
@@ -14,6 +15,24 @@ const Gh3036RpcList: React.FC = () => {
   const { token } = useToken();
   const { executeRpc, txChannel, rpcConfig, setRpcConfig } = useGh3036Store();
   const [extendedCmd, setExtendedCmd] = useState<string>('');
+  const [versionTypes, setVersionTypes] = useState<Gh3036VersionTypeConfig[]>([]);
+
+  useEffect(() => {
+    const loadVersionTypes = async () => {
+      try {
+        const types = await gh3036Api.getVersionTypes();
+        setVersionTypes(types);
+      } catch (err) {
+        console.error('加载版本类型失败:', err);
+      }
+    };
+    loadVersionTypes();
+  }, []);
+
+  const versionTypeOptions = versionTypes.map(vt => ({
+    value: vt.type_value,
+    label: vt.name,
+  }));
 
   const workModeOptions = [
     { value: '0', label: t('gh3036.workModes.mcuOnline') },
@@ -78,7 +97,7 @@ const Gh3036RpcList: React.FC = () => {
   };
 
   const handleGetVersion = async () => {
-    const result = await executeRpc('V', ['1']);
+    const result = await executeRpc('V', [rpcConfig.versionType.toString()]);
     if (result && result.length > 0) {
       const versionStr = String.fromCharCode(...result.filter(c => c >= 32 && c < 127));
       setRpcConfig({ version: versionStr || '-' });
@@ -288,6 +307,13 @@ const Gh3036RpcList: React.FC = () => {
           <div style={rowStyle}>
             <Text style={labelStyle}>{t('gh3036.versionGet')}</Text>
             <div style={controlStyle}>
+              <Select
+                value={rpcConfig.versionType}
+                onChange={(value) => setRpcConfig({ versionType: value })}
+                options={versionTypeOptions}
+                style={{ width: 150, marginRight: 8 }}
+                size="small"
+              />
               <Text style={{ fontSize: 13 }}>{rpcConfig.version}</Text>
             </div>
             <Button

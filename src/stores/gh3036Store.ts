@@ -104,6 +104,7 @@ interface Gh3036State {
     factoryMode: string;
     factoryResult: string;
     version: string;
+    versionType: number;
   };
   
   factoryTest: {
@@ -271,6 +272,7 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     factoryMode: '',
     factoryResult: '-',
     version: '-',
+    versionType: 1,
   },
   
   factoryTest: {

@@ -21,7 +21,7 @@ use super::config_loader::ConfigLoader;
 use super::manager::Gh3036Manager;
 use super::threshold_config::{
     FactoryThresholdConfig, FactoryEvaluationResult, ThresholdConfigValidation,
-    evaluate_test_data, validate_threshold_config_file,
+    evaluate_test_data, validate_threshold_config_file, generate_error_codes,
 };
 use super::types::{
     FactoryTestStep, FactoryTestStatus, FactoryTestResult, FactoryTestStepResult,
@@ -328,7 +328,18 @@ impl FactoryTestManager {
                     .duration_since(std::time::UNIX_EPOCH)
                     .map(|d| d.as_millis() as u64)
                     .unwrap_or(0),
+                device_info: String::new(),
+                error_code: String::new(),
+                project_name: String::new(),
             };
+
+            if let Some(tx_channel) = manager.get_tx_channel() {
+                test_result.device_info = tx_channel.device_id;
+            }
+
+            if let Some(ref config) = threshold_config {
+                test_result.project_name = config.project.clone();
+            }
 
             let steps: [(FactoryTestStep, f32, f32); 10] = [
                 (FactoryTestStep::Prepare, 0.0, 0.05),
@@ -429,18 +440,6 @@ impl FactoryTestManager {
             }
 
             if running.load(Ordering::SeqCst) {
-                Self::publish_progress_static(
-                    &event_bus,
-                    FactoryTestStep::Completed,
-                    FactoryTestStatus::Completed,
-                    1.0,
-                    &format!("产测完成，结果: {}", test_result.overall_result),
-                );
-
-                if let Err(e) = Self::save_result_to_csv(&test_result) {
-                    error!("[FactoryTest] 保存结果失败: {}", e);
-                }
-
                 if let Some(ref config) = threshold_config {
                     info!("[FactoryTest] 执行卡控判断...");
                     let eval_result = evaluate_test_data(
@@ -451,15 +450,40 @@ impl FactoryTestManager {
                         &test_result.lplctr,
                     );
                     info!("[FactoryTest] 卡控判断结果: overall_pass={}", eval_result.overall_pass);
-                    
-                    if !eval_result.overall_pass {
+
+                    let error_result = generate_error_codes(
+                        test_result.chip_init_status,
+                        &test_result.uuid,
+                        &eval_result,
+                    );
+                    test_result.error_code = error_result.error_codes.join(",");
+
+                    if error_result.has_error {
                         test_result.overall_result = "FAIL".to_string();
                     }
-                    
+
                     {
                         let mut eval = evaluation_result_clone.lock();
                         *eval = Some(eval_result);
                     }
+                }
+
+                Self::publish_progress_static(
+                    &event_bus,
+                    FactoryTestStep::Completed,
+                    FactoryTestStatus::Completed,
+                    1.0,
+                    &format!("产测完成，结果: {}", test_result.overall_result),
+                );
+
+                let project_name = if test_result.project_name.is_empty() {
+                    "unknown".to_string()
+                } else {
+                    test_result.project_name.clone()
+                };
+
+                if let Err(e) = Self::save_result_to_csv(&test_result, &project_name) {
+                    error!("[FactoryTest] 保存结果失败: {}", e);
                 }
 
                 {
@@ -1245,7 +1269,7 @@ impl FactoryTestManager {
         }))
     }
 
-    fn save_result_to_csv(result: &FactoryTestResult) -> Result<(), String> {
+    fn save_result_to_csv(result: &FactoryTestResult, project_name: &str) -> Result<(), String> {
         let exe_dir = std::env::current_exe()
             .ok()
             .and_then(|exe_path| exe_path.parent().map(|p| p.to_path_buf()))
@@ -1256,7 +1280,7 @@ impl FactoryTestManager {
             .map_err(|e| format!("创建输出目录失败: {}", e))?;
 
         let today = Local::now().format("%Y-%m-%d").to_string();
-        let file_name = format!("factory_{}.csv", today);
+        let file_name = format!("factory_{}_{}.csv", project_name, today);
         let file_path = output_dir.join(&file_name);
 
         let file_exists = file_path.exists();
@@ -1270,54 +1294,97 @@ impl FactoryTestManager {
         use std::io::Write;
 
         if !file_exists {
-            let header = "timestamp,overall_result,chip_init_status,uuid,base_noise,ppg_noise,lpctr,lplctr\n";
+            let header = Self::generate_csv_header();
             file.write_all(header.as_bytes())
                 .map_err(|e| format!("写入文件头失败: {}", e))?;
         }
 
-        let uuid_str = result.uuid.iter()
-            .map(|b| format!("{:02X}", b))
-            .collect::<Vec<_>>()
-            .join(":");
-
-        let base_noise_str = result.base_noise.iter()
-            .map(|v| v.to_string())
-            .collect::<Vec<_>>()
-            .join("|");
-
-        let ppg_noise_str = result.ppg_noise.iter()
-            .map(|v| v.to_string())
-            .collect::<Vec<_>>()
-            .join("|");
-
-        let lpctr_str = result.lpctr.iter()
-            .map(|v| v.to_string())
-            .collect::<Vec<_>>()
-            .join("|");
-
-        let lplctr_str = result.lplctr.iter()
-            .map(|v| v.to_string())
-            .collect::<Vec<_>>()
-            .join("|");
-
-        let line = format!(
-            "{},{},{},{},{},{},{},{}\n",
-            result.timestamp,
-            result.overall_result,
-            result.chip_init_status,
-            uuid_str,
-            base_noise_str,
-            ppg_noise_str,
-            lpctr_str,
-            lplctr_str
-        );
-
+        let line = Self::format_csv_row(result);
         file.write_all(line.as_bytes())
             .map_err(|e| format!("写入数据失败: {}", e))?;
 
         info!("[FactoryTest] 结果已保存到: {}", file_path.display());
 
         Ok(())
+    }
+
+    fn generate_csv_header() -> String {
+        let mut headers: Vec<&str> = vec![
+            "timestamp", "datetime", "overall_result", "error_code",
+            "device_info", "chip_init_status", "uuid",
+        ];
+
+        for i in 0..4 {
+            headers.push(Box::leak(format!("base_noise_{}", i).into_boxed_str()));
+        }
+
+        for i in 0..32 {
+            headers.push(Box::leak(format!("ppg_noise_{}", i).into_boxed_str()));
+        }
+
+        for i in 0..32 {
+            headers.push(Box::leak(format!("lpctr_{}", i).into_boxed_str()));
+        }
+
+        for i in 0..32 {
+            headers.push(Box::leak(format!("lplctr_{}", i).into_boxed_str()));
+        }
+
+        headers.join(",") + "\n"
+    }
+
+    fn format_csv_row(result: &FactoryTestResult) -> String {
+        let datetime = chrono::DateTime::from_timestamp_millis(result.timestamp as i64)
+            .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+            .unwrap_or_default();
+
+        let uuid_str = result.uuid.iter()
+            .map(|b| format!("{:02X}", b))
+            .collect::<Vec<_>>()
+            .join("");
+
+        let base_noise = Self::pad_channels(&result.base_noise, 4);
+        let ppg_noise = Self::pad_channels(&result.ppg_noise, 32);
+        let lpctr = Self::pad_channels(&result.lpctr, 32);
+        let lplctr = Self::pad_channels(&result.lplctr, 32);
+
+        let mut row = vec![
+            result.timestamp.to_string(),
+            datetime,
+            result.overall_result.clone(),
+            Self::escape_csv_field(&result.error_code),
+            result.device_info.clone(),
+            result.chip_init_status.to_string(),
+            uuid_str,
+        ];
+
+        row.extend(base_noise);
+        row.extend(ppg_noise);
+        row.extend(lpctr);
+        row.extend(lplctr);
+
+        row.join(",") + "\n"
+    }
+
+    fn escape_csv_field(field: &str) -> String {
+        if field.contains(',') || field.contains('"') || field.contains('\n') {
+            let escaped = field.replace('"', "\"\"");
+            format!("\"{}\"", escaped)
+        } else {
+            field.to_string()
+        }
+    }
+
+    fn pad_channels(data: &[u16], max_count: usize) -> Vec<String> {
+        let mut result: Vec<String> = data.iter()
+            .map(|v| v.to_string())
+            .collect();
+
+        while result.len() < max_count {
+            result.push("0".to_string());
+        }
+
+        result
     }
 
     fn publish_progress(

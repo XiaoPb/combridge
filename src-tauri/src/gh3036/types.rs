@@ -705,6 +705,9 @@ pub struct FactoryTestResult {
     pub lplctr: Vec<u16>,
     pub overall_result: String,
     pub timestamp: u64,
+    pub device_info: String,
+    pub error_code: String,
+    pub project_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

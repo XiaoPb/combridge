@@ -18,6 +18,7 @@
 | `Waveform/` | 波形页面（含多线/双线图表） |
 | `Dashboard/` | 仪表盘页面（20+ 子组件） |
 | `System/` | 系统页面 |
+| `Gh3036/` | GH3036 协议页面（配置/监控/产测/版本） |
 
 ## 页面结构
 
@@ -275,6 +276,77 @@ System/
 └── LogViewer.tsx       # 日志查看器：日志级别过滤、搜索
 ```
 
+### Gh3036 页面
+
+```
+Gh3036/
+├── index.tsx           # 主页面，标签切换，事件订阅管理
+├── ConfigTab.tsx       # 配置标签：通道配置、RPC 命令
+├── MonitorTab.tsx      # 监控标签：生命体征卡片、IPD/PA 图表、GSensor 图表
+├── FactoryTestTab.tsx  # 产测标签：配置目录选择、产测进度、测试结果
+├── VersionTab.tsx      # 版本标签：版本类型列表、版本获取
+└── components/
+    └── VitalSignCard.tsx # 生命体征卡片组件
+```
+
+**Gh3036 主页面**（[index.tsx](file:///e:/Code/CPP/combridge-rust/src/pages/Gh3036/index.tsx)）：
+
+| 功能 | 说明 |
+|------|------|
+| 初始化 | 调用 `loadLibraryStatus()` 检查库链接状态，调用 `initialize()` 初始化 GH3036 库 |
+| 配置加载 | 加载通道配置、CSV 配置、RPC 命令列表 |
+| 事件订阅 | 组件挂载时订阅 GH3036 事件，卸载时自动清理 |
+| 标签切换 | 根据 `gh3036ActiveTab` 渲染 ConfigTab/MonitorTab/FactoryTestTab/VersionTab |
+| 错误显示 | 顶部 Alert 显示错误信息 |
+
+**ConfigTab 组件**（[ConfigTab.tsx](file:///e:/Code/CPP/combridge-rust/src/pages/Gh3036/ConfigTab.tsx)）：
+
+| 功能 | 说明 |
+|------|------|
+| 通道配置 | 嵌入 `Gh3036ChannelConfig` 组件，配置 TX/RX 通道（串口/BLE） |
+| RPC 命令 | 嵌入 `Gh3036RpcList` 组件，显示可用 RPC 命令列表 |
+
+**MonitorTab 组件**（[MonitorTab.tsx](file:///e:/Code/CPP/combridge-rust/src/pages/Gh3036/MonitorTab.tsx)）：
+
+| 功能 | 说明 |
+|------|------|
+| 生命体征卡片 | 显示 HR（心率）、SpO2（血氧）、ADT（佩戴检测）、GNADT（活体检测） |
+| IPD/PA 图表 | 使用 `MultiLineChart` 显示多通道波形数据 |
+| GSensor 图表 | 显示加速度计三轴数据（ACC_X/Y/Z） |
+| 功能选择 | 下拉选择显示哪个功能 ID 的波形数据 |
+| 数据清理 | 清空波形数据和生命体征状态 |
+
+**FactoryTestTab 组件**（[FactoryTestTab.tsx](file:///e:/Code/CPP/combridge-rust/src/pages/Gh3036/FactoryTestTab.tsx)）：
+
+| 功能 | 说明 |
+|------|------|
+| 配置目录 | 选择产测配置文件目录 |
+| 配置验证 | 验证 base_noise/ppg_noise/lpctr/lplctr 配置文件是否存在 |
+| 产测控制 | 启动/停止产测流程 |
+| 进度显示 | Progress 组件显示产测进度 |
+| 环境切换 | 等待环境切换时弹出确认对话框 |
+| 测试结果 | 显示芯片初始化状态、UUID、各测试项结果 |
+| 卡控配置 | 加载和验证卡控阈值配置 |
+
+**VersionTab 组件**（[VersionTab.tsx](file:///e:/Code/CPP/combridge-rust/src/pages/Gh3036/VersionTab.tsx)）：
+
+| 功能 | 说明 |
+|------|------|
+| 版本类型列表 | 表格显示版本类型配置（name/type_value/description） |
+| 单项刷新 | 每行可单独刷新获取版本号 |
+| 全部刷新 | 一键刷新所有版本类型 |
+| 库状态显示 | 显示库链接状态和 TX 通道状态 |
+
+**VitalSignCard 组件**（[VitalSignCard.tsx](file:///e:/Code/CPP/combridge-rust/src/pages/Gh3036/components/VitalSignCard.tsx)）：
+
+| 属性 | 说明 |
+|------|------|
+| `title` | 卡片标题 |
+| `value` | 数值（数字或字符串） |
+| `unit` | 单位（可选） |
+| `status` | 状态（normal/success/warning/error） |
+| `icon` | 图标 |
+
 ## 页面架构
 
 ```mermaid
@@ -287,6 +359,15 @@ graph TB
         WaveformPage[Waveform Page]
         DashboardPage[Dashboard Page]
         SystemPage[System Page]
+        Gh3036Page[Gh3036 Page]
+    end
+
+    subgraph Gh3036Components
+        ConfigTab
+        MonitorTab
+        FactoryTestTab
+        VersionTab
+        VitalSignCard
     end
 
     subgraph DashboardComponents
@@ -319,12 +400,14 @@ graph TB
     HomePage -->|navigate| ProtocolPage
     HomePage -->|navigate| WaveformPage
     HomePage -->|navigate| SystemPage
+    HomePage -->|navigate| Gh3036Page
 
     SerialPage --> useSerial
     BlePage --> useBle
     ProtocolPage --> useProtocol
     WaveformPage --> useWaveform
     DashboardPage --> DashboardComponents
+    Gh3036Page --> Gh3036Components
 ```
 
 ## 路由配置
@@ -339,6 +422,7 @@ const routes = [
   { path: '/waveform', element: <WaveformPage /> },
   { path: '/dashboard', element: <DashboardPage /> },
   { path: '/system', element: <SystemPage /> },
+  { path: '/gh3036', element: <Gh3036Page /> },
 ];
 ```
 

@@ -29,15 +29,13 @@ API 层封装了所有 Tauri 命令调用和事件监听，提供类型安全的
 | 方法 | 后端命令 | 说明 |
 |------|----------|------|
 | `listPorts()` | `scan_serial_ports` | 扫描可用串口列表 |
-| `open(portName, config)` | `open_serial_port` | 打开串口 |
-| `close(portName)` | `close_serial_port` | 关闭串口 |
-| `write(portName, data)` | `send_serial_data` | 发送数据 |
+| `openPort(portName, config)` | `open_serial_port` | 打开串口 |
+| `closePort(portName)` | `close_serial_port` | 关闭串口 |
+| `sendData(portName, data)` | `send_serial_data` | 发送数据 |
 | `getOpenPorts()` | `get_open_ports` | 获取已打开的端口列表 |
 | `isConnected(portName)` | `is_port_open` | 检查端口是否已打开 |
 | `exportData(portName, allData, rxData)` | `export_serial_data` | 导出串口数据 |
 | `getCache(portName)` | `get_serial_cache` | 获取串口缓存数据 |
-
-别名方法：`scanPorts()` → `listPorts()`、`openPort()` → `open()`、`closePort()` → `close()`、`sendData()` → `write()`
 
 ### BleApi
 
@@ -45,21 +43,21 @@ BLE 相关 API，源码位于 [tauri.ts](file:///e:/Code/CPP/combridge-rust/src/
 
 | 方法 | 后端命令 | 说明 |
 |------|----------|------|
-| `configure(params)` | `configure_ble` | 配置 BLE 模式（native/at） |
-| `scan(options?)` | `scan_ble_devices` | 扫描 BLE 设备 |
-| `stopScan()` | `stop_ble_scan` | 停止扫描 |
-| `connect(params)` | `connect_ble` | 连接 BLE 设备 |
-| `disconnect(deviceId)` | `disconnect_ble` | 断开 BLE 连接 |
+| `configureBle(mode, serialPort?)` | `configure_ble` | 配置 BLE 模式（native/at） |
+| `scanBleDevices(options?)` | `scan_ble_devices` | 扫描 BLE 设备 |
+| `stopBleScan()` | `stop_ble_scan` | 停止扫描 |
+| `connectBle(address, timeout?)` | `connect_ble` | 连接 BLE 设备 |
+| `disconnectBle(deviceId)` | `disconnect_ble` | 断开 BLE 连接 |
 | `getConnections()` | `get_ble_connections` | 获取连接列表 |
-| `discoverServices(params)` | `discover_ble_services` | 发现服务 |
-| `discoverCharacteristics(params)` | `discover_ble_characteristics` | 发现特征 |
-| `read(params)` | `read_ble_characteristic` | 读取特征值 |
-| `write(params)` | `write_ble_characteristic` | 写入特征值 |
-| `writeWithoutResponse(deviceId, charUuid, data)` | `write_ble_without_response` | 无响应写入 |
-| `subscribe(params)` | `subscribe_ble_notify` | 订阅通知 |
-| `unsubscribe(deviceId, charUuid)` | `unsubscribe_ble_notify` | 取消订阅 |
+| `discoverBleServices(deviceId)` | `discover_ble_services` | 发现服务 |
+| `discoverBleCharacteristics(deviceId, serviceUuid)` | `discover_ble_characteristics` | 发现特征 |
+| `readBleCharacteristic(deviceId, charUuid)` | `read_ble_characteristic` | 读取特征值 |
+| `writeBleCharacteristic(deviceId, charUuid, data, withoutResponse?)` | `write_ble_characteristic` | 写入特征值 |
+| `writeBleWithoutResponse(deviceId, charUuid, data)` | `write_ble_without_response` | 无响应写入 |
+| `subscribeBleNotify(deviceId, charUuid)` | `subscribe_ble_notify` | 订阅通知 |
+| `unsubscribeBleNotify(deviceId, charUuid)` | `unsubscribe_ble_notify` | 取消订阅 |
 | `getRssi(deviceId)` | `get_ble_rssi` | 获取 RSSI |
-| `setMtu(deviceId, mtu)` | `set_ble_mtu` | 设置 MTU |
+| `setBleMtu(deviceId, mtu)` | `set_ble_mtu` | 设置 MTU |
 | `getMode()` | `get_ble_mode` | 获取 BLE 模式 |
 | `isConfigured()` | `is_ble_configured` | 检查是否已配置 |
 | `getCache(charUuid)` | `get_ble_cache` | 获取 BLE 缓存 |
@@ -92,6 +90,8 @@ WebSocket 相关 API：
 | `showInFolder(path)` | `show_in_folder` | 在文件管理器中显示 |
 | `configureLog(level, filePath?)` | `configure_log` | 配置日志 |
 | `getLogConfig()` | `get_log_config` | 获取日志配置 |
+| `setTimezone(timezone)` | `set_timezone_config` | 设置时区配置 |
+| `getTimezone()` | `get_timezone_config` | 获取时区配置 |
 
 ### ProtocolApi
 
@@ -99,15 +99,15 @@ WebSocket 相关 API：
 
 | 方法 | 后端命令 | 说明 |
 |------|----------|------|
-| `load(params)` | `load_protocol` | 加载协议 |
-| `unload(pluginId)` | `unload_protocol` | 卸载协议 |
-| `enable(pluginId)` | `enable_protocol` | 启用协议 |
-| `disable(pluginId)` | `disable_protocol` | 禁用协议 |
-| `bind(params)` | `bind_protocol` | 绑定协议到设备 |
-| `unbind(params)` | `unbind_protocol` | 解绑协议 |
-| `list()` | `list_protocols` | 获取协议列表 |
-| `get(pluginId)` | `get_protocol` | 获取单个协议信息 |
-| `getBound(deviceId)` | `get_bound_protocols` | 获取设备绑定的协议 |
+| `loadProtocol(pluginId, path)` | `load_protocol` | 加载协议 |
+| `unloadProtocol(pluginId)` | `unload_protocol` | 卸载协议 |
+| `enableProtocol(pluginId)` | `enable_protocol` | 启用协议 |
+| `disableProtocol(pluginId)` | `disable_protocol` | 禁用协议 |
+| `bindProtocol(pluginId, deviceId)` | `bind_protocol` | 绑定协议到设备 |
+| `unbindProtocol(pluginId, deviceId)` | `unbind_protocol` | 解绑协议 |
+| `listProtocols()` | `list_protocols` | 获取协议列表 |
+| `getProtocol(pluginId)` | `get_protocol` | 获取单个协议信息 |
+| `getBoundProtocols(deviceId)` | `get_bound_protocols` | 获取设备绑定的协议 |
 
 ### PreferencesApi
 
@@ -366,7 +366,7 @@ import { serialApi } from '@/api';
 
 const ports = await serialApi.listPorts();
 
-await serialApi.open('COM3', {
+await serialApi.openPort('COM3', {
   baudRate: 115200,
   dataBits: 8,
   stopBits: 1,
@@ -374,7 +374,7 @@ await serialApi.open('COM3', {
   flowControl: 'none',
 });
 
-await serialApi.write('COM3', [0x01, 0x02, 0x03]);
+await serialApi.sendData('COM3', [0x01, 0x02, 0x03]);
 ```
 
 ### 监听事件
@@ -427,7 +427,7 @@ import { serialApi } from '@/api';
 import { isApiError } from '@/api/types';
 
 try {
-  await serialApi.open('COM3', config);
+  await serialApi.openPort('COM3', config);
 } catch (error) {
   if (isApiError(error)) {
     console.error(`错误 [${error.code}]: ${error.message}`);

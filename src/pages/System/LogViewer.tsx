@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { Card, Table, Tag, Space, Button, Select, Input, Typography, Empty } from 'antd';
 import {
   ClearOutlined,
@@ -33,6 +33,42 @@ const LogViewer: React.FC = () => {
   const tableRef = useRef<HTMLDivElement>(null);
 
   const effectiveTimezone = hasHydrated ? timezone : 'Asia/Shanghai';
+
+  const columns = useMemo(() => [
+    {
+      title: t('logViewer.timestamp'),
+      dataIndex: 'timestamp',
+      key: 'timestamp',
+      width: 120,
+      render: (timestamp: number) => (
+        <Text style={{ fontSize: 12 }}>{formatLogTimestamp(timestamp, effectiveTimezone)}</Text>
+      ),
+    },
+    {
+      title: t('logViewer.level'),
+      dataIndex: 'level',
+      key: 'level',
+      width: 80,
+      render: (level: LogLevel) => (
+        <Tag color={levelColors[level]}>{levelTexts[level]}</Tag>
+      ),
+    },
+    {
+      title: t('logViewer.source'),
+      dataIndex: 'source',
+      key: 'source',
+      width: 120,
+      render: (source: string) => <Text style={{ fontSize: 12 }}>{source}</Text>,
+    },
+    {
+      title: t('logViewer.message'),
+      dataIndex: 'message',
+      key: 'message',
+      render: (message: string) => (
+        <Text style={{ fontSize: 12, wordBreak: 'break-all' }}>{message}</Text>
+      ),
+    },
+  ], [t, effectiveTimezone]);
 
   useEffect(() => {
     let filtered: LogEntry[] = logs;
@@ -78,40 +114,6 @@ const LogViewer: React.FC = () => {
     a.click();
     URL.revokeObjectURL(url);
   };
-
-  const columns = [
-    {
-      title: t('logViewer.timestamp'),
-      dataIndex: 'timestamp',
-      key: 'timestamp',
-      width: 120,
-      render: (timestamp: number) => (
-        <Text style={{ fontSize: 12 }}>{formatLogTimestamp(timestamp, effectiveTimezone)}</Text>
-      ),
-    },
-    {
-      title: t('logViewer.level'),
-      dataIndex: 'level',
-      key: 'level',
-      width: 80,
-      render: (level: LogLevel) => (
-        <Tag color={levelColors[level]}>{levelTexts[level]}</Tag>
-      ),
-    },
-    {
-      title: t('logViewer.source'),
-      dataIndex: 'source',
-      key: 'source',
-      width: 120,
-      render: (source: string) => <Text code>{source}</Text>,
-    },
-    {
-      title: t('logViewer.message'),
-      dataIndex: 'message',
-      key: 'message',
-      render: (message: string) => <Text>{message}</Text>,
-    },
-  ];
 
   const sources = [...new Set(logs.map((log: LogEntry) => log.source))];
 
@@ -172,6 +174,7 @@ const LogViewer: React.FC = () => {
       >
         {filteredLogs.length > 0 ? (
           <Table
+            key={effectiveTimezone}
             dataSource={filteredLogs}
             columns={columns}
             rowKey="id"

@@ -8,15 +8,15 @@ ComBridge 前端采用 React 18 + TypeScript 构建，使用 Zustand 进行状�
 
 | 技术 | 版本 | 说明 |
 |------|------|------|
-| React | 18 | UI 框架，函数组件 + Hooks |
-| TypeScript | 5.x | 类型安全 |
-| Zustand | 4.x | 状态管理，支持 persist 中间件 |
+| React | 19 | UI 框架，函数组件 + Hooks |
+| TypeScript | 5.8 | 类型安全 |
+| Zustand | 5.x | 状态管理，支持 persist 中间件 |
 | Ant Design | 6.3.5 | UI 组件库 |
-| React Router | 6.x | 路由管理 |
-| i18next | 23.x | 国际化，命名空间按模块拆分 |
-| ECharts | 5.x | 波形图表渲染（CSV 图表） |
-| Recharts | 2.x | 波形图表渲染（实时双线图） |
-| Vite | 5.x | 构建工具 |
+| React Router | 7.x | 路由管理 |
+| i18next | 26.x | 国际化，命名空间按模块拆分 |
+| ECharts | 6.x | 波形图表渲染（CSV 图表） |
+| Recharts | 3.x | 波形图表渲染（实时双线图） |
+| Vite | 7.x | 构建工具 |
 
 ## 架构图
 

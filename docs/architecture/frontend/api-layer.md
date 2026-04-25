@@ -119,6 +119,8 @@ WebSocket 相关 API：
 | `save(prefs)` | `save_preferences` | 保存所有偏好设置 |
 | `updateSerial(prefs)` | `update_serial_preferences` | 更新串口偏好 |
 | `updateBle(prefs)` | `update_ble_preferences` | 更新 BLE 偏好 |
+| `updateWaveform(prefs)` | `update_waveform_preferences` | 更新波形偏好（显示行数、刷新间隔、侧边栏状态） |
+| `updateGh3036Channel(prefs)` | `update_gh3036_channel_preferences` | 更新 GH3036 通道偏好（连接类型、串口/ BLE 设备、特征 UUID） |
 
 ### DashboardApi
 
@@ -195,103 +197,70 @@ GH3036 协议 API，源码位于 [gh3036.ts](file:///e:/Code/CPP/combridge-rust/
 
 源码位于 [events.ts](file:///e:/Code/CPP/combridge-rust/src/api/events.ts)，所有事件类型定义如下：
 
+### 事件总线架构
+
+项目使用统一的事件总线架构，通过 `event-bus` 事件接收所有后端推送的数据，根据 `topic` 字段分发到不同的处理函数。
+
 ### 事件常量
 
 ```typescript
+export const EventBusTopics = {
+  SERIAL_DATA: 'serial:data',
+  SERIAL_CONNECTED: 'serial:connected',
+  SERIAL_DISCONNECTED: 'serial:disconnected',
+  BLE_DATA: 'ble:data',
+  BLE_CONNECTED: 'ble:connected',
+  BLE_DISCONNECTED: 'ble:disconnected',
+  GH3036_FRAME: 'gh3036:frame',
+  PROTOCOL_PARSED: 'protocol:parsed',
+} as const;
+
 export const TauriEvents = {
-  SERIAL_DATA: 'serial-data',
-  SERIAL_ERROR: 'serial-error',
-  SERIAL_CONNECTED: 'serial-connected',
-  SERIAL_DISCONNECTED: 'serial-disconnected',
-  BLE_DATA: 'ble-notify',
-  BLE_CONNECTED: 'ble-connected',
-  BLE_DISCONNECTED: 'ble-disconnected',
-  BLE_ERROR: 'ble-error',
-  BLE_SCAN_RESULT: 'ble-scan-result',
-  BLE_MODE_CHANGED: 'ble-mode-changed',
-  PARSED_DATA: 'parsed-data',
+  EVENT_BUS: 'event-bus',
 } as const;
 ```
 
-### 串口事件类型
+### 事件 Payload 类型
 
-| 类型名 | 事件名 | 字段 | 说明 |
-|--------|--------|------|------|
-| `SerialDataEvent` | `serial-data` | `port_name: string`, `data: number[]`, `timestamp?: number` | 串口数据接收 |
-| `SerialErrorEvent` | `serial-error` | `portName: string`, `error: string` | 串口错误 |
-| — | `serial-connected` | payload: `string`（端口名） | 串口连接成功 |
-| — | `serial-disconnected` | payload: `string`（端口名） | 串口断开连接 |
-
-### BLE 事件类型
-
-| 类型名 | 事件名 | 字段 | 说明 |
-|--------|--------|------|------|
-| `BleDataEvent` | `ble-notify` | `deviceId: string`, `characteristicUuid: string`, `data: number[]`, `timestamp: number` | BLE 数据通知 |
-| `BleConnectionEvent` | `ble-connected` / `ble-disconnected` | `deviceId: string`, `address: string`, `name?: string`, `connected: boolean` | BLE 连接状态变更 |
-| `BleErrorEvent` | `ble-error` | `deviceId?: string`, `error: string` | BLE 错误 |
-| `BleScanResultEvent` | `ble-scan-result` | `device: { address, name?, rssi?, isConnectable, services?, manufacturerData? }`, `timestamp: number` | BLE 扫描结果 |
-| `BleModeChangedEvent` | `ble-mode-changed` | `mode: 'native' \| 'at'`, `serialPort?: string` | BLE 模式变更 |
-
-### 解析数据事件
-
-| 类型名 | 事件名 | 字段 | 说明 |
-|--------|--------|------|------|
-| `ParsedDataEvent` | `parsed-data` | `timestamp: number`, `values: Record<string, number>` | 协议解析后的数据 |
+| 类型名 | Topic | 字段 | 说明 |
+|--------|-------|------|------|
+| `SerialDataPayload` | `serial:data` | `device_id: string`, `data: number[]`, `timestamp: number` | 串口数据接收 |
+| `SerialConnectedPayload` | `serial:connected` | `port_name: string`, `timestamp: number` | 串口连接成功 |
+| `SerialDisconnectedPayload` | `serial:disconnected` | `port_name: string`, `timestamp: number` | 串口断开连接 |
+| `BleDataPayload` | `ble:data` | `device_id: string`, `address: string`, `characteristic_uuid: string`, `data: number[]`, `timestamp: number` | BLE 数据通知 |
+| `BleConnectedPayload` | `ble:connected` | `address: string`, `name?: string`, `timestamp: number` | BLE 连接成功 |
+| `BleDisconnectedPayload` | `ble:disconnected` | `address: string`, `name?: string`, `timestamp: number` | BLE 断开连接 |
+| `Gh3036FramePayload` | `gh3036:frame` | `function_id`, `function_name`, `frame_id`, `timestamp`, `channel_count`, `channels` | GH3036 帧数据 |
+| `ProtocolParsedPayload` | `protocol:parsed` | `plugin_id`, `device_id`, `original_data`, `parsed_data`, `timestamp` | 协议解析数据 |
 
 ### 事件监听函数
 
 | 函数 | 说明 |
 |------|------|
-| `onSerialData(callback)` | 监听串口数据 |
-| `onSerialError(callback)` | 监听串口错误 |
-| `onSerialConnected(callback)` | 监听串口连接 |
-| `onSerialDisconnected(callback)` | 监听串口断开 |
-| `onBleData(callback)` | 监听 BLE 数据通知 |
-| `onBleConnected(callback)` | 监听 BLE 连接 |
-| `onBleDisconnected(callback)` | 监听 BLE 断开 |
-| `onBleError(callback)` | 监听 BLE 错误 |
-| `onBleScanResult(callback)` | 监听 BLE 扫描结果 |
-| `onBleModeChanged(callback)` | 监听 BLE 模式变更 |
-| `onParsedData(callback)` | 监听解析数据 |
+| `onEventBus(callback)` | 监听原始事件总线 |
+| `onTopic<T>(topic, callback)` | 监听指定 topic 的事件，支持 JSON 和 msgpack+base64 编码 |
+| `onSerialData(callback)` | 监听串口数据 (`serial:data`) |
+| `onBleData(callback)` | 监听 BLE 数据 (`ble:data`) |
+| `onParsedData(callback)` | 监听协议解析数据 (`protocol:parsed`) |
 
 ### 事件聚合对象
 
 ```typescript
-export const serialEvents = {
-  onData: onSerialData,
-  onError: onSerialError,
-  onConnected: onSerialConnected,
-  onDisconnected: onSerialDisconnected,
-};
-
-export const bleEvents = {
-  onData: onBleData,
-  onConnected: onBleConnected,
-  onDisconnected: onBleDisconnected,
-  onError: onBleError,
-  onScanResult: onBleScanResult,
-  onModeChanged: onBleModeChanged,
+export const eventBus = {
+  on: onEventBus,
+  onTopic,
 };
 ```
+
+### 编码格式
+
+事件 Payload 支持两种编码格式：
+- `json`：标准 JSON 编码
+- `msgpack+base64`：MessagePack 编码后进行 Base64 转换
 
 ### 事件清理
 
-```typescript
-interface EventListeners {
-  serialData?: UnlistenFn;
-  serialError?: UnlistenFn;
-  serialConnected?: UnlistenFn;
-  serialDisconnected?: UnlistenFn;
-  bleData?: UnlistenFn;
-  bleConnected?: UnlistenFn;
-  bleDisconnected?: UnlistenFn;
-  bleError?: UnlistenFn;
-  bleScanResult?: UnlistenFn;
-  bleModeChanged?: UnlistenFn;
-}
-
-async function cleanupListeners(listeners: EventListeners): Promise<void>
-```
+通过 `onTopic` 返回的 `Promise<UnlistenFn>` 可以在组件卸载时清理事件监听。
 
 ## 类型定义
 

@@ -167,22 +167,49 @@ graph TB
 `ActionDispatcher` 在每次成功执行 Action 后，自动执行两个副作用操作：
 
 1. **广播状态变更**：通过 Tauri Event 将完整状态推送到前端
-2. **自动保存状态**：将当前状态持久化到文件
+2. **自动保存状态**：将当前状态持久化到文件（根据 SaveStrategy 决定时机）
+
+### SaveStrategy 保存策略
+
+状态保存采用三种策略平衡性能：
+
+| 策略 | 说明 | 适用 Action |
+|------|------|------------|
+| `Skip` | 跳过保存 | `DataSend`, `DataReceive` |
+| `Immediate` | 立即保存 | 设备连接/断开、设备增删、配置更新、设置变更、状态恢复 |
+| `Debounced` | 防抖保存（500ms） | 其他 Action |
+
+防抖机制避免频繁 IO 操作，所有数据发送/接收操作跳过保存以避免性能问题。
 
 ```rust
-pub async fn dispatch(&self, action: Action, app: &AppHandle) -> ActionResult {
-    info!("处理 Action: {}", action);
+const SAVE_DEBOUNCE_MS: u64 = 500;
 
-    let result = match action {
-        // ... 各 Action 处理
-    };
+enum SaveStrategy {
+    Skip,
+    Immediate,
+    Debounced,
+}
 
-    if result.success {
-        self.broadcast_state_change(app).await;
-        self.save_state().await;
+async fn save_with_strategy(&self, strategy: SaveStrategy) {
+    match strategy {
+        SaveStrategy::Skip => {}
+        SaveStrategy::Immediate => {
+            self.save_state().await;
+        }
+        SaveStrategy::Debounced => {
+            let should_save = if let Ok(last) = self.last_save.lock() {
+                match *last {
+                    Some(instant) => instant.elapsed().as_millis() as u64 >= SAVE_DEBOUNCE_MS,
+                    None => true,
+                }
+            } else {
+                true
+            };
+            if should_save {
+                self.save_state().await;
+            }
+        }
     }
-
-    result
 }
 ```
 
@@ -220,8 +247,14 @@ async fn connect_ble(&self, device_id: &str, _app: &AppHandle) -> ActionResult {
     };
 
     match self.ble_manager.connect(&address).await {
-        Ok(_connection) => ActionResult::success_with_message(format!("BLE 设备 {} 已连接", address)),
-        Err(e) => ActionResult::failure(format!("连接 BLE 设备失败: {}", e)),
+        Ok(_connection) => {
+            info!("BLE 设备 {} ({}) 已连接", device_id, address);
+            ActionResult::success_with_message(format!("BLE 设备 {} 已连接", address))
+        }
+        Err(e) => {
+            error!("连接 BLE 设备 {} 失败: {}", address, e);
+            ActionResult::failure(format!("连接 BLE 设备失败: {}", e))
+        }
     }
 }
 ```
@@ -239,8 +272,14 @@ async fn disconnect_ble(&self, device_id: &str) -> ActionResult {
     };
 
     match self.ble_manager.disconnect(&address).await {
-        Ok(()) => ActionResult::success_with_message(format!("BLE 设备 {} 已断开", address)),
-        Err(e) => ActionResult::failure(format!("断开 BLE 设备失败: {}", e)),
+        Ok(()) => {
+            info!("BLE 设备 {} ({}) 已断开", device_id, address);
+            ActionResult::success_with_message(format!("BLE 设备 {} 已断开", address))
+        }
+        Err(e) => {
+            error!("断开 BLE 设备 {} 失败: {}", address, e);
+            ActionResult::failure(format!("断开 BLE 设备失败: {}", e))
+        }
     }
 }
 ```

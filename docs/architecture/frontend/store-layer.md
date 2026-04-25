@@ -156,12 +156,14 @@ interface ProtocolState {
 ```typescript
 interface PageTabsState {
   systemActiveTab: 'info' | 'logs' | 'settings';
-  protocolActiveTab: 'editor' | 'bind' | 'gh3036';
+  protocolActiveTab: 'editor' | 'bind';
   waveformActiveTab: 'realtime' | 'csvLoader';
+  gh3036ActiveTab: 'config' | 'monitor' | 'version' | 'factory';
 
   setSystemActiveTab: (tab: 'info' | 'logs' | 'settings') => void;
-  setProtocolActiveTab: (tab: 'editor' | 'bind' | 'gh3036') => void;
+  setProtocolActiveTab: (tab: 'editor' | 'bind') => void;
   setWaveformActiveTab: (tab: 'realtime' | 'csvLoader') => void;
+  setGh3036ActiveTab: (tab: 'config' | 'monitor' | 'version' | 'factory') => void;
 }
 ```
 
@@ -170,8 +172,9 @@ interface PageTabsState {
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `systemActiveTab` | `'info' \| 'logs' \| 'settings'` | 系统页面当前激活的标签页 |
-| `protocolActiveTab` | `'editor' \| 'bind' \| 'gh3036'` | 协议页面当前激活的标签页 |
+| `protocolActiveTab` | `'editor' \| 'bind'` | 协议页面当前激活的标签页 |
 | `waveformActiveTab` | `'realtime' \| 'csvLoader'` | 波形页面当前激活的标签页 |
+| `gh3036ActiveTab` | `'config' \| 'monitor' \| 'version' \| 'factory'` | GH3036 面板当前激活的标签页 |
 
 **使用场景**：Home 页面通过 `pageTabsStore` 预设目标标签页，然后导航到对应页面，确保页面打开时显示正确的子标签。
 

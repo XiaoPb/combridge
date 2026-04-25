@@ -3,6 +3,7 @@ import { Card, Button, Space, Segmented, Empty, Typography, Tag } from 'antd';
 import { ClearOutlined, DownloadOutlined, ArrowDownOutlined, ArrowUpOutlined } from '@ant-design/icons';
 import type { DataEntry } from '../../stores/serialStore';
 import { formatTimestamp, formatData } from '../../stores/serialStore';
+import { useConfigStore } from '../../stores/configStore';
 
 const { Text } = Typography;
 
@@ -21,6 +22,10 @@ const SerialDataView: React.FC<SerialDataViewProps> = ({
   const [displayMode, setDisplayMode] = useState<'all' | 'receive' | 'send'>('all');
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const timezone = useConfigStore((state) => state.settings.timezone);
+  const hasHydrated = useConfigStore((state) => state._hasHydrated);
+  
+  const effectiveTimezone = hasHydrated ? timezone : 'Asia/Shanghai';
 
   const allData = [...(receivedData || []), ...(sentData || [])].sort((a, b) => a.timestamp - b.timestamp);
 
@@ -45,7 +50,7 @@ const SerialDataView: React.FC<SerialDataViewProps> = ({
     const handleExport = () => {
         const content = filteredData
             .map((entry) => {
-                const timestamp = formatTimestamp(entry.timestamp);
+                const timestamp = formatTimestamp(entry.timestamp, effectiveTimezone);
                 const direction = entry.direction === 'receive' ? 'RX' : 'TX';
                 const data = formatData(entry.data, displayFormat);
                 return `[${timestamp}] ${direction}: ${data}`;
@@ -135,7 +140,7 @@ const SerialDataView: React.FC<SerialDataViewProps> = ({
                                     <span style={{ marginLeft: 4 }}>{entry.direction === 'receive' ? 'RX' : 'TX'}</span>
                                 </Tag>
                                 <Text type="secondary" style={{ fontSize: 12 }}>
-                                    {formatTimestamp(entry.timestamp)}
+                                    {formatTimestamp(entry.timestamp, effectiveTimezone)}
                                 </Text>
                                 <Text>[{(entry.data || []).length} bytes]</Text>
                             </Space>

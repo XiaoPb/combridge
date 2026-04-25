@@ -14,12 +14,31 @@ import CharacteristicPanel from './CharacteristicPanel';
 import AtConfigPanel from './AtConfigPanel';
 import type { BleCharacteristic, BleService } from '../../types';
 import type { TextAreaRef } from 'antd/es/input/TextArea';
+import { useConfigStore } from '../../stores/configStore';
 
 const { Text } = Typography;
 const { TextArea } = Input;
 
-const formatTimestamp = (timestamp: number): string => {
+const formatTimestamp = (timestamp: number, timezone?: string): string => {
   const date = new Date(timestamp);
+  
+  if (timezone) {
+    try {
+      const options: Intl.DateTimeFormatOptions = {
+        timeZone: timezone,
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      };
+      const timeStr = date.toLocaleTimeString('zh-CN', options);
+      const ms = date.getMilliseconds().toString().padStart(3, '0');
+      return `${timeStr}.${ms}`;
+    } catch {
+      // 如果时区无效，使用本地时区
+    }
+  }
+  
   const hours = date.getHours().toString().padStart(2, '0');
   const minutes = date.getMinutes().toString().padStart(2, '0');
   const seconds = date.getSeconds().toString().padStart(2, '0');
@@ -29,6 +48,10 @@ const formatTimestamp = (timestamp: number): string => {
 
 const BlePage: React.FC = () => {
   const { t } = useTranslation('ble');
+  const timezone = useConfigStore((state) => state.settings.timezone);
+  const hasHydrated = useConfigStore((state) => state._hasHydrated);
+  const effectiveTimezone = hasHydrated ? timezone : 'Asia/Shanghai';
+  
   const {
     mode,
     serialPort,
@@ -426,7 +449,7 @@ const BlePage: React.FC = () => {
     
     const logText = tabData.logs
       .map((entry) => {
-        const ts = formatTimestamp(entry.timestamp);
+        const ts = formatTimestamp(entry.timestamp, effectiveTimezone);
         const dir = entry.direction;
         let content = '';
         if (entry.data) {
@@ -455,7 +478,7 @@ const BlePage: React.FC = () => {
     } catch (err) {
       console.error('[BlePage]', t('message.saveLogFailed'), err);
     }
-  }, [t]);
+  }, [t, effectiveTimezone]);
 
   const buildTreeData = (svcList: BleService[]) => {
     return svcList.map((svc) => ({
@@ -678,7 +701,7 @@ const BlePage: React.FC = () => {
               ref={(el) => { if (el) logContainerRefs.current[tabData.deviceId] = el; }}
               value={tabData.logs
                 .map((entry) => {
-                  const timestamp = formatTimestamp(entry.timestamp);
+                  const timestamp = formatTimestamp(entry.timestamp, effectiveTimezone);
                   const dir = entry.direction;
                   let content = '';
                   if (entry.data) {

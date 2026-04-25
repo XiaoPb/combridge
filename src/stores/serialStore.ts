@@ -226,8 +226,26 @@ export const generateId = (): string => {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 };
 
-export const formatTimestamp = (timestamp: number): string => {
+export const formatTimestamp = (timestamp: number, timezone?: string): string => {
   const date = new Date(timestamp);
+  
+  if (timezone) {
+    try {
+      const options: Intl.DateTimeFormatOptions = {
+        timeZone: timezone,
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      };
+      const timeStr = date.toLocaleTimeString('zh-CN', options);
+      const ms = date.getMilliseconds().toString().padStart(3, '0');
+      return `${timeStr}.${ms}`;
+    } catch {
+      // 如果时区无效，使用本地时区
+    }
+  }
+  
   const hours = date.getHours().toString().padStart(2, '0');
   const minutes = date.getMinutes().toString().padStart(2, '0');
   const seconds = date.getSeconds().toString().padStart(2, '0');

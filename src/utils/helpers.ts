@@ -12,6 +12,37 @@ export function formatTimestamp(timestamp: number, format: 'full' | 'time' | 'da
   }
 }
 
+export function formatTimeWithTimezone(timestamp: number, timezone?: string): string {
+  const date = new Date(timestamp);
+  
+  if (timezone) {
+    try {
+      const options: Intl.DateTimeFormatOptions = {
+        timeZone: timezone,
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      };
+      const timeStr = date.toLocaleTimeString('zh-CN', options);
+      const ms = date.getMilliseconds().toString().padStart(3, '0');
+      return `${timeStr}.${ms}`;
+    } catch {
+      // 如果时区无效，使用本地时区
+    }
+  }
+  
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  const seconds = date.getSeconds().toString().padStart(2, '0');
+  const ms = date.getMilliseconds().toString().padStart(3, '0');
+  return `${hours}:${minutes}:${seconds}.${ms}`;
+}
+
+export function getCurrentTimeString(timezone?: string): string {
+  return formatTimeWithTimezone(Date.now(), timezone);
+}
+
 export function formatDuration(ms: number): string {
   if (ms < 1000) {
     return `${ms}ms`;

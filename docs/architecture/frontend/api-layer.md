@@ -160,7 +160,6 @@ GH3036 协议 API，源码位于 [gh3036.ts](file:///e:/Code/CPP/combridge-rust/
 | `executeRpc(commandKey, params)` | `gh3036_execute_rpc` | 执行 RPC 命令 |
 | `subscribeEvents()` | `gh3036_subscribe_events` | 订阅 GH3036 事件 |
 | `getLibraryStatus()` | `gh3036_get_library_status` | 获取库链接/初始化状态 |
-| `onRxData(deviceId, data)` | `gh3036_on_rx_data` | 接收数据回调 |
 
 ### WaveformApi
 

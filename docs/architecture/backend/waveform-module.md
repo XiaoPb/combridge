@@ -2,29 +2,18 @@
 
 ## 概述
 
-波形模块提供波形数据的缓冲、解析和管理功能，支持多种数据格式解析和实时数据展示。
+波形模块提供波形数据的缓冲、解析和管理功能，支持分隔符和正则表达式两种数据解析方式。
 
 ## 模块位置
 
 - 源码路径：`src-tauri/src/waveform/`
 - 主要文件：
+  - `mod.rs` - 模块导出和数据结构定义
   - `buffer.rs` - 波形缓冲区
   - `parser.rs` - 数据解析器
+- 命令文件：`src-tauri/src/commands/waveform.rs`
 
 ## 核心组件
-
-### WaveformBuffer
-
-波形缓冲区：
-
-```rust
-pub struct WaveformBuffer {
-    config: WaveformBufferConfig,
-    columns: Vec<String>,
-    rows: Arc<RwLock<Vec<Vec<f64>>>>,
-    write_index: AtomicUsize,
-}
-```
 
 ### WaveformBufferConfig
 
@@ -32,34 +21,31 @@ pub struct WaveformBuffer {
 
 ```rust
 pub struct WaveformBufferConfig {
-    pub buffer_id: String,      // 缓冲区 ID
     pub capacity: usize,        // 容量
-    pub column_count: usize,    // 列数
-    pub column_names: Option<Vec<String>>, // 列名
+    pub column_names: Vec<String>, // 列名
 }
 ```
 
-### DataParser
+### WaveformBuffer
 
-数据解析器：
+波形缓冲区，使用环形缓冲区存储数据：
 
 ```rust
-pub struct DataParser {
-    parser_type: ParserType,
-    config: ParserConfig,
+pub struct WaveformBuffer {
+    config: WaveformBufferConfig,
+    data: RwLock<VecDeque<Vec<f64>>>,
+    timestamp: RwLock<u64>,
 }
 ```
 
 ### ParserType
 
-解析器类型：
+解析器类型（仅支持两种）：
 
 ```rust
 pub enum ParserType {
-    Csv,        // CSV 格式
-    Json,       // JSON 格式
-    Binary,     // 二进制格式
-    Custom,     // 自定义格式
+    Delimiter,   // 分隔符解析
+    Regex,       // 正则表达式解析
 }
 ```
 
@@ -69,10 +55,43 @@ pub enum ParserType {
 
 ```rust
 pub struct ParserConfig {
-    pub delimiter: char,        // 分隔符
-    pub skip_header: bool,      // 跳过表头
-    pub column_mapping: HashMap<String, usize>, // 列映射
-    pub scale_factors: HashMap<String, f64>, // 缩放因子
+    pub parser_type: ParserType,     // 解析器类型
+    pub delimiter: Option<String>,   // 分隔符（Delimiter 模式）
+    pub pattern: Option<String>,     // 正则表达式（Regex 模式）
+    pub column_names: Vec<String>,   // 列名
+    pub trim_whitespace: bool,       // 是否去除空白
+}
+```
+
+### DataParser Trait
+
+数据解析器接口：
+
+```rust
+pub trait DataParser: Send + Sync {
+    fn parse(&self, data: &str) -> Result<Vec<String>, ComBridgeError>;
+    fn config(&self) -> ParserConfig;
+}
+```
+
+### DelimiterParser
+
+分隔符解析器实现：
+
+```rust
+pub struct DelimiterParser {
+    config: ParserConfig,
+}
+```
+
+### RegexParser
+
+正则表达式解析器实现：
+
+```rust
+pub struct RegexParser {
+    config: ParserConfig,
+    regex: Regex,
 }
 ```
 
@@ -82,7 +101,7 @@ pub struct ParserConfig {
 
 ```rust
 pub struct ParserManager {
-    parsers: RwLock<HashMap<String, DataParser>>,
+    parsers: RwLock<HashMap<String, Arc<dyn DataParser>>>,
 }
 ```
 
@@ -113,6 +132,17 @@ pub struct WaveformData {
 }
 ```
 
+### WaveformManager
+
+波形管理器（位于 `commands/waveform.rs`）：
+
+```rust
+pub struct WaveformManager {
+    buffers: RwLock<HashMap<String, Arc<WaveformBuffer>>>,
+    parser_manager: Arc<ParserManager>,
+}
+```
+
 ## 架构图
 
 ```mermaid
@@ -120,69 +150,104 @@ graph TB
     subgraph WaveformManager
         WM[WaveformManager]
         Buffers[缓冲区表]
-        Parsers[解析器表]
+        PM[ParserManager]
     end
     
     subgraph WaveformBuffer
         WB[WaveformBuffer]
-        Columns[列定义]
-        Rows[数据行]
-        Index[写索引]
+        Data[VecDeque数据]
+        Timestamp[时间戳]
     end
     
     subgraph DataParser
-        DP[DataParser]
-        Type[解析类型]
-        Config[解析配置]
+        DP[DataParser Trait]
+        DelimParser[DelimiterParser]
+        RegexParser[RegexParser]
     end
     
     WM --> Buffers
-    WM --> Parsers
+    WM --> PM
     Buffers --> WB
-    WB --> Columns
-    WB --> Rows
-    WB --> Index
-    Parsers --> DP
-    DP --> Type
-    DP --> Config
+    WB --> Data
+    WB --> Timestamp
+    PM --> DP
+    DP --> DelimParser
+    DP --> RegexParser
 ```
 
 ## 核心功能
 
-### 缓冲区管理
+### WaveformBuffer 方法
 
 ```rust
 // 创建缓冲区
-pub async fn create_buffer(&self, config: WaveformBufferConfig) -> Result<String>
+pub fn new(config: WaveformBufferConfig) -> Self
 
-// 移除缓冲区
-pub async fn remove_buffer(&self, buffer_id: &str) -> Result<()>
+// 追加一行数据
+pub fn append_row(&self, values: Vec<f64>)
 
-// 列出所有缓冲区
-pub async fn list_buffers(&self) -> Vec<String>
+// 从字符串追加数据
+pub fn append_row_from_strings(&self, values: Vec<String>) -> Result<(), ComBridgeError>
+
+// 读取最后 N 行
+pub fn read_last_n_rows(&self, n: usize) -> Vec<Vec<f64>>
+
+// 获取状态
+pub fn get_status(&self) -> WaveformStatus
 
 // 清空缓冲区
-pub async fn clear_buffer(&self, buffer_id: &str) -> Result<()>
+pub fn clear(&self)
 
-// 获取缓冲区状态
-pub async fn get_status(&self, buffer_id: &str) -> Option<WaveformStatus>
+// 获取/设置列名
+pub fn get_column_names(&self) -> Vec<String>
+pub fn set_column_names(&mut self, names: Vec<String>)
 ```
 
-### 数据操作
+### ParserManager 方法
 
 ```rust
+// 创建解析器
+pub fn create_parser(&self, id: &str, config: ParserConfig) -> Result<(), ComBridgeError>
+
+// 解析数据
+pub fn parse(&self, id: &str, data: &str) -> Result<Vec<String>, ComBridgeError>
+
+// 移除解析器
+pub fn remove_parser(&self, id: &str)
+
+// 获取解析器配置
+pub fn get_parser_config(&self, id: &str) -> Option<ParserConfig>
+
+// 列出所有解析器
+pub fn list_parsers(&self) -> Vec<String>
+```
+
+### WaveformManager 方法
+
+```rust
+// 创建缓冲区
+pub fn create_buffer(&self, buffer_id: &str, config: WaveformBufferConfig) -> Result<(), ComBridgeError>
+
+// 移除缓冲区
+pub fn remove_buffer(&self, buffer_id: &str)
+
+// 配置解析器
+pub fn configure_parser(&self, buffer_id: &str, config: ParserConfig) -> Result<(), ComBridgeError>
+
 // 解析并存储数据
-pub async fn parse_and_store(&self, buffer_id: &str, data: &[u8]) -> Result<usize>
+pub fn parse_and_store(&self, buffer_id: &str, data: &str) -> Result<(), ComBridgeError>
 
 // 读取数据
-pub async fn read_data(&self, buffer_id: &str, start: usize, count: usize) -> Option<WaveformData>
-```
+pub fn read_data(&self, buffer_id: &str, rows: usize) -> Result<WaveformData, ComBridgeError>
 
-### 解析器管理
+// 获取状态
+pub fn get_status(&self, buffer_id: &str) -> Result<WaveformStatus, ComBridgeError>
 
-```rust
-// 配置解析器
-pub async fn configure_parser(&self, buffer_id: &str, parser_type: ParserType, config: ParserConfig) -> Result<()>
+// 清空缓冲区
+pub fn clear_buffer(&self, buffer_id: &str) -> Result<(), ComBridgeError>
+
+// 列出所有缓冲区
+pub fn list_buffers(&self) -> Vec<String>
 ```
 
 ## 数据流
@@ -191,73 +256,53 @@ pub async fn configure_parser(&self, buffer_id: &str, parser_type: ParserType, c
 sequenceDiagram
     participant Device as 设备
     participant WM as WaveformManager
-    participant DP as DataParser
+    participant PM as ParserManager
     participant WB as WaveformBuffer
     participant UI as 前端
     
-    Device->>WM: 原始数据
-    WM->>DP: 解析数据
-    DP->>DP: 按格式解析
-    DP-->>WM: 解析结果
-    WM->>WB: 存储数据
-    WB->>WB: 环形写入
+    Device->>WM: 原始数据字符串
+    WM->>PM: parse(buffer_id, data)
+    PM->>PM: 按配置解析
+    PM-->>WM: 解析结果 Vec<String>
+    WM->>WB: append_row_from_strings()
+    WB->>WB: 转换为 f64 并存储
     
-    UI->>WM: read_data(id, start, count)
-    WM->>WB: 读取数据
+    UI->>WM: read_data(buffer_id, rows)
+    WM->>WB: read_last_n_rows()
     WB-->>WM: 数据行
     WM-->>UI: WaveformData
 ```
 
 ## 解析器类型
 
-### CSV 解析器
+### 分隔符解析器
 
 ```rust
-// CSV 配置
 let config = ParserConfig {
-    delimiter: ',',
-    skip_header: true,
-    column_mapping: HashMap::new(),
-    scale_factors: HashMap::new(),
+    parser_type: ParserType::Delimiter,
+    delimiter: Some(",".to_string()),
+    pattern: None,
+    column_names: vec!["CH0".to_string(), "CH1".to_string()],
+    trim_whitespace: true,
 };
 
-// 解析 CSV 数据
-// "1.0,2.0,3.0\n4.0,5.0,6.0"
+// 解析数据: "1.0, 2.0, 3.0"
+// 结果: ["1.0", "2.0", "3.0"]
 ```
 
-### JSON 解析器
+### 正则表达式解析器
 
 ```rust
-// JSON 配置
 let config = ParserConfig {
-    delimiter: ',',
-    skip_header: false,
-    column_mapping: [
-        ("ch1".to_string(), 0),
-        ("ch2".to_string(), 1),
-    ].into_iter().collect(),
-    scale_factors: HashMap::new(),
+    parser_type: ParserType::Regex,
+    delimiter: None,
+    pattern: Some(r"(-?\d+),(-?\d+),(-?\d+)".to_string()),
+    column_names: vec!["A".to_string(), "B".to_string(), "C".to_string()],
+    trim_whitespace: false,
 };
 
-// 解析 JSON 数据
-// {"ch1": 1.0, "ch2": 2.0}
-```
-
-### 二进制解析器
-
-```rust
-// 二进制配置
-let config = ParserConfig {
-    delimiter: ',',
-    skip_header: false,
-    column_mapping: HashMap::new(),
-    scale_factors: [
-        ("ch1".to_string(), 0.001),
-    ].into_iter().collect(),
-};
-
-// 解析二进制数据
-// [0x01, 0x02, 0x03, 0x04, ...]
+// 解析数据: "10,-20,30"
+// 结果: ["10", "-20", "30"]
 ```
 
 ## 使用示例
@@ -267,37 +312,37 @@ let config = ParserConfig {
 ```rust
 let manager = WaveformManager::new();
 
-let buffer_id = manager.create_buffer(WaveformBufferConfig {
-    buffer_id: "wave-1".to_string(),
+let config = WaveformBufferConfig {
     capacity: 10000,
-    column_count: 4,
-    column_names: Some(vec!["ch1", "ch2", "ch3", "ch4"].into_iter().map(String::from).collect()),
-}).await?;
+    column_names: vec!["ch1", "ch2", "ch3", "ch4"].into_iter().map(String::from).collect(),
+};
+
+manager.create_buffer("wave-1", config)?;
 ```
 
 ### 配置解析器
 
 ```rust
-manager.configure_parser(&buffer_id, ParserType::Csv, ParserConfig {
-    delimiter: ',',
-    skip_header: false,
-    column_mapping: HashMap::new(),
-    scale_factors: HashMap::new(),
-}).await?;
+manager.configure_parser("wave-1", ParserConfig {
+    parser_type: ParserType::Delimiter,
+    delimiter: Some(",".to_string()),
+    pattern: None,
+    column_names: vec!["ch1", "ch2", "ch3", "ch4"].into_iter().map(String::from).collect(),
+    trim_whitespace: true,
+})?;
 ```
 
 ### 存储数据
 
 ```rust
-let data = b"1.0,2.0,3.0,4.0\n5.0,6.0,7.0,8.0";
-let count = manager.parse_and_store(&buffer_id, data).await?;
-println!("存储了 {} 行数据", count);
+let data = "1.0,2.0,3.0,4.0";
+manager.parse_and_store("wave-1", data)?;
 ```
 
 ### 读取数据
 
 ```rust
-if let Some(wave_data) = manager.read_data(&buffer_id, 0, 100).await {
+if let Ok(wave_data) = manager.read_data("wave-1", 100) {
     println!("列: {:?}", wave_data.columns);
     for row in &wave_data.rows {
         println!("行: {:?}", row);

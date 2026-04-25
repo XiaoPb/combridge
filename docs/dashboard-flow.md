@@ -12,30 +12,37 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         前端 (React + TypeScript)                    │
 ├─────────────────────────────────────────────────────────────────────┤
-│  DashboardPage                                                       │
+│  DashboardPage (index.tsx)                                          │
 │  ├── DashboardToolbar (工具栏)                                       │
 │  │   ├── Dashboard选择器                                             │
 │  │   ├── DataSourceSelector (数据源选择)                             │
 │  │   └── ParserSelector (解析器选择)                                 │
 │  ├── DashboardCanvas (画布)                                          │
 │  │   └── WidgetRenderer → Widget组件                                 │
-│  └── DashboardPanel (侧边面板)                                        │
-│      ├── 数据视图                                                    │
-│      ├── 原始数据                                                    │
-│      └── 组件配置                                                    │
+│  ├── ConsolePanel (控制台面板)                                        │
+│  ├── SettingsPanel (设置面板)                                        │
+│  └── JsonEditor (JSON编辑器)                                         │
+│      ├── DatasetEditor                                              │
+│      ├── FrameConfigEditor                                          │
+│      ├── GroupEditor                                                │
+│      └── JsonPreview                                                │
 ├─────────────────────────────────────────────────────────────────────┤
 │  dashboardStore (Zustand 状态管理)                                   │
 │  ├── currentDashboard: 当前Dashboard配置                             │
 │  ├── savedDashboards: 已保存的Dashboard列表                          │
-│  ├── dataBuffer: 数据缓冲区                                          │
-│  └── parserScripts: 解析脚本列表                                     │
+│  ├── jsonConfig: JSON配置                                           │
+│  ├── jsonFiles: JSON文件列表                                         │
+│  ├── rawDataBuffer: 原始数据缓冲区                                    │
+│  ├── parsedDataBuffer: 解析后数据缓冲区                               │
+│  ├── parserScripts: 解析脚本列表                                     │
+│  └── activeTabs: 活动标签页                                          │
 ├─────────────────────────────────────────────────────────────────────┤
 │                         Tauri IPC 桥接                               │
 ├─────────────────────────────────────────────────────────────────────┤
 │                         后端 (Rust)                                  │
 │  ├── dashboard/commands.rs - Dashboard命令                          │
 │  ├── dashboard/parser_scripts.rs - 解析脚本管理                      │
-│  └── serial/ble - 数据源                                             │
+│  └── dashboard/json_config.rs - JSON配置管理                         │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -61,18 +68,13 @@
     │              │              │  数据到达    │              │
     │              │              │<─────────────│<─────────────│
     │              │              │              │              │
-    │              │  onSerialData/onBleData     │              │
+    │              │  onSerialData/onBleData/onParsedData       │
     │              │<─────────────────────────────│              │
     │              │              │              │              │
-    │              │ parseData()  │              │              │
-    │              │──────┐       │              │              │
-    │              │      │ 解析  │              │              │
-    │              │<─────┘       │              │              │
-    │              │              │              │              │
-    │              │ addDataPoint │              │              │
+    │              │ addRawDataPoint/addParsedDataPoint         │
     │              │─────────────>│              │              │
     │              │              │              │              │
-    │              │  Widget订阅dataBuffer       │              │
+    │              │  Widget订阅parsedDataBuffer │              │
     │              │<─────────────│              │              │
     │              │              │              │              │
     │  更新显示    │              │              │              │
@@ -80,30 +82,28 @@
     │              │              │              │              │
 ```
 
-### 3.2 组件添加流程
+### 3.2 JSON配置加载流程
 
 ```
 ┌────────┐     ┌────────┐     ┌────────┐     ┌────────┐
-│ 用户   │     │ Canvas │     │Selector│     │ Store  │
+│ 用户   │     │ 前端   │     │ Store  │     │ 后端   │
 └───┬────┘     └───┬────┘     └───┬────┘     └───┬────┘
     │              │              │              │
-    │ 点击添加组件 │              │              │
+    │ 选择JSON文件 │              │              │
     │─────────────>│              │              │
-    │              │ 打开Selector │              │
-    │              │─────────────>│              │
+    │              │ load_json_file              │
+    │              │─────────────────────────────>│
     │              │              │              │
-    │ 选择组件类型 │              │              │
-    │─────────────────────────────>│              │
-    │              │              │              │
-    │ 配置组件参数 │              │              │
-    │─────────────────────────────>│              │
-    │              │              │ addWidget    │
-    │              │              │─────────────>│
-    │              │              │              │
-    │              │ 更新显示     │              │
+    │              │  DashboardJsonConfig        │
     │              │<─────────────────────────────│
     │              │              │              │
-    │  显示新组件  │              │              │
+    │              │ setJsonConfig│              │
+    │              │─────────────>│              │
+    │              │              │              │
+    │              │ setSelectedJsonFile         │
+    │              │─────────────>│              │
+    │              │              │              │
+    │  渲染组件    │              │              │
     │<─────────────│              │              │
     │              │              │              │
 ```
@@ -119,14 +119,12 @@
 事件层      [onSerialData]──────────────────────────────────────────>
                  │
                  ▼
-解析层      [parseData]──┬──[JSON解析]──┬──[Lua脚本]──┬──[分隔符]──>
-                             │              │              │
-                             └──────────────┴──────────────┘
-                                            │
-                                            ▼
-存储层      [addDataPoint]──────────────────────────────────────────>
-                                            │
-                                            ▼
+解析层      [Lua脚本解析]──────────────────────────────────────────>
+                 │
+                 ▼
+存储层      [addParsedDataPoint]────────────────────────────────────>
+                 │
+                 ▼
 渲染层      [Widget更新]────────────────────────────────────────────>
 ```
 
@@ -140,18 +138,41 @@
 ```typescript
 // 监听运行状态，注册/注销事件监听
 useEffect(() => {
-  if (isRunning && dataSourceType === 'serial') {
-    const unlisten = onSerialData(handleSerialData);
-    return () => { unlisten.then(f => f()); };
-  }
-}, [isRunning, dataSourceType]);
+  const setupDataListeners = async () => {
+    if (!isRunning) return;
 
-// 数据解析
-const parseData = (rawData: string): Record<string, number> => {
-  // 1. JSON解析
-  // 2. Lua脚本解析
-  // 3. 分隔符解析
-};
+    if (dataSourceType === 'serial') {
+      listenersRef.current.serialData = await onSerialData((event) => {
+        addRawDataPoint({
+          timestamp: event.timestamp ?? Date.now(),
+          data: event.data,
+          direction: 'RX',
+        });
+      });
+    } else if (dataSourceType === 'ble') {
+      listenersRef.current.bleData = await onBleData((event) => {
+        addRawDataPoint({
+          timestamp: event.timestamp ?? Date.now(),
+          data: event.data,
+          direction: 'RX',
+        });
+      });
+    }
+
+    listenersRef.current.parsedData = await onParsedData((event) => {
+      addParsedDataPoint({
+        timestamp: event.timestamp,
+        values: event.values,
+      });
+    });
+  };
+
+  setupDataListeners();
+
+  return () => {
+    // 清理监听器
+  };
+}, [isRunning, dataSourceType, connectedDevice]);
 ```
 
 ### 5.2 dashboardStore (状态管理)
@@ -168,19 +189,35 @@ interface DashboardState {
   connectedDevice: string | null;
   
   // 解析器配置
-  parserType: 'json' | 'lua' | 'delimiter';
+  parserType: 'json' | 'csv' | 'delimiter' | 'regex' | 'lua';
   parserScript: string | null;
   parserScripts: ParserScriptInfo[];
   
+  // JSON配置
+  jsonConfig: DashboardJsonConfig;
+  jsonFiles: string[];
+  selectedJsonFile: string | null;
+  
   // 运行时状态
   isRunning: boolean;
-  dataBuffer: DataPoint[];
+  rawDataBuffer: RawDataPoint[];
+  parsedDataBuffer: DataPoint[];
+  maxBufferSize: number;
   isEditMode: boolean;
   selectedWidget: string | null;
+  activeTabs: TabType[];
+  lastError: string | null;
+  
+  // 设备配置
+  serialConfig: SerialConfig;
+  serialPort: string;
+  bleConfig: BleConnectionConfig | null;
 }
 ```
 
-### 5.3 WidgetRenderer (组件渲染)
+### 5.3 DashboardCanvas (画布渲染)
+
+**职责**: 根据 JSON 配置渲染 Widget 组件
 
 **支持的组件类型**:
 | 类型 | 用途 | 配置参数 |
@@ -188,9 +225,21 @@ interface DashboardState {
 | lineChart | 趋势图 | dataKey, min, max, color |
 | gauge | 仪表盘 | dataKey, min, max, unit |
 | text | 文本显示 | dataKey, unit |
-| led | 状态指示 | dataKey, color |
+| led | 状态指示 | dataKey, color, ledHigh |
 | compass | 方向显示 | dataKey |
-| accelerometer | 三轴显示 | dataKey |
+| accelerometer | 三轴显示 | dataKey, min, max |
+| bar | 进度条 | dataKey, min, max, unit |
+| x/y/z | 坐标显示 | dataKey, units |
+
+### 5.4 JsonEditor (JSON编辑器)
+
+**职责**: 编辑 Dashboard JSON 配置
+
+**子组件**:
+- `DatasetEditor` - 数据集编辑器
+- `FrameConfigEditor` - 帧配置编辑器
+- `GroupEditor` - 组件组编辑器
+- `JsonPreview` - JSON 预览
 
 ## 六、后端API
 
@@ -199,21 +248,87 @@ interface DashboardState {
 | 命令 | 说明 | 参数 |
 |------|------|------|
 | `get_parser_scripts` | 获取解析脚本列表 | - |
+| `get_parser_script_content` | 获取脚本内容 | name |
 | `save_parser_script` | 保存解析脚本 | name, content |
 | `delete_parser_script` | 删除解析脚本 | name |
 | `execute_parser_script` | 执行解析脚本 | name, data |
-| `generate_parser_from_json` | 从JSON生成脚本 | json, name |
+| `init_default_parser_scripts` | 初始化默认脚本 | - |
+| `analyze_json_structure` | 分析JSON结构 | json_content |
+| `generate_parser_from_json` | 从JSON生成脚本 | json_content, script_name, selected_fields |
+| `get_parser_defined_fields` | 获取脚本定义字段 | script_name |
+| `merge_json_to_parser` | 合并JSON到脚本 | json_content, script_name, selected_fields |
 
-### 6.2 数据事件
+### 6.2 JSON配置命令
+
+| 命令 | 说明 | 参数 |
+|------|------|------|
+| `get_json_files` | 获取JSON文件列表 | - |
+| `save_json_file` | 保存JSON文件 | file_name, config |
+| `delete_json_file` | 删除JSON文件 | file_name |
+| `load_json_file` | 加载JSON文件 | file_name |
+
+### 6.3 数据事件
 
 | 事件 | 触发时机 | 数据格式 |
 |------|----------|----------|
-| `serial-data` | 串口收到数据 | `{ data: string, timestamp: number }` |
-| `ble-data` | BLE收到通知 | `{ data: string, timestamp: number }` |
+| `serial-data` | 串口收到数据 | `{ device_id, data, timestamp }` |
+| `ble-data` | BLE收到通知 | `{ device_id, address, characteristic_uuid, data, timestamp }` |
+| `parsed-data` | 数据解析完成 | `{ timestamp, values }` |
 
-## 七、多Dashboard布局支持
+## 七、JSON配置结构
 
-### 7.1 Dashboard配置结构
+### 7.1 DashboardJsonConfig
+
+```typescript
+interface DashboardJsonConfig {
+  title: string;
+  decoder: number;
+  frameDetection: number;
+  frameStart: string;
+  frameEnd: string;
+  frameParser: string;
+  groups: WidgetGroup[];
+  mapTilerApiKey?: string;
+  thunderforestApiKey?: string;
+}
+```
+
+### 7.2 WidgetGroup
+
+```typescript
+interface WidgetGroup {
+  title: string;
+  widget: string;
+  datasets: DatasetConfig[];
+}
+```
+
+### 7.3 DatasetConfig
+
+```typescript
+interface DatasetConfig {
+  index: number;
+  title: string;
+  units: string;
+  widget: string;
+  graph: boolean;
+  min: number;
+  max: number;
+  color?: string;
+  led: boolean;
+  ledHigh: number;
+  log: boolean;
+  alarm: number;
+  fft: boolean;
+  fftSamples: number;
+  fftSamplingRate: number;
+  value: string;
+}
+```
+
+## 八、多Dashboard布局支持
+
+### 8.1 Dashboard配置结构
 
 ```typescript
 interface DashboardConfig {
@@ -225,7 +340,7 @@ interface DashboardConfig {
     filePath?: string;
   };
   parser: {
-    type: 'json' | 'lua' | 'delimiter';
+    type: 'json' | 'csv' | 'delimiter' | 'regex' | 'lua';
     scriptName?: string;
     config: Record<string, unknown>;
   };
@@ -234,7 +349,7 @@ interface DashboardConfig {
 }
 ```
 
-### 7.2 多Dashboard操作流程
+### 8.2 多Dashboard操作流程
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -260,15 +375,15 @@ interface DashboardConfig {
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## 八、错误处理
+## 九、错误处理
 
-### 8.1 前端错误处理
+### 9.1 前端错误处理
 
 ```typescript
 // 数据解析错误
 try {
-  const parsed = parseData(rawData);
-  addDataPoint({ timestamp: Date.now(), values: parsed });
+  const parsed = await executeParserScript(scriptName, data);
+  addParsedDataPoint({ timestamp: Date.now(), values: parsed });
 } catch (error) {
   setLastError(`解析失败: ${error.message}`);
   console.error('Parse error:', error);
@@ -281,7 +396,7 @@ onSerialData(handleData).catch(error => {
 });
 ```
 
-### 8.2 后端错误处理
+### 9.2 后端错误处理
 
 ```rust
 // Rust 后端使用 thiserror 定义错误类型
@@ -293,27 +408,38 @@ pub enum DashboardError {
     ParseError(String),
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
+    #[error("JSON error: {0}")]
+    JsonError(#[from] serde_json::Error),
 }
 ```
 
-## 九、性能优化建议
+## 十、性能优化建议
 
 1. **数据缓冲区限制**: `maxBufferSize: 1000` 防止内存溢出
 2. **组件懒加载**: Widget组件按需渲染
 3. **事件节流**: 高频数据使用 throttle 降低更新频率
 4. **虚拟滚动**: 大量数据点时使用虚拟列表
 
-## 十、扩展指南
+## 十一、扩展指南
 
-### 10.1 添加新Widget类型
+### 11.1 添加新Widget类型
 
 1. 在 `src/types/dashboard.ts` 添加类型定义
 2. 在 `src/pages/Dashboard/widgets/` 创建组件
-3. 在 `WidgetRenderer.tsx` 添加渲染逻辑
-4. 在翻译文件添加国际化文本
+3. 在 `DashboardCanvas.tsx` 添加渲染逻辑
+4. 在 `WIDGET_SUPPORT_MATRIX` 添加配置支持
+5. 在翻译文件添加国际化文本
 
-### 10.2 添加新数据源
+### 11.2 添加新数据源
 
-1. 在 `dataSourceType` 添加新类型
+1. 在 `DataSourceType` 添加新类型
 2. 在 `index.tsx` 添加事件监听逻辑
 3. 在 `DataSourceSelector.tsx` 添加UI选项
+4. 在后端添加对应的事件发布逻辑
+
+### 11.3 添加新解析器类型
+
+1. 在 `ParserType` 添加新类型
+2. 在后端 `parser_scripts.rs` 添加解析逻辑
+3. 在 `ParserSelector.tsx` 添加UI选项
+4. 添加默认解析脚本模板

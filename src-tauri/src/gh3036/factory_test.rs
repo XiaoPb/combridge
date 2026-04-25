@@ -14,7 +14,7 @@ use std::time::Duration;
 use chrono::Local;
 use parking_lot::Mutex;
 use tokio::runtime::Runtime;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::service::EventBus;
 use super::config_loader::ConfigLoader;
@@ -74,19 +74,28 @@ impl FactoryTestManager {
         *config_dir = dir.clone();
         drop(config_dir);
 
-        if let Some(config_file) = FactoryThresholdConfig::find_config_file(&dir, "GH3036") {
-            match FactoryThresholdConfig::from_file(&config_file) {
-                Ok(config) => {
-                    info!("[FactoryTest] 加载卡控配置成功: {}", config.project);
-                    let mut threshold_config = self.threshold_config.lock();
-                    *threshold_config = Some(config);
-                }
-                Err(e) => {
-                    error!("[FactoryTest] 加载卡控配置失败: {}", e);
+        match FactoryThresholdConfig::find_config_file(&dir) {
+            Some(config_file) => {
+                match FactoryThresholdConfig::from_file(&config_file) {
+                    Ok(config) => {
+                        info!("[FactoryTest] 加载卡控配置成功: {} (项目: {})", 
+                            config_file.display(), config.project);
+                        let mut threshold_config = self.threshold_config.lock();
+                        *threshold_config = Some(config);
+                    }
+                    Err(e) => {
+                        error!("[FactoryTest] 加载卡控配置失败: {}", e);
+                    }
                 }
             }
-        } else {
-            info!("[FactoryTest] 未找到卡控配置文件");
+            None => {
+                let all_configs = FactoryThresholdConfig::find_all_config_files(&dir);
+                if all_configs.is_empty() {
+                    info!("[FactoryTest] 未找到卡控配置文件 (factory_config_*.yaml)");
+                } else if all_configs.len() > 1 {
+                    warn!("[FactoryTest] 找到多个卡控配置文件，请确保只有一个: {:?}", all_configs);
+                }
+            }
         }
     }
 
@@ -100,7 +109,7 @@ impl FactoryTestManager {
 
     pub fn validate_threshold_config(&self) -> ThresholdConfigValidation {
         let config_dir = self.config_dir.lock();
-        validate_threshold_config_file(&config_dir, "GH3036")
+        validate_threshold_config_file(&config_dir)
     }
 
     pub fn get_config_dir(&self) -> PathBuf {

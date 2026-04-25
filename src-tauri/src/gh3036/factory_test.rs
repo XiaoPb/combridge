@@ -1285,49 +1285,59 @@ impl FactoryTestManager {
 
         let file_exists = file_path.exists();
 
-        let mut file = std::fs::OpenOptions::new()
+        let file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&file_path)
             .map_err(|e| format!("打开文件失败: {}", e))?;
 
-        use std::io::Write;
+        let mut writer = csv::WriterBuilder::new()
+            .has_headers(!file_exists)
+            .from_writer(file);
 
         if !file_exists {
-            let header = Self::generate_csv_header();
-            file.write_all(header.as_bytes())
+            let headers = Self::generate_csv_headers();
+            writer.write_record(&headers)
                 .map_err(|e| format!("写入文件头失败: {}", e))?;
         }
 
-        let line = Self::format_csv_row(result);
-        file.write_all(line.as_bytes())
+        let row = Self::build_csv_row(result);
+        writer.write_record(&row)
             .map_err(|e| format!("写入数据失败: {}", e))?;
+
+        writer.flush()
+            .map_err(|e| format!("刷新文件失败: {}", e))?;
 
         info!("[FactoryTest] 结果已保存到: {}", file_path.display());
 
         Ok(())
     }
 
-    fn generate_csv_header() -> String {
-        let mut headers: Vec<&str> = vec![
-            "timestamp", "datetime", "overall_result", "error_code",
-            "device_info", "chip_init_status", "uuid",
+    fn generate_csv_headers() -> Vec<String> {
+        let mut headers: Vec<String> = vec![
+            "timestamp".to_string(),
+            "datetime".to_string(),
+            "overall_result".to_string(),
+            "error_code".to_string(),
+            "device_info".to_string(),
+            "chip_init_status".to_string(),
+            "uuid".to_string(),
         ];
 
         for i in 0..4 {
-            headers.push(Box::leak(format!("base_noise_{}", i).into_boxed_str()));
+            headers.push(format!("base_noise_{}", i));
         }
 
         for i in 0..32 {
-            headers.push(Box::leak(format!("ppg_noise_{}", i).into_boxed_str()));
-            headers.push(Box::leak(format!("lpctr_{}", i).into_boxed_str()));
-            headers.push(Box::leak(format!("lplctr_{}", i).into_boxed_str()));
+            headers.push(format!("ppg_noise_{}", i));
+            headers.push(format!("lpctr_{}", i));
+            headers.push(format!("lplctr_{}", i));
         }
 
-        headers.join(",") + "\n"
+        headers
     }
 
-    fn format_csv_row(result: &FactoryTestResult) -> String {
+    fn build_csv_row(result: &FactoryTestResult) -> Vec<String> {
         let datetime = chrono::DateTime::from_timestamp_millis(result.timestamp as i64)
             .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
             .unwrap_or_default();
@@ -1346,7 +1356,7 @@ impl FactoryTestManager {
             result.timestamp.to_string(),
             datetime,
             result.overall_result.clone(),
-            Self::escape_csv_field(&result.error_code),
+            result.error_code.clone(),
             result.device_info.clone(),
             result.chip_init_status.to_string(),
             uuid_str,
@@ -1360,16 +1370,7 @@ impl FactoryTestManager {
             row.push(lplctr[i].clone());
         }
 
-        row.join(",") + "\n"
-    }
-
-    fn escape_csv_field(field: &str) -> String {
-        if field.contains(',') || field.contains('"') || field.contains('\n') {
-            let escaped = field.replace('"', "\"\"");
-            format!("\"{}\"", escaped)
-        } else {
-            field.to_string()
-        }
+        row
     }
 
     fn pad_channels(data: &[u16], max_count: usize) -> Vec<String> {

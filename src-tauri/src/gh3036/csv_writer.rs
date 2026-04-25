@@ -1,15 +1,14 @@
-use std::fs::{File, OpenOptions};
-use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use chrono::Local;
+use csv::Writer;
 use tracing::info;
 
 use super::types::Gh3036FrameData;
 
 pub struct CsvWriter {
-    file: Mutex<Option<File>>,
+    writer: Mutex<Option<Writer<std::fs::File>>>,
     output_dir: PathBuf,
     function_name: String,
     current_file_index: u32,
@@ -19,7 +18,7 @@ pub struct CsvWriter {
 impl CsvWriter {
     pub fn new(output_dir: PathBuf, _function_id: i32, function_name: String) -> Self {
         Self {
-            file: Mutex::new(None),
+            writer: Mutex::new(None),
             output_dir,
             function_name,
             current_file_index: 0,
@@ -28,15 +27,15 @@ impl CsvWriter {
     }
 
     pub fn write_frame(&mut self, frame: &Gh3036FrameData) -> std::io::Result<()> {
-        let should_create_new_file = frame.frame_id == 0 || self.file.lock().unwrap_or_else(|e| e.into_inner()).is_none();
-        
+        let should_create_new_file = frame.frame_id == 0 || self.writer.lock().unwrap_or_else(|e| e.into_inner()).is_none();
+
         if should_create_new_file {
             self.create_new_file()?;
         }
 
-        let mut file_guard = self.file.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(ref mut file) = *file_guard {
-            self.write_row(file, frame)?;
+        let mut writer_guard = self.writer.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(ref mut writer) = *writer_guard {
+            self.write_row(writer, frame)?;
             self.last_frame_id = frame.frame_id;
         }
 
@@ -45,7 +44,7 @@ impl CsvWriter {
 
     fn create_new_file(&mut self) -> std::io::Result<()> {
         std::fs::create_dir_all(&self.output_dir)?;
-        
+
         let timestamp = Local::now().format("%Y%m%d-%H%M%S");
         let filename = format!(
             "gh3036_{}_{}.csv",
@@ -53,25 +52,21 @@ impl CsvWriter {
             timestamp
         );
         let filepath = self.output_dir.join(&filename);
-        
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&filepath)?;
-        
-        self.write_header(&mut file)?;
-        
+
+        let mut writer = Writer::from_path(&filepath)?;
+
+        self.write_header(&mut writer)?;
+
         info!("创建新的 CSV 文件: {:?}", filepath);
-        
-        let mut file_guard = self.file.lock().unwrap_or_else(|e| e.into_inner());
-        *file_guard = Some(file);
+
+        let mut writer_guard = self.writer.lock().unwrap_or_else(|e| e.into_inner());
+        *writer_guard = Some(writer);
         self.current_file_index += 1;
-        
+
         Ok(())
     }
 
-    fn write_header(&self, file: &mut File) -> std::io::Result<()> {
+    fn write_header(&self, writer: &mut Writer<std::fs::File>) -> std::io::Result<()> {
         let mut headers: Vec<String> = vec![
             "TIMESTAMP".to_string(),
             "FRAME_ID".to_string(),
@@ -106,13 +101,12 @@ impl CsvWriter {
             headers.push(format!("GYRO_{}", axis));
         }
 
-        let header_str: Vec<&str> = headers.iter().map(|s| s.as_str()).collect();
-        writeln!(file, "{}", header_str.join(","))?;
+        writer.write_record(&headers)?;
         Ok(())
     }
 
-    fn write_row(&self, file: &mut File, frame: &Gh3036FrameData) -> std::io::Result<()> {
-        let mut row = Vec::new();
+    fn write_row(&self, writer: &mut Writer<std::fs::File>, frame: &Gh3036FrameData) -> std::io::Result<()> {
+        let mut row: Vec<String> = Vec::new();
 
         row.push(frame.timestamp.to_string());
         row.push(frame.frame_id.to_string());
@@ -152,9 +146,9 @@ impl CsvWriter {
             row.push(val.to_string());
         }
 
-        writeln!(file, "{}", row.join(","))?;
-        file.flush()?;
-        
+        writer.write_record(&row)?;
+        writer.flush()?;
+
         Ok(())
     }
 }

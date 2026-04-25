@@ -4,10 +4,10 @@
 
 ComBridge 设备管理框架采用分层架构设计，实现了串口通信和蓝牙低功耗（BLE）设备的统一管理。框架核心特性：
 
-- **统一状态管理**：后端唯一数据源，支持页面刷新状态恢复
+- **统一设备管理**：DeviceManager 统一管理串口和 BLE 设备
 - **双模式 BLE**：支持原生蓝牙和 AT 指令两种 BLE 实现方式
 - **环形缓冲区**：每个通道独立收发缓冲区，支持历史数据追溯
-- **状态持久化**：自动保存设备连接状态和窗口布局
+- **事件总线**：基于 EventBus 的发布/订阅模式，支持跨模块通信
 
 ---
 
@@ -17,32 +17,30 @@ ComBridge 设备管理框架采用分层架构设计，实现了串口通信和�
 ┌─────────────────────────────────────────────────────────────────┐
 │                        前端 (React + TypeScript)                  │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
-│  │ useAppState │  │useAppDispatch│  │ useSerial / useBle     │  │
+│  │ useDeviceStore│ │useDashboardStore│ │ useSerial / useBle     │  │
 │  └──────┬──────┘  └──────┬──────┘  └─────────────┬───────────┘  │
 │         │                │                       │               │
 │  ┌──────▼────────────────▼───────────────────────▼───────────┐  │
-│  │                    API Layer (stateApi.ts)                 │  │
+│  │                    API Layer (deviceApi.ts)                │  │
 │  └─────────────────────────────┬─────────────────────────────┘  │
 └────────────────────────────────┼────────────────────────────────┘
                                  │ Tauri IPC
 ┌────────────────────────────────┼────────────────────────────────┐
 │                        Rust 后端                                 │
 │  ┌─────────────────────────────▼─────────────────────────────┐  │
-│  │                 State Management (state/)                  │  │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐  │  │
-│  │  │AppState  │ │ Action   │ │Dispatcher│ │Persistence   │  │  │
-│  │  └────┬─────┘ └────┬─────┘ └────┬─────┘ └──────────────┘  │  │
-│  └───────┼────────────┼────────────┼──────────────────────────┘  │
-│          │            │            │                             │
-│  ┌───────▼────────────▼────────────▼──────────────────────────┐  │
-│  │                  Device Management (device/)               │  │
-│  │  ┌─────────────────────┐  ┌─────────────────────────────┐  │  │
-│  │  │   SerialManager     │  │       BleManager            │  │  │
-│  │  │  ┌───────────────┐  │  │  ┌───────────┐ ┌──────────┐ │  │  │
-│  │  │  │ SerialPort[]  │  │  │  │NativeBackend│AtBackend │ │  │  │
-│  │  │  └───────────────┘  │  │  └───────────┘ └──────────┘ │  │  │
-│  │  └─────────────────────┘  └─────────────────────────────┘  │  │
-│  └────────────────────────────────────────────────────────────┘  │
+│  │                 DeviceManager (device_manager.rs)          │  │
+│  │  ┌──────────────────────┐  ┌────────────────────────────┐  │  │
+│  │  │   SerialManager      │  │       BleManager           │  │  │
+│  │  │  ┌────────────────┐  │  │  ┌──────────┐ ┌─────────┐  │  │  │
+│  │  │  │ SerialPort[]   │  │  │  │NativeMode│ │ AT Mode │  │  │  │
+│  │  │  └────────────────┘  │  │  └──────────┘ └─────────┘  │  │  │
+│  │  └──────────────────────┘  └────────────────────────────┘  │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+│                              │                                   │
+│  ┌───────────────────────────▼───────────────────────────────┐  │
+│  │                    EventBus (event_bus.rs)                 │  │
+│  │              发布/订阅模式，跨模块通信                        │  │
+│  └───────────────────────────────────────────────────────────┘  │
 │                              │                                   │
 │  ┌───────────────────────────▼───────────────────────────────┐  │
 │  │                    Ring Buffer (cache.rs)                  │  │
@@ -55,120 +53,49 @@ ComBridge 设备管理框架采用分层架构设计，实现了串口通信和�
 
 ## 三、核心模块详解
 
-### 3.1 状态管理模块 (`state/`)
+### 3.1 设备管理模块 (`device/`)
 
 #### 3.1.1 模块结构
 
 | 文件 | 职责 |
 |------|------|
 | `mod.rs` | 模块入口，统一导出 |
-| `types.rs` | 核心类型定义：ChannelType、DeviceChannel、AppState 等 |
-| `action.rs` | Action 枚举定义，支持所有状态变更操作 |
-| `app_state.rs` | 全局状态结构，包含通道管理、缓冲区操作方法 |
-| `dispatcher.rs` | Action 处理器，路由到具体设备管理器 |
-| `persistence.rs` | 状态持久化服务，JSON 格式存储到磁盘 |
+| `device_manager.rs` | 设备管理器，统一管理串口和 BLE 设备 |
+| `cache.rs` | 环形缓冲区实现，支持数据缓存和历史追溯 |
+| `serial/mod.rs` | 串口模块入口 |
+| `serial/serial_manager.rs` | 串口管理器，管理多个串口连接 |
+| `serial/serial_port.rs` | 单个串口封装，读写循环 |
+| `serial/serial_config.rs` | 配置定义：波特率、数据位、校验位等 |
+| `ble/mod.rs` | BLE 模块入口 |
+| `ble/ble_manager.rs` | BLE 管理器，统一接口层 |
+| `ble/ble_traits.rs` | BleBackend trait 定义 |
+| `ble/native/` | 原生 BLE 后端实现 |
+| `ble/at/` | AT 指令 BLE 后端实现 |
 
 #### 3.1.2 核心数据结构
 
 ```rust
-// 通道方向
-pub enum ChannelDirection {
-    Read,      // 读取/通知
-    Write,     // 写入
-    Notify,    // 通知
+pub enum DeviceType {
+    Serial,
+    Ble,
 }
 
-// 单个通道
-pub struct Channel {
-    pub id: String,                    // 通道ID
-    pub direction: ChannelDirection,   // 方向
-    pub buffer: ChannelBuffer,         // 环形缓冲区
-    pub subscribed: bool,              // 订阅状态
+pub struct DeviceManager {
+    pub serial_manager: SerialManagerRef,
+    pub ble_manager: BleManagerRef,
 }
 
-// 串口设备
-pub struct SerialDevice {
-    pub id: String,
-    pub name: String,                  // 串口名称，如 "COM3"
-    pub connected: bool,
-    pub baud_rate: u32,
-    pub data_bits: DataBits,
-    pub parity: Parity,
-    pub stop_bits: StopBits,
-    pub channels: HashMap<String, Channel>,  // 固定包含 "tx" 和 "rx"
-}
-
-// 蓝牙设备
-pub struct BleDevice {
-    pub id: String,
-    pub name: String,
-    pub mac: String,
-    pub connected: bool,
-    pub mtu: u16,
-    pub connection_params: ConnectionParams,
-    pub channels: HashMap<String, Channel>,  // 键为特征UUID
-}
-
-// 设备枚举
-pub enum Device {
-    Serial(SerialDevice),
-    Ble(BleDevice),
-}
-
-// 全局状态
-pub struct AppState {
-    pub devices: HashMap<String, Device>,  // 设备ID -> 设备
-    pub active_device_id: Option<String>,  // 当前活动设备
-    pub settings: AppSettings,
-    pub window_state: WindowState,
-}
-
-// 缓冲区条目
-pub struct BufferEntry {
-    pub timestamp: u64,                    // 时间戳
-    pub data: Vec<u8>,                     // 数据
+impl DeviceManager {
+    pub fn new(event_bus: Arc<EventBus>) -> Self;
+    pub async fn send_direct(&self, device_type: DeviceType, device_name: &str, char_uuid: Option<&str>, data: &[u8]) -> Result<()>;
+    pub async fn open_serial(&self, config: SerialPortConfig) -> Result<()>;
+    pub async fn close_serial(&self, port_name: &str) -> Result<()>;
+    pub async fn configure_ble_at(&self, config: AtConfig) -> Result<()>;
+    pub async fn configure_ble_native(&self) -> Result<()>;
+    pub async fn connect_ble(&self, address: &str) -> Result<BleConnection>;
+    pub async fn disconnect_ble(&self, address: &str) -> Result<()>;
 }
 ```
-
-#### 3.1.3 Action 类型
-
-```rust
-pub enum Action {
-    // 设备管理
-    DeviceAddSerial { id, name, baud_rate },
-    DeviceAddBle { id, name, mac },
-    DeviceRemove { device_id },
-    DeviceConnect { device_id },
-    DeviceDisconnect { device_id },
-    DeviceUpdateConfig { device_id, config },
-    DeviceSwitch { device_id },
-    
-    // 通道管理（蓝牙扫描特征后添加）
-    ChannelAdd { device_id, channel_id, direction },
-    ChannelSubscribe { device_id, channel_id, subscribe },
-    
-    // 数据操作
-    DataSend { device_id, channel_id, data },
-    DataReceive { device_id, channel_id, data },
-    BufferClear { device_id, channel_id },
-    
-    // TAB 管理
-    TabAdd { device_id, channel_id, label },
-    TabRemove { tab_key },
-    TabSwitch { tab_key },
-    
-    // 设置
-    SettingsUpdate { settings },
-    StateRestore { window_state },
-}
-```
-
-#### 3.1.4 通道ID生成规则
-
-| 设备类型 | 通道ID格式 | 示例 |
-|----------|------------|------|
-| 串口 | 固定 "tx" 和 "rx" | `tx`, `rx` |
-| 蓝牙 | "{UUID}_{direction}" | `00002a00-0000-1000-8000-00805f9b34fb_read` |
 
 ---
 
@@ -188,7 +115,7 @@ pub enum Action {
 ┌─────────────────────────────────────────────────────────────┐
 │                      SerialManager                          │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌────────────┐  │
-│  │ ports: HashMap  │  │callbacks:HashMap│  │caches:HashMap│ │
+│  │ ports: RwLock   │  │callbacks:RwLock │  │caches:RwLock│ │
 │  │  <String, Port> │  │ <String, CB>    │  │ <String,Cache>│ │
 │  └────────┬────────┘  └────────┬────────┘  └─────┬──────┘  │
 │           │                    │                  │         │
@@ -202,6 +129,14 @@ pub enum Action {
 │  │  │ - parity     │  │              │  │           │  │   │
 │  │  └──────────────┘  └──────────────┘  └───────────┘  │   │
 │  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │              SerialPortCache                         │   │
+│  │  ┌──────────────┐  ┌──────────────┐                 │   │
+│  │  │ tx_buffer    │  │ rx_buffer    │                 │   │
+│  │  │ (RingBuffer) │  │ (RingBuffer) │                 │   │
+│  │  └──────────────┘  └──────────────┘                 │   │
+│  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -209,24 +144,22 @@ pub enum Action {
 
 ```rust
 impl SerialManager {
-    // 扫描可用串口
+    pub fn new(event_bus: Arc<EventBus>) -> Self;
     pub fn scan_ports(&self) -> Result<Vec<PortInfo>>;
-    
-    // 打开串口（带数据回调）
     pub fn open_port<F>(&self, config: SerialPortConfig, callback: F) -> Result<()>
     where F: Fn(&str, &[u8]) + Send + Sync + 'static;
-    
-    // 关闭串口
     pub fn close_port(&self, port_name: &str) -> Result<()>;
-    
-    // 发送数据
+    pub fn close_all_ports(&self) -> Result<()>;
     pub fn send_data(&self, port_name: &str, data: &[u8]) -> Result<usize>;
-    
-    // 获取缓冲区数据
-    pub fn get_cache(&self, port_name: &str) -> Option<ChannelCache>;
-    
-    // 清除缓冲区
-    pub fn clear_cache(&self, port_name: &str) -> bool;
+    pub fn is_port_open(&self, port_name: &str) -> Result<bool>;
+    pub fn get_open_ports(&self) -> Result<Vec<String>>;
+    pub fn register_callback<F>(&self, port_name: &str, callback: F) -> Result<()>;
+    pub fn unregister_callback(&self, port_name: &str) -> Result<()>;
+    pub fn clear_callbacks(&self) -> Result<()>;
+    pub fn get_port_config(&self, port_name: &str) -> Result<SerialPortConfig>;
+    pub fn get_cache(&self, port_name: &str) -> Result<ChannelCache>;
+    pub fn clear_cache(&self, port_name: &str) -> Result<bool>;
+    pub fn get_cache_size(&self, port_name: &str) -> Result<Option<(usize, usize)>>;
 }
 ```
 
@@ -234,10 +167,14 @@ impl SerialManager {
 
 ```
 发送路径:
-前端 → dispatch_action(DATA_SEND) → ActionDispatcher → SerialManager.send_data() → SerialPort.write() → 硬件
+前端 → Tauri IPC → SerialManager.send_data() → SerialPort.write() → 硬件
+                      │
+                      └──> tx_buffer.write(data)  // 同时写入发送缓存
 
 接收路径:
-硬件 → SerialPort.read_loop() → RingBuffer.write() → callback() → Tauri emit → 前端
+硬件 → SerialPort.read_loop() → rx_buffer.write(data) → callback() 
+      │
+      └──> EventBus.publish(SerialDataEvent) → 前端
 ```
 
 ---
@@ -253,10 +190,13 @@ device/ble/
 ├── ble_traits.rs       # BleBackend trait 定义
 ├── native/             # 原生 BLE 后端
 │   ├── mod.rs
+│   ├── adapter.rs
+│   ├── gatt_client.rs
 │   └── native_backend.rs
 └── at/                 # AT 指令 BLE 后端
     ├── mod.rs
     ├── at_backend.rs
+    ├── at_cache.rs
     ├── at_commands.rs
     ├── at_parser.rs
     └── at_transport.rs
@@ -295,38 +235,100 @@ device/ble/
 #### 3.3.3 BleBackend Trait
 
 ```rust
+pub type NotifyCallback = Arc<dyn Fn(&str, &str, &[u8]) + Send + Sync>;
+
 #[async_trait]
 pub trait BleBackend: Send + Sync {
-    // 配置
     async fn configure(&mut self) -> Result<()>;
-    
-    // 扫描
     async fn scan(&self, duration_ms: u64) -> Result<Vec<BleDevice>>;
     async fn stop_scan(&self) -> Result<Vec<BleDevice>>;
-    
-    // 连接
     async fn connect(&self, address: &str) -> Result<BleConnection>;
     async fn disconnect(&self, address: &str) -> Result<()>;
     async fn get_connections(&self) -> Result<Vec<BleConnection>>;
-    
-    // GATT
     async fn discover_services(&self, address: &str) -> Result<Vec<BleService>>;
     async fn discover_characteristics(&self, address: &str, service_uuid: &str) -> Result<Vec<BleCharacteristic>>;
     async fn read_characteristic(&self, address: &str, char_uuid: &str) -> Result<Vec<u8>>;
     async fn write_characteristic(&self, address: &str, char_uuid: &str, data: &[u8]) -> Result<()>;
     async fn write_without_response(&self, address: &str, char_uuid: &str, data: &[u8]) -> Result<()>;
-    
-    // 通知
     async fn subscribe_notify(&self, address: &str, char_uuid: &str, callback: NotifyCallback) -> Result<()>;
     async fn unsubscribe_notify(&self, address: &str, char_uuid: &str) -> Result<()>;
-    
-    // 其他
     async fn get_rssi(&self, address: &str) -> Result<i16>;
     async fn set_mtu(&self, address: &str, mtu: u16) -> Result<u16>;
 }
 ```
 
-#### 3.3.4 模式切换
+#### 3.3.4 核心数据结构
+
+```rust
+pub enum BleMode {
+    Native,
+    At,
+}
+
+pub struct AtConfig {
+    pub port_name: String,
+    pub baud_rate: u32,
+    pub timeout_ms: u64,
+    pub tx_uuid: Option<String>,
+    pub rx_uuid: Option<String>,
+    pub srv_uuid: Option<String>,
+}
+
+pub struct BleDevice {
+    pub address: String,
+    pub name: Option<String>,
+    pub rssi: Option<i16>,
+    pub is_connectable: bool,
+}
+
+pub struct BleConnection {
+    pub address: String,
+    pub name: Option<String>,
+    pub is_connected: bool,
+    pub services: Vec<BleService>,
+}
+
+pub struct BleService {
+    pub uuid: String,
+    pub primary: bool,
+    pub characteristics: Vec<BleCharacteristic>,
+}
+
+pub struct BleCharacteristic {
+    pub uuid: String,
+    pub service_uuid: String,
+    pub properties: BleCharacteristicProperties,
+    pub subscribed: bool,
+}
+
+pub struct BleCharacteristicProperties {
+    pub read: bool,
+    pub write: bool,
+    pub write_without_response: bool,
+    pub notify: bool,
+    pub indicate: bool,
+}
+
+pub struct AtConnectionTab {
+    pub id: String,
+    pub address: String,
+    pub name: Option<String>,
+    pub tx_uuid: String,
+    pub rx_uuid: String,
+    pub connected_at: u64,
+    pub received_data: Vec<DataEntry>,
+    pub sent_data: Vec<DataEntry>,
+}
+
+pub struct DataEntry {
+    pub id: String,
+    pub timestamp: u64,
+    pub data: Vec<u8>,
+    pub direction: String,
+}
+```
+
+#### 3.3.5 模式切换
 
 ```rust
 // 配置原生模式
@@ -337,7 +339,16 @@ ble_manager.configure_at(AtConfig {
     port_name: "COM3".to_string(),
     baud_rate: 115200,
     timeout_ms: 1000,
+    tx_uuid: Some("...".to_string()),
+    rx_uuid: Some("...".to_string()),
+    srv_uuid: Some("...".to_string()),
 }).await?;
+
+// 获取当前模式
+let mode = ble_manager.mode().await;
+
+// 切换模式
+ble_manager.set_mode(BleMode::At).await?;
 ```
 
 ---
@@ -353,46 +364,119 @@ ble_manager.configure_at(AtConfig {
 #### 3.4.2 数据结构
 
 ```rust
-pub struct RingBuffer {
-    buffer: Vec<u8>,           // 底层存储
-    capacity: usize,           // 容量
-    head: usize,               // 读指针
-    tail: usize,               // 写指针
-    entries: Vec<CacheEntry>,  // 按次记录的条目
-}
-
 pub struct CacheEntry {
-    pub timestamp: u64,        // 时间戳
-    pub data: Vec<u8>,         // 数据
+    pub timestamp: u64,
+    pub data: Vec<u8>,
 }
 
-// 线程安全封装
+pub struct CacheData {
+    pub entries: Vec<CacheEntry>,
+    pub total_bytes: usize,
+    pub entry_count: usize,
+}
+
+pub struct RingBuffer {
+    buffer: Vec<u8>,
+    capacity: usize,
+    head: usize,
+    tail: usize,
+    entries: VecDeque<CacheEntry>,
+}
+
+pub struct ChannelCache {
+    pub tx_cache: CacheData,
+    pub rx_cache: CacheData,
+}
+
 pub struct ThreadSafeRingBuffer {
     inner: Mutex<RingBuffer>,
 }
+
+pub type RingBufferRef = Arc<ThreadSafeRingBuffer>;
 ```
 
 #### 3.4.3 核心操作
 
 ```rust
 impl RingBuffer {
-    // 写入数据（自动覆盖旧数据）
+    pub fn new() -> Self;
+    pub fn with_capacity(capacity: usize) -> Self;
     pub fn write(&mut self, data: &[u8]);
-    
-    // 读取所有数据
     pub fn read_all(&self) -> Vec<u8>;
-    
-    // 获取条目列表
-    pub fn get_entries(&self) -> &[CacheEntry];
-    
-    // 获取缓存数据
+    pub fn get_entries(&self) -> Vec<&CacheEntry>;
     pub fn get_cache_data(&self) -> CacheData;
-    
-    // 清空
     pub fn clear(&mut self);
-    
-    // 当前长度
     pub fn len(&self) -> usize;
+    pub fn is_empty(&self) -> bool;
+    pub fn capacity(&self) -> usize;
+}
+
+impl ThreadSafeRingBuffer {
+    pub fn new() -> Self;
+    pub fn with_capacity(capacity: usize) -> Self;
+    pub fn write(&self, data: &[u8]) -> Result<()>;
+    pub fn read_all(&self) -> Result<Vec<u8>>;
+    pub fn get_cache_data(&self) -> Result<CacheData>;
+    pub fn clear(&self) -> Result<()>;
+    pub fn len(&self) -> Result<usize>;
+    pub fn is_empty(&self) -> Result<bool>;
+}
+
+pub fn create_ring_buffer() -> RingBufferRef;
+pub fn create_ring_buffer_with_capacity(capacity: usize) -> RingBufferRef;
+```
+
+---
+
+### 3.5 事件总线 (`service/event_bus.rs`)
+
+#### 3.5.1 设计目标
+
+- 发布/订阅模式，支持跨模块通信
+- 支持 msgpack 序列化，高效传输
+- 类型安全的事件定义
+
+#### 3.5.2 事件类型
+
+```rust
+pub struct SerialDataEvent {
+    pub device_id: String,
+    pub data: Vec<u8>,
+    pub timestamp: u64,
+}
+
+pub struct SerialConnectedEvent {
+    pub port_name: String,
+}
+
+pub struct SerialDisconnectedEvent {
+    pub port_name: String,
+}
+
+pub struct BleDataEvent {
+    pub device_id: String,
+    pub address: String,
+    pub characteristic_uuid: String,
+    pub data: Vec<u8>,
+    pub timestamp: u64,
+}
+
+pub struct BleConnectionEvent {
+    pub address: String,
+    pub name: Option<String>,
+}
+```
+
+#### 3.5.3 事件主题
+
+```rust
+pub mod topics {
+    pub const SERIAL_DATA: &str = "serial-data";
+    pub const SERIAL_CONNECTED: &str = "serial-connected";
+    pub const SERIAL_DISCONNECTED: &str = "serial-disconnected";
+    pub const BLE_DATA: &str = "ble-data";
+    pub const BLE_CONNECTED: &str = "ble-connected";
+    pub const BLE_DISCONNECTED: &str = "ble-disconnected";
 }
 ```
 
@@ -400,194 +484,119 @@ impl RingBuffer {
 
 ## 四、前端集成
 
-### 4.1 状态订阅
+### 4.1 状态管理
+
+前端使用 Zustand 进行状态管理，主要 Store 包括：
+
+- `useDeviceStore` - 设备状态管理
+- `useDashboardStore` - Dashboard 状态管理
+- `useLogStore` - 日志状态管理
+
+### 4.2 API 调用
 
 ```typescript
-// 获取全局状态
-const state = useAppState();
+import { deviceApi } from '../../api/device';
 
-// 获取活动通道
-const activeChannel = useActiveChannel();
+// 扫描串口
+const ports = await deviceApi.scanPorts();
 
-// 获取指定通道
-const channel = useChannel(channelId);
-
-// 获取已连接通道
-const connectedChannels = useConnectedChannels();
-```
-
-### 4.2 Action 发送
-
-```typescript
-const { addChannel, connectChannel, disconnectChannel, sendData, clearBuffer } = useChannelActions();
-
-// 添加串口通道
-await addChannel('COM3', 'serial', { baudRate: 115200 });
-
-// 连接通道
-await connectChannel('serial-COM3', { baudRate: 115200 });
+// 打开串口
+await deviceApi.openSerialPort({
+  portName: 'COM3',
+  baudRate: 115200,
+  dataBits: 8,
+  parity: 'none',
+  stopBits: 1,
+  flowControl: 'none',
+});
 
 // 发送数据
-await sendData('serial-COM3', [0x01, 0x02, 0x03]);
+await deviceApi.sendSerialData('COM3', [0x01, 0x02, 0x03]);
 
-// 清空缓冲区
-await clearBuffer('serial-COM3', 'rx');
+// 关闭串口
+await deviceApi.closeSerialPort('COM3');
 ```
 
-### 4.3 状态同步流程
-
-```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│   Frontend   │     │   Tauri IPC  │     │   Backend    │
-└──────┬───────┘     └──────┬───────┘     └──────┬───────┘
-       │                    │                    │
-       │  dispatch_action   │                    │
-       │───────────────────>│                    │
-       │                    │  ActionDispatcher  │
-       │                    │───────────────────>│
-       │                    │                    │
-       │                    │    state-change    │
-       │<───────────────────│<───────────────────│
-       │                    │                    │
-       │  React re-render   │                    │
-       │                    │                    │
-```
-
----
-
-## 五、状态持久化
-
-### 5.1 存储位置
-
-- Windows: `%LOCALAPPDATA%/combridge/app_state.json`
-- macOS: `~/Library/Application Support/combridge/app_state.json`
-- Linux: `~/.local/share/combridge/app_state.json`
-
-### 5.2 持久化内容
-
-```json
-{
-  "channels": [
-    {
-      "id": "serial-COM3",
-      "name": "COM3",
-      "type": "serial",
-      "connected": false,
-      "config": {
-        "type": "serial",
-        "baudRate": 115200,
-        "dataBits": 8,
-        "parity": "none",
-        "stopBits": 1,
-        "flowControl": "none"
-      }
-    }
-  ],
-  "activeChannelId": "serial-COM3",
-  "settings": {
-    "theme": "dark",
-    "language": "zh-CN",
-    "autoReconnect": true,
-    "maxBufferSize": 4194304
-  },
-  "windowState": {
-    "tabs": [
-      {
-        "key": "tab-serial-COM3-1234567890",
-        "channelId": "serial-COM3",
-        "label": "COM3",
-        "isActive": true
-      }
-    ],
-    "activeTabKey": "tab-serial-COM3-1234567890"
-  }
-}
-```
-
-### 5.3 恢复流程
-
-```
-应用启动
-    │
-    ▼
-检查持久化文件是否存在
-    │
-    ├── 存在 ──> 读取 JSON ──> 解析 AppState ──> 恢复窗口 TAB
-    │                                      │
-    │                                      └──> 恢复设备配置（不自动连接）
-    │
-    └── 不存在 ──> 使用默认状态
-```
-
----
-
-## 六、最佳实践
-
-### 6.1 设备连接
+### 4.3 事件监听
 
 ```typescript
-// 推荐：通过 Action 系统连接
-const { addChannel, connectChannel } = useChannelActions();
+import { onSerialData, onBleData } from '../../api/events';
 
-// 1. 先添加通道
-const result = await addChannel('COM3', 'serial', config);
-const channelId = result.data?.channelId;
+// 监听串口数据
+const unlisten = await onSerialData((event) => {
+  console.log('Received:', event.data);
+});
 
-// 2. 再连接
-await connectChannel(channelId, config);
+// 取消监听
+unlisten();
 ```
 
-### 6.2 数据发送
+---
+
+## 五、最佳实践
+
+### 5.1 设备连接
+
+```typescript
+// 推荐：通过 API 层连接
+const { openSerialPort, sendSerialData, closeSerialPort } = useDeviceActions();
+
+// 1. 打开串口
+await openSerialPort(config);
+
+// 2. 发送数据
+await sendSerialData(portName, data);
+
+// 3. 关闭串口
+await closeSerialPort(portName);
+```
+
+### 5.2 数据发送
 
 ```typescript
 // 推荐：使用 Uint8Array
 const data = new Uint8Array([0x01, 0x02, 0x03]);
-await sendData(channelId, Array.from(data));
+await sendSerialData(portName, Array.from(data));
 
 // 或使用文本转换
 const text = "Hello";
 const encoder = new TextEncoder();
-await sendData(channelId, Array.from(encoder.encode(text)));
+await sendSerialData(portName, Array.from(encoder.encode(text)));
 ```
 
-### 6.3 错误处理
+### 5.3 错误处理
 
 ```typescript
-const result = await connectChannel(channelId, config);
-
-if (!result.success) {
-  console.error('连接失败:', result.message);
+try {
+  await openSerialPort(config);
+  console.log('连接成功');
+} catch (error) {
+  console.error('连接失败:', error);
   // 处理错误
-  return;
 }
-
-// 连接成功
-console.log('连接成功');
 ```
 
 ---
 
-## 七、扩展指南
+## 六、扩展指南
 
-### 7.1 添加新的设备类型
+### 6.1 添加新的设备类型
 
-1. 在 `types.rs` 中添加新的 `ChannelType` 变体
-2. 在 `Action` 枚举中添加对应的处理逻辑
-3. 在 `dispatcher.rs` 中实现处理函数
-4. 创建新的设备管理器（参考 `SerialManager`）
+1. 在 `device_manager.rs` 中添加新的 `DeviceType` 变体
+2. 创建新的设备管理器（参考 `SerialManager`）
+3. 在 `DeviceManager` 中添加对应的管理器引用
+4. 实现必要的 Tauri 命令
 
-### 7.2 自定义缓冲区大小
+### 6.2 自定义缓冲区大小
 
 ```rust
-// 在 AppSettings 中修改
-pub struct AppSettings {
-    pub max_buffer_size: usize,  // 默认 4MB
-}
+// 创建自定义容量的缓冲区
+let buffer = create_ring_buffer_with_capacity(8 * 1024 * 1024); // 8MB
 ```
 
-### 7.3 添加新的 Action
+### 6.3 添加新的事件类型
 
-1. 在 `action.rs` 中添加 Action 变体
-2. 在 `dispatcher.rs` 的 `dispatch` 方法中添加处理分支
-3. 在前端 `types/state.ts` 中添加对应类型
-4. 在 `useAppDispatch.ts` 中添加便捷方法
+1. 在 `service/event_bus.rs` 中定义新的事件结构
+2. 在 `topics` 模块中添加事件主题常量
+3. 在对应的 Manager 中发布事件
+4. 在前端添加事件监听器

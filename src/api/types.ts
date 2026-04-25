@@ -229,3 +229,99 @@ export interface FactoryTestProgressEvent {
   progress: number;
   message: string;
 }
+
+export type ThresholdOperator = 'lt' | 'le' | 'gt' | 'ge' | 'eq' | 'ne' | 'range';
+
+export interface ThresholdConfig {
+  operator: ThresholdOperator;
+  value?: number;
+  range?: [number, number];
+  description?: string;
+}
+
+export interface ChannelRule {
+  channels: number[];
+  operator: ThresholdOperator;
+  value?: number;
+  range?: [number, number];
+  description?: string;
+}
+
+export interface TestItemConfig {
+  enabled: boolean;
+  description?: string;
+  unit?: string;
+  global_threshold?: ThresholdConfig;
+  channel_rules?: ChannelRule[];
+}
+
+export interface TestsConfig {
+  base_noise?: TestItemConfig;
+  ppg_noise?: TestItemConfig;
+  lpctr?: TestItemConfig;
+  lplctr?: TestItemConfig;
+}
+
+export interface GlobalConfig {
+  default_operator: ThresholdOperator;
+  fail_action: 'stop' | 'continue';
+}
+
+export interface FactoryThresholdConfig {
+  project: string;
+  version: string;
+  description?: string;
+  global?: GlobalConfig;
+  tests: TestsConfig;
+}
+
+export interface ChannelEvaluationResult {
+  channel_index: number;
+  value: number;
+  pass: boolean;
+  threshold_display: string;
+  operator: string;
+  threshold_value?: number;
+  threshold_range?: [number, number];
+  description?: string;
+}
+
+export interface TestEvaluationResult {
+  test_name: string;
+  enabled: boolean;
+  pass: boolean;
+  channel_results: ChannelEvaluationResult[];
+  message: string;
+  description?: string;
+  unit?: string;
+}
+
+export interface FactoryEvaluationResult {
+  overall_pass: boolean;
+  project: string;
+  test_results: TestEvaluationResult[];
+  timestamp: number;
+}
+
+export interface TestStatus {
+  enabled: boolean;
+  has_global_threshold: boolean;
+  channel_rules_count: number;
+}
+
+export interface TestsStatus {
+  base_noise: TestStatus;
+  ppg_noise: TestStatus;
+  lpctr: TestStatus;
+  lplctr: TestStatus;
+}
+
+export interface ThresholdConfigValidation {
+  is_valid: boolean;
+  file_path?: string;
+  project?: string;
+  version?: string;
+  errors: string[];
+  warnings: string[];
+  tests_status: TestsStatus;
+}

@@ -235,20 +235,56 @@ impl FactoryThresholdConfig {
         Ok(())
     }
 
-    pub fn find_config_file(config_dir: &Path, project_name: &str) -> Option<std::path::PathBuf> {
-        let filename = format!("factory_config_{}.yaml", project_name);
-        let path = config_dir.join(&filename);
-        if path.exists() {
-            return Some(path);
+    pub fn find_config_file(config_dir: &Path) -> Option<std::path::PathBuf> {
+        if !config_dir.exists() {
+            return None;
         }
 
-        let filename_lower = format!("factory_config_{}.yaml", project_name.to_lowercase());
-        let path_lower = config_dir.join(&filename_lower);
-        if path_lower.exists() {
-            return Some(path_lower);
+        let entries = std::fs::read_dir(config_dir).ok()?;
+        let mut matches: Vec<std::path::PathBuf> = Vec::new();
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(file_name) = path.file_name() {
+                let file_name_str = file_name.to_string_lossy();
+                if file_name_str.starts_with("factory_config_") 
+                    && file_name_str.ends_with(".yaml") {
+                    matches.push(path);
+                }
+            }
         }
 
-        None
+        if matches.len() == 1 {
+            Some(matches.into_iter().next().unwrap())
+        } else {
+            None
+        }
+    }
+
+    pub fn find_all_config_files(config_dir: &Path) -> Vec<std::path::PathBuf> {
+        if !config_dir.exists() {
+            return Vec::new();
+        }
+
+        let entries = match std::fs::read_dir(config_dir) {
+            Ok(e) => e,
+            Err(_) => return Vec::new(),
+        };
+
+        let mut matches: Vec<std::path::PathBuf> = Vec::new();
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(file_name) = path.file_name() {
+                let file_name_str = file_name.to_string_lossy();
+                if file_name_str.starts_with("factory_config_") 
+                    && file_name_str.ends_with(".yaml") {
+                    matches.push(path);
+                }
+            }
+        }
+
+        matches
     }
 }
 
@@ -480,8 +516,8 @@ impl ThresholdConfigValidation {
     }
 }
 
-pub fn validate_threshold_config_file(config_dir: &Path, project_name: &str) -> ThresholdConfigValidation {
-    match FactoryThresholdConfig::find_config_file(config_dir, project_name) {
+pub fn validate_threshold_config_file(config_dir: &Path) -> ThresholdConfigValidation {
+    match FactoryThresholdConfig::find_config_file(config_dir) {
         Some(path) => {
             info!("[ThresholdConfig] Found config file: {:?}", path);
             match FactoryThresholdConfig::from_file(&path) {
@@ -496,10 +532,17 @@ pub fn validate_threshold_config_file(config_dir: &Path, project_name: &str) -> 
             }
         }
         None => {
-            let expected = format!("factory_config_{}.yaml", project_name);
-            let msg = format!("Config file not found: expected {} in {:?}", expected, config_dir);
-            warn!("[ThresholdConfig] {}", msg);
-            ThresholdConfigValidation::from_error(msg, None)
+            let all_configs = FactoryThresholdConfig::find_all_config_files(config_dir);
+            if all_configs.is_empty() {
+                let msg = format!("No factory_config_*.yaml found in {:?}", config_dir);
+                warn!("[ThresholdConfig] {}", msg);
+                ThresholdConfigValidation::from_error(msg, None)
+            } else {
+                let msg = format!("Found {} factory_config_*.yaml files, expected exactly 1: {:?}", 
+                    all_configs.len(), all_configs);
+                warn!("[ThresholdConfig] {}", msg);
+                ThresholdConfigValidation::from_error(msg, None)
+            }
         }
     }
 }

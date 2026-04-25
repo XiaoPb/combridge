@@ -1,6 +1,7 @@
 export interface AppSettings {
   theme: 'light' | 'dark' | 'system';
   language: 'zh-CN' | 'en-US';
+  timezone: string;
   autoReconnect: boolean;
   autoReconnectInterval: number;
   maxLogLines: number;
@@ -46,6 +47,7 @@ export interface RecentConnection {
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   theme: 'system',
   language: 'zh-CN',
+  timezone: 'Asia/Shanghai',
   autoReconnect: false,
   autoReconnectInterval: 3000,
   maxLogLines: 1000,

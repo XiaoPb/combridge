@@ -8,6 +8,7 @@ use tauri::Manager;
 use tracing::{info, warn};
 
 use crate::error::{ComBridgeError, Result};
+use crate::service::logger::{set_timezone, get_timezone};
 
 static SYSTEM: Lazy<Mutex<System>> = Lazy::new(|| {
     let mut sys = System::new_all();
@@ -210,6 +211,18 @@ pub async fn get_runtime_status(
 #[tauri::command]
 pub async fn get_app_version() -> Result<String> {
     Ok(env!("CARGO_PKG_VERSION").to_string())
+}
+
+#[tauri::command]
+pub async fn set_timezone_config(timezone: String) -> Result<()> {
+    set_timezone(&timezone);
+    info!("时区已设置为: {}", timezone);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_timezone_config() -> Result<String> {
+    Ok(get_timezone())
 }
 
 #[tauri::command]

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use tracing::Level;
 use tracing_subscriber::{
-    fmt::{self, format::FmtSpan},
+    fmt::{self, format::FmtSpan, time::FormatTime},
     layer::SubscriberExt,
     util::SubscriberInitExt,
     Layer,
@@ -10,6 +10,37 @@ use tracing_subscriber::{
 };
 
 static LOGGER: OnceLock<LoggerService> = OnceLock::new();
+static TIMEZONE: OnceLock<std::sync::RwLock<String>> = OnceLock::new();
+
+fn get_timezone_lock() -> &'static std::sync::RwLock<String> {
+    TIMEZONE.get_or_init(|| std::sync::RwLock::new("Asia/Shanghai".to_string()))
+}
+
+pub fn set_timezone(timezone: &str) {
+    if let Ok(mut tz) = get_timezone_lock().write() {
+        *tz = timezone.to_string();
+    }
+}
+
+pub fn get_timezone() -> String {
+    get_timezone_lock().read().map(|tz| tz.clone()).unwrap_or_else(|_| "Asia/Shanghai".to_string())
+}
+
+struct TimezoneTime;
+
+impl FormatTime for TimezoneTime {
+    fn format_time(&self, w: &mut tracing_subscriber::fmt::format::Writer<'_>) -> std::fmt::Result {
+        let timezone_str = get_timezone();
+        let now = chrono::Utc::now();
+        
+        if let Ok(tz) = timezone_str.parse::<chrono_tz::Tz>() {
+            let local_time = now.with_timezone(&tz);
+            write!(w, "{}", local_time.format("%Y-%m-%d %H:%M:%S%.3f"))
+        } else {
+            write!(w, "{}", now.format("%Y-%m-%d %H:%M:%S%.3f UTC"))
+        }
+    }
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LoggerConfig {
@@ -70,6 +101,7 @@ impl LoggerService {
 
         if config.console_enabled {
             let console_layer = fmt::layer()
+                .with_timer(TimezoneTime)
                 .with_span_events(FmtSpan::CLOSE)
                 .with_target(true)
                 .with_thread_ids(true)
@@ -87,7 +119,12 @@ impl LoggerService {
                 std::fs::create_dir_all(&log_dir)?;
             }
 
-            let now = chrono::Local::now();
+            let timezone_str = get_timezone();
+            let now = if let Ok(tz) = timezone_str.parse::<chrono_tz::Tz>() {
+                chrono::Utc::now().with_timezone(&tz)
+            } else {
+                chrono::Utc::now().with_timezone(&chrono_tz::Asia::Shanghai)
+            };
             let timestamp = now.format("%Y-%m-%d-%H-%M-%S");
             let log_filename = format!("combridge_system_{}.log", timestamp);
             let path = log_dir.join(&log_filename);
@@ -100,6 +137,7 @@ impl LoggerService {
                 .open(&path)?;
             
             let file_layer = fmt::layer()
+                .with_timer(TimezoneTime)
                 .with_span_events(FmtSpan::CLOSE)
                 .with_target(true)
                 .with_thread_ids(true)

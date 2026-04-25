@@ -152,6 +152,8 @@ const FactoryTestTab: React.FC = () => {
   };
 
   const renderTestResult = (testResult: TestEvaluationResult) => {
+    const testDisplayName = t(`factory.test_${testResult.test_name}`, { defaultValue: testResult.description || testResult.test_name });
+    
     const columns = [
       {
         title: t('factory.channel'),
@@ -200,7 +202,7 @@ const FactoryTestTab: React.FC = () => {
             ) : (
               <CloseCircleOutlined style={{ color: token.colorError }} />
             )}
-            <Text strong>{testResult.description || testResult.test_name}</Text>
+            <Text strong>{testDisplayName}</Text>
             <Tag color={testResult.pass ? 'success' : 'error'}>
               {testResult.pass ? t('factory.pass') : t('factory.fail')}
             </Tag>

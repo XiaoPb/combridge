@@ -14,6 +14,7 @@ import {
   type LogLevel,
   type LogEntry,
 } from '../../stores/logStore';
+import { useConfigStore } from '../../stores/configStore';
 
 const { Text } = Typography;
 const { Search } = Input;
@@ -22,6 +23,7 @@ const LogViewer: React.FC = () => {
   const { t } = useTranslation('system');
   const logs = useLogStore((state) => state.logs);
   const clearLogs = useLogStore((state) => state.clearLogs);
+  const timezone = useConfigStore((state) => state.settings.timezone);
   const [filteredLogs, setFilteredLogs] = useState<LogEntry[]>([]);
   const [levelFilter, setLevelFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('');
@@ -63,7 +65,7 @@ const LogViewer: React.FC = () => {
 
   const handleExport = () => {
     const content = logs
-      .map((log: LogEntry) => `[${formatLogTimestamp(log.timestamp)}] [${log.level.toUpperCase()}] [${log.source}] ${log.message}`)
+      .map((log: LogEntry) => `[${formatLogTimestamp(log.timestamp, timezone)}] [${log.level.toUpperCase()}] [${log.source}] ${log.message}`)
       .join('\n');
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -81,7 +83,7 @@ const LogViewer: React.FC = () => {
       key: 'timestamp',
       width: 120,
       render: (timestamp: number) => (
-        <Text style={{ fontSize: 12 }}>{formatLogTimestamp(timestamp)}</Text>
+        <Text style={{ fontSize: 12 }}>{formatLogTimestamp(timestamp, timezone)}</Text>
       ),
     },
     {

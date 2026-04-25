@@ -191,7 +191,8 @@ impl<R: Runtime> EventBridge<R> {
                 let fwd = forwarded_count.load(Ordering::Relaxed);
                 let filt = filtered_count.load(Ordering::Relaxed);
                 let failed = emit_failed_count.load(Ordering::Relaxed);
-                tracing::info!(
+                #[cfg(debug_assertions)]
+                tracing::debug!(
                     "[EventBridge] Heartbeat: alive (received={}, forwarded={}, filtered={}, failed={})",
                     recv, fwd, filt, failed
                 );

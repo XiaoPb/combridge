@@ -2,7 +2,7 @@
 name = "combridge-rust"
 version = "0.5.4"
 description = "A Tauri App"
-authors = ["you"]
+authors = ["XiaoPb"]
 edition = "2021"
 
 [lib]
@@ -37,6 +37,7 @@ open = "5"
 rmp = "0.8"
 rmp-serde = "1.1"
 chrono = "0.4"
+chrono-tz = "0.10"
 bluest = "0.6"
 futures = "0.3"
 dirs = "5"

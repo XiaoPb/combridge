@@ -5,7 +5,8 @@
     "runtimeStatus": "运行状态",
     "diskUsage": "磁盘使用",
     "connectionSettings": "连接设置",
-    "soundSettings": "声音设置"
+    "soundSettings": "声音设置",
+    "timezoneSettings": "时区设置"
   },
   "label": {
     "appName": "应用名称",
@@ -28,7 +29,9 @@
     "soundEnabled": "启用声音",
     "soundOnConnect": "连接时播放声音",
     "soundOnDisconnect": "断开时播放声音",
-    "soundOnData": "数据传输时播放声音"
+    "soundOnData": "数据传输时播放声音",
+    "timezone": "时区",
+    "timezoneHint": "日志时间戳将使用所选时区显示"
   },
   "value": {
     "description": "串口与蓝牙调试工具",

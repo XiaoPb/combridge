@@ -222,7 +222,15 @@ combridge-rust/
 │   │   ├── useBle.ts             # BLE Hook
 │   │   ├── useProtocol.ts        # 协议 Hook
 │   │   ├── useWaveform.ts        # 波形 Hook
-│   │   └── useDashboard.ts       # Dashboard Hook
+│   │   ├── useAppDispatch.ts     # 应用调度 Hook
+│   │   ├── useAppState.ts        # 应用状态 Hook
+│   │   ├── useConnectedDevices.ts # 已连接设备 Hook
+│   │   ├── useDataParser.ts      # 数据解析 Hook
+│   │   ├── useDebounce.ts        # 防抖 Hook
+│   │   ├── useLog.ts             # 日志 Hook
+│   │   ├── useModuleSubscribe.ts # 模块订阅 Hook
+│   │   ├── useNotification.ts    # 通知 Hook
+│   │   └── useTheme.ts           # 主题 Hook
 │   ├── i18n/                     # 国际化配置
 │   ├── locales/                  # 多语言资源
 │   │   ├── zh-CN/                # 中文

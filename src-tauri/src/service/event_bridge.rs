@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Runtime};
@@ -9,7 +9,8 @@ use super::event_bus::{Event, EventBus, EventEncoding};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 const HEARTBEAT_INTERVAL_SECS: u64 = 10;
-const EMIT_CHANNEL_CAPACITY: usize = 256;
+const POLL_INTERVAL_MS: u64 = 5;
+const EMIT_BATCH_SIZE: usize = 32;
 
 #[derive(Debug, Clone)]
 pub struct EventFilter {
@@ -45,11 +46,23 @@ impl Default for EventFilter {
     }
 }
 
+#[derive(Debug)]
+pub struct EventBridgeStats {
+    pub received: u64,
+    pub forwarded: u64,
+    pub filtered: u64,
+    pub emit_failed: u64,
+}
+
 pub struct EventBridge<R: Runtime> {
     event_bus: Arc<EventBus>,
     app_handle: AppHandle<R>,
     filter: EventFilter,
     running: Arc<AtomicBool>,
+    received_count: Arc<AtomicU64>,
+    forwarded_count: Arc<AtomicU64>,
+    filtered_count: Arc<AtomicU64>,
+    emit_failed_count: Arc<AtomicU64>,
 }
 
 impl<R: Runtime> EventBridge<R> {
@@ -59,6 +72,10 @@ impl<R: Runtime> EventBridge<R> {
             app_handle,
             filter: EventFilter::new(),
             running: Arc::new(AtomicBool::new(false)),
+            received_count: Arc::new(AtomicU64::new(0)),
+            forwarded_count: Arc::new(AtomicU64::new(0)),
+            filtered_count: Arc::new(AtomicU64::new(0)),
+            emit_failed_count: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -72,153 +89,121 @@ impl<R: Runtime> EventBridge<R> {
         let app_handle = self.app_handle.clone();
         let filter = self.filter.clone();
         let running = self.running.clone();
+        let received_count = self.received_count.clone();
+        let forwarded_count = self.forwarded_count.clone();
+        let filtered_count = self.filtered_count.clone();
+        let emit_failed_count = self.emit_failed_count.clone();
         running.store(true, Ordering::SeqCst);
 
-        let running_clone = running.clone();
-        tauri::async_runtime::spawn(async move {
-            Self::event_loop(receiver, app_handle, filter, running_clone).await;
-        });
+        std::thread::Builder::new()
+            .name("event-bridge".to_string())
+            .spawn(move || {
+                Self::run_loop(
+                    receiver,
+                    &app_handle,
+                    &filter,
+                    &running,
+                    &received_count,
+                    &forwarded_count,
+                    &filtered_count,
+                    &emit_failed_count,
+                );
+            })
+            .expect("Failed to spawn event-bridge thread");
     }
 
-    async fn event_loop(
+    fn run_loop(
         mut receiver: broadcast::Receiver<Event>,
-        app_handle: AppHandle<R>,
-        filter: EventFilter,
-        running: Arc<AtomicBool>,
+        app_handle: &AppHandle<R>,
+        filter: &EventFilter,
+        running: &AtomicBool,
+        received_count: &AtomicU64,
+        forwarded_count: &AtomicU64,
+        filtered_count: &AtomicU64,
+        emit_failed_count: &AtomicU64,
     ) {
         tracing::info!(
-            "[EventBridge] Started, listening for events (filter prefixes: {:?})",
+            "[EventBridge] Started on dedicated thread (filter prefixes: {:?})",
             filter.prefixes
         );
 
-        let (emit_tx, mut emit_rx) = tokio::sync::mpsc::channel::<Event>(EMIT_CHANNEL_CAPACITY);
-
-        let emit_app_handle = app_handle.clone();
-        let emit_running = running.clone();
-        let emit_task = tauri::async_runtime::spawn(async move {
-            Self::emit_loop(&mut emit_rx, &emit_app_handle, &emit_running).await;
-        });
-
-        let mut event_count = 0u64;
-        let mut forwarded_count = 0u64;
-        let mut filtered_count = 0u64;
-        let mut heartbeat_interval = tokio::time::interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
-        heartbeat_interval.tick().await;
+        let mut last_heartbeat = std::time::Instant::now();
+        let heartbeat_duration = Duration::from_secs(HEARTBEAT_INTERVAL_SECS);
+        let poll_duration = Duration::from_millis(POLL_INTERVAL_MS);
 
         while running.load(Ordering::SeqCst) {
-            tokio::select! {
-                recv_result = receiver.recv() => {
-                    match recv_result {
-                        Ok(event) => {
-                            event_count += 1;
+            let mut batch_count = 0usize;
+            loop {
+                match receiver.try_recv() {
+                    Ok(event) => {
+                        received_count.fetch_add(1, Ordering::Relaxed);
 
-                            if !filter.matches(&event.topic) {
-                                filtered_count += 1;
-                                if filtered_count <= 5 || filtered_count % 100 == 0 {
-                                    tracing::debug!(
-                                        "[EventBridge] Event #{} filtered out: topic={}",
-                                        event_count,
-                                        event.topic
-                                    );
+                        if !filter.matches(&event.topic) {
+                            filtered_count.fetch_add(1, Ordering::Relaxed);
+                        } else {
+                            match Self::emit_to_frontend(app_handle, &event) {
+                                Ok(()) => {
+                                    forwarded_count.fetch_add(1, Ordering::Relaxed);
                                 }
-                            } else {
-                                if let Err(e) = emit_tx.send(event).await {
+                                Err(e) => {
+                                    emit_failed_count.fetch_add(1, Ordering::Relaxed);
                                     tracing::error!(
-                                        "[EventBridge] Failed to send event to emit channel: {}",
+                                        "[EventBridge] Failed to emit: topic={}, error={}",
+                                        event.topic,
                                         e
                                     );
-                                } else {
-                                    forwarded_count += 1;
                                 }
                             }
                         }
-                        Err(broadcast::error::RecvError::Closed) => {
-                            tracing::info!(
-                                "[EventBridge] EventBus channel closed, stopping (total: {} received, {} forwarded)",
-                                event_count,
-                                forwarded_count
-                            );
+
+                        batch_count += 1;
+                        if batch_count >= EMIT_BATCH_SIZE {
                             break;
                         }
-                        Err(broadcast::error::RecvError::Lagged(n)) => {
-                            tracing::warn!(
-                                "[EventBridge] Lagged behind by {} messages (processed {} events), continuing",
-                                n,
-                                event_count
-                            );
-                        }
+                    }
+                    Err(broadcast::error::TryRecvError::Empty) => {
+                        break;
+                    }
+                    Err(broadcast::error::TryRecvError::Closed) => {
+                        tracing::info!("[EventBridge] Broadcast channel closed, stopping");
+                        running.store(false, Ordering::SeqCst);
+                        return;
+                    }
+                    Err(broadcast::error::TryRecvError::Lagged(n)) => {
+                        tracing::warn!(
+                            "[EventBridge] Lagged behind by {} messages, continuing",
+                            n
+                        );
                     }
                 }
-                _ = heartbeat_interval.tick() => {
-                    tracing::info!(
-                        "[EventBridge] Heartbeat: alive (total: {} received, {} forwarded, {} filtered)",
-                        event_count,
-                        forwarded_count,
-                        filtered_count
-                    );
-                }
+            }
+
+            if batch_count == 0 {
+                std::thread::sleep(poll_duration);
+            } else {
+                std::thread::yield_now();
+            }
+
+            let now = std::time::Instant::now();
+            if now.duration_since(last_heartbeat) >= heartbeat_duration {
+                last_heartbeat = now;
+                let recv = received_count.load(Ordering::Relaxed);
+                let fwd = forwarded_count.load(Ordering::Relaxed);
+                let filt = filtered_count.load(Ordering::Relaxed);
+                let failed = emit_failed_count.load(Ordering::Relaxed);
+                tracing::info!(
+                    "[EventBridge] Heartbeat: alive (received={}, forwarded={}, filtered={}, failed={})",
+                    recv, fwd, filt, failed
+                );
             }
         }
 
-        drop(emit_tx);
-        let _ = emit_task.await;
-
-        running.store(false, Ordering::SeqCst);
+        let recv = received_count.load(Ordering::Relaxed);
+        let fwd = forwarded_count.load(Ordering::Relaxed);
+        let filt = filtered_count.load(Ordering::Relaxed);
         tracing::info!(
-            "[EventBridge] Stopped (total: {} received, {} forwarded, {} filtered)",
-            event_count,
-            forwarded_count,
-            filtered_count
-        );
-    }
-
-    async fn emit_loop(
-        rx: &mut tokio::sync::mpsc::Receiver<Event>,
-        app_handle: &AppHandle<R>,
-        running: &AtomicBool,
-    ) {
-        let mut emitted_count = 0u64;
-        let mut failed_count = 0u64;
-
-        while running.load(Ordering::SeqCst) {
-            match rx.recv().await {
-                Some(event) => {
-                    match Self::emit_to_frontend(app_handle, &event) {
-                        Ok(()) => {
-                            emitted_count += 1;
-                            if emitted_count <= 5 || emitted_count % 50 == 0 {
-                                tracing::info!(
-                                    "[EventBridge] Forwarded to frontend: topic={}, timestamp={}",
-                                    event.topic,
-                                    event.timestamp
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            failed_count += 1;
-                            tracing::error!(
-                                "[EventBridge] Failed to emit to frontend: topic={}, error={}",
-                                event.topic,
-                                e
-                            );
-                        }
-                    }
-                }
-                None => {
-                    tracing::info!(
-                        "[EventBridge] Emit channel closed, stopping (emitted: {}, failed: {})",
-                        emitted_count,
-                        failed_count
-                    );
-                    break;
-                }
-            }
-        }
-
-        tracing::info!(
-            "[EventBridge] Emit loop stopped (emitted: {}, failed: {})",
-            emitted_count,
-            failed_count
+            "[EventBridge] Stopped (received={}, forwarded={}, filtered={})",
+            recv, fwd, filt
         );
     }
 
@@ -229,6 +214,15 @@ impl<R: Runtime> EventBridge<R> {
 
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::SeqCst)
+    }
+
+    pub fn get_stats(&self) -> EventBridgeStats {
+        EventBridgeStats {
+            received: self.received_count.load(Ordering::Relaxed),
+            forwarded: self.forwarded_count.load(Ordering::Relaxed),
+            filtered: self.filtered_count.load(Ordering::Relaxed),
+            emit_failed: self.emit_failed_count.load(Ordering::Relaxed),
+        }
     }
 
     fn emit_to_frontend(app_handle: &AppHandle<R>, event: &Event) -> Result<(), String> {

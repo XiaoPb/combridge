@@ -4,24 +4,20 @@
 //! - 协议实例生命周期管理
 //! - RPC 命令执行（基于 gh-rpc 库）
 //! - RX 数据处理（通过 EventBus 订阅）
-//! - CSV 数据保存
+//! - 聚合帧发布到前端
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use crossbeam_channel::{Receiver, Sender, unbounded};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
 use tokio::runtime::Handle;
 use tracing::{debug, error, info, warn};
 
 use crate::device::DeviceManager;
 use crate::service::{EventBus, topics, SerialDataEvent, BleDataEvent, SerialDisconnectedEvent, BleConnectionEvent};
-use super::csv_writer::CsvWriter;
 use super::factory_test::FactoryTestManager;
-use super::types::{Gh3036FrameData, GhFuncFrame, Gh3036FramesEvent, GhFuncFixIdx,
+use super::types::{GhFuncFrame, Gh3036FramesEvent, GhFuncFixIdx,
     FactoryTestStep, FactoryTestStatus, FactoryTestResult, ConfigValidationResult,
     KEY_GH3X_GET_VERSION, KEY_GH3X_REGS_WRITE_CMD, KEY_GH3X_REGS_READ_CMD,
     KEY_GH3X_REG_BIT_FIELD_WRITE_CMD, KEY_GH3X_CHIP_CTRL, KEY_GH3X_SW_FUNCTION_CMD,
@@ -59,28 +55,6 @@ pub struct ChannelConfig {
     pub channel_type: ChannelType,
     pub device_id: String,
     pub characteristic_uuid: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CsvConfig {
-    pub enabled: bool,
-    pub output_dir: String,
-}
-
-impl Default for CsvConfig {
-    fn default() -> Self {
-        let output_dir = std::env::current_exe()
-            .ok()
-            .and_then(|exe_path| exe_path.parent().map(|p| p.to_path_buf()))
-            .map(|exe_dir| exe_dir.join("data"))
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|| String::from("data"));
-        
-        Self {
-            enabled: false,
-            output_dir,
-        }
-    }
 }
 
 struct RpcDataRequest {
@@ -144,11 +118,7 @@ struct GlobalContext {
     rx_channel: Mutex<Option<ChannelConfig>>,
     tx_channel: Mutex<Option<ChannelConfig>>,
     device_manager: Mutex<Option<Arc<DeviceManager>>>,
-    app_handle: Mutex<Option<AppHandle>>,
-    csv_config: Mutex<CsvConfig>,
-    csv_writers: Mutex<HashMap<i32, CsvWriter>>,
-    frame_sender: Mutex<Option<Sender<Gh3036FrameData>>>,
-    rpc_data_sender: Mutex<Option<Sender<RpcDataRequest>>>,
+    rpc_data_sender: Mutex<Option<crossbeam_channel::Sender<RpcDataRequest>>>,
     frame_aggregator: Mutex<FrameAggregator>,
     runtime_handle: Mutex<Option<Handle>>,
 }
@@ -159,27 +129,16 @@ impl GlobalContext {
             rx_channel: Mutex::new(None),
             tx_channel: Mutex::new(None),
             device_manager: Mutex::new(None),
-            app_handle: Mutex::new(None),
-            csv_config: Mutex::new(CsvConfig::default()),
-            csv_writers: Mutex::new(HashMap::new()),
-            frame_sender: Mutex::new(None),
             rpc_data_sender: Mutex::new(None),
             frame_aggregator: Mutex::new(FrameAggregator::new()),
             runtime_handle: Mutex::new(None),
         }
     }
 
-    fn setup_channels(&self) -> (
-        Receiver<Gh3036FrameData>,
-        Receiver<RpcDataRequest>,
-    ) {
-        let (frame_sender, frame_receiver) = unbounded();
-        let (rpc_data_sender, rpc_data_receiver) = unbounded();
-        
-        *self.frame_sender.lock() = Some(frame_sender);
+    fn setup_rpc_channel(&self) -> crossbeam_channel::Receiver<RpcDataRequest> {
+        let (rpc_data_sender, rpc_data_receiver) = crossbeam_channel::unbounded();
         *self.rpc_data_sender.lock() = Some(rpc_data_sender);
-        
-        (frame_receiver, rpc_data_receiver)
+        rpc_data_receiver
     }
 
     fn set_rx_channel(&self, config: ChannelConfig) {
@@ -211,16 +170,6 @@ impl GlobalContext {
         *device_manager = Some(manager);
     }
 
-    fn set_app_handle(&self, handle: AppHandle) {
-        let mut app_handle = self.app_handle.lock();
-        *app_handle = Some(handle);
-    }
-
-    fn set_csv_config(&self, config: CsvConfig) {
-        let mut csv_config = self.csv_config.lock();
-        *csv_config = config;
-    }
-
     fn set_runtime_handle(&self, handle: Handle) {
         let mut runtime_handle = self.runtime_handle.lock();
         *runtime_handle = Some(handle);
@@ -231,14 +180,6 @@ impl GlobalContext {
             sender.send(RpcDataRequest { data })
         } else {
             Err(crossbeam_channel::SendError(RpcDataRequest { data: vec![] }))
-        }
-    }
-
-    fn send_frame_data(&self, frame_data: Gh3036FrameData) -> Result<(), crossbeam_channel::SendError<Gh3036FrameData>> {
-        if let Some(ref sender) = *self.frame_sender.lock() {
-            sender.send(frame_data)
-        } else {
-            Err(crossbeam_channel::SendError(frame_data))
         }
     }
 
@@ -278,10 +219,6 @@ impl Gh3036Manager {
             executor: Mutex::new(None),
             factory_test_manager,
         }
-    }
-
-    pub fn set_app_handle(&self, handle: AppHandle) {
-        CALLBACK_CONTEXT.set_app_handle(handle);
     }
 
     pub fn is_initialized(&self) -> bool {
@@ -446,11 +383,6 @@ impl Gh3036Manager {
                 );
                 event_bus.publish_msgpack("gh3036:frames", &aggregated);
             }
-            
-            let frame_data = Gh3036FrameData::from_func_frame(frame);
-            if let Err(e) = CALLBACK_CONTEXT.send_frame_data(frame_data) {
-                error!("[GH3036] 帧数据入队失败: {}", e);
-            }
         });
         
         let mut executor = CommandExecutor::new(RpcConfig {
@@ -484,7 +416,7 @@ impl Gh3036Manager {
         let running = self.running.clone();
         running.store(true, std::sync::atomic::Ordering::SeqCst);
 
-        let (frame_receiver, rpc_data_receiver) = CALLBACK_CONTEXT.setup_channels();
+        let rpc_data_receiver = CALLBACK_CONTEXT.setup_rpc_channel();
         let running_clone = running.clone();
         let executor = self.executor.lock().as_ref().map(Arc::clone);
         let tokio_handle = Handle::try_current().map_err(|e| format!("获取 Tokio 运行时失败: {}", e))?;
@@ -494,11 +426,6 @@ impl Gh3036Manager {
 
             while running_clone.load(std::sync::atomic::Ordering::SeqCst) {
                 crossbeam_channel::select! {
-                    recv(frame_receiver) -> result => {
-                        if let Ok(frame_data) = result {
-                            Self::handle_frame_data(frame_data);
-                        }
-                    }
                     recv(rpc_data_receiver) -> result => {
                         if let Ok(rpc_data) = result {
                             Self::handle_rpc_data(&executor, rpc_data, &tokio_handle);
@@ -550,44 +477,6 @@ impl Gh3036Manager {
         }
     }
 
-    fn handle_frame_data(frame_data: Gh3036FrameData) {
-        let app_handle = CALLBACK_CONTEXT.app_handle.lock();
-        if let Some(ref handle) = *app_handle {
-            if let Err(e) = handle.emit("gh3036-frame", &frame_data) {
-                error!("GH3036 发送帧数据到前端失败: {}", e);
-            } else {
-                debug!(
-                    "GH3036 帧数据已发送到前端: func_id={}, frame_id={}",
-                    frame_data.function_id, frame_data.frame_id
-                );
-            }
-        }
-
-        Self::save_frame_to_csv(&frame_data);
-    }
-
-    fn save_frame_to_csv(frame_data: &Gh3036FrameData) {
-        let csv_config = CALLBACK_CONTEXT.csv_config.lock();
-        if !csv_config.enabled {
-            return;
-        }
-
-        let mut writers = CALLBACK_CONTEXT.csv_writers.lock();
-        let function_id = frame_data.function_id;
-
-        let writer = writers.entry(function_id).or_insert_with(|| {
-            CsvWriter::new(
-                PathBuf::from(&csv_config.output_dir),
-                function_id,
-                frame_data.function_name.clone(),
-            )
-        });
-
-        if let Err(e) = writer.write_frame(frame_data) {
-            error!("CSV 写入失败: {}", e);
-        }
-    }
-
     fn stop_processing_thread(&self) {
         self.running.store(false, std::sync::atomic::Ordering::SeqCst);
         
@@ -615,16 +504,6 @@ impl Gh3036Manager {
 
     pub fn get_rx_channel(&self) -> Option<ChannelConfig> {
         CALLBACK_CONTEXT.get_rx_channel()
-    }
-
-    pub fn set_csv_config(&self, config: CsvConfig) -> Result<(), String> {
-        CALLBACK_CONTEXT.set_csv_config(config);
-        info!("GH3036 CSV 配置更新成功");
-        Ok(())
-    }
-
-    pub fn get_csv_config(&self) -> CsvConfig {
-        CALLBACK_CONTEXT.csv_config.lock().clone()
     }
 
     pub async fn send_data(&self, data: &[u8]) -> Result<(), String> {

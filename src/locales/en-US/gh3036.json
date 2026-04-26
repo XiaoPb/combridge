@@ -46,6 +46,7 @@
     "quickAdjust": "Quick Adjust",
     "hrRefConfig": "HR Reference Config",
     "hrRefHint": "Select a device with standard heart rate Bluetooth service, the system will automatically collect heart rate data as reference",
+    "hrRefHintConnected": "Select a connected device with heart rate service, the system will automatically collect heart rate data as reference",
     "hrRefDeviceName": "Device Name",
     "hrRefDeviceAddress": "Device Address",
     "hrRefRssi": "Signal Strength",
@@ -57,12 +58,15 @@
     "hrRefStopScan": "Stop Scan",
     "hrRefScanning": "Scanning...",
     "hrRefNoDevices": "No devices with heart rate service found",
+    "hrRefNoConnectedDevices": "No connected devices with heart rate service. Please connect a device first in the Bluetooth page",
     "hrRefScanFailed": "Failed to scan devices",
+    "hrRefLoadFailed": "Failed to load device list",
     "hrRefConnectFailed": "Failed to connect device",
     "hrRefMonitoring": "Collecting HR Reference",
     "hrRefCollecting": "Collecting",
     "hrRefCurrentHr": "Current HR",
-    "hrRefCollected": "Collected"
+    "hrRefCollected": "Collected",
+    "hrRefRefresh": "Refresh List"
   },
   "version": {
     "title": "Device Version Info",

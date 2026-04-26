@@ -9,6 +9,9 @@
   "monitor": {
     "hr": "Heart Rate",
     "spo2": "SpO2",
+    "hrv": "HRV",
+    "hrvRri": "RRI",
+    "hrvRriCount": "RRI Count",
     "adt": "Wear Status",
     "gnadt": "Liveness",
     "ipdPaChart": "IPD/PA Data Trend",
@@ -24,7 +27,15 @@
     "adtWear": "Wearing",
     "adtNotWear": "Not Wearing",
     "gnadtLive": "Live",
-    "gnadtNotLive": "Not Live"
+    "gnadtNotLive": "Not Live",
+    "hrRef": "HR Reference",
+    "spo2Ref": "SpO2 Reference",
+    "hrvRef": "HRV Reference",
+    "wearStatus": "Wear Status",
+    "livenessStatus": "Liveness",
+    "refInput": "Input Reference",
+    "snr": "SNR",
+    "confidenceLevel": "Confidence Level"
   },
   "version": {
     "title": "Device Version Info",

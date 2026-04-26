@@ -71,9 +71,17 @@ interface Gh3036State {
   vitalSigns: {
     hr: number | null;
     hrConfidence: number | null;
+    hrSnr: number | null;
+    hrRef: number[];
     spo2: number | null;
     spo2RValue: number | null;
     spo2Confidence: number | null;
+    spo2ConfidenceLevel: number | null;
+    spo2Ref: number[];
+    hrvRri: number[];
+    hrvConfidence: number | null;
+    hrvRriCount: number | null;
+    hrvRef: number[];
     adt: number | null;
     adtConfidence: number | null;
     gnadt: number | null;
@@ -256,9 +264,17 @@ export const useGh3036Store = create<Gh3036State>()(
   vitalSigns: {
     hr: null,
     hrConfidence: null,
+    hrSnr: null,
+    hrRef: [],
     spo2: null,
     spo2RValue: null,
     spo2Confidence: null,
+    spo2ConfidenceLevel: null,
+    spo2Ref: [],
+    hrvRri: [],
+    hrvConfidence: null,
+    hrvRriCount: null,
+    hrvRef: [],
     adt: null,
     adtConfidence: null,
     gnadt: null,
@@ -378,6 +394,7 @@ export const useGh3036Store = create<Gh3036State>()(
         gyro_z: [...existing.gyro_z, ...frames.gyro_z].slice(-maxFramesCount * 10),
         algo_results: [...existing.algo_results, ...frames.algo_results].slice(-maxFramesCount * 10),
         led_drv_fs: [...existing.led_drv_fs, ...frames.led_drv_fs].slice(-maxFramesCount * 10),
+        ref_data: [...existing.ref_data, ...frames.ref_data].slice(-maxFramesCount * 10),
       };
       newFramesData.set(frames.function_id, combined);
     } else {
@@ -402,6 +419,7 @@ export const useGh3036Store = create<Gh3036State>()(
             ...newVitalSigns, 
             hr: lastAlgoResult[0] ?? null,
             hrConfidence: lastAlgoResult[1] ?? null,
+            hrSnr: lastAlgoResult[2] ?? null,
           };
           break;
         case 2:
@@ -410,6 +428,15 @@ export const useGh3036Store = create<Gh3036State>()(
             spo2: lastAlgoResult[0] ?? null,
             spo2RValue: lastAlgoResult[1] ?? null,
             spo2Confidence: lastAlgoResult[2] ?? null,
+            spo2ConfidenceLevel: lastAlgoResult[3] ?? null,
+          };
+          break;
+        case 3:
+          newVitalSigns = { 
+            ...newVitalSigns, 
+            hrvRri: [lastAlgoResult[0] ?? 0, lastAlgoResult[1] ?? 0, lastAlgoResult[2] ?? 0, lastAlgoResult[3] ?? 0],
+            hrvConfidence: lastAlgoResult[4] ?? null,
+            hrvRriCount: lastAlgoResult[5] ?? null,
           };
           break;
         case 0:
@@ -452,9 +479,17 @@ export const useGh3036Store = create<Gh3036State>()(
     vitalSigns: {
       hr: null,
       hrConfidence: null,
+      hrSnr: null,
+      hrRef: [],
       spo2: null,
       spo2RValue: null,
       spo2Confidence: null,
+      spo2ConfidenceLevel: null,
+      spo2Ref: [],
+      hrvRri: [],
+      hrvConfidence: null,
+      hrvRriCount: null,
+      hrvRef: [],
       adt: null,
       adtConfidence: null,
       gnadt: null,

@@ -9,6 +9,9 @@
   "monitor": {
     "hr": "心率",
     "spo2": "血氧",
+    "hrv": "心率变异性",
+    "hrvRri": "RRI",
+    "hrvRriCount": "RRI数量",
     "adt": "佩戴状态",
     "gnadt": "活体检测",
     "ipdPaChart": "IPD/PA 数据趋势",
@@ -24,7 +27,15 @@
     "adtWear": "佩戴",
     "adtNotWear": "未佩戴",
     "gnadtLive": "活体",
-    "gnadtNotLive": "非活体"
+    "gnadtNotLive": "非活体",
+    "hrRef": "心率金标",
+    "spo2Ref": "血氧金标",
+    "hrvRef": "HRV金标",
+    "wearStatus": "佩戴状态",
+    "livenessStatus": "活体检测",
+    "refInput": "输入金标值",
+    "snr": "信噪比",
+    "confidenceLevel": "置信等级"
   },
   "version": {
     "title": "设备版本信息",

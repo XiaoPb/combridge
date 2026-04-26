@@ -43,7 +43,9 @@ impl CsvWriter {
     }
 
     fn create_new_file(&mut self) -> std::io::Result<()> {
-        std::fs::create_dir_all(&self.output_dir)?;
+
+        let function_output_dir = self.output_dir.join(&self.function_name);
+        std::fs::create_dir_all(&function_output_dir)?;
 
         let timestamp = Local::now().format("%Y%m%d-%H%M%S");
         let filename = format!(
@@ -51,7 +53,7 @@ impl CsvWriter {
             self.function_name,
             timestamp
         );
-        let filepath = self.output_dir.join(&filename);
+        let filepath = function_output_dir.join(&filename);
 
         let mut writer = Writer::from_path(&filepath)?;
 

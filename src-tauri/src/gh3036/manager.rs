@@ -434,6 +434,20 @@ impl Gh3036Manager {
 
         let event_bus = self.event_bus.clone();
         let frame_callback: FrameCallback = Arc::new(move |frame: &GhFuncFrame| {
+            let func_name = GhFuncFixIdx::from(frame.id as u8).name();
+            let acc = &frame.gsensor_data.acc;
+            debug!(
+                "[GH3036] 帧解码: func_id={} ({}), frame_cnt={}, ch_num={}, acc=[{},{},{}]",
+                frame.id, func_name, frame.frame_cnt, frame.ch_num, acc[0], acc[1], acc[2]
+            );
+            
+            for (i, ch_data) in frame.data.iter().enumerate() {
+                debug!(
+                    "[GH3036]   ch[{}]: ipd={}, raw={}",
+                    i, ch_data.ipd_pa, ch_data.rawdata
+                );
+            }
+            
             if let Some(aggregated) = CALLBACK_CONTEXT.add_frame_to_aggregator(frame) {
                 info!(
                     "[GH3036] 发布聚合帧事件: function_id={}, frame_count={}, channel_count={}",

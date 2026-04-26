@@ -118,7 +118,7 @@ impl DecoderState {
         let header_value = zigzag_decode(header_raw) as u32;
         frame.pack_header = PackHeader::from_bits_truncate(header_value);
         
-        logger.log(LogLevel::Debug, "decode", &format!(
+        logger.log(LogLevel::Info, "decode", &format!(
             "pack_header: bits=0x{:08X}, rawdata_en={}, phy_value_en={}, gs_data_en={}, flags_en={}, alg_data_en={}, agc_info_en={}, timestamp_en={}, func_id_en={}, slot_cfg_en={}",
             header_value,
             frame.pack_header.contains(PackHeader::RAWDATA_EN),

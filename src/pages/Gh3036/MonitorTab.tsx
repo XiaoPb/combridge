@@ -127,12 +127,22 @@ const MonitorTab: React.FC = () => {
 
   const getAdtStatus = (): 'normal' | 'success' | 'warning' => {
     if (vitalSigns.adt === null) return 'normal';
-    return vitalSigns.adt === '佩戴' ? 'success' : 'warning';
+    return vitalSigns.adt === 1 ? 'success' : 'warning';
   };
 
   const getGnadtStatus = (): 'normal' | 'success' | 'error' => {
     if (vitalSigns.gnadt === null) return 'normal';
-    return vitalSigns.gnadt === '活体' ? 'success' : 'error';
+    return vitalSigns.gnadt === 1 ? 'success' : 'error';
+  };
+
+  const getAdtDisplayValue = (): string | null => {
+    if (vitalSigns.adt === null) return null;
+    return vitalSigns.adt === 1 ? t('monitor.adtWear') : t('monitor.adtNotWear');
+  };
+
+  const getGnadtDisplayValue = (): string | null => {
+    if (vitalSigns.gnadt === null) return null;
+    return vitalSigns.gnadt === 1 ? t('monitor.gnadtLive') : t('monitor.gnadtNotLive');
   };
 
   return (
@@ -163,7 +173,7 @@ const MonitorTab: React.FC = () => {
         <Col xs={12} sm={6}>
           <VitalSignCard
             title={t('monitor.adt')}
-            value={vitalSigns.adt}
+            value={getAdtDisplayValue()}
             status={getAdtStatus()}
             icon={<EyeOutlined />}
             confidence={vitalSigns.adtConfidence}
@@ -172,7 +182,7 @@ const MonitorTab: React.FC = () => {
         <Col xs={12} sm={6}>
           <VitalSignCard
             title={t('monitor.gnadt')}
-            value={vitalSigns.gnadt}
+            value={getGnadtDisplayValue()}
             status={getGnadtStatus()}
             icon={<SafetyOutlined />}
             confidence={vitalSigns.gnadtConfidence}
@@ -191,8 +201,8 @@ const MonitorTab: React.FC = () => {
               value={ipdRawDataType}
               onChange={setIpdRawDataType}
               options={[
-                { value: 'ipd', label: 'IPD' },
-                { value: 'rawdata', label: 'Rawdata' },
+                { value: 'ipd', label: t('monitor.ipd') },
+                { value: 'rawdata', label: t('monitor.rawdata') },
               ]}
             />
             <Select

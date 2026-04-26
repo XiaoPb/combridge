@@ -12,11 +12,19 @@
     "adt": "佩戴状态",
     "gnadt": "活体检测",
     "ipdPaChart": "IPD/PA 数据趋势",
+    "rawdataChart": "Rawdata 数据趋势",
     "gsensorChart": "加速度计数据",
     "selectFunction": "选择功能",
     "clearData": "清除数据",
     "noData": "暂无数据",
-    "noGsensorData": "暂无加速度计数据"
+    "noGsensorData": "暂无加速度计数据",
+    "confidence": "置信度",
+    "ipd": "IPD",
+    "rawdata": "Rawdata",
+    "adtWear": "佩戴",
+    "adtNotWear": "未佩戴",
+    "gnadtLive": "活体",
+    "gnadtNotLive": "非活体"
   },
   "version": {
     "title": "设备版本信息",

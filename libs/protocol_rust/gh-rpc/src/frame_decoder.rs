@@ -216,22 +216,6 @@ impl DecoderState {
     fn process_single_frame(&mut self, data_frame: &DataFrame) -> GhFuncFrame {
         let mut func_frame = GhFuncFrame::default();
 
-        if self.last_frame_id >= 0 {
-            let expected_next = (self.last_frame_id + 1) % 1001;
-            if data_frame.frame_id != expected_next {
-                self.start_flag = true;
-                self.last_rawdata = [0; MAX_CHANNELS];
-                self.last_phy_value = [0; MAX_CHANNELS];
-                self.last_timestamp = 0;
-                self.last_timestamp_high = 0;
-                self.last_gs_data = [0; MAX_GS_DATA];
-                self.last_flags = [0; MAX_CHANNELS];
-                self.last_algo_data = [0; MAX_ALGO_DATA];
-                self.last_agc_info = [0; MAX_CHANNELS];
-                self.last_agc_info_high = [0; MAX_CHANNELS];
-            }
-        }
-
         func_frame.frame_cnt = data_frame.frame_id as u32;
         func_frame.id = GhFuncFixIdx::from(data_frame.function_id as u8);
         self.last_frame_id = data_frame.frame_id;
@@ -390,6 +374,16 @@ impl DecoderState {
     fn decode_frames_internal(&mut self, data: &[u8], logger: &dyn LogCallback) -> Result<Vec<GhFuncFrame>, DecodeError> {
         let mut frames = Vec::new();
         self.reset();
+        self.start_flag = true;
+        self.last_rawdata = [0; MAX_CHANNELS];
+        self.last_phy_value = [0; MAX_CHANNELS];
+        self.last_timestamp = 0;
+        self.last_timestamp_high = 0;
+        self.last_gs_data = [0; MAX_GS_DATA];
+        self.last_flags = [0; MAX_CHANNELS];
+        self.last_algo_data = [0; MAX_ALGO_DATA];
+        self.last_agc_info = [0; MAX_CHANNELS];
+        self.last_agc_info_high = [0; MAX_CHANNELS];
 
         logger.log(LogLevel::Debug, "decode", &format!("start decoding {} bytes", data.len()));
 

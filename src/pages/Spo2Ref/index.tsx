@@ -23,10 +23,24 @@ const QUICK_ADJUSTMENTS = [
   { label: '+5', value: 5 },
 ];
 
+const DEFAULT_VALUE = 95;
+
+function getInitialValueFromUrl(): number {
+  const params = new URLSearchParams(window.location.search);
+  const valueStr = params.get('value');
+  if (valueStr) {
+    const parsed = parseInt(valueStr, 10);
+    if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+      return parsed;
+    }
+  }
+  return DEFAULT_VALUE;
+}
+
 const Spo2RefPage: React.FC = () => {
   const { t } = useTranslation('gh3036');
   const { isDark } = useTheme();
-  const [value, setValue] = useState<number>(95);
+  const [value, setValue] = useState<number>(() => getInitialValueFromUrl());
   const [loading, setLoading] = useState(false);
   const [antdLocale, setAntdLocale] = useState(zhCN);
 

@@ -253,19 +253,6 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
       },
     ];
 
-    const legendSelected: Record<string, boolean> = {};
-    const selectedState = chartLegendSelected || {};
-    seriesData.forEach((s) => {
-      const key = `${group.name}_${s.name}`;
-      const value = selectedState[key];
-      if (value !== undefined && typeof value === 'boolean') {
-        legendSelected[s.name] = value;
-      }
-    });
-
-    const hasLegendSelected = Object.keys(legendSelected).length > 0;
-    const safeLegendSelected = hasLegendSelected ? JSON.parse(JSON.stringify(legendSelected)) : undefined;
-
     return {
       animationDuration: 0,
       progressive: 500,
@@ -307,7 +294,6 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
         left: 'center',
         orient: 'horizontal',
         data: seriesData.map((s) => s.name),
-        selected: safeLegendSelected,
         textStyle: {
           color: 'var(--text-primary)',
         },
@@ -338,7 +324,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
       series: seriesOption,
       dataZoom: dataZoomOption,
     };
-  }, [xAxisData, rows, columns, unifiedGridConfig, dataZoomState, chartLegendSelected]);
+  }, [xAxisData, rows, columns, unifiedGridConfig, dataZoomState]);
 
   const handleContextMenu = useCallback((chartIndex: number) => (e: React.MouseEvent) => {
     e.preventDefault();
@@ -446,6 +432,35 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
       }
     });
   }, [rows, columns, initialized, chartGroups, getChartOption, colorMap, sampleRate]);
+
+  useEffect(() => {
+    if (!initialized || chartInstances.current.length === 0) return;
+
+    chartInstances.current.forEach((chart, chartIndex) => {
+      if (!chart) return;
+      const group = chartGroups[chartIndex];
+      if (!group) return;
+
+      const limitedColumns = group.columns.slice(0, MAX_LINES_PER_CHART);
+      limitedColumns.forEach((col) => {
+        const key = `${group.name}_${col}`;
+        const selectedState = chartLegendSelected || {};
+        const isSelected = selectedState[key];
+        
+        if (isSelected === false) {
+          chart.dispatchAction({
+            type: 'legendUnSelect',
+            name: col,
+          });
+        } else if (isSelected === true) {
+          chart.dispatchAction({
+            type: 'legendSelect',
+            name: col,
+          });
+        }
+      });
+    });
+  }, [initialized, chartGroups, chartLegendSelected]);
 
   useEffect(() => {
     if (!initialized || chartInstances.current.length === 0) return;

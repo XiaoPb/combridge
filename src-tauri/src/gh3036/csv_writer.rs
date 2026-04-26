@@ -5,7 +5,7 @@ use chrono::Local;
 use csv::Writer;
 use tracing::info;
 
-use super::types::Gh3036FrameData;
+use super::types::{Gh3036FrameData, Gh3036FramesEvent};
 
 pub struct CsvWriter {
     writer: Mutex<Option<Writer<std::fs::File>>>,
@@ -39,6 +39,13 @@ impl CsvWriter {
             self.last_frame_id = frame.frame_id;
         }
 
+        Ok(())
+    }
+
+    pub fn write_frames(&mut self, frames: &Gh3036FramesEvent) -> std::io::Result<()> {
+        for frame in &frames.frames {
+            self.write_frame(frame)?;
+        }
         Ok(())
     }
 

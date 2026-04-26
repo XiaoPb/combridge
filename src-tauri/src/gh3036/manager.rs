@@ -440,8 +440,8 @@ impl Gh3036Manager {
             let func_name = GhFuncFixIdx::from(func_id).name();
             let acc = &frame.gsensor_data.acc;
             info!(
-                "[GH3036] 帧解码: func_id={} ({}), frame_cnt={}, ch_num={}, acc=[{},{},{}]",
-                func_id, func_name, frame.frame_cnt, frame.ch_num, acc[0], acc[1], acc[2]
+                "[GH3036] 帧解码: func_id={} ({}), frame_cnt={}, ch_num={}, acc=[{},{},{}], algo_data={:?}",
+                func_id, func_name, frame.frame_cnt, frame.ch_num, acc[0], acc[1], acc[2], frame.algo_data
             );
             
             for (i, ch_data) in frame.data.iter().enumerate() {

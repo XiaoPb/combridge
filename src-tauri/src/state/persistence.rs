@@ -21,8 +21,10 @@ impl StatePersistence {
     pub fn new(app_data_dir: PathBuf) -> Self {
         let state_path = app_data_dir.join(STATE_FILE_NAME);
         
-        let preferences_path = std::env::current_dir()
-            .unwrap_or_else(|_| app_data_dir.clone())
+        let preferences_path = std::env::current_exe()
+            .ok()
+            .and_then(|exe_path| exe_path.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_else(|| app_data_dir.clone())
             .join(CONFIG_DIR_NAME)
             .join(PREFERENCES_FILE_NAME);
         

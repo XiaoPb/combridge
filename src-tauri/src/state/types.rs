@@ -453,9 +453,16 @@ impl Default for Gh3036CsvPreferences {
 
 impl Gh3036CsvPreferences {
     pub fn default_values() -> Self {
+        let output_dir = std::env::current_exe()
+            .ok()
+            .and_then(|exe_path| exe_path.parent().map(|p| p.to_path_buf()))
+            .map(|exe_dir| exe_dir.join("data"))
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| String::from("data"));
+        
         Self {
             enabled: true,
-            output_dir: ".".to_string(),
+            output_dir,
         }
     }
 }

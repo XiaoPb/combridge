@@ -268,7 +268,8 @@ impl GlobalContext {
             return;
         }
 
-        let frame_data = Gh3036FrameData::from_func_frame(frame);
+        let ref_data = self.ref_data_manager.get_ref_data(frame.frame_cnt as usize);
+        let frame_data = Gh3036FrameData::from_func_frame(frame, Some(&ref_data));
         let mut writers = self.csv_writers.lock();
         let function_id = frame_data.function_id;
         let function_name = frame_data.function_name.clone();

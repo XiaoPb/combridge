@@ -3,7 +3,7 @@ import { getAllWebviewWindows } from '@tauri-apps/api/webviewWindow';
 
 const SPO2_REF_WINDOW_LABEL = 'spo2-ref-window';
 
-export async function openSpo2RefWindow(): Promise<WebviewWindow | null> {
+export async function openSpo2RefWindow(initialValue?: number): Promise<WebviewWindow | null> {
   try {
     const existingWindow = await getSpo2RefWindow();
     if (existingWindow) {
@@ -11,8 +11,12 @@ export async function openSpo2RefWindow(): Promise<WebviewWindow | null> {
       return existingWindow;
     }
 
+    const url = initialValue !== undefined 
+      ? `/spo2-ref?value=${encodeURIComponent(initialValue)}`
+      : '/spo2-ref';
+
     const webview = new WebviewWindow(SPO2_REF_WINDOW_LABEL, {
-      url: '/spo2-ref',
+      url,
       title: '血氧金标配置',
       width: 320,
       height: 300,

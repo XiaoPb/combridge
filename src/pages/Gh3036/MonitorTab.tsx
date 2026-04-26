@@ -50,10 +50,12 @@ const MonitorTab: React.FC = () => {
   const [hrRefMonitoring, setHrRefMonitoring] = useState(false);
   const [hrRefCollectedCount, setHrRefCollectedCount] = useState(0);
   const [hrRefCurrentValue, setHrRefCurrentValue] = useState<number | null>(null);
+  const [spo2RefValue, setSpo2RefValue] = useState<number>(95);
 
   useEffect(() => {
     const unlisten = listen<{ value: number }>('spo2-ref-updated', (event) => {
       console.debug('[MonitorTab] 收到血氧金标更新:', event.payload.value);
+      setSpo2RefValue(event.payload.value);
     });
     return () => {
       unlisten.then((fn) => fn());
@@ -203,7 +205,7 @@ const MonitorTab: React.FC = () => {
             confidence={vitalSigns.spo2Confidence}
             subValue={vitalSigns.spo2RValue}
             subLabel="R"
-            onConfig={() => openSpo2RefWindow()}
+            onConfig={() => openSpo2RefWindow(spo2RefValue)}
             configLabel={t('monitor.spo2RefConfig')}
           />
         </Col>

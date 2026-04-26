@@ -20,6 +20,7 @@ use crate::device::DeviceManager;
 use crate::service::{EventBus, topics, SerialDataEvent, BleDataEvent, SerialDisconnectedEvent, BleConnectionEvent};
 use super::csv_writer::CsvWriter;
 use super::factory_test::FactoryTestManager;
+use super::ref_data_manager::RefDataManager;
 use super::types::{GhFuncFrame, Gh3036FrameData, Gh3036FramesEvent, GhFuncFixIdx,
     FactoryTestStep, FactoryTestStatus, FactoryTestResult, ConfigValidationResult,
     KEY_GH3X_GET_VERSION, KEY_GH3X_REGS_WRITE_CMD, KEY_GH3X_REGS_READ_CMD,
@@ -90,14 +91,16 @@ struct FrameAggregator {
     buffer: HashMap<u8, Gh3036FramesEvent>,
     last_publish_time: std::time::Instant,
     min_interval: std::time::Duration,
+    ref_data_manager: Arc<RefDataManager>,
 }
 
 impl FrameAggregator {
-    fn new() -> Self {
+    fn new(ref_data_manager: Arc<RefDataManager>) -> Self {
         Self {
             buffer: HashMap::new(),
             last_publish_time: std::time::Instant::now(),
             min_interval: std::time::Duration::from_millis(30),
+            ref_data_manager,
         }
     }
 
@@ -108,7 +111,9 @@ impl FrameAggregator {
         let event = self.buffer.entry(func_id).or_insert_with(|| {
             Gh3036FramesEvent::new(func_id, func_name)
         });
-        event.add_frame(frame);
+        
+        let ref_data = self.ref_data_manager.get_ref_data(event.frame_count);
+        event.add_frame_with_ref(frame, ref_data);
 
         let now = std::time::Instant::now();
         if now.duration_since(self.last_publish_time) >= self.min_interval {
@@ -148,19 +153,22 @@ struct GlobalContext {
     runtime_handle: Mutex<Option<Handle>>,
     csv_config: Mutex<CsvConfig>,
     csv_writers: Mutex<HashMap<i32, CsvWriter>>,
+    ref_data_manager: Arc<RefDataManager>,
 }
 
 impl GlobalContext {
     fn new() -> Self {
+        let ref_data_manager = Arc::new(RefDataManager::new());
         Self {
             rx_channel: Mutex::new(None),
             tx_channel: Mutex::new(None),
             device_manager: Mutex::new(None),
             rpc_data_sender: Mutex::new(None),
-            frame_aggregator: Mutex::new(FrameAggregator::new()),
+            frame_aggregator: Mutex::new(FrameAggregator::new(Arc::clone(&ref_data_manager))),
             runtime_handle: Mutex::new(None),
             csv_config: Mutex::new(CsvConfig::default()),
             csv_writers: Mutex::new(HashMap::new()),
+            ref_data_manager,
         }
     }
 
@@ -269,6 +277,33 @@ impl GlobalContext {
 static CALLBACK_CONTEXT: once_cell::sync::Lazy<GlobalContext> = once_cell::sync::Lazy::new(GlobalContext::new);
 
 static EVENTS_SUBSCRIBED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HrRefStatus {
+    pub values: Vec<i32>,
+    pub count: i32,
+    pub elapsed_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HrvRefStatus {
+    pub values: Vec<i32>,
+    pub count: i32,
+    pub elapsed_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Spo2RefStatus {
+    pub values: Vec<i32>,
+    pub count: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefDataStatus {
+    pub hr: HrRefStatus,
+    pub hrv: HrvRefStatus,
+    pub spo2: Spo2RefStatus,
+}
 
 
 pub struct Gh3036Manager {
@@ -1138,6 +1173,63 @@ impl Gh3036Manager {
 
     pub fn get_evaluation_result(&self) -> Option<super::FactoryEvaluationResult> {
         self.factory_test_manager.get_evaluation_result()
+    }
+
+    pub fn set_hr_ref(&self, values: &[i32]) -> Result<(), String> {
+        CALLBACK_CONTEXT.ref_data_manager
+            .set_hr_ref(values)
+            .map_err(|e| format!("设置HR金标失败: {}", e))
+    }
+
+    pub fn set_hrv_ref(&self, values: &[i32]) -> Result<(), String> {
+        CALLBACK_CONTEXT.ref_data_manager
+            .set_hrv_ref(values)
+            .map_err(|e| format!("设置HRV金标失败: {}", e))
+    }
+
+    pub fn set_spo2_ref(&self, values: &[i32]) -> Result<(), String> {
+        CALLBACK_CONTEXT.ref_data_manager
+            .set_spo2_ref(values)
+            .map_err(|e| format!("设置SpO2金标失败: {}", e))
+    }
+
+    pub fn clear_hr_ref(&self) {
+        CALLBACK_CONTEXT.ref_data_manager.clear_hr_ref();
+    }
+
+    pub fn clear_hrv_ref(&self) {
+        CALLBACK_CONTEXT.ref_data_manager.clear_hrv_ref();
+    }
+
+    pub fn clear_spo2_ref(&self) {
+        CALLBACK_CONTEXT.ref_data_manager.clear_spo2_ref();
+    }
+
+    pub fn clear_all_ref(&self) {
+        CALLBACK_CONTEXT.ref_data_manager.clear_all();
+    }
+
+    pub fn get_ref_data_status(&self) -> RefDataStatus {
+        let (hr_values, hr_count, hr_elapsed) = CALLBACK_CONTEXT.ref_data_manager.get_hr_ref_status();
+        let (hrv_values, hrv_count, hrv_elapsed) = CALLBACK_CONTEXT.ref_data_manager.get_hrv_ref_status();
+        let (spo2_values, spo2_count) = CALLBACK_CONTEXT.ref_data_manager.get_spo2_ref_status();
+        
+        RefDataStatus {
+            hr: HrRefStatus {
+                values: hr_values,
+                count: hr_count,
+                elapsed_ms: hr_elapsed.as_millis() as u64,
+            },
+            hrv: HrvRefStatus {
+                values: hrv_values,
+                count: hrv_count,
+                elapsed_ms: hrv_elapsed.as_millis() as u64,
+            },
+            spo2: Spo2RefStatus {
+                values: spo2_values,
+                count: spo2_count,
+            },
+        }
     }
 }
 

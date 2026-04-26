@@ -5,7 +5,7 @@ use crate::gh3036::{
     ChannelConfig, ChannelType, CsvConfig, FactoryTestResult,
     FactoryTestStep, FactoryTestStatus, Gh3036ManagerRef, RpcCommand, VersionTypeConfig,
     ConfigValidationResult, ThresholdConfigValidation, FactoryThresholdConfig,
-    FactoryEvaluationResult,
+    FactoryEvaluationResult, RefDataStatus,
 };
 use crate::state::StatePersistenceRef;
 
@@ -265,4 +265,73 @@ pub async fn gh3036_get_evaluation_result(
     manager: State<'_, Gh3036ManagerRef>,
 ) -> Result<Option<FactoryEvaluationResult>, ErrorResponse> {
     Ok(manager.get_evaluation_result())
+}
+
+#[tauri::command]
+pub async fn gh3036_set_hr_ref(
+    values: Vec<i32>,
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(), ErrorResponse> {
+    manager
+        .set_hr_ref(&values)
+        .map_err(|e| ComBridgeError::protocol(e).to_error_response())
+}
+
+#[tauri::command]
+pub async fn gh3036_set_hrv_ref(
+    values: Vec<i32>,
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(), ErrorResponse> {
+    manager
+        .set_hrv_ref(&values)
+        .map_err(|e| ComBridgeError::protocol(e).to_error_response())
+}
+
+#[tauri::command]
+pub async fn gh3036_set_spo2_ref(
+    values: Vec<i32>,
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(), ErrorResponse> {
+    manager
+        .set_spo2_ref(&values)
+        .map_err(|e| ComBridgeError::protocol(e).to_error_response())
+}
+
+#[tauri::command]
+pub async fn gh3036_clear_hr_ref(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(), ErrorResponse> {
+    manager.clear_hr_ref();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn gh3036_clear_hrv_ref(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(), ErrorResponse> {
+    manager.clear_hrv_ref();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn gh3036_clear_spo2_ref(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(), ErrorResponse> {
+    manager.clear_spo2_ref();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn gh3036_clear_all_ref(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(), ErrorResponse> {
+    manager.clear_all_ref();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn gh3036_get_ref_data_status(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<RefDataStatus, ErrorResponse> {
+    Ok(manager.get_ref_data_status())
 }

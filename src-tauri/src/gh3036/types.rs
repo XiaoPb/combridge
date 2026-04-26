@@ -642,6 +642,58 @@ impl Gh3036FramesEvent {
         self.frame_count += 1;
     }
 
+    pub fn add_frame_with_ref(&mut self, frame: &GhFuncFrame, ref_data: Vec<i32>) {
+        self.frame_cnts.push(frame.frame_cnt);
+        self.timestamps.push(frame.timestamp);
+        self.frame_ids.push(frame.frame_cnt);
+        
+        if self.ipd_pa.is_empty() {
+            self.channel_count = frame.ch_num as usize;
+            self.ipd_pa = vec![Vec::new(); frame.ch_num as usize];
+            self.rawdata = vec![Vec::new(); frame.ch_num as usize];
+            self.flags = vec![Vec::new(); frame.ch_num as usize];
+            self.agc_info = vec![Vec::new(); frame.ch_num as usize];
+        }
+        
+        for (i, ch_data) in frame.data.iter().enumerate() {
+            if i < self.ipd_pa.len() {
+                self.ipd_pa[i].push(ch_data.ipd_pa);
+                self.rawdata[i].push(ch_data.rawdata);
+                
+                let mut flag_val = 0i32;
+                if ch_data.flag.led_adj_flag { flag_val |= 1; }
+                if ch_data.flag.sa_flag { flag_val |= 2; }
+                if ch_data.flag.param_change_flag { flag_val |= 4; }
+                if ch_data.flag.dre_update { flag_val |= 8; }
+                if ch_data.flag.skip_ok_flag { flag_val |= 16; }
+                self.flags[i].push(flag_val);
+                
+                let word0 = (ch_data.agc_info.gain_code as u32)
+                    | ((ch_data.agc_info.bg_cancel_range as u32) << 4)
+                    | ((ch_data.agc_info.dc_cancel_range as u32) << 6)
+                    | ((ch_data.agc_info.dc_cancel_code as u32) << 8)
+                    | ((ch_data.agc_info.led_drv0 as u32) << 16)
+                    | ((ch_data.agc_info.led_drv1 as u32) << 24);
+                self.agc_info[i].push(word0 as i32);
+            }
+        }
+        
+        self.acc_x.push(frame.gsensor_data.acc[0]);
+        self.acc_y.push(frame.gsensor_data.acc[1]);
+        self.acc_z.push(frame.gsensor_data.acc[2]);
+        self.gyro_x.push(0);
+        self.gyro_y.push(0);
+        self.gyro_z.push(0);
+        
+        self.algo_results.push(frame.algo_data.clone());
+        
+        self.led_drv_fs.push(frame.led_drv_fs);
+        
+        self.ref_data.push(ref_data);
+        
+        self.frame_count += 1;
+    }
+
     pub fn is_empty(&self) -> bool {
         self.frame_count == 0
     }

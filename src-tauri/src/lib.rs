@@ -337,6 +337,14 @@ pub fn run() {
             commands::gh3036::gh3036_validate_threshold_config,
             commands::gh3036::gh3036_get_threshold_config,
             commands::gh3036::gh3036_get_evaluation_result,
+            commands::gh3036::gh3036_set_hr_ref,
+            commands::gh3036::gh3036_set_hrv_ref,
+            commands::gh3036::gh3036_set_spo2_ref,
+            commands::gh3036::gh3036_clear_hr_ref,
+            commands::gh3036::gh3036_clear_hrv_ref,
+            commands::gh3036::gh3036_clear_spo2_ref,
+            commands::gh3036::gh3036_clear_all_ref,
+            commands::gh3036::gh3036_get_ref_data_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -7,17 +7,21 @@
 //! - 产测流程管理
 //! - 配置文件加载
 //! - 卡控配置管理
+//! - 金标数据管理
 
 pub mod config_loader;
 pub mod csv_writer;
 pub mod factory_test;
 pub mod manager;
+pub mod ref_data_manager;
 pub mod threshold_config;
 pub mod types;
 
 pub use config_loader::{ConfigLoader, RegisterItem};
 pub use factory_test::FactoryTestManager;
-pub use manager::{ChannelConfig, ChannelType, CsvConfig, Gh3036Manager};
+pub use manager::{ChannelConfig, ChannelType, CsvConfig, Gh3036Manager, 
+    HrRefStatus, HrvRefStatus, Spo2RefStatus, RefDataStatus};
+pub use ref_data_manager::{RefDataManager, RefDataError, REF_DATA_TIMEOUT_SECS};
 pub use threshold_config::{
     ChannelEvaluationResult, FactoryEvaluationResult, FactoryThresholdConfig,
     TestEvaluationResult, ThresholdConfigValidation, ThresholdOperator,

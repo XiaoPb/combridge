@@ -226,24 +226,25 @@ impl GlobalContext {
         self.csv_config.lock().clone()
     }
 
-    fn save_frames_to_csv(&self, frames: &Gh3036FramesEvent) {
+    fn save_frame_to_csv(&self, frame: &GhFuncFrame) {
         let csv_config = self.csv_config.lock();
         if !csv_config.enabled {
             return;
         }
 
         let mut writers = self.csv_writers.lock();
-        let function_id = frames.function_id;
+        let function_id = frame.id as i32;
+        let function_name = GhFuncFixIdx::from(frame.id as u8).name().to_string();
 
         let writer = writers.entry(function_id).or_insert_with(|| {
             CsvWriter::new(
                 PathBuf::from(&csv_config.output_dir),
                 function_id,
-                frames.function_name.clone(),
+                function_name,
             )
         });
 
-        if let Err(e) = writer.write_frames(frames) {
+        if let Err(e) = writer.write_frame(frame) {
             error!("CSV 写入失败: {}", e);
         }
     }
@@ -434,11 +435,12 @@ impl Gh3036Manager {
 
         let event_bus = self.event_bus.clone();
         let frame_callback: FrameCallback = Arc::new(move |frame: &GhFuncFrame| {
-            let func_name = GhFuncFixIdx::from(frame.id as u8).name();
+            let func_id = frame.id as u8;
+            let func_name = GhFuncFixIdx::from(func_id).name();
             let acc = &frame.gsensor_data.acc;
             debug!(
                 "[GH3036] 帧解码: func_id={} ({}), frame_cnt={}, ch_num={}, acc=[{},{},{}]",
-                frame.id, func_name, frame.frame_cnt, frame.ch_num, acc[0], acc[1], acc[2]
+                func_id, func_name, frame.frame_cnt, frame.ch_num, acc[0], acc[1], acc[2]
             );
             
             for (i, ch_data) in frame.data.iter().enumerate() {
@@ -448,6 +450,8 @@ impl Gh3036Manager {
                 );
             }
             
+            CALLBACK_CONTEXT.save_frame_to_csv(frame);
+            
             if let Some(aggregated) = CALLBACK_CONTEXT.add_frame_to_aggregator(frame) {
                 info!(
                     "[GH3036] 发布聚合帧事件: function_id={}, frame_count={}, channel_count={}",
@@ -455,7 +459,6 @@ impl Gh3036Manager {
                     aggregated.frame_count,
                     aggregated.channel_count
                 );
-                CALLBACK_CONTEXT.save_frames_to_csv(&aggregated);
                 event_bus.publish_msgpack("gh3036:frames", &aggregated);
             }
         });

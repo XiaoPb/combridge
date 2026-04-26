@@ -5,14 +5,14 @@ use chrono::Local;
 use csv::Writer;
 use tracing::info;
 
-use super::types::{Gh3036FrameData, Gh3036FramesEvent};
+use gh_rpc::types::GhFuncFrame;
 
 pub struct CsvWriter {
     writer: Mutex<Option<Writer<std::fs::File>>>,
     output_dir: PathBuf,
     function_name: String,
     current_file_index: u32,
-    last_frame_id: i32,
+    last_frame_cnt: u32,
 }
 
 impl CsvWriter {
@@ -22,12 +22,12 @@ impl CsvWriter {
             output_dir,
             function_name,
             current_file_index: 0,
-            last_frame_id: -1,
+            last_frame_cnt: 0,
         }
     }
 
-    pub fn write_frame(&mut self, frame: &Gh3036FrameData) -> std::io::Result<()> {
-        let should_create_new_file = frame.frame_id == 0 || self.writer.lock().unwrap_or_else(|e| e.into_inner()).is_none();
+    pub fn write_frame(&mut self, frame: &GhFuncFrame) -> std::io::Result<()> {
+        let should_create_new_file = frame.frame_cnt == 0 || self.writer.lock().unwrap_or_else(|e| e.into_inner()).is_none();
 
         if should_create_new_file {
             self.create_new_file()?;
@@ -36,16 +36,9 @@ impl CsvWriter {
         let mut writer_guard = self.writer.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(ref mut writer) = *writer_guard {
             self.write_row(writer, frame)?;
-            self.last_frame_id = frame.frame_id;
+            self.last_frame_cnt = frame.frame_cnt;
         }
 
-        Ok(())
-    }
-
-    pub fn write_frames(&mut self, frames: &Gh3036FramesEvent) -> std::io::Result<()> {
-        for frame in &frames.frames {
-            self.write_frame(frame)?;
-        }
         Ok(())
     }
 
@@ -75,82 +68,51 @@ impl CsvWriter {
 
     fn write_header(&self, writer: &mut Writer<std::fs::File>) -> std::io::Result<()> {
         let mut headers: Vec<String> = vec![
+            "FRAME_CNT".to_string(),
             "TIMESTAMP".to_string(),
-            "FRAME_ID".to_string(),
+            "FUNC_ID".to_string(),
+            "CH_NUM".to_string(),
+            "ACC_X".to_string(),
+            "ACC_Y".to_string(),
+            "ACC_Z".to_string(),
         ];
 
-        let axis_names = ["X", "Y", "Z"];
-        for axis in axis_names {
-            headers.push(format!("ACC_{}", axis));
+        for i in 0..32 {
+            headers.push(format!("CH{}_IPD", i));
         }
 
         for i in 0..32 {
-            headers.push(format!("CH{}", i));
-        }
-
-        for i in 0..32 {
-            headers.push(format!("FLAG{}", i));
-        }
-
-        for i in 0..32 {
-            headers.push(format!("ALGO_RESULT{}", i));
-        }
-
-        for i in 0..32 {
-            headers.push(format!("AGC_INFO{}", i));
-        }
-
-        for i in 0..32 {
-            headers.push(format!("PHY_VALUE{}", i));
-        }
-
-        for axis in axis_names {
-            headers.push(format!("GYRO_{}", axis));
+            headers.push(format!("CH{}_RAW", i));
         }
 
         writer.write_record(&headers)?;
         Ok(())
     }
 
-    fn write_row(&self, writer: &mut Writer<std::fs::File>, frame: &Gh3036FrameData) -> std::io::Result<()> {
+    fn write_row(&self, writer: &mut Writer<std::fs::File>, frame: &GhFuncFrame) -> std::io::Result<()> {
         let mut row: Vec<String> = Vec::new();
 
+        row.push(frame.frame_cnt.to_string());
         row.push(frame.timestamp.to_string());
-        row.push(frame.frame_id.to_string());
+        row.push((frame.id as u8).to_string());
+        row.push(frame.ch_num.to_string());
+        
+        row.push(frame.gsensor_data.acc[0].to_string());
+        row.push(frame.gsensor_data.acc[1].to_string());
+        row.push(frame.gsensor_data.acc[2].to_string());
 
-        for i in 0..3 {
-            let val = frame.gs_data.get(i).copied().unwrap_or(0);
-            row.push(val.to_string());
+        for ch_data in &frame.data {
+            row.push(ch_data.ipd_pa.to_string());
+        }
+        for _ in frame.data.len()..32 {
+            row.push("0".to_string());
         }
 
-        for i in 0..32 {
-            let val = frame.rawdata.get(i).copied().unwrap_or(0);
-            row.push(val.to_string());
+        for ch_data in &frame.data {
+            row.push(ch_data.rawdata.to_string());
         }
-
-        for i in 0..32 {
-            let val = frame.flags.get(i).copied().unwrap_or(0);
-            row.push(val.to_string());
-        }
-
-        for i in 0..32 {
-            let val = frame.algo_data.get(i).copied().unwrap_or(0);
-            row.push(val.to_string());
-        }
-
-        for i in 0..32 {
-            let val = frame.agc_info.get(i).copied().unwrap_or(0);
-            row.push(val.to_string());
-        }
-
-        for i in 0..32 {
-            let val = frame.phy_value.get(i).copied().unwrap_or(0);
-            row.push(val.to_string());
-        }
-
-        for i in 0..3 {
-            let val = frame.gs_data.get(i + 3).copied().unwrap_or(0);
-            row.push(val.to_string());
+        for _ in frame.data.len()..32 {
+            row.push("0".to_string());
         }
 
         writer.write_record(&row)?;

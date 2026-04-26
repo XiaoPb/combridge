@@ -134,7 +134,7 @@ pub struct Gh3036FrameData {
 }
 
 impl Gh3036FrameData {
-    pub fn from_func_frame(frame: &GhFuncFrame) -> Self {
+    pub fn from_func_frame(frame: &GhFuncFrame, ref_data: Option<&[i32]>) -> Self {
         let func_id = GhFuncFixIdx::from(frame.id as u8);
         let function_name = func_id.name().to_string();
         
@@ -171,6 +171,16 @@ impl Gh3036FrameData {
             })
             .collect();
         
+        let ref_data = match ref_data {
+            Some(data) if !data.is_empty() => {
+                let mut vec = vec![0i32; REF_DATA_COUNT];
+                let len = data.len().min(REF_DATA_COUNT);
+                vec[..len].copy_from_slice(&data[..len]);
+                vec
+            }
+            _ => vec![0; REF_DATA_COUNT],
+        };
+        
         Self {
             function_id: frame.id as i32,
             function_name,
@@ -179,8 +189,8 @@ impl Gh3036FrameData {
             gs_data,
             rawdata,
             flags,
-            ref_data: vec![0; REF_DATA_COUNT],
-            algo_data: Vec::new(),
+            ref_data,
+            algo_data: frame.algo_data.clone(),
             agc_info,
             phy_value,
         }

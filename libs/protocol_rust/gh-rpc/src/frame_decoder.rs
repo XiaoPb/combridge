@@ -175,7 +175,9 @@ impl DecoderState {
                 frame.algo_data_bits = MAX_ALGO_DATA;
             }
             frame.algo_data = self.read_i32_array(buffer, frame.algo_data_bits)?;
-            logger.log(LogLevel::Debug, "decode", &format!("algo_data_bits={}", frame.algo_data_bits));
+            logger.log(LogLevel::Info, "decode", &format!("algo_data_bits={}, algo_data={:?}", frame.algo_data_bits, frame.algo_data));
+        } else {
+            logger.log(LogLevel::Info, "decode", "ALG_DATA_EN not set in pack_header");
         }
 
         if frame.pack_header.contains(PackHeader::AGC_INFO_EN) {

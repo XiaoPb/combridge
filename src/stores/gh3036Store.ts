@@ -504,12 +504,12 @@ export const useGh3036Store = create<Gh3036State>()(
   loadCsvConfig: async () => {
     try {
       const prefs = await preferencesApi.get();
-      const gh3036Csv = prefs.gh3036_csv;
+      const gh3036Csv = prefs.gh3036Csv;
       if (gh3036Csv) {
         set({
           csvConfig: {
             enabled: gh3036Csv.enabled ?? true,
-            output_dir: gh3036Csv.output_dir || '.',
+            output_dir: gh3036Csv.outputDir || '.',
           },
         });
       }
@@ -614,7 +614,7 @@ export const useGh3036Store = create<Gh3036State>()(
     try {
       await preferencesApi.updateGh3036Csv({
         enabled,
-        output_dir: outputDir,
+        outputDir: outputDir,
       });
       set({ 
         csvConfig: { enabled, output_dir: outputDir }

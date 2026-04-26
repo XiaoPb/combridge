@@ -21,7 +21,7 @@ use crate::device::DeviceManager;
 use crate::service::{EventBus, topics, SerialDataEvent, BleDataEvent, SerialDisconnectedEvent, BleConnectionEvent};
 use super::csv_writer::CsvWriter;
 use super::factory_test::FactoryTestManager;
-use super::types::{Gh3036EventData, Gh3036FrameData, GhFuncFrame, FrameDecoder, Gh3036FramesEvent, GhFuncFixIdx,
+use super::types::{Gh3036FrameData, GhFuncFrame, Gh3036FramesEvent, GhFuncFixIdx,
     FactoryTestStep, FactoryTestStatus, FactoryTestResult, ConfigValidationResult,
     KEY_GH3X_GET_VERSION, KEY_GH3X_REGS_WRITE_CMD, KEY_GH3X_REGS_READ_CMD,
     KEY_GH3X_REG_BIT_FIELD_WRITE_CMD, KEY_GH3X_CHIP_CTRL, KEY_GH3X_SW_FUNCTION_CMD,
@@ -81,10 +81,6 @@ impl Default for CsvConfig {
             output_dir,
         }
     }
-}
-
-struct SendRequest {
-    data: Vec<u8>,
 }
 
 struct RpcDataRequest {
@@ -151,11 +147,8 @@ struct GlobalContext {
     app_handle: Mutex<Option<AppHandle>>,
     csv_config: Mutex<CsvConfig>,
     csv_writers: Mutex<HashMap<i32, CsvWriter>>,
-    send_sender: Mutex<Option<Sender<SendRequest>>>,
-    event_sender: Mutex<Option<Sender<Gh3036EventData>>>,
     frame_sender: Mutex<Option<Sender<Gh3036FrameData>>>,
     rpc_data_sender: Mutex<Option<Sender<RpcDataRequest>>>,
-    frame_raw_sender: Mutex<Option<Sender<Vec<u8>>>>,
     frame_aggregator: Mutex<FrameAggregator>,
     runtime_handle: Mutex<Option<Handle>>,
 }
@@ -169,36 +162,24 @@ impl GlobalContext {
             app_handle: Mutex::new(None),
             csv_config: Mutex::new(CsvConfig::default()),
             csv_writers: Mutex::new(HashMap::new()),
-            send_sender: Mutex::new(None),
-            event_sender: Mutex::new(None),
             frame_sender: Mutex::new(None),
             rpc_data_sender: Mutex::new(None),
-            frame_raw_sender: Mutex::new(None),
             frame_aggregator: Mutex::new(FrameAggregator::new()),
             runtime_handle: Mutex::new(None),
         }
     }
 
     fn setup_channels(&self) -> (
-        Receiver<SendRequest>, 
-        Receiver<Gh3036EventData>, 
         Receiver<Gh3036FrameData>,
         Receiver<RpcDataRequest>,
-        Receiver<Vec<u8>>,
     ) {
-        let (send_sender, send_receiver) = unbounded();
-        let (event_sender, event_receiver) = unbounded();
         let (frame_sender, frame_receiver) = unbounded();
         let (rpc_data_sender, rpc_data_receiver) = unbounded();
-        let (frame_raw_sender, frame_raw_receiver) = unbounded();
         
-        *self.send_sender.lock() = Some(send_sender);
-        *self.event_sender.lock() = Some(event_sender);
         *self.frame_sender.lock() = Some(frame_sender);
         *self.rpc_data_sender.lock() = Some(rpc_data_sender);
-        *self.frame_raw_sender.lock() = Some(frame_raw_sender);
         
-        (send_receiver, event_receiver, frame_receiver, rpc_data_receiver, frame_raw_receiver)
+        (frame_receiver, rpc_data_receiver)
     }
 
     fn set_rx_channel(&self, config: ChannelConfig) {
@@ -261,12 +242,10 @@ impl GlobalContext {
         }
     }
 
-
     fn add_frame_to_aggregator(&self, frame: &GhFuncFrame) -> Option<Gh3036FramesEvent> {
         let mut aggregator = self.frame_aggregator.lock();
         aggregator.add_frame(frame)
     }
-
 }
 
 static CALLBACK_CONTEXT: once_cell::sync::Lazy<GlobalContext> = once_cell::sync::Lazy::new(GlobalContext::new);
@@ -280,7 +259,6 @@ pub struct Gh3036Manager {
     initialized: Mutex<bool>,
     running: Arc<std::sync::atomic::AtomicBool>,
     thread_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
-    rpc_thread_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
     executor: Mutex<Option<Arc<tokio::sync::RwLock<CommandExecutor>>>>,
     factory_test_manager: Arc<FactoryTestManager>,
 }
@@ -297,7 +275,6 @@ impl Gh3036Manager {
             initialized: Mutex::new(false),
             running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             thread_handle: Mutex::new(None),
-            rpc_thread_handle: Mutex::new(None),
             executor: Mutex::new(None),
             factory_test_manager,
         }
@@ -392,32 +369,6 @@ impl Gh3036Manager {
                 let mut tx_channel = CALLBACK_CONTEXT.tx_channel.lock();
                 *tx_channel = None;
                 info!("GH3036 TX 通道已清理: 设备 {} 已断开", device_id);
-            }
-        }
-    }
-    
-    fn process_frame_data(event_bus: &Arc<EventBus>, decoder: &mut FrameDecoder, data: &[u8]) {
-        match decoder.decode_frames(data) {
-            Ok(frames) => {
-                for frame in frames.iter() {
-                    if let Some(aggregated) = CALLBACK_CONTEXT.add_frame_to_aggregator(frame) {
-                        info!(
-                            "[GH3036] 发布聚合帧事件: function_id={}, frame_count={}, channel_count={}",
-                            aggregated.function_id,
-                            aggregated.frame_count,
-                            aggregated.channel_count
-                        );
-                        event_bus.publish_msgpack("gh3036:frames", &aggregated);
-                    }
-                    
-                    let frame_data = Gh3036FrameData::from_func_frame(frame);
-                    if let Err(e) = CALLBACK_CONTEXT.send_frame_data(frame_data) {
-                        error!("[GH3036] 帧数据入队失败: {}", e);
-                    }
-                }
-            }
-            Err(e) => {
-                error!("[GH3036] 帧解码失败: {:?}", e);
             }
         }
     }
@@ -533,30 +484,16 @@ impl Gh3036Manager {
         let running = self.running.clone();
         running.store(true, std::sync::atomic::Ordering::SeqCst);
 
-        let (send_receiver, event_receiver, frame_receiver, rpc_data_receiver, frame_raw_receiver) = 
-            CALLBACK_CONTEXT.setup_channels();
-        let device_manager = Arc::clone(&self.device_manager);
+        let (frame_receiver, rpc_data_receiver) = CALLBACK_CONTEXT.setup_channels();
         let running_clone = running.clone();
         let executor = self.executor.lock().as_ref().map(Arc::clone);
-        let event_bus = self.event_bus.clone();
         let tokio_handle = Handle::try_current().map_err(|e| format!("获取 Tokio 运行时失败: {}", e))?;
         
         let thread_handle = std::thread::spawn(move || {
             info!("[GH3036] 处理线程启动");
-            let mut frame_decoder = FrameDecoder::new();
 
             while running_clone.load(std::sync::atomic::Ordering::SeqCst) {
                 crossbeam_channel::select! {
-                    recv(send_receiver) -> result => {
-                        if let Ok(request) = result {
-                            Self::handle_send_request(&device_manager, request);
-                        }
-                    }
-                    recv(event_receiver) -> result => {
-                        if let Ok(event_data) = result {
-                            Self::handle_event_data(event_data);
-                        }
-                    }
                     recv(frame_receiver) -> result => {
                         if let Ok(frame_data) = result {
                             Self::handle_frame_data(frame_data);
@@ -565,11 +502,6 @@ impl Gh3036Manager {
                     recv(rpc_data_receiver) -> result => {
                         if let Ok(rpc_data) = result {
                             Self::handle_rpc_data(&executor, rpc_data, &tokio_handle);
-                        }
-                    }
-                    recv(frame_raw_receiver) -> result => {
-                        if let Ok(raw_data) = result {
-                            Self::process_frame_data(&event_bus, &mut frame_decoder, &raw_data);
                         }
                     }
                     default(std::time::Duration::from_millis(10)) => {
@@ -618,57 +550,6 @@ impl Gh3036Manager {
         }
     }
 
-    fn handle_send_request(device_manager: &Arc<DeviceManager>, request: SendRequest) {
-        info!("GH3036 handle_send_request 开始处理: {} bytes", request.data.len());
-        
-        let (channel_type, device_id, char_uuid) = {
-            let tx_channel = CALLBACK_CONTEXT.tx_channel.lock();
-            let Some(channel) = tx_channel.as_ref() else {
-                warn!("GH3036 TX 通道未配置，无法发送数据");
-                return;
-            };
-            (channel.channel_type, channel.device_id.clone(), channel.characteristic_uuid.clone())
-        };
-
-        info!("GH3036 handle_send_request 设备: type={:?}, id={}, 数据: {:02X?}", channel_type, device_id, request.data);
-
-        let device_manager_clone = Arc::clone(device_manager);
-        let data = request.data;
-        
-        if let Some(handle) = CALLBACK_CONTEXT.runtime_handle.lock().as_ref() {
-            info!("GH3036 handle_send_request 在异步运行时中发送");
-            handle.spawn(async move {
-                info!("GH3036 handle_send_request 异步任务开始");
-                let result = device_manager_clone
-                    .send_direct(
-                        channel_type.into(),
-                        &device_id,
-                        char_uuid.as_deref(),
-                        &data,
-                    )
-                    .await;
-                
-                match result {
-                    Ok(_) => info!("GH3036 handle_send_request 发送成功: {} bytes", data.len()),
-                    Err(e) => error!("GH3036 handle_send_request 发送失败: {}", e),
-                }
-            });
-        } else {
-            warn!("GH3036 异步运行时不可用，跳过发送");
-        }
-    }
-
-    fn handle_event_data(event_data: Gh3036EventData) {
-        let app_handle = CALLBACK_CONTEXT.app_handle.lock();
-        if let Some(ref handle) = *app_handle {
-            if let Err(e) = handle.emit("gh3036-event", &event_data) {
-                error!("GH3036 发送事件到前端失败: {}", e);
-            } else {
-                debug!("GH3036 事件已发送到前端: type={}", event_data.event_type);
-            }
-        }
-    }
-
     fn handle_frame_data(frame_data: Gh3036FrameData) {
         let app_handle = CALLBACK_CONTEXT.app_handle.lock();
         if let Some(ref handle) = *app_handle {
@@ -712,11 +593,6 @@ impl Gh3036Manager {
         
         let mut thread_guard = self.thread_handle.lock();
         if let Some(thread) = thread_guard.take() {
-            let _ = thread.join();
-        }
-        
-        let mut rpc_thread_guard = self.rpc_thread_handle.lock();
-        if let Some(thread) = rpc_thread_guard.take() {
             let _ = thread.join();
         }
     }

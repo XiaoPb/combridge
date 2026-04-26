@@ -470,14 +470,23 @@ export const useGh3036Store = create<Gh3036State>()(
             spo2ConfidenceLevel: lastAlgoResult[3] ?? null,
           };
           break;
-        case 3:
+        case 3: {
+          const rriCount = lastAlgoResult[5] ?? 0;
+          const rriValues = [
+            lastAlgoResult[0] ?? 0,
+            lastAlgoResult[1] ?? 0,
+            lastAlgoResult[2] ?? 0,
+            lastAlgoResult[3] ?? 0,
+          ];
+          const hrvRri = rriValues.map((val, idx) => idx < rriCount ? val : 0);
           newVitalSigns = { 
             ...newVitalSigns, 
-            hrvRri: [lastAlgoResult[0] ?? 0, lastAlgoResult[1] ?? 0, lastAlgoResult[2] ?? 0, lastAlgoResult[3] ?? 0],
+            hrvRri,
             hrvConfidence: lastAlgoResult[4] ?? null,
-            hrvRriCount: lastAlgoResult[5] ?? null,
+            hrvRriCount: rriCount,
           };
           break;
+        }
         case 0:
           newVitalSigns = { 
             ...newVitalSigns, 

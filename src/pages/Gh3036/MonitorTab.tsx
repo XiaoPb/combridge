@@ -156,6 +156,8 @@ const MonitorTab: React.FC = () => {
             status="normal"
             icon={<ThunderboltOutlined />}
             confidence={vitalSigns.spo2Confidence}
+            subValue={vitalSigns.spo2RValue}
+            subLabel="R"
           />
         </Col>
         <Col xs={12} sm={6}>

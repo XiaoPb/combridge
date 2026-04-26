@@ -10,6 +10,8 @@ interface VitalSignCardProps {
   status?: 'normal' | 'warning' | 'error' | 'success';
   icon?: React.ReactNode;
   confidence?: number | null;
+  subValue?: number | null;
+  subLabel?: string;
 }
 
 const VitalSignCard: React.FC<VitalSignCardProps> = ({
@@ -19,6 +21,8 @@ const VitalSignCard: React.FC<VitalSignCardProps> = ({
   status = 'normal',
   icon,
   confidence,
+  subValue,
+  subLabel,
 }) => {
   const { token } = theme.useToken();
 
@@ -80,6 +84,11 @@ const VitalSignCard: React.FC<VitalSignCardProps> = ({
         {displayUnit && (
           <Text type="secondary" style={{ fontSize: 12 }}>
             {displayUnit}
+          </Text>
+        )}
+        {subValue !== null && subValue !== undefined && subLabel && (
+          <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
+            {subLabel}: {(subValue / 10000).toFixed(4)}
           </Text>
         )}
       </div>

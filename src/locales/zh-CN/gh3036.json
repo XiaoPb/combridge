@@ -46,6 +46,7 @@
     "quickAdjust": "快速调整",
     "hrRefConfig": "心率金标配置",
     "hrRefHint": "选择一个带有标准心率蓝牙服务的设备，系统将自动采集心率数据作为金标",
+    "hrRefHintConnected": "选择已连接的支持心率服务的蓝牙设备，系统将自动采集心率数据作为金标",
     "hrRefDeviceName": "设备名称",
     "hrRefDeviceAddress": "设备地址",
     "hrRefRssi": "信号强度",
@@ -57,12 +58,15 @@
     "hrRefStopScan": "停止扫描",
     "hrRefScanning": "正在扫描...",
     "hrRefNoDevices": "未找到支持心率服务的设备",
+    "hrRefNoConnectedDevices": "没有已连接的支持心率服务的设备，请先在蓝牙页面连接设备",
     "hrRefScanFailed": "扫描设备失败",
+    "hrRefLoadFailed": "加载设备列表失败",
     "hrRefConnectFailed": "连接设备失败",
     "hrRefMonitoring": "正在采集心率金标",
     "hrRefCollecting": "采集中",
     "hrRefCurrentHr": "当前心率",
-    "hrRefCollected": "已采集"
+    "hrRefCollected": "已采集",
+    "hrRefRefresh": "刷新列表"
   },
   "version": {
     "title": "设备版本信息",

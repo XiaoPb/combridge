@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Modal, Table, Button, Space, Tag, Progress, Typography, Empty, message } from 'antd';
-import { SearchOutlined, StopOutlined, HeartOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Modal, Table, Button, Space, Tag, Progress, Typography, Empty, message, Spin } from 'antd';
+import { HeartOutlined, CheckCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { bleApi } from '../../../api/tauri';
 import { BLE_SERVICE_UUID } from '../../../types/ble';
-import type { BleDeviceInfo } from '../../../types';
+import type { BleConnection } from '../../../types';
 
 const { Text } = Typography;
 
@@ -18,8 +18,6 @@ interface HrRefDeviceDialogProps {
 }
 
 const HEART_RATE_SERVICE_UUID = BLE_SERVICE_UUID.HEART_RATE.toLowerCase();
-const SCAN_INTERVAL_MS = 1000;
-const MAX_SCAN_TIME_MS = 30000;
 
 const HrRefDeviceDialog: React.FC<HrRefDeviceDialogProps> = ({
   open,
@@ -30,71 +28,37 @@ const HrRefDeviceDialog: React.FC<HrRefDeviceDialogProps> = ({
   collectedCount = 0,
 }) => {
   const { t } = useTranslation('gh3036');
-  const [devices, setDevices] = useState<BleDeviceInfo[]>([]);
-  const [isScanning, setIsScanning] = useState(false);
+  const [devices, setDevices] = useState<BleConnection[]>([]);
+  const [loading, setLoading] = useState(false);
   const [connecting, setConnecting] = useState<string | null>(null);
-  const [selectedDevice, setSelectedDevice] = useState<BleDeviceInfo | null>(null);
-  const [scanProgress, setScanProgress] = useState(0);
-  
-  const scanAbortRef = useRef<boolean>(false);
-  const scanTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [selectedDevice, setSelectedDevice] = useState<BleConnection | null>(null);
 
-  const filterHrDevices = useCallback((scannedDevices: BleDeviceInfo[]): BleDeviceInfo[] => {
-    return scannedDevices.filter((device) => {
-      if (device.services && device.services.length > 0) {
-        return device.services.some(
-          (svc) => svc.toLowerCase().includes(HEART_RATE_SERVICE_UUID.replace(/-/g, ''))
+  const filterHrDevices = useCallback((connections: BleConnection[]): BleConnection[] => {
+    return connections.filter((conn) => {
+      if (conn.services && conn.services.length > 0) {
+        return conn.services.some(
+          (svc) => svc.uuid.toLowerCase().includes(HEART_RATE_SERVICE_UUID.replace(/-/g, ''))
         );
       }
       return false;
     });
   }, []);
 
-  const handleScan = useCallback(async () => {
-    setIsScanning(true);
-    setDevices([]);
-    setScanProgress(0);
-    scanAbortRef.current = false;
-    
-    const startTime = Date.now();
-    
+  const loadConnectedDevices = useCallback(async () => {
+    setLoading(true);
     try {
-      while (!scanAbortRef.current && (Date.now() - startTime) < MAX_SCAN_TIME_MS) {
-        const scannedDevices = await bleApi.scanBleDevices({ timeout: SCAN_INTERVAL_MS });
-        
-        if (scanAbortRef.current) break;
-        
-        const hrDevices = filterHrDevices(scannedDevices);
-        setDevices(prev => {
-          const merged = new Map<string, BleDeviceInfo>();
-          prev.forEach(d => merged.set(d.address, d));
-          hrDevices.forEach(d => merged.set(d.address, d));
-          return Array.from(merged.values());
-        });
-        
-        const elapsed = Date.now() - startTime;
-        setScanProgress(Math.min(100, (elapsed / MAX_SCAN_TIME_MS) * 100));
-      }
+      const connections = await bleApi.getConnections();
+      const hrDevices = filterHrDevices(connections);
+      setDevices(hrDevices);
     } catch (err) {
-      if (!scanAbortRef.current) {
-        const errorMsg = err instanceof Error ? err.message : t('monitor.hrRefScanFailed');
-        message.error(errorMsg);
-      }
+      const errorMsg = err instanceof Error ? err.message : t('monitor.hrRefLoadFailed');
+      message.error(errorMsg);
     } finally {
-      setIsScanning(false);
+      setLoading(false);
     }
   }, [filterHrDevices, t]);
 
-  const handleStopScan = useCallback(() => {
-    scanAbortRef.current = true;
-    if (scanTimerRef.current) {
-      clearTimeout(scanTimerRef.current);
-      scanTimerRef.current = null;
-    }
-    setIsScanning(false);
-  }, []);
-
-  const handleSelectDevice = useCallback(async (device: BleDeviceInfo) => {
+  const handleSelectDevice = useCallback(async (device: BleConnection) => {
     setSelectedDevice(device);
     setConnecting(device.address);
     try {
@@ -108,20 +72,12 @@ const HrRefDeviceDialog: React.FC<HrRefDeviceDialogProps> = ({
     }
   }, [onSelect, t]);
 
-  const getRssiColor = (rssi?: number): string => {
-    if (!rssi) return 'default';
-    if (rssi >= -50) return 'green';
-    if (rssi >= -70) return 'blue';
-    if (rssi >= -90) return 'orange';
-    return 'red';
-  };
-
   const columns = [
     {
       title: t('monitor.hrRefDeviceName'),
       dataIndex: 'name',
       key: 'name',
-      render: (name: string) => name || <Text type="secondary">{t('monitor.hrRefUnnamed')}</Text>,
+      render: (name?: string) => name || <Text type="secondary">{t('monitor.hrRefUnnamed')}</Text>,
     },
     {
       title: t('monitor.hrRefDeviceAddress'),
@@ -135,22 +91,10 @@ const HrRefDeviceDialog: React.FC<HrRefDeviceDialogProps> = ({
       ),
     },
     {
-      title: t('monitor.hrRefRssi'),
-      dataIndex: 'rssi',
-      key: 'rssi',
-      width: 120,
-      render: (rssi?: number) =>
-        rssi ? (
-          <Tag color={getRssiColor(rssi)}>{rssi} dBm</Tag>
-        ) : (
-          <Text type="secondary">-</Text>
-        ),
-    },
-    {
       title: t('monitor.hrRefAction'),
       key: 'action',
       width: 120,
-      render: (_: unknown, record: BleDeviceInfo) => {
+      render: (_: unknown, record: BleConnection) => {
         const isSelected = selectedDevice?.address === record.address;
         const isConnecting = connecting === record.address;
         return (
@@ -170,23 +114,10 @@ const HrRefDeviceDialog: React.FC<HrRefDeviceDialogProps> = ({
   ];
 
   useEffect(() => {
-    if (open && devices.length === 0 && !isScanning) {
-      handleScan();
+    if (open) {
+      loadConnectedDevices();
     }
-    if (!open) {
-      scanAbortRef.current = true;
-      setIsScanning(false);
-    }
-  }, [open, devices.length, isScanning, handleScan]);
-
-  useEffect(() => {
-    return () => {
-      scanAbortRef.current = true;
-      if (scanTimerRef.current) {
-        clearTimeout(scanTimerRef.current);
-      }
-    };
-  }, []);
+  }, [open, loadConnectedDevices]);
 
   return (
     <Modal
@@ -199,12 +130,12 @@ const HrRefDeviceDialog: React.FC<HrRefDeviceDialogProps> = ({
       }
       onCancel={onCancel}
       footer={null}
-      width={600}
+      width={500}
       maskClosable={!isMonitoring}
       closable={!isMonitoring}
     >
       <div style={{ marginBottom: 16 }}>
-        <Text type="secondary">{t('monitor.hrRefHint')}</Text>
+        <Text type="secondary">{t('monitor.hrRefHintConnected')}</Text>
       </div>
 
       {isMonitoring && (
@@ -234,54 +165,34 @@ const HrRefDeviceDialog: React.FC<HrRefDeviceDialogProps> = ({
       )}
 
       <div style={{ marginBottom: 16 }}>
-        <Space>
-          {isScanning ? (
-            <Button
-              type="primary"
-              danger
-              icon={<StopOutlined />}
-              onClick={handleStopScan}
-            >
-              {t('monitor.hrRefStopScan')}
-            </Button>
-          ) : (
-            <Button
-              type="primary"
-              icon={<SearchOutlined />}
-              onClick={handleScan}
-              disabled={isMonitoring}
-            >
-              {t('monitor.hrRefScan')}
-            </Button>
-          )}
-        </Space>
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={loadConnectedDevices}
+          disabled={loading || isMonitoring}
+          loading={loading}
+        >
+          {t('monitor.hrRefRefresh')}
+        </Button>
       </div>
 
-      {isScanning && (
-        <div style={{ marginBottom: 16 }}>
-          <Progress percent={Math.round(scanProgress)} status="active" showInfo={false} />
-          <Text type="secondary">{t('monitor.hrRefScanning')} ({Math.round(scanProgress)}%)</Text>
-        </div>
-      )}
-
-      {devices.length > 0 ? (
-        <Table
-          dataSource={devices}
-          columns={columns}
-          rowKey="address"
-          size="small"
-          pagination={false}
-          style={{ maxHeight: 300, overflow: 'auto' }}
-        />
-      ) : (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={
-            isScanning ? t('monitor.hrRefScanning') : t('monitor.hrRefNoDevices')
-          }
-          style={{ padding: '40px 0' }}
-        />
-      )}
+      <Spin spinning={loading}>
+        {devices.length > 0 ? (
+          <Table
+            dataSource={devices}
+            columns={columns}
+            rowKey="address"
+            size="small"
+            pagination={false}
+            style={{ maxHeight: 300, overflow: 'auto' }}
+          />
+        ) : (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={t('monitor.hrRefNoConnectedDevices')}
+            style={{ padding: '40px 0' }}
+          />
+        )}
+      </Spin>
 
       <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
         <Button onClick={onCancel} disabled={isMonitoring}>

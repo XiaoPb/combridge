@@ -22,6 +22,7 @@ const ProtocolPage = lazy(() => import('./pages/Protocol'));
 const DashboardPage = lazy(() => import('./pages/Dashboard'));
 const SystemPage = lazy(() => import('./pages/System'));
 const WaveformPage = lazy(() => import('./pages/Waveform'));
+const Spo2RefPage = lazy(() => import('./pages/Spo2Ref'));
 
 const LOADING_TIMEOUT_MS = 30000;
 
@@ -202,22 +203,39 @@ function AppContent() {
       }}
     >
       <BrowserRouter>
-        <MainLayout>
-          <ErrorBoundary>
-            <Suspense fallback={<PageLoader onLoadTimeout={handleLoadTimeout} />}>
-              <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/serial" element={<SerialPage />} />
-                <Route path="/ble" element={<BlePage />} />
-                <Route path="/gh3036" element={<Gh3036Page />} />
-                <Route path="/protocol" element={<ProtocolPage />} />
-                <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/waveform" element={<WaveformPage />} />
-                <Route path="/system" element={<SystemPage />} />
-              </Routes>
-            </Suspense>
-          </ErrorBoundary>
-        </MainLayout>
+        <Routes>
+          <Route
+            path="/spo2-ref"
+            element={
+              <ErrorBoundary>
+                <Suspense fallback={<PageLoader onLoadTimeout={handleLoadTimeout} />}>
+                  <Spo2RefPage />
+                </Suspense>
+              </ErrorBoundary>
+            }
+          />
+          <Route
+            path="*"
+            element={
+              <MainLayout>
+                <ErrorBoundary>
+                  <Suspense fallback={<PageLoader onLoadTimeout={handleLoadTimeout} />}>
+                    <Routes>
+                      <Route path="/" element={<HomePage />} />
+                      <Route path="/serial" element={<SerialPage />} />
+                      <Route path="/ble" element={<BlePage />} />
+                      <Route path="/gh3036" element={<Gh3036Page />} />
+                      <Route path="/protocol" element={<ProtocolPage />} />
+                      <Route path="/dashboard" element={<DashboardPage />} />
+                      <Route path="/waveform" element={<WaveformPage />} />
+                      <Route path="/system" element={<SystemPage />} />
+                    </Routes>
+                  </Suspense>
+                </ErrorBoundary>
+              </MainLayout>
+            }
+          />
+        </Routes>
       </BrowserRouter>
     </ConfigProvider>
   );

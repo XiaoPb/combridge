@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "spo2-ref",
+  "description": "Capability for the SpO2 reference window",
+  "windows": ["spo2-ref-window"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-set-focus",
+    "core:webview:allow-emit",
+    "core:webview:allow-emit-to"
+  ]
+}

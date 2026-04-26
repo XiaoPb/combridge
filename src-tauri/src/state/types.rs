@@ -440,6 +440,28 @@ impl Gh3036ChannelPreferences {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct Gh3036CsvPreferences {
+    pub enabled: bool,
+    pub output_dir: String,
+}
+
+impl Default for Gh3036CsvPreferences {
+    fn default() -> Self {
+        Self::default_values()
+    }
+}
+
+impl Gh3036CsvPreferences {
+    pub fn default_values() -> Self {
+        Self {
+            enabled: true,
+            output_dir: ".".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Preferences {
     #[serde(default = "SerialPreferences::default_values")]
     pub serial: SerialPreferences,
@@ -449,6 +471,8 @@ pub struct Preferences {
     pub waveform: WaveformPreferences,
     #[serde(default = "Gh3036ChannelPreferences::default_values")]
     pub gh3036_channel: Gh3036ChannelPreferences,
+    #[serde(default = "Gh3036CsvPreferences::default_values")]
+    pub gh3036_csv: Gh3036CsvPreferences,
 }
 
 impl Default for Preferences {
@@ -464,6 +488,7 @@ impl Preferences {
             ble: BlePreferences::default_values(),
             waveform: WaveformPreferences::default_values(),
             gh3036_channel: Gh3036ChannelPreferences::default_values(),
+            gh3036_csv: Gh3036CsvPreferences::default_values(),
         }
     }
 }

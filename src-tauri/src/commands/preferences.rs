@@ -157,3 +157,27 @@ pub async fn update_gh3036_channel_preferences(
     
     Ok(())
 }
+
+#[tauri::command]
+pub async fn update_gh3036_csv_preferences(
+    persistence: State<'_, StatePersistenceRef>,
+    enabled: bool,
+    output_dir: String,
+) -> Result<()> {
+    debug!("更新GH3036 CSV偏好设置");
+    
+    let persistence = persistence.inner().read().await;
+    let mut prefs = persistence.load_preferences().await.unwrap_or_else(|_| {
+        Preferences::default()
+    });
+    
+    prefs.gh3036_csv.enabled = enabled;
+    prefs.gh3036_csv.output_dir = output_dir;
+    
+    persistence.save_preferences(&prefs).await.map_err(|e| {
+        error!("保存偏好设置失败: {}", e);
+        e
+    })?;
+    
+    Ok(())
+}

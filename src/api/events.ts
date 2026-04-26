@@ -55,6 +55,7 @@ export interface Gh3036FramesPayload {
   
   algo_results: number[][];
   led_drv_fs: [number, number][];
+  ref_data: number[][];
 }
 
 export interface ProtocolParsedPayload {

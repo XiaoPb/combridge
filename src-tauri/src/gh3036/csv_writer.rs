@@ -5,7 +5,7 @@ use chrono::Local;
 use csv::Writer;
 use tracing::info;
 
-use super::types::Gh3036FrameData;
+use super::types::{Gh3036FrameData, REF_DATA_COUNT};
 
 pub struct CsvWriter {
     writer: Mutex<Option<Writer<std::fs::File>>>,
@@ -77,23 +77,39 @@ impl CsvWriter {
             headers.push(format!("ACC_{}", axis));
         }
 
-        for i in 0..32 {
+        for i in 0..16 {
             headers.push(format!("CH{}", i));
         }
 
-        for i in 0..32 {
+        for i in 0..9 {
             headers.push(format!("FLAG{}", i));
         }
 
-        for i in 0..32 {
+        for i in 0..REF_DATA_COUNT {
+            headers.push(format!("REF_RESULT_{}", i));
+        }
+
+        for i in 0..9 {
             headers.push(format!("ALGO_RESULT{}", i));
         }
 
-        for i in 0..32 {
+        for i in 0..16 {
             headers.push(format!("AGC_INFO{}", i));
         }
 
-        for i in 0..32 {
+        for i in 0..16 {
+            headers.push(format!("PHY_VALUE{}", i));
+        }
+
+        for i in 16..32 {
+            headers.push(format!("CH{}", i));
+        }
+
+        for i in 16..32 {
+            headers.push(format!("AGC_INFO{}", i));
+        }
+
+        for i in 16..32 {
             headers.push(format!("PHY_VALUE{}", i));
         }
 
@@ -116,33 +132,53 @@ impl CsvWriter {
             row.push(val.to_string());
         }
 
-        for i in 0..32 {
+        for i in 0..16 {
             let val = frame.rawdata.get(i).copied().unwrap_or(0);
             row.push(val.to_string());
         }
 
-        for i in 0..32 {
+        for i in 0..9 {
             let val = frame.flags.get(i).copied().unwrap_or(0);
             row.push(val.to_string());
         }
 
-        for i in 0..32 {
+        for i in 0..REF_DATA_COUNT {
+            let val = frame.ref_data.get(i).copied().unwrap_or(0);
+            row.push(val.to_string());
+        }
+
+        for i in 0..9 {
             let val = frame.algo_data.get(i).copied().unwrap_or(0);
             row.push(val.to_string());
         }
 
-        for i in 0..32 {
+        for i in 0..16 {
             let val = frame.agc_info.get(i).copied().unwrap_or(0);
             row.push(val.to_string());
         }
 
-        for i in 0..32 {
+        for i in 0..16 {
             let val = frame.phy_value.get(i).copied().unwrap_or(0);
             row.push(val.to_string());
         }
 
-        for i in 0..3 {
-            let val = frame.gs_data.get(i + 3).copied().unwrap_or(0);
+        for i in 16..32 {
+            let val = frame.rawdata.get(i).copied().unwrap_or(0);
+            row.push(val.to_string());
+        }
+
+        for i in 16..32 {
+            let val = frame.agc_info.get(i).copied().unwrap_or(0);
+            row.push(val.to_string());
+        }
+
+        for i in 16..32 {
+            let val = frame.phy_value.get(i).copied().unwrap_or(0);
+            row.push(val.to_string());
+        }
+
+        for i in 3..6 {
+            let val = frame.gs_data.get(i).copied().unwrap_or(0);
             row.push(val.to_string());
         }
 

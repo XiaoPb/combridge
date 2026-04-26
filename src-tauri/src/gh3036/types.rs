@@ -116,6 +116,8 @@ impl GhFuncFixIdxExt for GhFuncFixIdx {
     }
 }
 
+pub const REF_DATA_COUNT: usize = 16;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Gh3036FrameData {
     pub function_id: i32,
@@ -125,6 +127,7 @@ pub struct Gh3036FrameData {
     pub gs_data: Vec<i32>,
     pub rawdata: Vec<i32>,
     pub flags: Vec<i32>,
+    pub ref_data: Vec<i32>,
     pub algo_data: Vec<i32>,
     pub agc_info: Vec<i32>,
     pub phy_value: Vec<i32>,
@@ -176,6 +179,7 @@ impl Gh3036FrameData {
             gs_data,
             rawdata,
             flags,
+            ref_data: vec![0; REF_DATA_COUNT],
             algo_data: Vec::new(),
             agc_info,
             phy_value,
@@ -557,6 +561,7 @@ pub struct Gh3036FramesEvent {
     
     pub algo_results: Vec<Vec<i32>>,
     pub led_drv_fs: Vec<[u8; 2]>,
+    pub ref_data: Vec<Vec<i32>>,
 }
 
 impl Gh3036FramesEvent {
@@ -581,6 +586,7 @@ impl Gh3036FramesEvent {
             gyro_z: Vec::new(),
             algo_results: Vec::new(),
             led_drv_fs: Vec::new(),
+            ref_data: Vec::new(),
         }
     }
 
@@ -631,6 +637,8 @@ impl Gh3036FramesEvent {
         
         self.led_drv_fs.push(frame.led_drv_fs);
         
+        self.ref_data.push(vec![0; REF_DATA_COUNT]);
+        
         self.frame_count += 1;
     }
 
@@ -656,6 +664,7 @@ impl Gh3036FramesEvent {
         self.gyro_z.clear();
         self.algo_results.clear();
         self.led_drv_fs.clear();
+        self.ref_data.clear();
     }
 }
 

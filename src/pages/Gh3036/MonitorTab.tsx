@@ -1,9 +1,11 @@
 import React, { useMemo } from 'react';
 import { Card, Row, Col, Empty, Select, Space, Button } from 'antd';
-import { ClearOutlined, HeartOutlined, ThunderboltOutlined, EyeOutlined, SafetyOutlined } from '@ant-design/icons';
+import { ClearOutlined, HeartOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
 import VitalSignCard from './components/VitalSignCard';
+import HrvCard from './components/HrvCard';
+import StatusCombinedCard from './components/StatusCombinedCard';
 import MultiLineChart from '../Waveform/MultiLineChart';
 
 const DISPLAY_DURATION_SECONDS = 6;
@@ -125,26 +127,6 @@ const MonitorTab: React.FC = () => {
     }];
   }, [t]);
 
-  const getAdtStatus = (): 'normal' | 'success' | 'warning' => {
-    if (vitalSigns.adt === null) return 'normal';
-    return vitalSigns.adt === 1 ? 'success' : 'warning';
-  };
-
-  const getGnadtStatus = (): 'normal' | 'success' | 'error' => {
-    if (vitalSigns.gnadt === null) return 'normal';
-    return vitalSigns.gnadt === 1 ? 'success' : 'error';
-  };
-
-  const getAdtDisplayValue = (): string | null => {
-    if (vitalSigns.adt === null) return null;
-    return vitalSigns.adt === 1 ? t('monitor.adtWear') : t('monitor.adtNotWear');
-  };
-
-  const getGnadtDisplayValue = (): string | null => {
-    if (vitalSigns.gnadt === null) return null;
-    return vitalSigns.gnadt === 1 ? t('monitor.gnadtLive') : t('monitor.gnadtNotLive');
-  };
-
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 8, overflow: 'auto' }}>
       <Row gutter={8}>
@@ -171,22 +153,10 @@ const MonitorTab: React.FC = () => {
           />
         </Col>
         <Col xs={12} sm={6}>
-          <VitalSignCard
-            title={t('monitor.adt')}
-            value={getAdtDisplayValue()}
-            status={getAdtStatus()}
-            icon={<EyeOutlined />}
-            confidence={vitalSigns.adtConfidence}
-          />
+          <HrvCard />
         </Col>
         <Col xs={12} sm={6}>
-          <VitalSignCard
-            title={t('monitor.gnadt')}
-            value={getGnadtDisplayValue()}
-            status={getGnadtStatus()}
-            icon={<SafetyOutlined />}
-            confidence={vitalSigns.gnadtConfidence}
-          />
+          <StatusCombinedCard />
         </Col>
       </Row>
 

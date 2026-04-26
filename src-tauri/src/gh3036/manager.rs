@@ -439,13 +439,13 @@ impl Gh3036Manager {
             let func_id = frame.id as u8;
             let func_name = GhFuncFixIdx::from(func_id).name();
             let acc = &frame.gsensor_data.acc;
-            debug!(
+            info!(
                 "[GH3036] 帧解码: func_id={} ({}), frame_cnt={}, ch_num={}, acc=[{},{},{}]",
                 func_id, func_name, frame.frame_cnt, frame.ch_num, acc[0], acc[1], acc[2]
             );
             
             for (i, ch_data) in frame.data.iter().enumerate() {
-                debug!(
+                info!(
                     "[GH3036]   ch[{}]: ipd={}, raw={}",
                     i, ch_data.ipd_pa, ch_data.rawdata
                 );

@@ -55,7 +55,20 @@ export interface Gh3036FramesPayload {
   
   algo_results: number[][];
   led_drv_fs: [number, number][];
-  ref_data: number[][];
+  ref_data?: number[][];
+}
+
+export interface Gh3036RefDataPayload {
+  hr_values: number[];
+  hr_count: number;
+  hr_valid: boolean;
+  hrv_values: number[];
+  hrv_count: number;
+  hrv_valid: boolean;
+  spo2_values: number[];
+  spo2_count: number;
+  spo2_valid: boolean;
+  timestamp: number;
 }
 
 export interface ProtocolParsedPayload {

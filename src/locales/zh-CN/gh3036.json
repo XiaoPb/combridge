@@ -35,7 +35,8 @@
     "livenessStatus": "活体检测",
     "refInput": "输入金标值",
     "snr": "信噪比",
-    "confidenceLevel": "置信等级"
+    "confidenceLevel": "置信等级",
+    "sampleRateHint": "设置当前功能的数据采样频率，用于计算正确的时间尺度"
   },
   "version": {
     "title": "设备版本信息",

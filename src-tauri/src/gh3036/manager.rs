@@ -219,7 +219,22 @@ impl GlobalContext {
 
     fn set_csv_config(&self, config: CsvConfig) {
         let mut csv_config = self.csv_config.lock();
-        *csv_config = config;
+        
+        let output_dir = if std::path::Path::new(&config.output_dir).is_absolute() {
+            config.output_dir
+        } else {
+            std::env::current_exe()
+                .ok()
+                .and_then(|exe_path| exe_path.parent().map(|p| p.to_path_buf()))
+                .map(|exe_dir| exe_dir.join(&config.output_dir))
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or(config.output_dir)
+        };
+        
+        *csv_config = CsvConfig {
+            enabled: config.enabled,
+            output_dir,
+        };
     }
 
     fn get_csv_config(&self) -> CsvConfig {

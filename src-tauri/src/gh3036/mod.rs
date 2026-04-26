@@ -17,7 +17,7 @@ pub mod types;
 
 pub use config_loader::{ConfigLoader, RegisterItem};
 pub use factory_test::FactoryTestManager;
-pub use manager::{ChannelConfig, ChannelType, CsvConfig, Gh3036Manager};
+pub use manager::{ChannelConfig, ChannelType, Gh3036Manager};
 pub use threshold_config::{
     ChannelEvaluationResult, FactoryEvaluationResult, FactoryThresholdConfig,
     TestEvaluationResult, ThresholdConfigValidation, ThresholdOperator,

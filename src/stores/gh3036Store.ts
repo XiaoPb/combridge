@@ -394,7 +394,7 @@ export const useGh3036Store = create<Gh3036State>()(
         gyro_z: [...existing.gyro_z, ...frames.gyro_z].slice(-maxFramesCount * 10),
         algo_results: [...existing.algo_results, ...frames.algo_results].slice(-maxFramesCount * 10),
         led_drv_fs: [...existing.led_drv_fs, ...frames.led_drv_fs].slice(-maxFramesCount * 10),
-        ref_data: [...existing.ref_data, ...frames.ref_data].slice(-maxFramesCount * 10),
+        ref_data: [...(existing.ref_data ?? []), ...(frames.ref_data ?? [])].slice(-maxFramesCount * 10),
       };
       newFramesData.set(frames.function_id, combined);
     } else {

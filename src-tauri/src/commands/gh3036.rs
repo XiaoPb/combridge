@@ -335,3 +335,27 @@ pub async fn gh3036_get_ref_data_status(
 ) -> Result<RefDataStatus, ErrorResponse> {
     Ok(manager.get_ref_data_status())
 }
+
+#[tauri::command]
+pub async fn gh3036_start_hr_ref_monitor(
+    device_address: String,
+) -> Result<(), ErrorResponse> {
+    crate::gh3036::start_hr_ref_monitor(&device_address)
+        .await
+        .map_err(|e| ComBridgeError::protocol(e).to_error_response())
+}
+
+#[tauri::command]
+pub async fn gh3036_stop_hr_ref_monitor() -> Result<(), ErrorResponse> {
+    crate::gh3036::stop_hr_ref_monitor()
+        .await
+        .map_err(|e| ComBridgeError::protocol(e).to_error_response())
+}
+
+#[tauri::command]
+pub fn gh3036_get_hr_ref_monitor_status() -> Result<(bool, i32, i32), ErrorResponse> {
+    let is_running = crate::gh3036::is_hr_ref_monitor_running();
+    let current_hr = crate::gh3036::get_hr_ref_monitor_current_hr();
+    let collected_count = crate::gh3036::get_hr_ref_monitor_collected_count();
+    Ok((is_running, current_hr, collected_count))
+}

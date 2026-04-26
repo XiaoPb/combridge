@@ -127,6 +127,25 @@ export const gh3036Api = {
   }> {
     return invoke('gh3036_get_ref_data_status');
   },
+
+  async startHrRefMonitor(deviceAddress: string): Promise<void> {
+    await invoke<void>('gh3036_start_hr_ref_monitor', { deviceAddress });
+  },
+
+  async stopHrRefMonitor(): Promise<void> {
+    await invoke<void>('gh3036_stop_hr_ref_monitor');
+  },
+
+  async getHrRefMonitorStatus(): Promise<{
+    isRunning: boolean;
+    currentHr: number;
+    collectedCount: number;
+  }> {
+    const [isRunning, currentHr, collectedCount] = await invoke<[boolean, number, number]>(
+      'gh3036_get_hr_ref_monitor_status'
+    );
+    return { isRunning, currentHr, collectedCount };
+  },
 };
 
 export const factoryTestApi = {

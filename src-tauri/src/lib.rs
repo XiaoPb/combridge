@@ -121,7 +121,7 @@ pub fn run() {
         .manage(app_state)
         .manage(state_persistence)
         .manage(action_dispatcher)
-        .manage(gh3036_manager)
+        .manage(gh3036_manager.clone())
         .manage(waveform_manager)
         .manage(parser_script_manager)
         .manage(json_config_manager)
@@ -188,6 +188,9 @@ pub fn run() {
                     info!("BLE 初始化成功");
                 }
             });
+            
+            info!("初始化 HR 金标监听器");
+            gh3036_manager.init_hr_ref_monitor();
             
             info!("PluginManager 订阅 EventBus 事件");
             plugin_manager_clone.subscribe_to_events();
@@ -345,6 +348,9 @@ pub fn run() {
             commands::gh3036::gh3036_clear_spo2_ref,
             commands::gh3036::gh3036_clear_all_ref,
             commands::gh3036::gh3036_get_ref_data_status,
+            commands::gh3036::gh3036_start_hr_ref_monitor,
+            commands::gh3036::gh3036_stop_hr_ref_monitor,
+            commands::gh3036::gh3036_get_hr_ref_monitor_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

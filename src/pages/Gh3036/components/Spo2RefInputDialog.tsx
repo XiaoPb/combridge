@@ -54,7 +54,6 @@ const Spo2RefInputDialog: React.FC<Spo2RefInputDialogProps> = ({
     try {
       await onConfirm(value);
       message.success(t('monitor.spo2RefSetSuccess'));
-      onCancel();
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : t('monitor.spo2RefSetFailed');
       message.error(errorMsg);
@@ -70,8 +69,10 @@ const Spo2RefInputDialog: React.FC<Spo2RefInputDialogProps> = ({
       onCancel={onCancel}
       footer={null}
       width={320}
-      maskClosable={!loading}
-      closable={!loading}
+      mask={false}
+      maskClosable={true}
+      closable={true}
+      style={{ top: 20 }}
     >
       <div style={{ marginBottom: 16 }}>
         <Text type="secondary">{t('monitor.spo2RefHint')}</Text>

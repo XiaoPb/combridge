@@ -12,7 +12,6 @@ use tracing::{debug, error, info, warn};
 use crate::device::BleManagerRef;
 use super::ref_data_manager::RefDataManager;
 
-const HEART_RATE_SERVICE_UUID: &str = "0000180d-0000-1000-8000-00805f9b34fb";
 const HEART_RATE_MEASUREMENT_UUID: &str = "00002a37-0000-1000-8000-00805f9b34fb";
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -102,8 +101,7 @@ pub async fn start_hr_ref_monitor(device_address: &str) -> Result<(), String> {
         None => return Err("HR金标监听器未初始化".to_string()),
     };
 
-    let ref_data_manager = HR_REF_MONITOR_REF_DATA_MANAGER.lock().clone();
-    let ref_data_manager = match ref_data_manager {
+    let _ref_data_manager = match HR_REF_MONITOR_REF_DATA_MANAGER.lock().clone() {
         Some(m) => m,
         None => return Err("HR金标监听器未初始化".to_string()),
     };
@@ -124,7 +122,6 @@ pub async fn start_hr_ref_monitor(device_address: &str) -> Result<(), String> {
     let hr_values_for_callback = Arc::new(Mutex::new(Vec::new()));
     let is_running_for_callback = Arc::new(AtomicBool::new(true));
 
-    let state_clone = state_for_callback.clone();
     let current_hr_clone = current_hr_for_callback.clone();
     let collected_count_clone = collected_count_for_callback.clone();
     let hr_values_clone = hr_values_for_callback.clone();
@@ -297,7 +294,6 @@ impl HrRefMonitor {
         let collected_count_clone = collected_count.clone();
         let hr_values_clone = hr_values.clone();
         let is_running_clone = is_running.clone();
-        let device_address_clone = device_address.clone();
 
         let callback = Arc::new(move |_addr: &str, _char: &str, data: &[u8]| {
             if !is_running_clone.load(Ordering::SeqCst) {

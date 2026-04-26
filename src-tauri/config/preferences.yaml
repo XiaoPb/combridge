@@ -1,10 +1,10 @@
 serial:
-  displayFormat: hex
+  displayFormat: text
   displayMode: all
   sendFormat: text
   appendNewline: true
   newlineType: lf
-  autoScroll: true
+  autoScroll: false
 ble:
   displayFormat: hex
   autoScroll: true

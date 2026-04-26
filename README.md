@@ -247,14 +247,20 @@ combridge-rust/
 │   ├── services/                 # 服务层
 │   │   ├── eventListeners.ts     # 事件监听器
 │   │   ├── messageParser.ts      # 消息解析
-│   │   └── storageService.ts     # 存储服务
+│   │   ├── storageService.ts     # 存储服务
+│   │   └── dataFormatter.ts      # 数据格式化服务
 │   ├── stores/                   # Zustand 状态管理
 │   │   ├── serialStore.ts        # 串口状态
 │   │   ├── bleStore.ts           # BLE 状态
 │   │   ├── protocolStore.ts      # 协议状态
 │   │   ├── dashboardStore.ts     # Dashboard 状态
 │   │   ├── waveformStore.ts      # 波形状态
-│   │   └── gh3036Store.ts        # GH3036 状态
+│   │   ├── gh3036Store.ts        # GH3036 状态
+│   │   ├── configStore.ts        # 配置状态
+│   │   ├── csvChartStore.ts      # CSV 图表状态
+│   │   ├── logStore.ts           # 日志状态
+│   │   ├── notificationStore.ts  # 通知状态
+│   │   └── pageTabsStore.ts      # 页面标签状态
 │   ├── types/                    # TypeScript 类型定义
 │   └── utils/                    # 工具函数
 │
@@ -268,19 +274,32 @@ combridge-rust/
 │   │   │   ├── serial.rs         # 串口命令
 │   │   │   ├── ble.rs            # BLE 命令
 │   │   │   ├── protocol.rs       # 协议命令
-│   │   │   ├── dashboard.rs      # Dashboard 命令
 │   │   │   ├── waveform.rs       # 波形命令
 │   │   │   ├── gh3036.rs         # GH3036 命令
 │   │   │   ├── state.rs          # 状态命令
 │   │   │   ├── system.rs         # 系统命令
-│   │   │   └── websocket.rs      # WebSocket 命令
+│   │   │   ├── websocket.rs      # WebSocket 命令
+│   │   │   └── preferences.rs    # 偏好设置命令
 │   │   ├── device/               # 设备管理
 │   │   │   ├── device_manager.rs # 设备管理器
+│   │   │   ├── cache.rs          # 设备缓存
 │   │   │   ├── serial/           # 串口模块
+│   │   │   │   ├── serial_manager.rs
+│   │   │   │   ├── serial_config.rs
+│   │   │   │   └── serial_port.rs
 │   │   │   └── ble/              # BLE 模块
 │   │   │       ├── ble_manager.rs
+│   │   │       ├── ble_traits.rs
 │   │   │       ├── native/       # 原生 BLE
+│   │   │       │   ├── adapter.rs
+│   │   │       │   ├── gatt_client.rs
+│   │   │       │   └── native_backend.rs
 │   │   │       └── at/           # AT 指令 BLE
+│   │   │           ├── at_backend.rs
+│   │   │           ├── at_cache.rs
+│   │   │           ├── at_commands.rs
+│   │   │           ├── at_parser.rs
+│   │   │           └── at_transport.rs
 │   │   ├── dashboard/            # Dashboard 模块
 │   │   │   ├── commands.rs       # Dashboard 命令
 │   │   │   ├── parser_scripts.rs # 解析脚本管理
@@ -292,22 +311,39 @@ combridge-rust/
 │   │   │   ├── manager.rs        # GH3036 管理器
 │   │   │   ├── types.rs          # 类型定义
 │   │   │   ├── config_loader.rs  # 配置加载
-│   │   │   └── factory_test.rs   # 工厂测试
+│   │   │   ├── factory_test.rs   # 工厂测试
+│   │   │   ├── csv_writer.rs     # CSV 写入器
+│   │   │   └── threshold_config.rs # 阈值配置
 │   │   ├── protocol/             # 协议插件
 │   │   │   ├── lua_engine.rs     # Lua 引擎
-│   │   │   └── plugin_manager.rs # 插件管理
+│   │   │   ├── plugin_manager.rs # 插件管理
+│   │   │   ├── hook_executor.rs  # 钩子执行器
+│   │   │   └── script_loader.rs  # 脚本加载器
 │   │   ├── service/              # 服务层
 │   │   │   ├── event_bus.rs      # 事件总线
+│   │   │   ├── event_bridge.rs   # 事件桥接
 │   │   │   ├── logger.rs         # 日志服务
-│   │   │   └── config.rs         # 配置服务
+│   │   │   ├── config.rs         # 配置服务
+│   │   │   ├── data_queue.rs     # 数据队列
+│   │   │   └── msgpack_handler.rs # MsgPack 处理器
 │   │   ├── state/                # 状态管理
-│   │   │   └── app_state.rs      # 应用状态
+│   │   │   ├── app_state.rs      # 应用状态
+│   │   │   ├── action.rs         # 状态动作
+│   │   │   ├── dispatcher.rs     # 状态分发器
+│   │   │   ├── persistence.rs    # 状态持久化
+│   │   │   └── types.rs          # 状态类型
 │   │   └── websocket/            # WebSocket 客户端
+│   │       ├── client.rs         # WebSocket 客户端
+│   │       ├── connection_pool.rs # 连接池
+│   │       ├── message_handler.rs # 消息处理器
+│   │       └── reconnection.rs   # 重连机制
 │   ├── parser_scripts/           # 预置 Lua 解析脚本
 │   │   ├── csv_parser.lua
 │   │   ├── json_parser.lua
+│   │   ├── json.lua              # JSON 库
 │   │   ├── imu_parser.lua
-│   │   └── nmea_parser.lua
+│   │   ├── nmea_parser.lua
+│   │   └── custom_example.lua    # 自定义示例
 │   ├── capabilities/             # Tauri 权限配置
 │   ├── Cargo.toml                # Rust 依赖配置
 │   └── tauri.conf.json           # Tauri 配置
@@ -412,6 +448,9 @@ cd src-tauri && cargo fmt
 - [状态管理](docs/architecture/backend/state-module.md)
 - [服务层](docs/architecture/backend/service-module.md)
 - [WebSocket](docs/architecture/backend/websocket-module.md)
+- [命令模块](docs/architecture/backend/commands-module.md)
+- [错误处理](docs/architecture/backend/error-handling.md)
+- [工厂测试](docs/architecture/backend/factory-test-module.md)
 
 ### 前端模块文档
 
@@ -421,6 +460,7 @@ cd src-tauri && cargo fmt
 - [Hooks 层](docs/architecture/frontend/hooks-layer.md)
 - [页面层](docs/architecture/frontend/pages-layer.md)
 - [组件层](docs/architecture/frontend/components-layer.md)
+- [服务层](docs/architecture/frontend/services-layer.md)
 
 ## 许可证
 

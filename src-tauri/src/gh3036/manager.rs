@@ -36,7 +36,7 @@ use super::types::{Gh3036EventData, Gh3036FrameData, GhFuncFrame, FrameDecoder, 
     RET_GH3X_GET_VERSION, RET_GH3X_REGS_READ_CMD, RET_F_GET_MODE,
     GhFuncFixIdxExt};
 
-use gh_rpc::CommandExecutor;
+use gh_rpc::{CommandExecutor, FrameCallback};
 use rpc::{RpcConfig, SendFunction, LogCallback, LogLevel, unpack, UnpackValue};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -484,13 +484,40 @@ impl Gh3036Manager {
             }
         }
 
-        let executor = CommandExecutor::new(RpcConfig {
+        let event_bus = self.event_bus.clone();
+        let frame_callback: FrameCallback = Arc::new(move |frame: &GhFuncFrame| {
+            if let Some(aggregated) = CALLBACK_CONTEXT.add_frame_to_aggregator(frame) {
+                info!(
+                    "[GH3036] 发布聚合帧事件: function_id={}, frame_count={}, channel_count={}",
+                    aggregated.function_id,
+                    aggregated.frame_count,
+                    aggregated.channel_count
+                );
+                event_bus.publish_msgpack("gh3036:frames", &aggregated);
+            }
+            
+            let frame_data = Gh3036FrameData::from_func_frame(frame);
+            if let Err(e) = CALLBACK_CONTEXT.send_frame_data(frame_data) {
+                error!("[GH3036] 帧数据入队失败: {}", e);
+            }
+        });
+        
+        let mut executor = CommandExecutor::new(RpcConfig {
             timeout_ms: 1000,
             ..RpcConfig::default()
         }).with_logger(Arc::new(TauriLogger));
         
+        executor.register_frame_callback(frame_callback);
+        
         tokio::task::block_in_place(|| {
-            handle.block_on(executor.set_send_function(Arc::clone(&send_fn)));
+            handle.block_on(async {
+                executor.set_send_function(Arc::clone(&send_fn)).await;
+                if let Err(e) = executor.register_g_handler().await {
+                    error!("GH3036 注册 G 协议处理器失败: {:?}", e);
+                } else {
+                    info!("GH3036 G 协议处理器注册成功");
+                }
+            });
         });
         
         info!("GH3036 RPC 核心初始化完成");

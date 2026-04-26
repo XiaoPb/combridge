@@ -2,7 +2,7 @@
 
 ## 概述
 
-ComBridge 前端采用 React 18 + TypeScript 构建，使用 Zustand 进行状态管理，Ant Design v6.3.5 作为 UI 组件库。前端通过 Tauri 的 invoke API 调用后端命令，通过 Tauri Events 接收后端推送的数据。支持 i18next 国际化（中文/英文），所有文本通过命名空间管理。
+ComBridge 前端采用 React 19 + TypeScript 构建，使用 Zustand 进行状态管理，Ant Design v6.3.5 作为 UI 组件库。前端通过 Tauri 的 invoke API 调用后端命令，通过 Tauri Events 接收后端推送的数据。支持 i18next 国际化（中文/英文），所有文本通过命名空间管理。
 
 ## 技术栈
 

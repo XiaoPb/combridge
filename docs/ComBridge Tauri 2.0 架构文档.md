@@ -971,7 +971,6 @@ flowchart TB
 | `gh3036_execute_rpc`        | invoke | 执行 RPC 命令         |
 | `gh3036_subscribe_events`   | invoke | 订阅 GH3036 事件      |
 | `gh3036_get_library_status` | invoke | 获取库状态             |
-| `gh3036_on_rx_data`         | invoke | RX 数据回调           |
 
 ### 7.8 Waveform API
 

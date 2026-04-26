@@ -1870,27 +1870,6 @@ const [loaded, initialized] = await invoke<[boolean, boolean]>('gh3036_get_libra
 
 ***
 
-### gh3036\_on\_rx\_data
-
-接收 RX 数据回调。
-
-**后端命令**: `gh3036_on_rx_data`
-
-**参数**:
-
-| 参数名        | 类型        | 必填 | 描述     |
-| ---------- | --------- | -- | ------ |
-| device\_id | string    | 是  | 设备 ID  |
-| data       | number\[] | 是  | 接收到的数据 |
-
-**返回**: `void`
-
-```typescript
-await invoke('gh3036_on_rx_data', { deviceId: 'COM1', data: [0x01, 0x02] });
-```
-
-***
-
 ## 波形模块 (Waveform)
 
 ### waveform\_create\_buffer

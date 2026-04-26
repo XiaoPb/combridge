@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { 
   Gh3036ChannelConfig, 
@@ -69,9 +70,13 @@ interface Gh3036State {
   
   vitalSigns: {
     hr: number | null;
+    hrConfidence: number | null;
     spo2: number | null;
+    spo2Confidence: number | null;
     adt: string | null;
+    adtConfidence: number | null;
     gnadt: string | null;
+    gnadtConfidence: number | null;
   };
   
   gsensorData: {
@@ -86,6 +91,9 @@ interface Gh3036State {
   
   chartGroups: ChartGroupConfig[];
   selectedFunctionId: number | null;
+  
+  chartLegendSelected: Record<string, boolean>;
+  ipdRawDataType: 'ipd' | 'rawdata';
   
   isLinked: boolean;
   
@@ -153,6 +161,8 @@ interface Gh3036State {
   
   setChartGroups: (groups: ChartGroupConfig[]) => void;
   setSelectedFunctionId: (id: number | null) => void;
+  setChartLegendSelected: (selected: Record<string, boolean>) => void;
+  setIpdRawDataType: (type: 'ipd' | 'rawdata') => void;
   
   setIsLinked: (value: boolean) => void;
   
@@ -207,25 +217,27 @@ interface ChartGroupConfig {
   height?: number;
 }
 
-export const useGh3036Store = create<Gh3036State>((set, get) => ({
-  isInitialized: false,
-  isLoading: false,
-  error: null,
-  
-  channelConfig: {
-    connectionType: 'serial',
-    serialPort: '',
-    bleDevice: '',
-    txChar: '00000004-0000-1000-8000-00805f9b34fb',
-    rxChar: '00000003-0000-1000-8000-00805f9b34fb',
-  },
-  
-  txChannel: null,
-  rxChannel: null,
-  
-  csvConfig: {
-    enabled: false,
-    output_dir: '.',
+export const useGh3036Store = create<Gh3036State>()(
+  persist(
+    (set, get) => ({
+      isInitialized: false,
+      isLoading: false,
+      error: null,
+      
+      channelConfig: {
+        connectionType: 'serial',
+        serialPort: '',
+        bleDevice: '',
+        txChar: '00000004-0000-1000-8000-00805f9b34fb',
+        rxChar: '00000003-0000-1000-8000-00805f9b34fb',
+      },
+      
+      txChannel: null,
+      rxChannel: null,
+      
+      csvConfig: {
+        enabled: false,
+        output_dir: '.',
   },
   
   rpcCommands: [],
@@ -242,9 +254,13 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   
   vitalSigns: {
     hr: null,
+    hrConfidence: null,
     spo2: null,
+    spo2Confidence: null,
     adt: null,
+    adtConfidence: null,
     gnadt: null,
+    gnadtConfidence: null,
   },
   
   gsensorData: {
@@ -259,6 +275,8 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   
   chartGroups: [],
   selectedFunctionId: null,
+  chartLegendSelected: {},
+  ipdRawDataType: 'ipd',
   
   isLinked: false,
   
@@ -375,19 +393,35 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
     
     let newVitalSigns = { ...vitalSigns };
     if (frames.algo_results.length > 0 && frames.algo_results[0].length > 0) {
-      const algoValue = frames.algo_results[frames.algo_results.length - 1][0];
+      const lastAlgoResult = frames.algo_results[frames.algo_results.length - 1];
       switch (frames.function_id) {
         case 1:
-          newVitalSigns = { ...newVitalSigns, hr: algoValue };
+          newVitalSigns = { 
+            ...newVitalSigns, 
+            hr: lastAlgoResult[0] ?? null,
+            hrConfidence: lastAlgoResult[1] ?? null,
+          };
           break;
         case 2:
-          newVitalSigns = { ...newVitalSigns, spo2: algoValue };
+          newVitalSigns = { 
+            ...newVitalSigns, 
+            spo2: lastAlgoResult[0] ?? null,
+            spo2Confidence: lastAlgoResult[2] ?? null,
+          };
           break;
         case 0:
-          newVitalSigns = { ...newVitalSigns, adt: algoValue === 1 ? '佩戴' : '未佩戴' };
+          newVitalSigns = { 
+            ...newVitalSigns, 
+            adt: lastAlgoResult[0] === 1 ? '佩戴' : '未佩戴',
+            adtConfidence: lastAlgoResult[1] ?? null,
+          };
           break;
         case 4:
-          newVitalSigns = { ...newVitalSigns, gnadt: algoValue === 1 ? '活体' : '非活体' };
+          newVitalSigns = { 
+            ...newVitalSigns, 
+            gnadt: lastAlgoResult[0] === 1 ? '活体' : '非活体',
+            gnadtConfidence: lastAlgoResult[1] ?? null,
+          };
           break;
       }
     }
@@ -422,6 +456,8 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
   
   setChartGroups: (groups) => set({ chartGroups: groups }),
   setSelectedFunctionId: (id) => set({ selectedFunctionId: id }),
+  setChartLegendSelected: (selected) => set({ chartLegendSelected: selected }),
+  setIpdRawDataType: (type) => set({ ipdRawDataType: type }),
   
   setIsLinked: (value) => set({ isLinked: value }),
   
@@ -1051,4 +1087,13 @@ export const useGh3036Store = create<Gh3036State>((set, get) => ({
       console.error('[Gh3036Store] 加载判断结果失败:', err);
     }
   },
-}));
+}),
+{
+  name: 'gh3036-chart-settings',
+  partialize: (state) => ({
+    chartLegendSelected: state.chartLegendSelected,
+    ipdRawDataType: state.ipdRawDataType,
+  }),
+}
+  )
+);

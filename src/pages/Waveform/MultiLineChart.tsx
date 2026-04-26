@@ -10,6 +10,7 @@ import {
 import { UniversalTransition } from 'echarts/features';
 import { CanvasRenderer } from 'echarts/renderers';
 import { useCsvChartStore } from '../../stores/csvChartStore';
+import { useGh3036Store } from '../../stores/gh3036Store';
 
 echarts.use([
   LineChart,
@@ -114,6 +115,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
 
   const { dataZoomState, setDataZoomState } = useCsvChartStore();
+  const { chartLegendSelected, setChartLegendSelected } = useGh3036Store();
 
   const xAxisData = useMemo(() => {
     const interval = 1 / sampleRate;
@@ -251,6 +253,14 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
       },
     ];
 
+    const legendSelected: Record<string, boolean> = {};
+    seriesData.forEach((s) => {
+      const key = `${group.name}_${s.name}`;
+      if (chartLegendSelected[key] !== undefined) {
+        legendSelected[s.name] = chartLegendSelected[key];
+      }
+    });
+
     return {
       animationDuration: 0,
       progressive: 500,
@@ -292,6 +302,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
         left: 'center',
         orient: 'horizontal',
         data: seriesData.map((s) => s.name),
+        selected: Object.keys(legendSelected).length > 0 ? legendSelected : undefined,
         textStyle: {
           color: 'var(--text-primary)',
         },
@@ -322,7 +333,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
       series: seriesOption,
       dataZoom: dataZoomOption,
     };
-  }, [xAxisData, rows, columns, unifiedGridConfig, dataZoomState]);
+  }, [xAxisData, rows, columns, unifiedGridConfig, dataZoomState, chartLegendSelected]);
 
   const handleContextMenu = useCallback((chartIndex: number) => (e: React.MouseEvent) => {
     e.preventDefault();
@@ -482,6 +493,36 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
       disposers.forEach((dispose) => dispose());
     };
   }, [initialized, setDataZoomState]);
+
+  useEffect(() => {
+    if (!initialized || chartInstances.current.length === 0) return;
+
+    const handleLegendSelectChanged = (chartIndex: number) => (params: unknown) => {
+      const p = params as { name: string; selected: Record<string, boolean> };
+      const group = chartGroups[chartIndex];
+      if (!group) return;
+
+      const newSelected = { ...chartLegendSelected };
+      Object.entries(p.selected).forEach(([name, selected]) => {
+        const key = `${group.name}_${name}`;
+        newSelected[key] = selected;
+      });
+      setChartLegendSelected(newSelected);
+    };
+
+    const disposers: Array<() => void> = [];
+
+    chartInstances.current.forEach((chart, index) => {
+      if (!chart) return;
+      const handler = handleLegendSelectChanged(index);
+      chart.on('legendselectchanged', handler);
+      disposers.push(() => chart.off('legendselectchanged', handler));
+    });
+
+    return () => {
+      disposers.forEach((dispose) => dispose());
+    };
+  }, [initialized, chartGroups, chartLegendSelected, setChartLegendSelected]);
 
   useEffect(() => {
     const handleResize = () => {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Typography, theme } from 'antd';
+import { Card, Typography, theme, Progress } from 'antd';
 
 const { Text } = Typography;
 
@@ -9,6 +9,7 @@ interface VitalSignCardProps {
   unit?: string;
   status?: 'normal' | 'warning' | 'error' | 'success';
   icon?: React.ReactNode;
+  confidence?: number | null;
 }
 
 const VitalSignCard: React.FC<VitalSignCardProps> = ({
@@ -17,6 +18,7 @@ const VitalSignCard: React.FC<VitalSignCardProps> = ({
   unit,
   status = 'normal',
   icon,
+  confidence,
 }) => {
   const { token } = theme.useToken();
 
@@ -35,6 +37,12 @@ const VitalSignCard: React.FC<VitalSignCardProps> = ({
 
   const displayValue = value !== null ? value : '--';
   const displayUnit = unit || '';
+
+  const getConfidenceColor = (conf: number) => {
+    if (conf >= 80) return token.colorSuccess;
+    if (conf >= 50) return token.colorWarning;
+    return token.colorError;
+  };
 
   return (
     <Card
@@ -75,6 +83,23 @@ const VitalSignCard: React.FC<VitalSignCardProps> = ({
           </Text>
         )}
       </div>
+      {confidence !== null && confidence !== undefined && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+            <Text type="secondary" style={{ fontSize: 11 }}>置信度</Text>
+            <Text style={{ fontSize: 11, color: getConfidenceColor(confidence) }}>
+              {confidence.toFixed(0)}%
+            </Text>
+          </div>
+          <Progress
+            percent={confidence}
+            size="small"
+            showInfo={false}
+            strokeColor={getConfidenceColor(confidence)}
+            trailColor={token.colorBorderSecondary}
+          />
+        </div>
+      )}
     </Card>
   );
 };

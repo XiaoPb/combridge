@@ -26,6 +26,8 @@ const MonitorTab: React.FC = () => {
     selectedFunctionId,
     clearWaveformData,
     setSelectedFunctionId,
+    ipdRawDataType,
+    setIpdRawDataType,
   } = useGh3036Store();
 
   const sampleRate = getSampleRateByFunctionId(selectedFunctionId);
@@ -59,13 +61,17 @@ const MonitorTab: React.FC = () => {
     for (let frameIdx = startIndex; frameIdx < currentFrames.frame_count; frameIdx++) {
       const row: number[] = [];
       for (let chIdx = 0; chIdx < currentFrames.channel_count; chIdx++) {
-        row.push(currentFrames.ipd_pa[chIdx]?.[frameIdx] ?? 0);
+        if (ipdRawDataType === 'ipd') {
+          row.push(currentFrames.ipd_pa[chIdx]?.[frameIdx] ?? 0);
+        } else {
+          row.push(currentFrames.rawdata[chIdx]?.[frameIdx] ?? 0);
+        }
       }
       rows.push(row);
     }
 
     return { columns, rows };
-  }, [currentFrames, sampleRate]);
+  }, [currentFrames, sampleRate, ipdRawDataType]);
 
   const gsensorChartData = useMemo(() => {
     const columns = ['ACC_X', 'ACC_Y', 'ACC_Z'];
@@ -105,11 +111,11 @@ const MonitorTab: React.FC = () => {
     }
     
     return [{
-      name: t('monitor.ipdPaChart'),
+      name: ipdRawDataType === 'ipd' ? t('monitor.ipdPaChart') : t('monitor.rawdataChart'),
       columns,
       height: 250,
     }];
-  }, [currentFrames, t]);
+  }, [currentFrames, t, ipdRawDataType]);
 
   const gsensorChartGroups = useMemo(() => {
     return [{
@@ -139,6 +145,7 @@ const MonitorTab: React.FC = () => {
             unit="bpm"
             status="normal"
             icon={<HeartOutlined />}
+            confidence={vitalSigns.hrConfidence}
           />
         </Col>
         <Col xs={12} sm={6}>
@@ -148,6 +155,7 @@ const MonitorTab: React.FC = () => {
             unit="%"
             status="normal"
             icon={<ThunderboltOutlined />}
+            confidence={vitalSigns.spo2Confidence}
           />
         </Col>
         <Col xs={12} sm={6}>
@@ -156,6 +164,7 @@ const MonitorTab: React.FC = () => {
             value={vitalSigns.adt}
             status={getAdtStatus()}
             icon={<EyeOutlined />}
+            confidence={vitalSigns.adtConfidence}
           />
         </Col>
         <Col xs={12} sm={6}>
@@ -164,15 +173,26 @@ const MonitorTab: React.FC = () => {
             value={vitalSigns.gnadt}
             status={getGnadtStatus()}
             icon={<SafetyOutlined />}
+            confidence={vitalSigns.gnadtConfidence}
           />
         </Col>
       </Row>
 
       <Card
         size="small"
-        title={t('monitor.ipdPaChart')}
+        title={ipdRawDataType === 'ipd' ? t('monitor.ipdPaChart') : t('monitor.rawdataChart')}
         extra={
           <Space>
+            <Select
+              size="small"
+              style={{ width: 100 }}
+              value={ipdRawDataType}
+              onChange={setIpdRawDataType}
+              options={[
+                { value: 'ipd', label: 'IPD' },
+                { value: 'rawdata', label: 'Rawdata' },
+              ]}
+            />
             <Select
               size="small"
               style={{ width: 150 }}

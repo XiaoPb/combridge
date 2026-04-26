@@ -111,8 +111,7 @@ impl FrameAggregator {
         let event = self.buffer.entry(func_id).or_insert_with(|| {
             Gh3036FramesEvent::new(func_id, func_name)
         });
-        
-        let ref_data = self.ref_data_manager.get_ref_data(event.frame_count);
+        let ref_data = self.ref_data_manager.get_ref_data(frame.frame_cnt as usize);
         event.add_frame_with_ref(frame, ref_data);
 
         let now = std::time::Instant::now();
@@ -267,7 +266,7 @@ impl GlobalContext {
         if !csv_config.enabled {
             return;
         }
-
+        info!("frame.frame_cnt: {}", frame.frame_cnt);
         let ref_data = self.ref_data_manager.get_ref_data(frame.frame_cnt as usize);
         let frame_data = Gh3036FrameData::from_func_frame(frame, Some(&ref_data));
         let mut writers = self.csv_writers.lock();

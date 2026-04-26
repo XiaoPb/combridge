@@ -237,9 +237,9 @@ export const useGh3036Store = create<Gh3036State>()(
       rxChannel: null,
       
       csvConfig: {
-        enabled: false,
+        enabled: true,
         output_dir: '.',
-  },
+      },
   
   rpcCommands: [],
   expandedCommand: null,
@@ -503,8 +503,16 @@ export const useGh3036Store = create<Gh3036State>()(
   
   loadCsvConfig: async () => {
     try {
-      const config = await gh3036Api.getCsvConfig();
-      set({ csvConfig: config });
+      const prefs = await preferencesApi.get();
+      const gh3036Csv = prefs.gh3036_csv;
+      if (gh3036Csv) {
+        set({
+          csvConfig: {
+            enabled: gh3036Csv.enabled ?? true,
+            output_dir: gh3036Csv.output_dir || '.',
+          },
+        });
+      }
     } catch (err) {
       console.error('加载CSV配置失败:', err);
     }
@@ -604,7 +612,10 @@ export const useGh3036Store = create<Gh3036State>()(
   updateCsvConfig: async (enabled, outputDir) => {
     set({ isLoading: true, error: null });
     try {
-      await gh3036Api.setCsvConfig(enabled, outputDir);
+      await preferencesApi.updateGh3036Csv({
+        enabled,
+        output_dir: outputDir,
+      });
       set({ 
         csvConfig: { enabled, output_dir: outputDir }
       });

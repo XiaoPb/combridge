@@ -372,13 +372,8 @@ impl DecoderState {
         if data_frame.pack_header.contains(PackHeader::ALG_DATA_EN) && data_frame.algo_data_bits > 0 {
             self.last_algo_data_size = data_frame.algo_data_bits;
             for i in 0..data_frame.algo_data_bits {
-                if self.start_flag {
-                    self.last_algo_data[i] = data_frame.algo_data[i];
-                    func_frame.algo_data.push(data_frame.algo_data[i]);
-                } else {
-                    self.last_algo_data[i] = self.last_algo_data[i] + data_frame.algo_data[i];
-                    func_frame.algo_data.push(self.last_algo_data[i]);
-                }
+                func_frame.algo_data.push(data_frame.algo_data[i]);
+                self.last_algo_data[i] = data_frame.algo_data[i];
             }
         } else if self.last_algo_data_size > 0 {
             for i in 0..self.last_algo_data_size {

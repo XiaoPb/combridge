@@ -270,11 +270,17 @@ export interface Gh3036ChannelPreferences {
   rx_char: string;
 }
 
+export interface Gh3036CsvPreferences {
+  enabled: boolean;
+  output_dir: string;
+}
+
 export interface Preferences {
   serial: SerialPreferences;
   ble: BlePreferences;
   waveform?: WaveformPreferences;
   gh3036_channel?: Gh3036ChannelPreferences;
+  gh3036_csv?: Gh3036CsvPreferences;
 }
 
 export const preferencesApi = {
@@ -324,6 +330,13 @@ export const preferencesApi = {
       bleDevice: prefs.ble_device,
       txChar: prefs.tx_char,
       rxChar: prefs.rx_char,
+    });
+  },
+
+  async updateGh3036Csv(prefs: Gh3036CsvPreferences): Promise<void> {
+    await invoke<void>('update_gh3036_csv_preferences', {
+      enabled: prefs.enabled,
+      outputDir: prefs.output_dir,
     });
   },
 };

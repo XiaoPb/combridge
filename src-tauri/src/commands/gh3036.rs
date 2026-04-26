@@ -7,11 +7,26 @@ use crate::gh3036::{
     ConfigValidationResult, ThresholdConfigValidation, FactoryThresholdConfig,
     FactoryEvaluationResult,
 };
+use crate::state::StatePersistenceRef;
 
 #[tauri::command]
 pub async fn gh3036_init(
     manager: State<'_, Gh3036ManagerRef>,
+    persistence: State<'_, StatePersistenceRef>,
 ) -> Result<(), ErrorResponse> {
+    let persistence = persistence.inner().read().await;
+    let prefs = persistence.load_preferences().await.map_err(|e| {
+        ComBridgeError::config(format!("加载偏好设置失败: {}", e)).to_error_response()
+    })?;
+    
+    let csv_config = CsvConfig {
+        enabled: prefs.gh3036_csv.enabled,
+        output_dir: prefs.gh3036_csv.output_dir,
+    };
+    manager.set_csv_config(csv_config).map_err(|e| {
+        ComBridgeError::protocol(format!("设置CSV配置失败: {}", e)).to_error_response()
+    })?;
+    
     manager
         .initialize()
         .map_err(|e| ComBridgeError::protocol(e).to_error_response())

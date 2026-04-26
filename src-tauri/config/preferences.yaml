@@ -23,3 +23,6 @@ gh3036Channel:
   bleDevice: ''
   txChar: 00000004-0000-1000-8000-00805f9b34fb
   rxChar: 00000003-0000-1000-8000-00805f9b34fb
+gh3036Csv:
+  enabled: true
+  outputDir: data

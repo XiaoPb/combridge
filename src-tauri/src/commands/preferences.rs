@@ -3,6 +3,8 @@ use tracing::{debug, error, info};
 
 use crate::error::Result;
 use crate::state::{StatePersistenceRef, Preferences};
+use crate::gh3036::Gh3036ManagerRef;
+use crate::gh3036::CsvConfig;
 
 #[tauri::command]
 pub async fn get_preferences(
@@ -161,6 +163,7 @@ pub async fn update_gh3036_channel_preferences(
 #[tauri::command]
 pub async fn update_gh3036_csv_preferences(
     persistence: State<'_, StatePersistenceRef>,
+    manager: State<'_, Gh3036ManagerRef>,
     enabled: bool,
     output_dir: String,
 ) -> Result<()> {
@@ -172,12 +175,18 @@ pub async fn update_gh3036_csv_preferences(
     });
     
     prefs.gh3036_csv.enabled = enabled;
-    prefs.gh3036_csv.output_dir = output_dir;
+    prefs.gh3036_csv.output_dir = output_dir.clone();
     
     persistence.save_preferences(&prefs).await.map_err(|e| {
         error!("保存偏好设置失败: {}", e);
         e
     })?;
     
+    let config = CsvConfig { enabled, output_dir };
+    if let Err(e) = manager.set_csv_config(config) {
+        error!("同步更新后端CSV配置失败: {}", e);
+    }
+    
+    info!("GH3036 CSV偏好设置已更新并同步到后端");
     Ok(())
 }

@@ -13,6 +13,7 @@ import type {
   BleConnectedPayload,
   BleDisconnectedPayload,
   Gh3036FramesPayload,
+  Gh3036RefDataPayload,
 } from '../api/events';
 
 let eventBusListener: UnlistenFn | undefined;
@@ -112,6 +113,12 @@ function handleGh3036Frames(payload: Gh3036FramesPayload) {
   store.addFramesData(payload);
 }
 
+function handleGh3036RefData(payload: Gh3036RefDataPayload) {
+  console.log('[EventListeners] handleGh3036RefData:', payload);
+  const store = useGh3036Store.getState();
+  store.updateRefData(payload);
+}
+
 function dispatchEvent(event: EventBusEvent) {
   const ts = new Date().toISOString().substr(11, 12);
   console.log(`[${ts}] [EventListeners] Received event-bus event: topic=${event.topic}, encoding=${event.encoding}`);
@@ -138,6 +145,9 @@ function dispatchEvent(event: EventBusEvent) {
         break;
       case 'gh3036:frames':
         handleGh3036Frames(decodePayload<Gh3036FramesPayload>(event));
+        break;
+      case 'gh3036:ref_data':
+        handleGh3036RefData(decodePayload<Gh3036RefDataPayload>(event));
         break;
       case 'gh3036:factory_test_progress':
         console.log(`[${ts}] [EventListeners] gh3036:factory_test_progress received (handled by store)`);

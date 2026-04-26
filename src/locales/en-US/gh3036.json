@@ -35,7 +35,8 @@
     "livenessStatus": "Liveness",
     "refInput": "Input Reference",
     "snr": "SNR",
-    "confidenceLevel": "Confidence Level"
+    "confidenceLevel": "Confidence Level",
+    "sampleRateHint": "Set the data sampling frequency for the current function to calculate the correct time scale"
   },
   "version": {
     "title": "Device Version Info",

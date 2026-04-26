@@ -18,7 +18,7 @@ import type {
 import { gh3036Api, factoryTestApi } from '../api/gh3036';
 import { preferencesApi, type Gh3036ChannelPreferences } from '../api/tauri';
 import { decodePayload, type EventBusEvent } from '../utils/msgpack';
-import type { Gh3036FramePayload, Gh3036FramesPayload } from '../api/events';
+import type { Gh3036FramePayload, Gh3036FramesPayload, Gh3036RefDataPayload } from '../api/events';
 import { getCurrentTimeString } from '../utils/helpers';
 import { useConfigStore } from './configStore';
 
@@ -68,6 +68,19 @@ interface Gh3036State {
   framesData: Map<number, Gh3036FramesPayload>;
   maxFramesCount: number;
   
+  refData: {
+    hrValues: number[];
+    hrCount: number;
+    hrValid: boolean;
+    hrvValues: number[];
+    hrvCount: number;
+    hrvValid: boolean;
+    spo2Values: number[];
+    spo2Count: number;
+    spo2Valid: boolean;
+    timestamp: number;
+  };
+  
   vitalSigns: {
     hr: number | null;
     hrConfidence: number | null;
@@ -103,6 +116,8 @@ interface Gh3036State {
   
   chartLegendSelected: Record<string, boolean>;
   ipdRawDataType: 'ipd' | 'rawdata';
+  
+  sampleRateConfig: Record<number, number>;
   
   isLinked: boolean;
   
@@ -168,10 +183,13 @@ interface Gh3036State {
   addFramesData: (frames: Gh3036FramesPayload) => void;
   clearWaveformData: () => void;
   
+  updateRefData: (refData: Gh3036RefDataPayload) => void;
+  
   setChartGroups: (groups: ChartGroupConfig[]) => void;
   setSelectedFunctionId: (id: number | null) => void;
   setChartLegendSelected: (selected: Record<string, boolean>) => void;
   setIpdRawDataType: (type: 'ipd' | 'rawdata') => void;
+  setSampleRateConfig: (config: Record<number, number>) => void;
   
   setIsLinked: (value: boolean) => void;
   
@@ -261,6 +279,19 @@ export const useGh3036Store = create<Gh3036State>()(
   framesData: new Map(),
   maxFramesCount: 100,
   
+  refData: {
+    hrValues: [],
+    hrCount: 0,
+    hrValid: false,
+    hrvValues: [],
+    hrvCount: 0,
+    hrvValid: false,
+    spo2Values: [],
+    spo2Count: 0,
+    spo2Valid: false,
+    timestamp: 0,
+  },
+  
   vitalSigns: {
     hr: null,
     hrConfidence: null,
@@ -295,6 +326,14 @@ export const useGh3036Store = create<Gh3036State>()(
   selectedFunctionId: null,
   chartLegendSelected: {},
   ipdRawDataType: 'ipd',
+  
+  sampleRateConfig: {
+    0: 5,
+    1: 25,
+    2: 25,
+    3: 25,
+    4: 25,
+  },
   
   isLinked: false,
   
@@ -495,12 +534,65 @@ export const useGh3036Store = create<Gh3036State>()(
       gnadt: null,
       gnadtConfidence: null,
     },
+    refData: {
+      hrValues: [],
+      hrCount: 0,
+      hrValid: false,
+      hrvValues: [],
+      hrvCount: 0,
+      hrvValid: false,
+      spo2Values: [],
+      spo2Count: 0,
+      spo2Valid: false,
+      timestamp: 0,
+    },
   }),
+  
+  updateRefData: (refData) => {
+    const { vitalSigns } = get();
+    const newVitalSigns = { ...vitalSigns };
+    
+    if (refData.hr_valid && refData.hr_count > 0) {
+      newVitalSigns.hrRef = refData.hr_values.slice(0, refData.hr_count);
+    } else {
+      newVitalSigns.hrRef = [];
+    }
+    
+    if (refData.hrv_valid && refData.hrv_count > 0) {
+      newVitalSigns.hrvRef = refData.hrv_values.slice(0, refData.hrv_count);
+    } else {
+      newVitalSigns.hrvRef = [];
+    }
+    
+    if (refData.spo2_valid && refData.spo2_count > 0) {
+      newVitalSigns.spo2Ref = refData.spo2_values.slice(0, refData.spo2_count);
+    } else {
+      newVitalSigns.spo2Ref = [];
+    }
+    
+    set({ 
+      refData: {
+        hrValues: refData.hr_values,
+        hrCount: refData.hr_count,
+        hrValid: refData.hr_valid,
+        hrvValues: refData.hrv_values,
+        hrvCount: refData.hrv_count,
+        hrvValid: refData.hrv_valid,
+        spo2Values: refData.spo2_values,
+        spo2Count: refData.spo2_count,
+        spo2Valid: refData.spo2_valid,
+        timestamp: refData.timestamp,
+      },
+      vitalSigns: newVitalSigns,
+    });
+  },
   
   setChartGroups: (groups) => set({ chartGroups: groups }),
   setSelectedFunctionId: (id) => set({ selectedFunctionId: id }),
   setChartLegendSelected: (selected) => set({ chartLegendSelected: selected }),
   setIpdRawDataType: (type) => set({ ipdRawDataType: type }),
+  
+  setSampleRateConfig: (config) => set({ sampleRateConfig: config }),
   
   setIsLinked: (value) => set({ isLinked: value }),
   
@@ -1147,11 +1239,13 @@ export const useGh3036Store = create<Gh3036State>()(
   partialize: (state) => ({
     chartLegendSelected: state.chartLegendSelected ? { ...state.chartLegendSelected } : {},
     ipdRawDataType: state.ipdRawDataType || 'ipd',
+    sampleRateConfig: state.sampleRateConfig || { 0: 5, 1: 25, 2: 25, 3: 25, 4: 25 },
   }),
   merge: (persisted, current) => ({
     ...current,
     chartLegendSelected: (persisted as { chartLegendSelected?: Record<string, boolean> })?.chartLegendSelected || {},
     ipdRawDataType: (persisted as { ipdRawDataType?: 'ipd' | 'rawdata' })?.ipdRawDataType || 'ipd',
+    sampleRateConfig: (persisted as { sampleRateConfig?: Record<number, number> })?.sampleRateConfig || { 0: 5, 1: 25, 2: 25, 3: 25, 4: 25 },
   }),
 }
   )

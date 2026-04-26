@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
-import { Card, Row, Col, Empty, Select, Space, Button } from 'antd';
-import { ClearOutlined, HeartOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { Card, Row, Col, Empty, Select, Space, Button, InputNumber, Tooltip } from 'antd';
+import { ClearOutlined, HeartOutlined, ThunderboltOutlined, SettingOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
 import VitalSignCard from './components/VitalSignCard';
@@ -9,14 +9,22 @@ import StatusCombinedCard from './components/StatusCombinedCard';
 import MultiLineChart from '../Waveform/MultiLineChart';
 
 const DISPLAY_DURATION_SECONDS = 6;
-const ADT_SAMPLE_RATE = 5;
 const DEFAULT_SAMPLE_RATE = 25;
 
-const getSampleRateByFunctionId = (functionId: number | null): number => {
-  if (functionId === 0) {
-    return ADT_SAMPLE_RATE;
-  }
-  return DEFAULT_SAMPLE_RATE;
+const FUNCTION_ID_TO_NAME: Record<number, string> = {
+  0: 'ADT',
+  1: 'HR',
+  2: 'SPO2',
+  3: 'HRV',
+  4: 'GNADT',
+};
+
+const DEFAULT_SAMPLE_RATE_CONFIG: Record<number, number> = {
+  0: 5,
+  1: 25,
+  2: 25,
+  3: 25,
+  4: 25,
 };
 
 const MonitorTab: React.FC = () => {
@@ -30,9 +38,22 @@ const MonitorTab: React.FC = () => {
     setSelectedFunctionId,
     ipdRawDataType,
     setIpdRawDataType,
+    sampleRateConfig,
+    setSampleRateConfig,
   } = useGh3036Store();
 
-  const sampleRate = getSampleRateByFunctionId(selectedFunctionId);
+  const sampleRate = useMemo(() => {
+    if (selectedFunctionId === null) return DEFAULT_SAMPLE_RATE;
+    return sampleRateConfig[selectedFunctionId] ?? DEFAULT_SAMPLE_RATE_CONFIG[selectedFunctionId] ?? DEFAULT_SAMPLE_RATE;
+  }, [selectedFunctionId, sampleRateConfig]);
+
+  const handleSampleRateChange = (value: number | null) => {
+    if (selectedFunctionId === null || value === null) return;
+    setSampleRateConfig({
+      ...sampleRateConfig,
+      [selectedFunctionId]: value,
+    });
+  };
 
   const functionOptions = useMemo(() => {
     return Array.from(framesData.entries()).map(([id, frames]) => ({
@@ -165,6 +186,24 @@ const MonitorTab: React.FC = () => {
         title={ipdRawDataType === 'ipd' ? t('monitor.ipdPaChart') : t('monitor.rawdataChart')}
         extra={
           <Space>
+            <Tooltip title={t('monitor.sampleRateHint')}>
+              <Space size={4}>
+                <SettingOutlined style={{ color: 'var(--text-secondary)' }} />
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {selectedFunctionId !== null ? FUNCTION_ID_TO_NAME[selectedFunctionId] : ''}:
+                </span>
+                <InputNumber
+                  size="small"
+                  min={1}
+                  max={1000}
+                  value={sampleRate}
+                  onChange={handleSampleRateChange}
+                  style={{ width: 70 }}
+                  addonAfter="Hz"
+                  disabled={selectedFunctionId === null}
+                />
+              </Space>
+            </Tooltip>
             <Select
               size="small"
               style={{ width: 100 }}

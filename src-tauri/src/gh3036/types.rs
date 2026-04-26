@@ -789,3 +789,17 @@ pub struct FactoryTestProgressEvent {
     pub progress: f32,
     pub message: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Gh3036RefDataEvent {
+    pub hr_values: Vec<i32>,
+    pub hr_count: i32,
+    pub hr_valid: bool,
+    pub hrv_values: Vec<i32>,
+    pub hrv_count: i32,
+    pub hrv_valid: bool,
+    pub spo2_values: Vec<i32>,
+    pub spo2_count: i32,
+    pub spo2_valid: bool,
+    pub timestamp: u64,
+}

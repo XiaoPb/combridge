@@ -154,6 +154,7 @@ struct GlobalContext {
     csv_config: Mutex<CsvConfig>,
     csv_writers: Mutex<HashMap<i32, CsvWriter>>,
     ref_data_manager: Arc<RefDataManager>,
+    event_bus: Mutex<Option<Arc<EventBus>>>,
 }
 
 impl GlobalContext {
@@ -169,7 +170,13 @@ impl GlobalContext {
             csv_config: Mutex::new(CsvConfig::default()),
             csv_writers: Mutex::new(HashMap::new()),
             ref_data_manager,
+            event_bus: Mutex::new(None),
         }
+    }
+
+    fn set_event_bus(&self, event_bus: Arc<EventBus>) {
+        let mut bus = self.event_bus.lock();
+        *bus = Some(event_bus);
     }
 
     fn setup_rpc_channel(&self) -> crossbeam_channel::Receiver<RpcDataRequest> {
@@ -272,6 +279,44 @@ impl GlobalContext {
             error!("CSV 写入失败: {}", e);
         }
     }
+
+    fn publish_ref_data(&self) {
+        use super::types::Gh3036RefDataEvent;
+        use std::time::Duration;
+
+        let event_bus = self.event_bus.lock();
+        if let Some(bus) = event_bus.as_ref() {
+            let (hr_values, hr_count, hr_elapsed) = self.ref_data_manager.get_hr_ref_status();
+            let (hrv_values, hrv_count, hrv_elapsed) = self.ref_data_manager.get_hrv_ref_status();
+            let (spo2_values, spo2_count) = self.ref_data_manager.get_spo2_ref_status();
+
+            let hr_valid = hr_count > 0 && hr_elapsed < Duration::from_secs(4);
+            let hrv_valid = hrv_count > 0 && hrv_elapsed < Duration::from_secs(4);
+            let spo2_valid = spo2_count > 0;
+
+            let event = Gh3036RefDataEvent {
+                hr_values,
+                hr_count,
+                hr_valid,
+                hrv_values,
+                hrv_count,
+                hrv_valid,
+                spo2_values,
+                spo2_count,
+                spo2_valid,
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0),
+            };
+
+            bus.publish_msgpack("gh3036:ref_data", &event);
+            debug!(
+                "[GH3036] 发布金标数据: hr_valid={}, hrv_valid={}, spo2_valid={}",
+                hr_valid, hrv_valid, spo2_valid
+            );
+        }
+    }
 }
 
 static CALLBACK_CONTEXT: once_cell::sync::Lazy<GlobalContext> = once_cell::sync::Lazy::new(GlobalContext::new);
@@ -345,6 +390,7 @@ impl Gh3036Manager {
         info!("GH3036 协议管理器初始化 (纯 Rust 模式 + RPC 集成)");
         
         CALLBACK_CONTEXT.set_device_manager(Arc::clone(&self.device_manager));
+        CALLBACK_CONTEXT.set_event_bus(Arc::clone(&self.event_bus));
         
         if let Ok(handle) = Handle::try_current() {
             CALLBACK_CONTEXT.set_runtime_handle(handle);
@@ -552,6 +598,8 @@ impl Gh3036Manager {
         
         let thread_handle = std::thread::spawn(move || {
             info!("[GH3036] 处理线程启动");
+            let mut last_ref_data_publish = std::time::Instant::now();
+            let ref_data_interval = std::time::Duration::from_secs(1);
 
             while running_clone.load(std::sync::atomic::Ordering::SeqCst) {
                 crossbeam_channel::select! {
@@ -562,6 +610,12 @@ impl Gh3036Manager {
                     }
                     default(std::time::Duration::from_millis(10)) => {
                     }
+                }
+
+                let now = std::time::Instant::now();
+                if now.duration_since(last_ref_data_publish) >= ref_data_interval {
+                    CALLBACK_CONTEXT.publish_ref_data();
+                    last_ref_data_publish = now;
                 }
             }
 

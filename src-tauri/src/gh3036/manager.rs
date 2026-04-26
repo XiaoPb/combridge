@@ -20,7 +20,7 @@ use crate::device::DeviceManager;
 use crate::service::{EventBus, topics, SerialDataEvent, BleDataEvent, SerialDisconnectedEvent, BleConnectionEvent};
 use super::csv_writer::CsvWriter;
 use super::factory_test::FactoryTestManager;
-use super::types::{GhFuncFrame, Gh3036FramesEvent, GhFuncFixIdx,
+use super::types::{GhFuncFrame, Gh3036FrameData, Gh3036FramesEvent, GhFuncFixIdx,
     FactoryTestStep, FactoryTestStatus, FactoryTestResult, ConfigValidationResult,
     KEY_GH3X_GET_VERSION, KEY_GH3X_REGS_WRITE_CMD, KEY_GH3X_REGS_READ_CMD,
     KEY_GH3X_REG_BIT_FIELD_WRITE_CMD, KEY_GH3X_CHIP_CTRL, KEY_GH3X_SW_FUNCTION_CMD,
@@ -232,9 +232,10 @@ impl GlobalContext {
             return;
         }
 
+        let frame_data = Gh3036FrameData::from_func_frame(frame);
         let mut writers = self.csv_writers.lock();
-        let function_id = frame.id as i32;
-        let function_name = GhFuncFixIdx::from(frame.id as u8).name().to_string();
+        let function_id = frame_data.function_id;
+        let function_name = frame_data.function_name.clone();
 
         let writer = writers.entry(function_id).or_insert_with(|| {
             CsvWriter::new(
@@ -244,7 +245,7 @@ impl GlobalContext {
             )
         });
 
-        if let Err(e) = writer.write_frame(frame) {
+        if let Err(e) = writer.write_frame(&frame_data) {
             error!("CSV 写入失败: {}", e);
         }
     }

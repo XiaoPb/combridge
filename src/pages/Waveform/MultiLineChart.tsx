@@ -257,10 +257,14 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
     const selectedState = chartLegendSelected || {};
     seriesData.forEach((s) => {
       const key = `${group.name}_${s.name}`;
-      if (selectedState[key] !== undefined) {
-        legendSelected[s.name] = selectedState[key];
+      const value = selectedState[key];
+      if (value !== undefined && typeof value === 'boolean') {
+        legendSelected[s.name] = value;
       }
     });
+
+    const hasLegendSelected = Object.keys(legendSelected).length > 0;
+    const safeLegendSelected = hasLegendSelected ? JSON.parse(JSON.stringify(legendSelected)) : undefined;
 
     return {
       animationDuration: 0,
@@ -303,7 +307,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
         left: 'center',
         orient: 'horizontal',
         data: seriesData.map((s) => s.name),
-        selected: Object.keys(legendSelected).length > 0 ? legendSelected : undefined,
+        selected: safeLegendSelected,
         textStyle: {
           color: 'var(--text-primary)',
         },

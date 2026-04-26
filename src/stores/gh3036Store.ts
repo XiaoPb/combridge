@@ -1094,19 +1094,14 @@ export const useGh3036Store = create<Gh3036State>()(
 {
   name: 'gh3036-chart-settings',
   partialize: (state) => ({
-    chartLegendSelected: state.chartLegendSelected || {},
+    chartLegendSelected: state.chartLegendSelected ? { ...state.chartLegendSelected } : {},
     ipdRawDataType: state.ipdRawDataType || 'ipd',
   }),
-  onRehydrateStorage: () => (state) => {
-    if (state) {
-      if (!state.chartLegendSelected) {
-        state.chartLegendSelected = {};
-      }
-      if (!state.ipdRawDataType) {
-        state.ipdRawDataType = 'ipd';
-      }
-    }
-  },
+  merge: (persisted, current) => ({
+    ...current,
+    chartLegendSelected: (persisted as { chartLegendSelected?: Record<string, boolean> })?.chartLegendSelected || {},
+    ipdRawDataType: (persisted as { ipdRawDataType?: 'ipd' | 'rawdata' })?.ipdRawDataType || 'ipd',
+  }),
 }
   )
 );

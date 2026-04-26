@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, Row, Col, Empty, Select, Space, Button, InputNumber, Tooltip } from 'antd';
 import { ClearOutlined, HeartOutlined, ThunderboltOutlined, SettingOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +7,9 @@ import VitalSignCard from './components/VitalSignCard';
 import HrvCard from './components/HrvCard';
 import StatusCombinedCard from './components/StatusCombinedCard';
 import MultiLineChart from '../Waveform/MultiLineChart';
+import Spo2RefInputDialog from './components/Spo2RefInputDialog';
+import HrRefDeviceDialog from './components/HrRefDeviceDialog';
+import { gh3036Api } from '../../api/gh3036';
 
 const DISPLAY_DURATION_SECONDS = 6;
 const DEFAULT_SAMPLE_RATE = 25;
@@ -41,6 +44,28 @@ const MonitorTab: React.FC = () => {
     sampleRateConfig,
     setSampleRateConfig,
   } = useGh3036Store();
+
+  const [spo2RefDialogOpen, setSpo2RefDialogOpen] = useState(false);
+  const [hrRefDialogOpen, setHrRefDialogOpen] = useState(false);
+  const [hrRefMonitoring, setHrRefMonitoring] = useState(false);
+  const [hrRefCollectedCount, setHrRefCollectedCount] = useState(0);
+  const [hrRefCurrentValue, setHrRefCurrentValue] = useState<number | null>(null);
+
+  const handleSpo2RefConfirm = async (value: number) => {
+    await gh3036Api.setSpo2Ref([value]);
+  };
+
+  const handleHrRefDeviceSelect = async (deviceAddress: string) => {
+    setHrRefMonitoring(true);
+    setHrRefCollectedCount(0);
+    setHrRefCurrentValue(null);
+    try {
+      await gh3036Api.startHrRefMonitor(deviceAddress);
+    } catch (err) {
+      setHrRefMonitoring(false);
+      throw err;
+    }
+  };
 
   const sampleRate = useMemo(() => {
     if (selectedFunctionId === null) return DEFAULT_SAMPLE_RATE;
@@ -159,6 +184,8 @@ const MonitorTab: React.FC = () => {
             status="normal"
             icon={<HeartOutlined />}
             confidence={vitalSigns.hrConfidence}
+            onConfig={() => setHrRefDialogOpen(true)}
+            configLabel={t('monitor.hrRefConfig')}
           />
         </Col>
         <Col xs={12} sm={6}>
@@ -171,6 +198,8 @@ const MonitorTab: React.FC = () => {
             confidence={vitalSigns.spo2Confidence}
             subValue={vitalSigns.spo2RValue}
             subLabel="R"
+            onConfig={() => setSpo2RefDialogOpen(true)}
+            configLabel={t('monitor.spo2RefConfig')}
           />
         </Col>
         <Col xs={12} sm={6}>
@@ -263,6 +292,28 @@ const MonitorTab: React.FC = () => {
           <Empty description={t('monitor.noGsensorData')} style={{ marginTop: 60 }} />
         )}
       </Card>
+
+      <Spo2RefInputDialog
+        open={spo2RefDialogOpen}
+        initialValue={vitalSigns.spo2 ?? 95}
+        onConfirm={handleSpo2RefConfirm}
+        onCancel={() => setSpo2RefDialogOpen(false)}
+      />
+
+      <HrRefDeviceDialog
+        open={hrRefDialogOpen}
+        onSelect={handleHrRefDeviceSelect}
+        onCancel={() => {
+          setHrRefDialogOpen(false);
+          if (hrRefMonitoring) {
+            gh3036Api.stopHrRefMonitor().catch(console.error);
+            setHrRefMonitoring(false);
+          }
+        }}
+        isMonitoring={hrRefMonitoring}
+        currentHrValue={hrRefCurrentValue}
+        collectedCount={hrRefCollectedCount}
+      />
     </div>
   );
 };

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Card, Typography, theme, Progress } from 'antd';
+import { useTranslation } from 'react-i18next';
 
 const { Text } = Typography;
 
@@ -25,6 +26,7 @@ const VitalSignCard: React.FC<VitalSignCardProps> = ({
   subLabel,
 }) => {
   const { token } = theme.useToken();
+  const { t } = useTranslation('gh3036');
 
   const getStatusColor = () => {
     switch (status) {
@@ -95,7 +97,7 @@ const VitalSignCard: React.FC<VitalSignCardProps> = ({
       {confidence !== null && confidence !== undefined && (
         <div style={{ marginTop: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-            <Text type="secondary" style={{ fontSize: 11 }}>置信度</Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>{t('monitor.confidence')}</Text>
             <Text style={{ fontSize: 11, color: getConfidenceColor(confidence) }}>
               {confidence.toFixed(0)}%
             </Text>

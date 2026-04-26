@@ -74,9 +74,9 @@ interface Gh3036State {
     spo2: number | null;
     spo2RValue: number | null;
     spo2Confidence: number | null;
-    adt: string | null;
+    adt: number | null;
     adtConfidence: number | null;
-    gnadt: string | null;
+    gnadt: number | null;
     gnadtConfidence: number | null;
   };
   
@@ -415,14 +415,14 @@ export const useGh3036Store = create<Gh3036State>()(
         case 0:
           newVitalSigns = { 
             ...newVitalSigns, 
-            adt: lastAlgoResult[0] === 1 ? '佩戴' : '未佩戴',
+            adt: lastAlgoResult[0] ?? null,
             adtConfidence: lastAlgoResult[1] ?? null,
           };
           break;
         case 4:
           newVitalSigns = { 
             ...newVitalSigns, 
-            gnadt: lastAlgoResult[0] === 1 ? '活体' : '非活体',
+            gnadt: lastAlgoResult[0] ?? null,
             gnadtConfidence: lastAlgoResult[1] ?? null,
           };
           break;
@@ -451,9 +451,14 @@ export const useGh3036Store = create<Gh3036State>()(
     },
     vitalSigns: {
       hr: null,
+      hrConfidence: null,
       spo2: null,
+      spo2RValue: null,
+      spo2Confidence: null,
       adt: null,
+      adtConfidence: null,
       gnadt: null,
+      gnadtConfidence: null,
     },
   }),
   

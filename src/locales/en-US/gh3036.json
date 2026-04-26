@@ -12,11 +12,19 @@
     "adt": "Wear Status",
     "gnadt": "Liveness",
     "ipdPaChart": "IPD/PA Data Trend",
+    "rawdataChart": "Rawdata Data Trend",
     "gsensorChart": "Accelerometer Data",
     "selectFunction": "Select Function",
     "clearData": "Clear Data",
     "noData": "No Data",
-    "noGsensorData": "No Accelerometer Data"
+    "noGsensorData": "No Accelerometer Data",
+    "confidence": "Confidence",
+    "ipd": "IPD",
+    "rawdata": "Rawdata",
+    "adtWear": "Wearing",
+    "adtNotWear": "Not Wearing",
+    "gnadtLive": "Live",
+    "gnadtNotLive": "Not Live"
   },
   "version": {
     "title": "Device Version Info",

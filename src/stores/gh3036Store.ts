@@ -72,6 +72,7 @@ interface Gh3036State {
     hr: number | null;
     hrConfidence: number | null;
     spo2: number | null;
+    spo2RValue: number | null;
     spo2Confidence: number | null;
     adt: string | null;
     adtConfidence: number | null;
@@ -256,6 +257,7 @@ export const useGh3036Store = create<Gh3036State>()(
     hr: null,
     hrConfidence: null,
     spo2: null,
+    spo2RValue: null,
     spo2Confidence: null,
     adt: null,
     adtConfidence: null,
@@ -406,6 +408,7 @@ export const useGh3036Store = create<Gh3036State>()(
           newVitalSigns = { 
             ...newVitalSigns, 
             spo2: lastAlgoResult[0] ?? null,
+            spo2RValue: lastAlgoResult[1] ?? null,
             spo2Confidence: lastAlgoResult[2] ?? null,
           };
           break;
@@ -1091,9 +1094,19 @@ export const useGh3036Store = create<Gh3036State>()(
 {
   name: 'gh3036-chart-settings',
   partialize: (state) => ({
-    chartLegendSelected: state.chartLegendSelected,
-    ipdRawDataType: state.ipdRawDataType,
+    chartLegendSelected: state.chartLegendSelected || {},
+    ipdRawDataType: state.ipdRawDataType || 'ipd',
   }),
+  onRehydrateStorage: () => (state) => {
+    if (state) {
+      if (!state.chartLegendSelected) {
+        state.chartLegendSelected = {};
+      }
+      if (!state.ipdRawDataType) {
+        state.ipdRawDataType = 'ipd';
+      }
+    }
+  },
 }
   )
 );

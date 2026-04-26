@@ -254,10 +254,11 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
     ];
 
     const legendSelected: Record<string, boolean> = {};
+    const selectedState = chartLegendSelected || {};
     seriesData.forEach((s) => {
       const key = `${group.name}_${s.name}`;
-      if (chartLegendSelected[key] !== undefined) {
-        legendSelected[s.name] = chartLegendSelected[key];
+      if (selectedState[key] !== undefined) {
+        legendSelected[s.name] = selectedState[key];
       }
     });
 

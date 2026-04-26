@@ -155,6 +155,7 @@ struct GlobalContext {
     csv_writers: Mutex<HashMap<i32, CsvWriter>>,
     ref_data_manager: Arc<RefDataManager>,
     event_bus: Mutex<Option<Arc<EventBus>>>,
+    last_frame_time: Mutex<Option<std::time::Instant>>,
 }
 
 impl GlobalContext {
@@ -171,6 +172,7 @@ impl GlobalContext {
             csv_writers: Mutex::new(HashMap::new()),
             ref_data_manager,
             event_bus: Mutex::new(None),
+            last_frame_time: Mutex::new(None),
         }
     }
 
@@ -228,6 +230,10 @@ impl GlobalContext {
     }
 
     fn add_frame_to_aggregator(&self, frame: &GhFuncFrame) -> Option<Gh3036FramesEvent> {
+        {
+            let mut last_frame_time = self.last_frame_time.lock();
+            *last_frame_time = Some(std::time::Instant::now());
+        }
         let mut aggregator = self.frame_aggregator.lock();
         aggregator.add_frame(frame)
     }
@@ -284,6 +290,22 @@ impl GlobalContext {
         use super::types::Gh3036RefDataEvent;
         use std::time::Duration;
 
+        let last_frame_time = self.last_frame_time.lock();
+        match *last_frame_time {
+            Some(last_time) => {
+                let elapsed = last_time.elapsed();
+                if elapsed >= Duration::from_secs(4) {
+                    debug!("[GH3036] 金标数据发布已停止: frames 事件超时 {}秒", elapsed.as_secs());
+                    return;
+                }
+            }
+            None => {
+                debug!("[GH3036] 金标数据发布已停止: 无 frames 事件");
+                return;
+            }
+        }
+        drop(last_frame_time);
+
         let event_bus = self.event_bus.lock();
         if let Some(bus) = event_bus.as_ref() {
             let (hr_values, hr_count, hr_elapsed) = self.ref_data_manager.get_hr_ref_status();
@@ -293,6 +315,12 @@ impl GlobalContext {
             let hr_valid = hr_count > 0 && hr_elapsed < Duration::from_secs(4);
             let hrv_valid = hrv_count > 0 && hrv_elapsed < Duration::from_secs(4);
             let spo2_valid = spo2_count > 0;
+
+            let has_valid_ref_data = hr_valid || hrv_valid || spo2_valid;
+            if !has_valid_ref_data {
+                debug!("[GH3036] 金标数据发布已停止: 无有效金标数据");
+                return;
+            }
 
             let event = Gh3036RefDataEvent {
                 hr_values,

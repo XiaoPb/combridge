@@ -1,5 +1,6 @@
 import React from 'react';
-import { Card, Typography, theme, Progress } from 'antd';
+import { Card, Typography, theme, Progress, Button, Space } from 'antd';
+import { SettingOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 
 const { Text } = Typography;
@@ -13,6 +14,8 @@ interface VitalSignCardProps {
   confidence?: number | null;
   subValue?: number | null;
   subLabel?: string;
+  onConfig?: () => void;
+  configLabel?: string;
 }
 
 const VitalSignCard: React.FC<VitalSignCardProps> = ({
@@ -24,6 +27,8 @@ const VitalSignCard: React.FC<VitalSignCardProps> = ({
   confidence,
   subValue,
   subLabel,
+  onConfig,
+  configLabel,
 }) => {
   const { token } = theme.useToken();
   const { t } = useTranslation('gh3036');
@@ -67,11 +72,23 @@ const VitalSignCard: React.FC<VitalSignCardProps> = ({
         },
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        {icon && <span style={{ color: getStatusColor() }}>{icon}</span>}
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          {title}
-        </Text>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {icon && <span style={{ color: getStatusColor() }}>{icon}</span>}
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {title}
+          </Text>
+        </div>
+        {onConfig && (
+          <Button
+            type="text"
+            size="small"
+            icon={<SettingOutlined />}
+            onClick={onConfig}
+            title={configLabel || t('monitor.configRef')}
+            style={{ color: token.colorTextSecondary }}
+          />
+        )}
       </div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
         <Text

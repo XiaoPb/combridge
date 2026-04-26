@@ -97,6 +97,36 @@ export const gh3036Api = {
   async loadConfigFile(filePath: string): Promise<string[]> {
     return invoke<string[]>('gh3036_load_config_file', { filePath });
   },
+
+  async setSpo2Ref(values: number[]): Promise<void> {
+    await invoke<void>('gh3036_set_spo2_ref', { values });
+  },
+
+  async setHrRef(values: number[]): Promise<void> {
+    await invoke<void>('gh3036_set_hr_ref', { values });
+  },
+
+  async clearSpo2Ref(): Promise<void> {
+    await invoke<void>('gh3036_clear_spo2_ref');
+  },
+
+  async clearHrRef(): Promise<void> {
+    await invoke<void>('gh3036_clear_hr_ref');
+  },
+
+  async getRefDataStatus(): Promise<{
+    hr_valid: boolean;
+    hr_count: number;
+    hr_values: number[];
+    hrv_valid: boolean;
+    hrv_count: number;
+    hrv_values: number[];
+    spo2_valid: boolean;
+    spo2_count: number;
+    spo2_values: number[];
+  }> {
+    return invoke('gh3036_get_ref_data_status');
+  },
 };
 
 export const factoryTestApi = {

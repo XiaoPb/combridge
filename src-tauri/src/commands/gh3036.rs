@@ -2,7 +2,7 @@ use tauri::State;
 
 use crate::error::{ComBridgeError, ErrorResponse};
 use crate::gh3036::{
-    ChannelConfig, ChannelType, FactoryTestResult,
+    ChannelConfig, ChannelType, CsvConfig, FactoryTestResult,
     FactoryTestStep, FactoryTestStatus, Gh3036ManagerRef, RpcCommand, VersionTypeConfig,
     ConfigValidationResult, ThresholdConfigValidation, FactoryThresholdConfig,
     FactoryEvaluationResult,
@@ -102,6 +102,25 @@ pub async fn gh3036_send_data(
         .send_data(&data)
         .await
         .map_err(|e| ComBridgeError::protocol(e).to_error_response())
+}
+
+#[tauri::command]
+pub async fn gh3036_set_csv_config(
+    enabled: bool,
+    output_dir: String,
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(), ErrorResponse> {
+    let config = CsvConfig { enabled, output_dir };
+    manager
+        .set_csv_config(config)
+        .map_err(|e| ComBridgeError::protocol(e).to_error_response())
+}
+
+#[tauri::command]
+pub async fn gh3036_get_csv_config(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<CsvConfig, ErrorResponse> {
+    Ok(manager.get_csv_config())
 }
 
 #[tauri::command]

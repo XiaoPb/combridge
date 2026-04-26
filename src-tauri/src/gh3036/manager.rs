@@ -5,8 +5,10 @@
 //! - RPC 命令执行（基于 gh-rpc 库）
 //! - RX 数据处理（通过 EventBus 订阅）
 //! - 聚合帧发布到前端
+//! - CSV 数据保存
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -16,6 +18,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::device::DeviceManager;
 use crate::service::{EventBus, topics, SerialDataEvent, BleDataEvent, SerialDisconnectedEvent, BleConnectionEvent};
+use super::csv_writer::CsvWriter;
 use super::factory_test::FactoryTestManager;
 use super::types::{GhFuncFrame, Gh3036FramesEvent, GhFuncFixIdx,
     FactoryTestStep, FactoryTestStatus, FactoryTestResult, ConfigValidationResult,
@@ -55,6 +58,28 @@ pub struct ChannelConfig {
     pub channel_type: ChannelType,
     pub device_id: String,
     pub characteristic_uuid: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CsvConfig {
+    pub enabled: bool,
+    pub output_dir: String,
+}
+
+impl Default for CsvConfig {
+    fn default() -> Self {
+        let output_dir = std::env::current_exe()
+            .ok()
+            .and_then(|exe_path| exe_path.parent().map(|p| p.to_path_buf()))
+            .map(|exe_dir| exe_dir.join("data"))
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| String::from("data"));
+        
+        Self {
+            enabled: false,
+            output_dir,
+        }
+    }
 }
 
 struct RpcDataRequest {
@@ -121,6 +146,8 @@ struct GlobalContext {
     rpc_data_sender: Mutex<Option<crossbeam_channel::Sender<RpcDataRequest>>>,
     frame_aggregator: Mutex<FrameAggregator>,
     runtime_handle: Mutex<Option<Handle>>,
+    csv_config: Mutex<CsvConfig>,
+    csv_writers: Mutex<HashMap<i32, CsvWriter>>,
 }
 
 impl GlobalContext {
@@ -132,6 +159,8 @@ impl GlobalContext {
             rpc_data_sender: Mutex::new(None),
             frame_aggregator: Mutex::new(FrameAggregator::new()),
             runtime_handle: Mutex::new(None),
+            csv_config: Mutex::new(CsvConfig::default()),
+            csv_writers: Mutex::new(HashMap::new()),
         }
     }
 
@@ -186,6 +215,37 @@ impl GlobalContext {
     fn add_frame_to_aggregator(&self, frame: &GhFuncFrame) -> Option<Gh3036FramesEvent> {
         let mut aggregator = self.frame_aggregator.lock();
         aggregator.add_frame(frame)
+    }
+
+    fn set_csv_config(&self, config: CsvConfig) {
+        let mut csv_config = self.csv_config.lock();
+        *csv_config = config;
+    }
+
+    fn get_csv_config(&self) -> CsvConfig {
+        self.csv_config.lock().clone()
+    }
+
+    fn save_frames_to_csv(&self, frames: &Gh3036FramesEvent) {
+        let csv_config = self.csv_config.lock();
+        if !csv_config.enabled {
+            return;
+        }
+
+        let mut writers = self.csv_writers.lock();
+        let function_id = frames.function_id;
+
+        let writer = writers.entry(function_id).or_insert_with(|| {
+            CsvWriter::new(
+                PathBuf::from(&csv_config.output_dir),
+                function_id,
+                frames.function_name.clone(),
+            )
+        });
+
+        if let Err(e) = writer.write_frames(frames) {
+            error!("CSV 写入失败: {}", e);
+        }
     }
 }
 
@@ -381,6 +441,7 @@ impl Gh3036Manager {
                     aggregated.frame_count,
                     aggregated.channel_count
                 );
+                CALLBACK_CONTEXT.save_frames_to_csv(&aggregated);
                 event_bus.publish_msgpack("gh3036:frames", &aggregated);
             }
         });
@@ -504,6 +565,16 @@ impl Gh3036Manager {
 
     pub fn get_rx_channel(&self) -> Option<ChannelConfig> {
         CALLBACK_CONTEXT.get_rx_channel()
+    }
+
+    pub fn set_csv_config(&self, config: CsvConfig) -> Result<(), String> {
+        CALLBACK_CONTEXT.set_csv_config(config);
+        info!("GH3036 CSV 配置更新成功");
+        Ok(())
+    }
+
+    pub fn get_csv_config(&self) -> CsvConfig {
+        CALLBACK_CONTEXT.get_csv_config()
     }
 
     pub async fn send_data(&self, data: &[u8]) -> Result<(), String> {

@@ -168,6 +168,13 @@ impl BleAdapter {
     }
 
     pub async fn connect_device(&self, address: &str) -> Result<Arc<GattClient>> {
+        if let Some(client) = self.get_client(address) {
+            if client.is_connected()? {
+                info!("设备已连接，复用现有连接: {}", address);
+                return Ok(client);
+            }
+        }
+
         let device = self
             .get_device(address)
             .ok_or_else(|| ComBridgeError::ble(format!("设备未找到: {}", address)))?;

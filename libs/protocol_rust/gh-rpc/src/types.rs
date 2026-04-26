@@ -245,6 +245,7 @@ pub struct GhFuncFrame {
     pub fifo_end_flag: u8,
     pub led_drv_fs: [u8; 2],
     pub data: Vec<GhFrameData>,
+    pub algo_data: Vec<i32>,
 }
 
 impl GhFuncFrame {
@@ -291,11 +292,12 @@ impl GhFuncFrame {
             fifo_end_flag,
             led_drv_fs,
             data: frames,
+            algo_data: Vec::new(),
         })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut result = Vec::with_capacity(25 + self.data.len() * 17);
+        let mut result = Vec::with_capacity(25 + self.data.len() * 17 + self.algo_data.len() * 4);
 
         result.extend_from_slice(&self.frame_cnt.to_le_bytes());
         result.extend_from_slice(&self.timestamp.to_le_bytes());
@@ -309,6 +311,10 @@ impl GhFuncFrame {
 
         for frame in &self.data {
             result.extend_from_slice(&frame.to_bytes(self.led_drv_fs[0]));
+        }
+
+        for algo in &self.algo_data {
+            result.extend_from_slice(&algo.to_le_bytes());
         }
 
         result

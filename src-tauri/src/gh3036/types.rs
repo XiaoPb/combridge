@@ -627,7 +627,7 @@ impl Gh3036FramesEvent {
         self.gyro_y.push(0);
         self.gyro_z.push(0);
         
-        self.algo_results.push(Vec::new());
+        self.algo_results.push(frame.algo_data.clone());
         
         self.led_drv_fs.push(frame.led_drv_fs);
         

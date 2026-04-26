@@ -1313,6 +1313,13 @@ impl Gh3036Manager {
             },
         }
     }
+
+    pub fn init_hr_ref_monitor(&self) {
+        let ble_manager = self.device_manager.ble_manager.clone();
+        let ref_data_manager = CALLBACK_CONTEXT.ref_data_manager.clone();
+        super::hr_ref_monitor::init_hr_ref_monitor(ble_manager, ref_data_manager);
+        info!("[Gh3036Manager] HR金标监听器初始化完成");
+    }
 }
 
 impl Drop for Gh3036Manager {

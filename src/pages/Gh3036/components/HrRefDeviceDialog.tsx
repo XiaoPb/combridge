@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Modal, Table, Button, Space, Tag, Progress, Typography, Empty, message, Spin } from 'antd';
+import { Modal, Table, Button, Space, Tag, Progress, Typography, Empty, message } from 'antd';
 import { SearchOutlined, StopOutlined, HeartOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { bleApi } from '../../../api/tauri';
-import { BLE_SERVICE_UUID, BLE_CHARACTERISTIC_UUID, getServiceName } from '../../../types/ble';
-import type { BleDeviceInfo, BleConnection, BleCharacteristic } from '../../../types';
+import { BLE_SERVICE_UUID } from '../../../types/ble';
+import type { BleDeviceInfo } from '../../../types';
 
 const { Text } = Typography;
 
@@ -18,7 +18,6 @@ interface HrRefDeviceDialogProps {
 }
 
 const HEART_RATE_SERVICE_UUID = BLE_SERVICE_UUID.HEART_RATE.toLowerCase();
-const HEART_RATE_MEASUREMENT_UUID = BLE_CHARACTERISTIC_UUID.HEART_RATE_MEASUREMENT.toLowerCase();
 
 const HrRefDeviceDialog: React.FC<HrRefDeviceDialogProps> = ({
   open,

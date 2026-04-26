@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Typography, theme, Progress, Button, Space } from 'antd';
+import { Card, Typography, theme, Progress, Button } from 'antd';
 import { SettingOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 

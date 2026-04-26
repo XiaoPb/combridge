@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Modal, Table, Button, Space, Tag, Progress, Typography, Empty, message } from 'antd';
 import { SearchOutlined, StopOutlined, HeartOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -18,6 +18,8 @@ interface HrRefDeviceDialogProps {
 }
 
 const HEART_RATE_SERVICE_UUID = BLE_SERVICE_UUID.HEART_RATE.toLowerCase();
+const SCAN_INTERVAL_MS = 1000;
+const MAX_SCAN_TIME_MS = 30000;
 
 const HrRefDeviceDialog: React.FC<HrRefDeviceDialogProps> = ({
   open,
@@ -32,34 +34,62 @@ const HrRefDeviceDialog: React.FC<HrRefDeviceDialogProps> = ({
   const [isScanning, setIsScanning] = useState(false);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [selectedDevice, setSelectedDevice] = useState<BleDeviceInfo | null>(null);
+  const [scanProgress, setScanProgress] = useState(0);
+  
+  const scanAbortRef = useRef<boolean>(false);
+  const scanTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const filterHrDevices = useCallback((scannedDevices: BleDeviceInfo[]): BleDeviceInfo[] => {
+    return scannedDevices.filter((device) => {
+      if (device.services && device.services.length > 0) {
+        return device.services.some(
+          (svc) => svc.toLowerCase().includes(HEART_RATE_SERVICE_UUID.replace(/-/g, ''))
+        );
+      }
+      return false;
+    });
+  }, []);
 
   const handleScan = useCallback(async () => {
     setIsScanning(true);
     setDevices([]);
+    setScanProgress(0);
+    scanAbortRef.current = false;
+    
+    const startTime = Date.now();
+    
     try {
-      const scannedDevices = await bleApi.scanBleDevices({ timeout: 10000 });
-      const hrDevices = scannedDevices.filter((device) => {
-        if (device.services && device.services.length > 0) {
-          return device.services.some(
-            (svc) => svc.toLowerCase().includes(HEART_RATE_SERVICE_UUID.replace(/-/g, ''))
-          );
-        }
-        return false;
-      });
-      setDevices(hrDevices);
+      while (!scanAbortRef.current && (Date.now() - startTime) < MAX_SCAN_TIME_MS) {
+        const scannedDevices = await bleApi.scanBleDevices({ timeout: SCAN_INTERVAL_MS });
+        
+        if (scanAbortRef.current) break;
+        
+        const hrDevices = filterHrDevices(scannedDevices);
+        setDevices(prev => {
+          const merged = new Map<string, BleDeviceInfo>();
+          prev.forEach(d => merged.set(d.address, d));
+          hrDevices.forEach(d => merged.set(d.address, d));
+          return Array.from(merged.values());
+        });
+        
+        const elapsed = Date.now() - startTime;
+        setScanProgress(Math.min(100, (elapsed / MAX_SCAN_TIME_MS) * 100));
+      }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : t('monitor.hrRefScanFailed');
-      message.error(errorMsg);
+      if (!scanAbortRef.current) {
+        const errorMsg = err instanceof Error ? err.message : t('monitor.hrRefScanFailed');
+        message.error(errorMsg);
+      }
     } finally {
       setIsScanning(false);
     }
-  }, [t]);
+  }, [filterHrDevices, t]);
 
-  const handleStopScan = useCallback(async () => {
-    try {
-      await bleApi.stopBleScan();
-    } catch (err) {
-      console.error('停止扫描失败:', err);
+  const handleStopScan = useCallback(() => {
+    scanAbortRef.current = true;
+    if (scanTimerRef.current) {
+      clearTimeout(scanTimerRef.current);
+      scanTimerRef.current = null;
     }
     setIsScanning(false);
   }, []);
@@ -143,7 +173,20 @@ const HrRefDeviceDialog: React.FC<HrRefDeviceDialogProps> = ({
     if (open && devices.length === 0 && !isScanning) {
       handleScan();
     }
+    if (!open) {
+      scanAbortRef.current = true;
+      setIsScanning(false);
+    }
   }, [open, devices.length, isScanning, handleScan]);
+
+  useEffect(() => {
+    return () => {
+      scanAbortRef.current = true;
+      if (scanTimerRef.current) {
+        clearTimeout(scanTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <Modal
@@ -216,8 +259,8 @@ const HrRefDeviceDialog: React.FC<HrRefDeviceDialogProps> = ({
 
       {isScanning && (
         <div style={{ marginBottom: 16 }}>
-          <Progress percent={100} status="active" showInfo={false} />
-          <Text type="secondary">{t('monitor.hrRefScanning')}</Text>
+          <Progress percent={Math.round(scanProgress)} status="active" showInfo={false} />
+          <Text type="secondary">{t('monitor.hrRefScanning')} ({Math.round(scanProgress)}%)</Text>
         </div>
       )}
 

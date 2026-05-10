@@ -26,6 +26,7 @@ pub struct ActionDispatcher {
     serial_manager: SerialManagerRef,
     ble_manager: BleManagerRef,
     last_save: Mutex<Option<Instant>>,
+    runtime_handle: tokio::runtime::Handle,
 }
 
 impl ActionDispatcher {
@@ -41,6 +42,7 @@ impl ActionDispatcher {
             serial_manager,
             ble_manager,
             last_save: Mutex::new(None),
+            runtime_handle: tokio::runtime::Handle::current(),
         }
     }
 
@@ -48,17 +50,17 @@ impl ActionDispatcher {
         info!("处理 Action: {}", action);
 
         let save_strategy = Self::get_save_strategy(&action);
-        
+
         let result = match action {
-            Action::DeviceAddSerial { id, name, baud_rate } => {
-                self.handle_device_add_serial(&id, &name, baud_rate).await
-            }
+            Action::DeviceAddSerial {
+                id,
+                name,
+                baud_rate,
+            } => self.handle_device_add_serial(&id, &name, baud_rate).await,
             Action::DeviceAddBle { id, name, mac } => {
                 self.handle_device_add_ble(&id, &name, &mac).await
             }
-            Action::DeviceRemove { device_id } => {
-                self.handle_device_remove(&device_id).await
-            }
+            Action::DeviceRemove { device_id } => self.handle_device_remove(&device_id).await,
             Action::DeviceConnect { device_id } => {
                 self.handle_device_connect(&device_id, app).await
             }
@@ -68,46 +70,59 @@ impl ActionDispatcher {
             Action::DeviceUpdateConfig { device_id, config } => {
                 self.handle_device_update_config(&device_id, config).await
             }
-            Action::ChannelAdd { device_id, channel_id, direction } => {
-                self.handle_channel_add(&device_id, &channel_id, &direction).await
+            Action::ChannelAdd {
+                device_id,
+                channel_id,
+                direction,
+            } => {
+                self.handle_channel_add(&device_id, &channel_id, &direction)
+                    .await
             }
-            Action::ChannelSubscribe { device_id, channel_id, subscribe } => {
-                self.handle_channel_subscribe(&device_id, &channel_id, subscribe).await
+            Action::ChannelSubscribe {
+                device_id,
+                channel_id,
+                subscribe,
+            } => {
+                self.handle_channel_subscribe(&device_id, &channel_id, subscribe)
+                    .await
             }
-            Action::DataSend { device_id, channel_id, data } => {
-                self.handle_data_send(&device_id, &channel_id, &data, app).await
+            Action::DataSend {
+                device_id,
+                channel_id,
+                data,
+            } => {
+                self.handle_data_send(&device_id, &channel_id, &data, app)
+                    .await
             }
-            Action::DataReceive { device_id, channel_id, data } => {
-                self.handle_data_receive(&device_id, &channel_id, &data).await
+            Action::DataReceive {
+                device_id,
+                channel_id,
+                data,
+            } => {
+                self.handle_data_receive(&device_id, &channel_id, &data)
+                    .await
             }
-            Action::BufferClear { device_id, channel_id } => {
-                self.handle_buffer_clear(&device_id, &channel_id).await
-            }
-            Action::DeviceSwitch { device_id } => {
-                self.handle_device_switch(&device_id).await
-            }
-            Action::TabAdd { device_id, channel_id, label } => {
-                self.handle_tab_add(&device_id, channel_id, &label).await
-            }
-            Action::TabRemove { tab_key } => {
-                self.handle_tab_remove(&tab_key).await
-            }
-            Action::TabSwitch { tab_key } => {
-                self.handle_tab_switch(&tab_key).await
-            }
-            Action::SettingsUpdate { settings } => {
-                self.handle_settings_update(settings).await
-            }
-            Action::StateRestore { window_state } => {
-                self.handle_state_restore(window_state).await
-            }
+            Action::BufferClear {
+                device_id,
+                channel_id,
+            } => self.handle_buffer_clear(&device_id, &channel_id).await,
+            Action::DeviceSwitch { device_id } => self.handle_device_switch(&device_id).await,
+            Action::TabAdd {
+                device_id,
+                channel_id,
+                label,
+            } => self.handle_tab_add(&device_id, channel_id, &label).await,
+            Action::TabRemove { tab_key } => self.handle_tab_remove(&tab_key).await,
+            Action::TabSwitch { tab_key } => self.handle_tab_switch(&tab_key).await,
+            Action::SettingsUpdate { settings } => self.handle_settings_update(settings).await,
+            Action::StateRestore { window_state } => self.handle_state_restore(window_state).await,
         };
 
         if result.success {
             self.broadcast_state_change(app).await;
             self.save_with_strategy(save_strategy).await;
         }
-        
+
         result
     }
 
@@ -206,14 +221,16 @@ impl ActionDispatcher {
         let state = self.state.clone();
         let device_id_owned = device_id.to_string();
         let app_clone = app.clone();
+        let handle = self.runtime_handle.clone();
 
-        match self.serial_manager.open_port(port_config, move |_name, data| {
-            let state = state.clone();
-            let device_id = device_id_owned.clone();
-            let app = app_clone.clone();
-            let data = data.to_vec();
+        match self
+            .serial_manager
+            .open_port(port_config, move |_name, data| {
+                let state = state.clone();
+                let device_id = device_id_owned.clone();
+                let app = app_clone.clone();
+                let data = data.to_vec();
 
-            if let Ok(handle) = tokio::runtime::Handle::try_current() {
                 handle.spawn(async move {
                     let mut state = state.write().await;
                     state.add_serial_rx_data(&device_id, &data);
@@ -221,8 +238,7 @@ impl ActionDispatcher {
 
                     let _ = app.emit(STATE_CHANGE_EVENT, ());
                 });
-            }
-        }) {
+            }) {
             Ok(()) => ActionResult::success_with_message(format!("串口 {} 已连接", port_name)),
             Err(e) => ActionResult::failure(format!("连接串口失败: {}", e)),
         }
@@ -290,7 +306,9 @@ impl ActionDispatcher {
                 };
                 match port_name {
                     Some(name) => match self.serial_manager.close_port(&name) {
-                        Ok(()) => ActionResult::success_with_message(format!("串口 {} 已断开", name)),
+                        Ok(()) => {
+                            ActionResult::success_with_message(format!("串口 {} 已断开", name))
+                        }
                         Err(e) => ActionResult::failure(format!("断开串口失败: {}", e)),
                     },
                     None => ActionResult::failure(format!("串口设备不存在: {}", device_id)),
@@ -308,7 +326,11 @@ impl ActionDispatcher {
         result
     }
 
-    async fn handle_device_update_config(&self, device_id: &str, config: serde_json::Value) -> ActionResult {
+    async fn handle_device_update_config(
+        &self,
+        device_id: &str,
+        config: serde_json::Value,
+    ) -> ActionResult {
         let device_type = {
             let state = self.state.read().await;
             match state.get_device(device_id) {
@@ -322,14 +344,21 @@ impl ActionDispatcher {
 
         match device_type {
             "serial" => {
-                let baud_rate = config.get("baudRate").and_then(|v| v.as_u64()).unwrap_or(115200) as u32;
+                let baud_rate = config
+                    .get("baudRate")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(115200) as u32;
                 let data_bits = match config.get("dataBits").and_then(|v| v.as_u64()).unwrap_or(8) {
                     5 => DataBits::Five,
                     6 => DataBits::Six,
                     7 => DataBits::Seven,
                     _ => DataBits::Eight,
                 };
-                let parity = match config.get("parity").and_then(|v| v.as_str()).unwrap_or("none") {
+                let parity = match config
+                    .get("parity")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("none")
+                {
                     "odd" => Parity::Odd,
                     "even" => Parity::Even,
                     _ => Parity::None,
@@ -362,7 +391,12 @@ impl ActionDispatcher {
         }
     }
 
-    async fn handle_channel_add(&self, device_id: &str, channel_id: &str, direction: &str) -> ActionResult {
+    async fn handle_channel_add(
+        &self,
+        device_id: &str,
+        channel_id: &str,
+        direction: &str,
+    ) -> ActionResult {
         let direction = match direction {
             "read" => ChannelDirection::Read,
             "write" => ChannelDirection::Write,
@@ -378,7 +412,12 @@ impl ActionDispatcher {
         }
     }
 
-    async fn handle_channel_subscribe(&self, device_id: &str, channel_id: &str, subscribe: bool) -> ActionResult {
+    async fn handle_channel_subscribe(
+        &self,
+        device_id: &str,
+        channel_id: &str,
+        subscribe: bool,
+    ) -> ActionResult {
         let mut state = self.state.write().await;
         if state.set_channel_subscribed(device_id, channel_id, subscribe) {
             ActionResult::success()
@@ -387,7 +426,13 @@ impl ActionDispatcher {
         }
     }
 
-    async fn handle_data_send(&self, device_id: &str, channel_id: &str, data: &[u8], app: &AppHandle) -> ActionResult {
+    async fn handle_data_send(
+        &self,
+        device_id: &str,
+        channel_id: &str,
+        data: &[u8],
+        app: &AppHandle,
+    ) -> ActionResult {
         let device_type = {
             let state = self.state.read().await;
             match state.get_device(device_id) {
@@ -407,7 +452,9 @@ impl ActionDispatcher {
                 };
                 match port_name {
                     Some(name) => match self.serial_manager.send_data(&name, data) {
-                        Ok(bytes) => ActionResult::success_with_data(serde_json::json!({ "bytesSent": bytes })),
+                        Ok(bytes) => ActionResult::success_with_data(
+                            serde_json::json!({ "bytesSent": bytes }),
+                        ),
                         Err(e) => ActionResult::failure(format!("发送数据失败: {}", e)),
                     },
                     None => ActionResult::failure(format!("串口设备不存在: {}", device_id)),
@@ -418,7 +465,9 @@ impl ActionDispatcher {
                     let state = self.state.read().await;
                     match state.get_ble_device(device_id) {
                         Some(bd) => bd.mac.clone(),
-                        None => return ActionResult::failure(format!("BLE 设备不存在: {}", device_id)),
+                        None => {
+                            return ActionResult::failure(format!("BLE 设备不存在: {}", device_id))
+                        }
                     }
                 };
 
@@ -427,10 +476,19 @@ impl ActionDispatcher {
                     None => channel_id.to_string(),
                 };
 
-                match self.ble_manager.write_characteristic(&address, &char_uuid, data).await {
-                    Ok(()) => ActionResult::success_with_data(serde_json::json!({ "bytesSent": data.len() })),
+                match self
+                    .ble_manager
+                    .write_characteristic(&address, &char_uuid, data)
+                    .await
+                {
+                    Ok(()) => ActionResult::success_with_data(
+                        serde_json::json!({ "bytesSent": data.len() }),
+                    ),
                     Err(e) => {
-                        error!("BLE 发送数据失败 (设备: {}, 特征: {}): {}", address, char_uuid, e);
+                        error!(
+                            "BLE 发送数据失败 (设备: {}, 特征: {}): {}",
+                            address, char_uuid, e
+                        );
                         ActionResult::failure(format!("BLE 发送数据失败: {}", e))
                     }
                 }
@@ -452,7 +510,12 @@ impl ActionDispatcher {
         result
     }
 
-    async fn handle_data_receive(&self, device_id: &str, channel_id: &str, data: &[u8]) -> ActionResult {
+    async fn handle_data_receive(
+        &self,
+        device_id: &str,
+        channel_id: &str,
+        data: &[u8],
+    ) -> ActionResult {
         let mut state = self.state.write().await;
         if state.add_data_to_channel(device_id, channel_id, data) {
             ActionResult::success()
@@ -479,7 +542,12 @@ impl ActionDispatcher {
         }
     }
 
-    async fn handle_tab_add(&self, device_id: &str, channel_id: Option<String>, label: &str) -> ActionResult {
+    async fn handle_tab_add(
+        &self,
+        device_id: &str,
+        channel_id: Option<String>,
+        label: &str,
+    ) -> ActionResult {
         let mut state = self.state.write().await;
         let tab_key = state.add_tab(device_id.to_string(), channel_id, label.to_string());
         ActionResult::success_with_data(serde_json::json!({ "tabKey": tab_key }))
@@ -601,5 +669,10 @@ pub fn create_action_dispatcher(
     serial_manager: SerialManagerRef,
     ble_manager: BleManagerRef,
 ) -> ActionDispatcherRef {
-    Arc::new(ActionDispatcher::new(state, persistence, serial_manager, ble_manager))
+    Arc::new(ActionDispatcher::new(
+        state,
+        persistence,
+        serial_manager,
+        ble_manager,
+    ))
 }

@@ -3,12 +3,14 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use tracing::{debug, error, info, warn};
 
-use crate::error::{ComBridgeError, Result};
 use super::serial_config::{PortInfo, SerialPortConfig};
 use super::serial_port::{scan_ports, SerialPort};
-use crate::device::cache::{ChannelCache, RingBufferRef, create_ring_buffer};
-use crate::service::event_bus::{EventBus, SerialDataEvent, SerialConnectedEvent, SerialDisconnectedEvent};
+use crate::device::cache::{create_ring_buffer, ChannelCache, RingBufferRef};
+use crate::error::{ComBridgeError, Result};
 use crate::service::event_bus::topics;
+use crate::service::event_bus::{
+    EventBus, SerialConnectedEvent, SerialDataEvent, SerialDisconnectedEvent,
+};
 
 pub type DataCallback = Arc<dyn Fn(&str, &[u8]) + Send + Sync>;
 
@@ -53,20 +55,22 @@ impl SerialManager {
     {
         let port_name = config.port_name.clone();
 
-        {
-            let ports = self.ports.read()
-                .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
-            if ports.contains_key(&port_name) {
-                return Err(ComBridgeError::serial(format!(
-                    "串口 {} 已经打开",
-                    port_name
-                )));
-            }
+        let mut ports = self
+            .ports
+            .write()
+            .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
+        if ports.contains_key(&port_name) {
+            return Err(ComBridgeError::serial(format!(
+                "串口 {} 已经打开",
+                port_name
+            )));
         }
 
         let callback_arc: DataCallback = Arc::new(callback);
         {
-            let mut callbacks = self.callbacks.write()
+            let mut callbacks = self
+                .callbacks
+                .write()
                 .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
             callbacks.insert(port_name.clone(), Arc::clone(&callback_arc));
         }
@@ -74,13 +78,15 @@ impl SerialManager {
         let cache = SerialPortCache::new();
         let rx_buffer = Arc::clone(&cache.rx_buffer);
         {
-            let mut caches = self.caches.write()
+            let mut caches = self
+                .caches
+                .write()
                 .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
             caches.insert(port_name.clone(), cache);
         }
 
         let port = SerialPort::open(config)?;
-        
+
         let event_bus = Arc::clone(&self.event_bus);
         let callback_clone = Arc::clone(&callback_arc);
         port.start_read_loop(move |name, data| {
@@ -93,16 +99,13 @@ impl SerialManager {
         })?;
 
         let port = Arc::new(Mutex::new(port));
-
-        {
-            let mut ports = self.ports.write()
-                .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
-            ports.insert(port_name.clone(), Arc::clone(&port));
-        }
+        ports.insert(port_name.clone(), Arc::clone(&port));
+        drop(ports);
 
         let connected_event = SerialConnectedEvent::new(&port_name);
-        self.event_bus.publish_typed(topics::SERIAL_CONNECTED, &connected_event);
-        
+        self.event_bus
+            .publish_typed(topics::SERIAL_CONNECTED, &connected_event);
+
         info!("串口 {} 已打开并添加到管理器", port_name);
         Ok(())
     }
@@ -110,7 +113,9 @@ impl SerialManager {
     pub fn close_port(&self, port_name: &str) -> Result<()> {
         let port_name_owned = port_name.to_string();
         let port = {
-            let mut ports = self.ports.write()
+            let mut ports = self
+                .ports
+                .write()
                 .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
             ports
                 .remove(port_name)
@@ -118,14 +123,18 @@ impl SerialManager {
         };
 
         {
-            let mut callbacks = self.callbacks.write()
+            let mut callbacks = self
+                .callbacks
+                .write()
                 .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
             callbacks.remove(port_name);
             debug!("已移除串口 {} 的回调", port_name);
         }
 
         {
-            let mut caches = self.caches.write()
+            let mut caches = self
+                .caches
+                .write()
                 .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
             caches.remove(port_name);
             debug!("已清除串口 {} 的缓存", port_name);
@@ -136,7 +145,8 @@ impl SerialManager {
             .close()?;
 
         let disconnected_event = SerialDisconnectedEvent::new(&port_name_owned);
-        self.event_bus.publish_typed(topics::SERIAL_DISCONNECTED, &disconnected_event);
+        self.event_bus
+            .publish_typed(topics::SERIAL_DISCONNECTED, &disconnected_event);
 
         info!("串口 {} 已关闭并从管理器移除", port_name);
         Ok(())
@@ -144,7 +154,9 @@ impl SerialManager {
 
     pub fn close_all_ports(&self) -> Result<()> {
         let port_names: Vec<String> = {
-            let ports = self.ports.read()
+            let ports = self
+                .ports
+                .read()
                 .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
             ports.keys().cloned().collect()
         };
@@ -161,13 +173,20 @@ impl SerialManager {
 
     pub fn send_data(&self, port_name: &str, data: &[u8]) -> Result<usize> {
         let port = {
-            let ports = self.ports.read()
+            let ports = self
+                .ports
+                .read()
                 .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
-            ports.get(port_name).map(|p| Arc::clone(p)).ok_or_else(|| ComBridgeError::serial(format!("串口 {} 未打开", port_name)))?
+            ports
+                .get(port_name)
+                .map(|p| Arc::clone(p))
+                .ok_or_else(|| ComBridgeError::serial(format!("串口 {} 未打开", port_name)))?
         };
 
         {
-            let caches = self.caches.read()
+            let caches = self
+                .caches
+                .read()
                 .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
             if let Some(cache) = caches.get(port_name) {
                 if let Err(e) = cache.tx_buffer.write(data) {
@@ -177,7 +196,8 @@ impl SerialManager {
         }
 
         let result = {
-            let port_guard = port.lock()
+            let port_guard = port
+                .lock()
                 .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
             port_guard.write(data)
         };
@@ -185,13 +205,17 @@ impl SerialManager {
     }
 
     pub fn is_port_open(&self, port_name: &str) -> Result<bool> {
-        let ports = self.ports.read()
+        let ports = self
+            .ports
+            .read()
             .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
         Ok(ports.contains_key(port_name))
     }
 
     pub fn get_open_ports(&self) -> Result<Vec<String>> {
-        let ports = self.ports.read()
+        let ports = self
+            .ports
+            .read()
             .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
         Ok(ports.keys().cloned().collect())
     }
@@ -200,7 +224,9 @@ impl SerialManager {
     where
         F: Fn(&str, &[u8]) + Send + Sync + 'static,
     {
-        let mut callbacks = self.callbacks.write()
+        let mut callbacks = self
+            .callbacks
+            .write()
             .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
         callbacks.insert(port_name.to_string(), Arc::new(callback));
         debug!("已为串口 {} 注册数据回调", port_name);
@@ -208,7 +234,9 @@ impl SerialManager {
     }
 
     pub fn unregister_callback(&self, port_name: &str) -> Result<()> {
-        let mut callbacks = self.callbacks.write()
+        let mut callbacks = self
+            .callbacks
+            .write()
             .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
         if callbacks.remove(port_name).is_some() {
             debug!("已移除串口 {} 的数据回调", port_name);
@@ -217,7 +245,9 @@ impl SerialManager {
     }
 
     pub fn clear_callbacks(&self) -> Result<()> {
-        let mut callbacks = self.callbacks.write()
+        let mut callbacks = self
+            .callbacks
+            .write()
             .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
         callbacks.clear();
         debug!("已清除所有数据回调");
@@ -226,12 +256,17 @@ impl SerialManager {
 
     pub fn get_port_config(&self, port_name: &str) -> Result<SerialPortConfig> {
         let port = {
-            let ports = self.ports.read()
+            let ports = self
+                .ports
+                .read()
                 .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
-            ports.get(port_name).map(|p| Arc::clone(p))
+            ports
+                .get(port_name)
+                .map(|p| Arc::clone(p))
                 .ok_or_else(|| ComBridgeError::serial(format!("串口 {} 未打开", port_name)))?
         };
-        let config = port.lock()
+        let config = port
+            .lock()
             .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?
             .config()
             .clone();
@@ -239,9 +274,12 @@ impl SerialManager {
     }
 
     pub fn get_cache(&self, port_name: &str) -> Result<ChannelCache> {
-        let caches = self.caches.read()
+        let caches = self
+            .caches
+            .read()
             .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
-        let cache = caches.get(port_name)
+        let cache = caches
+            .get(port_name)
             .ok_or_else(|| ComBridgeError::serial(format!("串口 {} 缓存未找到", port_name)))?;
         Ok(ChannelCache {
             tx_cache: cache.tx_buffer.get_cache_data()?,
@@ -250,7 +288,9 @@ impl SerialManager {
     }
 
     pub fn clear_cache(&self, port_name: &str) -> Result<bool> {
-        let caches = self.caches.read()
+        let caches = self
+            .caches
+            .read()
             .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
         if let Some(cache) = caches.get(port_name) {
             cache.tx_buffer.clear()?;
@@ -263,7 +303,9 @@ impl SerialManager {
     }
 
     pub fn get_cache_size(&self, port_name: &str) -> Result<Option<(usize, usize)>> {
-        let caches = self.caches.read()
+        let caches = self
+            .caches
+            .read()
             .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
         match caches.get(port_name) {
             Some(cache) => Ok(Some((cache.tx_buffer.len()?, cache.rx_buffer.len()?))),
@@ -309,10 +351,12 @@ mod tests {
         let call_count = Arc::new(Mutex::new(0));
         let count_clone = Arc::clone(&call_count);
 
-        manager.register_callback("test_port", move |_name, _data| {
-            let mut count = count_clone.lock().unwrap();
-            *count += 1;
-        }).unwrap();
+        manager
+            .register_callback("test_port", move |_name, _data| {
+                let mut count = count_clone.lock().unwrap();
+                *count += 1;
+            })
+            .unwrap();
 
         manager.unregister_callback("test_port").unwrap();
     }

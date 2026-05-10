@@ -6,7 +6,7 @@ use tokio::sync::broadcast;
 
 use super::event_bus::{Event, EventBus, EventEncoding};
 
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 
 const HEARTBEAT_INTERVAL_SECS: u64 = 10;
 const POLL_INTERVAL_MS: u64 = 5;
@@ -63,6 +63,7 @@ pub struct EventBridge<R: Runtime> {
     forwarded_count: Arc<AtomicU64>,
     filtered_count: Arc<AtomicU64>,
     emit_failed_count: Arc<AtomicU64>,
+    thread_handle: Option<std::thread::JoinHandle<()>>,
 }
 
 impl<R: Runtime> EventBridge<R> {
@@ -76,6 +77,7 @@ impl<R: Runtime> EventBridge<R> {
             forwarded_count: Arc::new(AtomicU64::new(0)),
             filtered_count: Arc::new(AtomicU64::new(0)),
             emit_failed_count: Arc::new(AtomicU64::new(0)),
+            thread_handle: None,
         }
     }
 
@@ -85,6 +87,10 @@ impl<R: Runtime> EventBridge<R> {
     }
 
     pub fn start(&mut self) {
+        if self.running.load(Ordering::SeqCst) {
+            return;
+        }
+
         let receiver = self.event_bus.subscribe_channel();
         let app_handle = self.app_handle.clone();
         let filter = self.filter.clone();
@@ -95,7 +101,7 @@ impl<R: Runtime> EventBridge<R> {
         let emit_failed_count = self.emit_failed_count.clone();
         running.store(true, Ordering::SeqCst);
 
-        std::thread::Builder::new()
+        let handle = std::thread::Builder::new()
             .name("event-bridge".to_string())
             .spawn(move || {
                 Self::run_loop(
@@ -110,6 +116,8 @@ impl<R: Runtime> EventBridge<R> {
                 );
             })
             .expect("Failed to spawn event-bridge thread");
+
+        self.thread_handle = Some(handle);
     }
 
     fn run_loop(
@@ -170,10 +178,7 @@ impl<R: Runtime> EventBridge<R> {
                         return;
                     }
                     Err(broadcast::error::TryRecvError::Lagged(n)) => {
-                        tracing::warn!(
-                            "[EventBridge] Lagged behind by {} messages, continuing",
-                            n
-                        );
+                        tracing::warn!("[EventBridge] Lagged behind by {} messages, continuing", n);
                     }
                 }
             }
@@ -204,7 +209,9 @@ impl<R: Runtime> EventBridge<R> {
         let filt = filtered_count.load(Ordering::Relaxed);
         tracing::info!(
             "[EventBridge] Stopped (received={}, forwarded={}, filtered={})",
-            recv, fwd, filt
+            recv,
+            fwd,
+            filt
         );
     }
 
@@ -271,10 +278,7 @@ mod tests {
 
     #[test]
     fn test_event_filter_with_prefixes() {
-        let filter = EventFilter::with_prefixes(vec![
-            "serial:".to_string(),
-            "ble:".to_string(),
-        ]);
+        let filter = EventFilter::with_prefixes(vec!["serial:".to_string(), "ble:".to_string()]);
         assert!(filter.matches("serial:data"));
         assert!(filter.matches("ble:data"));
         assert!(!filter.matches("other:data"));

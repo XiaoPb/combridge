@@ -5,11 +5,11 @@ use bluest::{Characteristic, Device, Service};
 use futures::StreamExt;
 use tracing::{debug, error, info, warn};
 
-use crate::error::{ComBridgeError, Result};
 use super::super::ble_traits::{
     BleCharacteristic, BleCharacteristicProperties, BleService, NotifyCallback,
 };
-use crate::device::cache::{ChannelCache, RingBufferRef, create_ring_buffer};
+use crate::device::cache::{create_ring_buffer, ChannelCache, RingBufferRef};
+use crate::error::{ComBridgeError, Result};
 
 pub type DisconnectCallback = Arc<dyn Fn(&str) + Send + Sync>;
 
@@ -121,22 +121,33 @@ impl GattClient {
             callbacks.clear();
         }
 
-        info!("[{}] GattClient 状态已重置", extract_short_mac(&self.address));
+        info!(
+            "[{}] GattClient 状态已重置",
+            extract_short_mac(&self.address)
+        );
     }
 
     pub fn set_device(&self, device: Arc<Device>, adapter: Arc<bluest::Adapter>) -> Result<()> {
-        *self.device.write()
+        *self
+            .device
+            .write()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))? = Some(device);
-        *self.adapter.write()
+        *self
+            .adapter
+            .write()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))? = Some(adapter);
         Ok(())
     }
 
     pub fn is_connected(&self) -> Result<bool> {
-        let device = self.device.read()
+        let device = self
+            .device
+            .read()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
         if let Some(device) = device.as_ref() {
-            Ok(futures::executor::block_on(async { device.is_connected().await }))
+            Ok(tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async { device.is_connected().await })
+            }))
         } else {
             Ok(false)
         }
@@ -144,9 +155,13 @@ impl GattClient {
 
     pub async fn connect(&self) -> Result<()> {
         let (device, adapter) = {
-            let device = self.device.read()
+            let device = self
+                .device
+                .read()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
-            let adapter = self.adapter.read()
+            let adapter = self
+                .adapter
+                .read()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
             (
                 device
@@ -176,12 +191,17 @@ impl GattClient {
         if let Ok(mut monitor) = self.connection_monitor_handle.lock() {
             if let Some(handle) = monitor.take() {
                 handle.abort();
-                info!("[{}] 已停止旧的连接监控任务", extract_short_mac(&self.address));
+                info!(
+                    "[{}] 已停止旧的连接监控任务",
+                    extract_short_mac(&self.address)
+                );
             }
         }
 
         let device = {
-            let device_guard = self.device.read()
+            let device_guard = self
+                .device
+                .read()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)));
             match device_guard {
                 Ok(guard) => match guard.as_ref() {
@@ -203,7 +223,7 @@ impl GattClient {
         let handle = tokio::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
             info!("[{}] 连接监控任务已启动", extract_short_mac(&address));
-            
+
             let mut disconnect_count = 0;
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -212,7 +232,11 @@ impl GattClient {
                 if !connected {
                     disconnect_count += 1;
                     if disconnect_count >= 2 {
-                        info!("[{}] 检测到设备断开连接（连续{}次确认）", extract_short_mac(&address), disconnect_count);
+                        info!(
+                            "[{}] 检测到设备断开连接（连续{}次确认）",
+                            extract_short_mac(&address),
+                            disconnect_count
+                        );
                         if let Ok(cb_guard) = callback_arc.read() {
                             if let Some(cb) = cb_guard.as_ref() {
                                 cb(&address);
@@ -239,9 +263,13 @@ impl GattClient {
         }
 
         let (device, adapter) = {
-            let device = self.device.read()
+            let device = self
+                .device
+                .read()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
-            let adapter = self.adapter.read()
+            let adapter = self
+                .adapter
+                .read()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
             match (device.as_ref(), adapter.as_ref()) {
                 (Some(d), Some(a)) => (Some(d.clone()), Some(a.clone())),
@@ -257,22 +285,29 @@ impl GattClient {
         }
 
         {
-            let mut device_guard = self.device.write()
+            let mut device_guard = self
+                .device
+                .write()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
             *device_guard = None;
         }
 
-        self.services.write()
+        self.services
+            .write()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?
             .clear();
-        self.characteristics.write()
+        self.characteristics
+            .write()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?
             .clear();
-        self.caches.write()
+        self.caches
+            .write()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?
             .clear();
 
-        let mut handles = self.notify_handles.lock()
+        let mut handles = self
+            .notify_handles
+            .lock()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
         for (_, handle) in handles.drain() {
             handle.abort();
@@ -284,7 +319,9 @@ impl GattClient {
 
     pub async fn discover_services(&self) -> Result<Vec<BleService>> {
         let device = {
-            let device = self.device.read()
+            let device = self
+                .device
+                .read()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
             device
                 .as_ref()
@@ -316,7 +353,8 @@ impl GattClient {
             };
 
             let mut ble_chars: Vec<BleCharacteristic> = Vec::new();
-            let mut char_data: Vec<(String, Characteristic, BleCharacteristicProperties)> = Vec::new();
+            let mut char_data: Vec<(String, Characteristic, BleCharacteristicProperties)> =
+                Vec::new();
 
             for c in &chars {
                 let char_uuid = c.uuid().to_string();
@@ -346,7 +384,9 @@ impl GattClient {
             total_chars += ble_chars.len();
 
             {
-                let mut char_map = self.characteristics.write()
+                let mut char_map = self
+                    .characteristics
+                    .write()
                     .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
                 let chars_vec: Vec<Characteristic> =
                     char_data.iter().map(|(_, c, _)| c.clone()).collect();
@@ -361,7 +401,9 @@ impl GattClient {
         }
 
         {
-            let mut svc_map = self.services.write()
+            let mut svc_map = self
+                .services
+                .write()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
             for (uuid, svc, _) in svc_data {
                 svc_map.insert(uuid, svc);
@@ -377,7 +419,9 @@ impl GattClient {
         service_uuid: &str,
     ) -> Result<Vec<BleCharacteristic>> {
         let service = {
-            let services = self.services.read()
+            let services = self
+                .services
+                .read()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
             services
                 .get(service_uuid)
@@ -417,7 +461,9 @@ impl GattClient {
         }
 
         {
-            let mut char_map = self.characteristics.write()
+            let mut char_map = self
+                .characteristics
+                .write()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
             let chars_vec: Vec<Characteristic> =
                 char_data.iter().map(|(_, c, _)| c.clone()).collect();
@@ -439,7 +485,9 @@ impl GattClient {
         info!("{}", format_ble_log(&self.address, char_uuid, "R", &value));
 
         {
-            let caches = self.caches.read()
+            let caches = self
+                .caches
+                .read()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
             if let Some(cache) = caches.get(char_uuid) {
                 if let Err(e) = cache.rx_buffer.write(&value) {
@@ -447,7 +495,9 @@ impl GattClient {
                 }
             } else {
                 drop(caches);
-                let mut caches = self.caches.write()
+                let mut caches = self
+                    .caches
+                    .write()
                     .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
                 let cache = CharacteristicCache::new();
                 if let Err(e) = cache.rx_buffer.write(&value) {
@@ -466,7 +516,9 @@ impl GattClient {
         info!("{}", format_ble_log(&self.address, char_uuid, "W", data));
 
         {
-            let caches = self.caches.read()
+            let caches = self
+                .caches
+                .read()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
             if let Some(cache) = caches.get(char_uuid) {
                 if let Err(e) = cache.tx_buffer.write(data) {
@@ -474,7 +526,9 @@ impl GattClient {
                 }
             } else {
                 drop(caches);
-                let mut caches = self.caches.write()
+                let mut caches = self
+                    .caches
+                    .write()
                     .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
                 let cache = CharacteristicCache::new();
                 if let Err(e) = cache.tx_buffer.write(data) {
@@ -486,8 +540,15 @@ impl GattClient {
 
         if let Err(e) = char.write(data).await {
             let error_str = format!("{}", e);
-            if error_str.contains("已关闭") || error_str.contains("closed") || error_str.contains("disconnected") {
-                warn!("[{}] 设备已断开，写入失败: {}", extract_short_mac(&self.address), e);
+            if error_str.contains("已关闭")
+                || error_str.contains("closed")
+                || error_str.contains("disconnected")
+            {
+                warn!(
+                    "[{}] 设备已断开，写入失败: {}",
+                    extract_short_mac(&self.address),
+                    e
+                );
             } else {
                 error!("[{}] 写入特征失败: {}", extract_short_mac(&self.address), e);
             }
@@ -503,7 +564,9 @@ impl GattClient {
         info!("{}", format_ble_log(&self.address, char_uuid, "W", data));
 
         {
-            let caches = self.caches.read()
+            let caches = self
+                .caches
+                .read()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
             if let Some(cache) = caches.get(char_uuid) {
                 if let Err(e) = cache.tx_buffer.write(data) {
@@ -511,7 +574,9 @@ impl GattClient {
                 }
             } else {
                 drop(caches);
-                let mut caches = self.caches.write()
+                let mut caches = self
+                    .caches
+                    .write()
                     .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
                 let cache = CharacteristicCache::new();
                 if let Err(e) = cache.tx_buffer.write(data) {
@@ -523,8 +588,15 @@ impl GattClient {
 
         if let Err(e) = char.write_without_response(data).await {
             let error_str = format!("{}", e);
-            if error_str.contains("已关闭") || error_str.contains("closed") || error_str.contains("disconnected") {
-                warn!("[{}] 设备已断开，写入失败: {}", extract_short_mac(&self.address), e);
+            if error_str.contains("已关闭")
+                || error_str.contains("closed")
+                || error_str.contains("disconnected")
+            {
+                warn!(
+                    "[{}] 设备已断开，写入失败: {}",
+                    extract_short_mac(&self.address),
+                    e
+                );
             } else {
                 error!("[{}] 写入特征失败: {}", extract_short_mac(&self.address), e);
             }
@@ -537,7 +609,11 @@ impl GattClient {
     pub async fn subscribe_notify(&self, char_uuid: &str, callback: NotifyCallback) -> Result<()> {
         let char = self.find_characteristic(char_uuid).await?;
 
-        info!("[{}][{}][SUB] 订阅通知", extract_short_mac(&self.address), extract_short_uuid(char_uuid));
+        info!(
+            "[{}][{}][SUB] 订阅通知",
+            extract_short_mac(&self.address),
+            extract_short_uuid(char_uuid)
+        );
 
         self.notify_callbacks
             .lock()
@@ -545,20 +621,27 @@ impl GattClient {
             .insert(char_uuid.to_string(), callback.clone());
 
         {
-            let caches = self.caches.read()
+            let caches = self
+                .caches
+                .read()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
             if caches.get(char_uuid).is_none() {
                 drop(caches);
-                let mut caches = self.caches.write()
+                let mut caches = self
+                    .caches
+                    .write()
                     .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
                 caches.insert(char_uuid.to_string(), CharacteristicCache::new());
             }
         }
 
         let rx_buffer = {
-            let caches = self.caches.read()
+            let caches = self
+                .caches
+                .read()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
-            caches.get(char_uuid)
+            caches
+                .get(char_uuid)
                 .map(|c| Arc::clone(&c.rx_buffer))
                 .ok_or_else(|| ComBridgeError::ble(format!("特征 {} 缓存未找到", char_uuid)))?
         };
@@ -578,14 +661,24 @@ impl GattClient {
                                 callback(&device_id, &uuid, &data);
                             }
                             Err(e) => {
-                                warn!("[{}][{}][N] 通知错误: {}", extract_short_mac(&device_id), extract_short_uuid(&uuid), e);
+                                warn!(
+                                    "[{}][{}][N] 通知错误: {}",
+                                    extract_short_mac(&device_id),
+                                    extract_short_uuid(&uuid),
+                                    e
+                                );
                                 break;
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    warn!("[{}][{}][SUB] 订阅失败: {}", extract_short_mac(&device_id), extract_short_uuid(&uuid), e);
+                    warn!(
+                        "[{}][{}][SUB] 订阅失败: {}",
+                        extract_short_mac(&device_id),
+                        extract_short_uuid(&uuid),
+                        e
+                    );
                 }
             }
         });
@@ -599,15 +692,23 @@ impl GattClient {
     }
 
     pub async fn unsubscribe_notify(&self, char_uuid: &str) -> Result<()> {
-        info!("[{}][{}][UNSUB] 取消订阅", extract_short_mac(&self.address), extract_short_uuid(char_uuid));
+        info!(
+            "[{}][{}][UNSUB] 取消订阅",
+            extract_short_mac(&self.address),
+            extract_short_uuid(char_uuid)
+        );
 
-        self.notify_callbacks.lock()
+        self.notify_callbacks
+            .lock()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?
             .remove(char_uuid);
 
-        if let Some(handle) = self.notify_handles.lock()
+        if let Some(handle) = self
+            .notify_handles
+            .lock()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?
-            .remove(char_uuid) {
+            .remove(char_uuid)
+        {
             handle.abort();
         }
 
@@ -616,7 +717,9 @@ impl GattClient {
 
     pub async fn get_rssi(&self) -> Result<i16> {
         let device = {
-            let device = self.device.read()
+            let device = self
+                .device
+                .read()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
             device
                 .as_ref()
@@ -642,15 +745,22 @@ impl GattClient {
     }
 
     pub fn get_discovered_services(&self) -> Result<Vec<BleService>> {
-        let services = self.services.read()
+        let services = self
+            .services
+            .read()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
-        let characteristics = self.characteristics.read()
+        let characteristics = self
+            .characteristics
+            .read()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
 
         Ok(services
             .iter()
             .map(|(uuid, svc)| {
-                let is_primary = futures::executor::block_on(async { svc.is_primary().await.unwrap_or(true) });
+                let is_primary = tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current()
+                        .block_on(async { svc.is_primary().await.unwrap_or(true) })
+                });
 
                 let ble_chars: Vec<BleCharacteristic> = characteristics
                     .get(uuid)
@@ -659,7 +769,10 @@ impl GattClient {
                             .iter()
                             .filter_map(|c| {
                                 let char_uuid = c.uuid().to_string();
-                                let props = futures::executor::block_on(async { c.properties().await.ok() })?;
+                                let props = tokio::task::block_in_place(|| {
+                                    tokio::runtime::Handle::current()
+                                        .block_on(async { c.properties().await.ok() })
+                                })?;
                                 Some(BleCharacteristic {
                                     uuid: char_uuid,
                                     service_uuid: uuid.clone(),
@@ -687,9 +800,12 @@ impl GattClient {
     }
 
     pub fn get_cache(&self, char_uuid: &str) -> Result<ChannelCache> {
-        let caches = self.caches.read()
+        let caches = self
+            .caches
+            .read()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
-        let cache = caches.get(char_uuid)
+        let cache = caches
+            .get(char_uuid)
             .ok_or_else(|| ComBridgeError::ble(format!("特征 {} 缓存未找到", char_uuid)))?;
         Ok(ChannelCache {
             tx_cache: cache.tx_buffer.get_cache_data()?,
@@ -698,7 +814,9 @@ impl GattClient {
     }
 
     pub fn clear_cache(&self, char_uuid: &str) -> Result<bool> {
-        let caches = self.caches.read()
+        let caches = self
+            .caches
+            .read()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
         if let Some(cache) = caches.get(char_uuid) {
             cache.tx_buffer.clear()?;
@@ -711,7 +829,9 @@ impl GattClient {
     }
 
     pub fn get_cache_size(&self, char_uuid: &str) -> Result<Option<(usize, usize)>> {
-        let caches = self.caches.read()
+        let caches = self
+            .caches
+            .read()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
         match caches.get(char_uuid) {
             Some(cache) => Ok(Some((cache.tx_buffer.len()?, cache.rx_buffer.len()?))),
@@ -720,7 +840,9 @@ impl GattClient {
     }
 
     pub fn get_all_caches(&self) -> Result<HashMap<String, ChannelCache>> {
-        let caches = self.caches.read()
+        let caches = self
+            .caches
+            .read()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
         caches
             .iter()
@@ -737,7 +859,9 @@ impl GattClient {
     }
 
     async fn find_characteristic(&self, char_uuid: &str) -> Result<Characteristic> {
-        let char_map = self.characteristics.read()
+        let char_map = self
+            .characteristics
+            .read()
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?
             .clone();
 

@@ -1,10 +1,10 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EventEncoding {
@@ -103,7 +103,7 @@ impl EventBus {
 
         let subscribers = self.subscribers.read().unwrap_or_else(|e| {
             tracing::error!("Failed to acquire read lock: {}", e);
-            panic!("EventBus lock poisoned");
+            e.into_inner()
         });
         if let Some(callbacks) = subscribers.get(&topic) {
             for callback in callbacks {
@@ -123,7 +123,7 @@ impl EventBus {
 
         let subscribers = self.subscribers.read().unwrap_or_else(|e| {
             tracing::error!("Failed to acquire read lock: {}", e);
-            panic!("EventBus lock poisoned");
+            e.into_inner()
         });
         if let Some(callbacks) = subscribers.get(&topic) {
             for callback in callbacks {
@@ -157,7 +157,11 @@ impl EventBus {
                     panic!("EventBus lock poisoned");
                 });
                 if let Some(callbacks) = subscribers.get(&topic) {
-                    tracing::info!("[EventBus] Invoking {} callbacks for topic={}", callbacks.len(), topic);
+                    tracing::info!(
+                        "[EventBus] Invoking {} callbacks for topic={}",
+                        callbacks.len(),
+                        topic
+                    );
                     for callback in callbacks {
                         callback(&event.topic, &event.payload, encoding);
                     }
@@ -220,7 +224,7 @@ impl EventBus {
     {
         let mut subscribers = self.subscribers.write().unwrap_or_else(|e| {
             tracing::error!("Failed to acquire write lock: {}", e);
-            panic!("EventBus lock poisoned");
+            e.into_inner()
         });
         subscribers
             .entry(topic.to_string())
@@ -234,7 +238,7 @@ impl EventBus {
     {
         let mut subscribers = self.subscribers.write().unwrap_or_else(|e| {
             tracing::error!("Failed to acquire write lock: {}", e);
-            panic!("EventBus lock poisoned");
+            e.into_inner()
         });
         subscribers
             .entry(topic.to_string())
@@ -277,7 +281,7 @@ impl EventBus {
     pub async fn unsubscribe(&self, topic: &str) {
         let mut subscribers = self.subscribers.write().unwrap_or_else(|e| {
             tracing::error!("Failed to acquire write lock: {}", e);
-            panic!("EventBus lock poisoned");
+            e.into_inner()
         });
         subscribers.remove(topic);
     }
@@ -285,7 +289,7 @@ impl EventBus {
     pub fn unsubscribe_sync(&self, topic: &str) {
         let mut subscribers = self.subscribers.write().unwrap_or_else(|e| {
             tracing::error!("Failed to acquire write lock: {}", e);
-            panic!("EventBus lock poisoned");
+            e.into_inner()
         });
         subscribers.remove(topic);
     }
@@ -301,7 +305,7 @@ impl EventBus {
     pub async fn subscriber_count(&self, topic: &str) -> usize {
         let subscribers = self.subscribers.read().unwrap_or_else(|e| {
             tracing::error!("Failed to acquire read lock: {}", e);
-            panic!("EventBus lock poisoned");
+            e.into_inner()
         });
         subscribers.get(topic).map(|v| v.len()).unwrap_or(0)
     }
@@ -309,7 +313,7 @@ impl EventBus {
     pub fn subscriber_count_sync(&self, topic: &str) -> usize {
         let subscribers = self.subscribers.read().unwrap_or_else(|e| {
             tracing::error!("Failed to acquire read lock: {}", e);
-            panic!("EventBus lock poisoned");
+            e.into_inner()
         });
         subscribers.get(topic).map(|v| v.len()).unwrap_or(0)
     }
@@ -317,7 +321,7 @@ impl EventBus {
     pub async fn topic_count(&self) -> usize {
         let subscribers = self.subscribers.read().unwrap_or_else(|e| {
             tracing::error!("Failed to acquire read lock: {}", e);
-            panic!("EventBus lock poisoned");
+            e.into_inner()
         });
         subscribers.len()
     }
@@ -325,7 +329,7 @@ impl EventBus {
     pub fn topic_count_sync(&self) -> usize {
         let subscribers = self.subscribers.read().unwrap_or_else(|e| {
             tracing::error!("Failed to acquire read lock: {}", e);
-            panic!("EventBus lock poisoned");
+            e.into_inner()
         });
         subscribers.len()
     }
@@ -607,7 +611,7 @@ mod tests {
         let bus = EventBus::new(16);
         let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let called_clone = called.clone();
-        
+
         bus.subscribe_sync("test:topic", move |topic, payload, encoding| {
             assert_eq!(topic, "test:topic");
             assert_eq!(encoding, EventEncoding::Json);
@@ -647,7 +651,10 @@ mod tests {
     #[test]
     fn test_event_payload_as_string() {
         let json_event = Event::new_json("test:topic", "test_payload");
-        assert_eq!(json_event.payload_as_string(), Some("test_payload".to_string()));
+        assert_eq!(
+            json_event.payload_as_string(),
+            Some("test_payload".to_string())
+        );
 
         let msgpack_event = Event::new_msgpack("test:topic", vec![0xFF, 0xFE]);
         assert_eq!(msgpack_event.payload_as_string(), None);
@@ -665,7 +672,7 @@ mod tests {
         let bus = EventBus::new(16);
         let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let called_clone = called.clone();
-        
+
         bus.subscribe_json::<SerialDataEvent, _>(topics::SERIAL_DATA, move |_topic, event| {
             assert_eq!(event.device_id, "serial-1");
             assert_eq!(event.data, vec![0x01, 0x02]);
@@ -682,7 +689,7 @@ mod tests {
         let bus = EventBus::new(16);
         let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let called_clone = called.clone();
-        
+
         bus.subscribe_msgpack::<SerialDataEvent, _>(topics::SERIAL_DATA, move |_topic, event| {
             assert_eq!(event.device_id, "serial-1");
             assert_eq!(event.data, vec![0x01, 0x02]);

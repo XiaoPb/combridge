@@ -94,12 +94,16 @@ impl<T: Clone + Send + 'static> DataQueue<T> {
                 if self.sender.is_closed() {
                     return Err(mpsc::error::TrySendError::Closed(value));
                 }
-                let mut rx = self.receiver.blocking_lock();
-                if self.sender.capacity() == 0 {
-                    let _ = rx.try_recv();
+                match self.receiver.try_lock() {
+                    Ok(mut rx) => {
+                        if self.sender.capacity() == 0 {
+                            let _ = rx.try_recv();
+                        }
+                        drop(rx);
+                        self.sender.try_send(value)
+                    }
+                    Err(_) => self.sender.try_send(value),
                 }
-                drop(rx);
-                self.sender.try_send(value)
             }
         }
     }
@@ -148,7 +152,8 @@ impl<T: Clone + Send + 'static> DataQueue<T> {
     }
 
     pub async fn close(&self) {
-        self.sender.closed().await;
+        let mut rx = self.receiver.lock().await;
+        rx.close();
     }
 }
 

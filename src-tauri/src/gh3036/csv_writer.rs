@@ -13,6 +13,7 @@ pub struct CsvWriter {
     function_name: String,
     current_file_index: u32,
     last_frame_id: i32,
+    rows_since_flush: u32,
 }
 
 impl CsvWriter {
@@ -23,36 +24,43 @@ impl CsvWriter {
             function_name,
             current_file_index: 0,
             last_frame_id: -1,
+            rows_since_flush: 0,
         }
     }
 
     pub fn write_frame(&mut self, frame: &Gh3036FrameData) -> std::io::Result<()> {
-        let should_create_new_file = frame.frame_id == 0 || self.writer.lock().unwrap_or_else(|e| e.into_inner()).is_none();
+        let should_create_new_file = frame.frame_id == 0
+            || self
+                .writer
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_none();
 
         if should_create_new_file {
             self.create_new_file()?;
+            self.rows_since_flush = 0;
         }
 
         let mut writer_guard = self.writer.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(ref mut writer) = *writer_guard {
             self.write_row(writer, frame)?;
             self.last_frame_id = frame.frame_id;
+            self.rows_since_flush += 1;
+            if self.rows_since_flush >= 100 {
+                writer.flush()?;
+                self.rows_since_flush = 0;
+            }
         }
 
         Ok(())
     }
 
     fn create_new_file(&mut self) -> std::io::Result<()> {
-
         let function_output_dir = self.output_dir.join(&self.function_name);
         std::fs::create_dir_all(&function_output_dir)?;
 
         let timestamp = Local::now().format("%Y%m%d-%H%M%S");
-        let filename = format!(
-            "gh3036_{}_{}.csv",
-            self.function_name,
-            timestamp
-        );
+        let filename = format!("gh3036_{}_{}.csv", self.function_name, timestamp);
         let filepath = function_output_dir.join(&filename);
 
         let mut writer = Writer::from_path(&filepath)?;
@@ -69,10 +77,7 @@ impl CsvWriter {
     }
 
     fn write_header(&self, writer: &mut Writer<std::fs::File>) -> std::io::Result<()> {
-        let mut headers: Vec<String> = vec![
-            "TIMESTAMP".to_string(),
-            "FRAME_ID".to_string(),
-        ];
+        let mut headers: Vec<String> = vec!["TIMESTAMP".to_string(), "FRAME_ID".to_string()];
 
         let axis_names = ["X", "Y", "Z"];
         for axis in axis_names {
@@ -123,7 +128,11 @@ impl CsvWriter {
         Ok(())
     }
 
-    fn write_row(&self, writer: &mut Writer<std::fs::File>, frame: &Gh3036FrameData) -> std::io::Result<()> {
+    fn write_row(
+        &self,
+        writer: &mut Writer<std::fs::File>,
+        frame: &Gh3036FrameData,
+    ) -> std::io::Result<()> {
         let mut row: Vec<String> = Vec::new();
 
         row.push(frame.timestamp.to_string());
@@ -185,7 +194,6 @@ impl CsvWriter {
         }
 
         writer.write_record(&row)?;
-        writer.flush()?;
 
         Ok(())
     }

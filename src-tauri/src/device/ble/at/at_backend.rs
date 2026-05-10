@@ -1,19 +1,19 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
-use crate::error::{ComBridgeError, LockResultExt, Result};
 use super::super::ble_traits::{
-    BleBackend, BleDevice, BleConnection, BleService, BleCharacteristic,
-    BleCharacteristicProperties, NotifyCallback,
+    BleBackend, BleCharacteristic, BleCharacteristicProperties, BleConnection, BleDevice,
+    BleService, NotifyCallback,
 };
-use super::at_commands::{AtCommand, AtResponse, AtConnectionConfig, ScanDevice};
+use super::at_commands::{AtCommand, AtConnectionConfig, AtResponse, ScanDevice};
 use super::at_parser::AtParser;
-use super::at_transport::{AtTransport, TransportMode, DataCallback};
+use super::at_transport::{AtTransport, DataCallback, TransportMode};
+use crate::error::{ComBridgeError, LockResultExt, Result};
 
 const DEFAULT_SERVICE_UUID: &str = "0000FFE0-0000-1000-8000-00805F9B34FB";
 const DEFAULT_TX_UUID: &str = "0000FFE1-0000-1000-8000-00805F9B34FB";
@@ -89,10 +89,10 @@ impl AtBleBackend {
 
     fn send_command_and_wait(&self, command: &AtCommand, timeout_ms: u64) -> Result<Vec<String>> {
         let mut transport_guard = self.transport.lock().lock_err("AT传输层")?;
-        let transport = transport_guard.as_mut().ok_or_else(|| {
-            ComBridgeError::ble("AT传输层未初始化")
-        })?;
-        
+        let transport = transport_guard
+            .as_mut()
+            .ok_or_else(|| ComBridgeError::ble("AT传输层未初始化"))?;
+
         transport.send_command(command)?;
         transport.read_response(Some(timeout_ms))
     }
@@ -102,7 +102,9 @@ impl AtBleBackend {
             return Err(ComBridgeError::ble("未收到响应"));
         }
 
-        let last = responses.last().ok_or_else(|| ComBridgeError::ble("响应为空"))?;
+        let last = responses
+            .last()
+            .ok_or_else(|| ComBridgeError::ble("响应为空"))?;
         if last == "OK" {
             Ok(())
         } else if last.starts_with("ERROR") {
@@ -135,7 +137,7 @@ impl AtBleBackend {
     fn build_virtual_service(&self, address: &str) -> BleService {
         let connections = self.connections.lock().unwrap_or_else(|e| e.into_inner());
         let conn_info = connections.get(address);
-        
+
         let tx_uuid = conn_info
             .map(|c| c.tx_uuid.as_str())
             .unwrap_or(DEFAULT_TX_UUID);
@@ -181,10 +183,14 @@ impl AtBleBackend {
     fn setup_transparent_callback(&self, address: String) -> Result<()> {
         let callbacks = self.notify_callbacks.clone();
         let address_clone = address.clone();
-        
+
         let callback: DataCallback = Arc::new(move |data: &[u8]| {
             debug!("透传接收数据: {} 字节", data.len());
-            if let Some(cb) = callbacks.lock().unwrap_or_else(|e| e.into_inner()).get(&address_clone) {
+            if let Some(cb) = callbacks
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&address_clone)
+            {
                 cb(&address_clone, "", data);
             }
         });
@@ -225,10 +231,10 @@ impl Drop for AtBleBackend {
 impl BleBackend for AtBleBackend {
     async fn configure(&mut self) -> Result<()> {
         let mut transport_guard = self.transport.lock().lock_err("AT传输层")?;
-        let transport = transport_guard.as_mut().ok_or_else(|| {
-            ComBridgeError::ble("AT传输层未初始化")
-        })?;
-        
+        let transport = transport_guard
+            .as_mut()
+            .ok_or_else(|| ComBridgeError::ble("AT传输层未初始化"))?;
+
         transport.send_command(&AtCommand::Test)?;
         let responses = transport.read_response(Some(1000))?;
         Self::parse_ok_response(&responses)?;
@@ -236,9 +242,9 @@ impl BleBackend for AtBleBackend {
         transport.send_command(&AtCommand::SetRole(1))?;
         let responses = transport.read_response(Some(1000))?;
         Self::parse_ok_response(&responses)?;
-        
+
         drop(transport_guard);
-        
+
         self.configure_uuids()?;
         info!("AT BLE后端配置成功（主机模式）");
         Ok(())
@@ -246,9 +252,9 @@ impl BleBackend for AtBleBackend {
 
     async fn scan(&self, duration_ms: u64) -> Result<Vec<BleDevice>> {
         self.is_scanning.store(true, Ordering::SeqCst);
-        
+
         let responses = self.send_command_and_wait(&AtCommand::ScanStart, duration_ms + 2000)?;
-        
+
         let mut devices = Vec::new();
         let parser = AtParser::new();
 
@@ -272,17 +278,15 @@ impl BleBackend for AtBleBackend {
     async fn stop_scan(&self) -> Result<Vec<BleDevice>> {
         let responses = self.send_command_and_wait(&AtCommand::ScanStop, 3000)?;
         Self::parse_ok_response(&responses)?;
-        
+
         self.is_scanning.store(false, Ordering::SeqCst);
         info!("停止扫描");
         Ok(Vec::new())
     }
 
     async fn connect(&self, address: &str) -> Result<BleConnection> {
-        let responses = self.send_command_and_wait(
-            &AtCommand::Connect(address.to_string()),
-            15000
-        )?;
+        let responses =
+            self.send_command_and_wait(&AtCommand::Connect(address.to_string()), 15000)?;
 
         let mut connected_address = address.to_string();
         for line in &responses {
@@ -299,25 +303,44 @@ impl BleBackend for AtBleBackend {
 
         let mut conn_info = AtConnectionInfo::default();
         conn_info.address = connected_address.clone();
-        conn_info.tx_uuid = self.config.tx_uuid.clone().unwrap_or_else(|| DEFAULT_TX_UUID.to_string());
-        conn_info.rx_uuid = self.config.rx_uuid.clone().unwrap_or_else(|| DEFAULT_RX_UUID.to_string());
-        conn_info.srv_uuid = self.config.srv_uuid.clone().unwrap_or_else(|| DEFAULT_SERVICE_UUID.to_string());
-        conn_info.connected_at = Some(std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64);
+        conn_info.tx_uuid = self
+            .config
+            .tx_uuid
+            .clone()
+            .unwrap_or_else(|| DEFAULT_TX_UUID.to_string());
+        conn_info.rx_uuid = self
+            .config
+            .rx_uuid
+            .clone()
+            .unwrap_or_else(|| DEFAULT_RX_UUID.to_string());
+        conn_info.srv_uuid = self
+            .config
+            .srv_uuid
+            .clone()
+            .unwrap_or_else(|| DEFAULT_SERVICE_UUID.to_string());
+        conn_info.connected_at = Some(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+        );
 
-        self.connections.lock().lock_err("AT连接")?.insert(connected_address.clone(), conn_info);
+        self.connections
+            .lock()
+            .lock_err("AT连接")?
+            .insert(connected_address.clone(), conn_info);
 
-        let mut transport_guard = self.transport.lock().lock_err("AT传输层")?;
-        if let Some(ref mut transport) = *transport_guard {
-            transport.enter_transparent_mode()?;
+        {
+            let mut transport_guard = self.transport.lock().lock_err("AT传输层")?;
+            if let Some(ref mut transport) = *transport_guard {
+                transport.enter_transparent_mode()?;
+            }
         }
 
         self.setup_transparent_callback(connected_address.clone())?;
 
         info!("已连接到设备: {}", connected_address);
-        
+
         let service = self.build_virtual_service(&connected_address);
         Ok(BleConnection {
             address: connected_address,
@@ -334,13 +357,14 @@ impl BleBackend for AtBleBackend {
         }
         drop(transport_guard);
 
-        let responses = self.send_command_and_wait(
-            &AtCommand::Disconnect(address.to_string()),
-            5000
-        )?;
+        let responses =
+            self.send_command_and_wait(&AtCommand::Disconnect(address.to_string()), 5000)?;
 
         self.connections.lock().lock_err("AT连接")?.remove(address);
-        self.notify_callbacks.lock().lock_err("AT回调")?.remove(address);
+        self.notify_callbacks
+            .lock()
+            .lock_err("AT回调")?
+            .remove(address);
 
         Self::parse_ok_response(&responses)?;
         info!("已断开设备: {}", address);
@@ -370,21 +394,32 @@ impl BleBackend for AtBleBackend {
         Ok(vec![service])
     }
 
-    async fn discover_characteristics(&self, address: &str, _service_uuid: &str) -> Result<Vec<BleCharacteristic>> {
+    async fn discover_characteristics(
+        &self,
+        address: &str,
+        _service_uuid: &str,
+    ) -> Result<Vec<BleCharacteristic>> {
         let service = self.build_virtual_service(address);
         info!("返回虚拟特征（AT模块不支持特征发现）");
         Ok(service.characteristics)
     }
 
     async fn read_characteristic(&self, _address: &str, _char_uuid: &str) -> Result<Vec<u8>> {
-        Err(ComBridgeError::ble("AT模块不支持读取特征值，请使用透传模式接收数据"))
+        Err(ComBridgeError::ble(
+            "AT模块不支持读取特征值，请使用透传模式接收数据",
+        ))
     }
 
-    async fn write_characteristic(&self, _address: &str, _char_uuid: &str, data: &[u8]) -> Result<()> {
+    async fn write_characteristic(
+        &self,
+        _address: &str,
+        _char_uuid: &str,
+        data: &[u8],
+    ) -> Result<()> {
         let mut transport_guard = self.transport.lock().lock_err("AT传输层")?;
-        let transport = transport_guard.as_mut().ok_or_else(|| {
-            ComBridgeError::ble("AT传输层未初始化")
-        })?;
+        let transport = transport_guard
+            .as_mut()
+            .ok_or_else(|| ComBridgeError::ble("AT传输层未初始化"))?;
 
         if transport.mode() == TransportMode::Transparent {
             transport.send_transparent_data(data)?;
@@ -398,22 +433,38 @@ impl BleBackend for AtBleBackend {
         Ok(())
     }
 
-    async fn write_without_response(&self, address: &str, char_uuid: &str, data: &[u8]) -> Result<()> {
+    async fn write_without_response(
+        &self,
+        address: &str,
+        char_uuid: &str,
+        data: &[u8],
+    ) -> Result<()> {
         self.write_characteristic(address, char_uuid, data).await
     }
 
-    async fn subscribe_notify(&self, address: &str, _char_uuid: &str, callback: NotifyCallback) -> Result<()> {
+    async fn subscribe_notify(
+        &self,
+        address: &str,
+        _char_uuid: &str,
+        callback: NotifyCallback,
+    ) -> Result<()> {
         let key = Self::make_callback_key(address);
-        self.notify_callbacks.lock().lock_err("AT回调")?.insert(key, callback);
-        
+        self.notify_callbacks
+            .lock()
+            .lock_err("AT回调")?
+            .insert(key, callback);
+
         info!("已设置透传数据回调: {}", address);
         Ok(())
     }
 
     async fn unsubscribe_notify(&self, address: &str, _char_uuid: &str) -> Result<()> {
         let key = Self::make_callback_key(address);
-        self.notify_callbacks.lock().lock_err("AT回调")?.remove(&key);
-        
+        self.notify_callbacks
+            .lock()
+            .lock_err("AT回调")?
+            .remove(&key);
+
         info!("已移除透传数据回调: {}", address);
         Ok(())
     }

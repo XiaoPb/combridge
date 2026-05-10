@@ -7,9 +7,9 @@ use std::time::Duration;
 use serialport::{SerialPort as SerialPortImpl, SerialPortType};
 use tracing::{debug, error, info, warn};
 
-use crate::error::{ComBridgeError, Result};
 use super::at_commands::AtCommand;
 use super::at_parser::AtParser;
+use crate::error::{ComBridgeError, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransportMode {
@@ -81,9 +81,10 @@ impl AtTransport {
             return Err(ComBridgeError::ble("当前不在AT命令模式，无法发送AT指令"));
         }
 
-        let port = self.port.as_mut().ok_or_else(|| {
-            ComBridgeError::ble("串口未打开")
-        })?;
+        let port = self
+            .port
+            .as_mut()
+            .ok_or_else(|| ComBridgeError::ble("串口未打开"))?;
 
         let data = command.to_bytes();
         debug!("发送AT指令: {:?}", String::from_utf8_lossy(&data));
@@ -102,9 +103,10 @@ impl AtTransport {
             return Err(ComBridgeError::ble("当前不在AT命令模式，无法读取AT响应"));
         }
 
-        let port = self.port.as_mut().ok_or_else(|| {
-            ComBridgeError::ble("串口未打开")
-        })?;
+        let port = self
+            .port
+            .as_mut()
+            .ok_or_else(|| ComBridgeError::ble("串口未打开"))?;
 
         let timeout = Duration::from_millis(timeout_ms.unwrap_or(self.timeout_ms));
         let start = std::time::Instant::now();
@@ -134,7 +136,9 @@ impl AtTransport {
             }
 
             if !responses.is_empty() {
-                let last = responses.last().ok_or_else(|| ComBridgeError::ble("AT响应为空"))?;
+                let last = responses
+                    .last()
+                    .ok_or_else(|| ComBridgeError::ble("AT响应为空"))?;
                 if last == "OK" || last.starts_with("ERROR") || last.starts_with("+") {
                     if last == "OK" || last.starts_with("ERROR") {
                         break;
@@ -153,7 +157,7 @@ impl AtTransport {
 
         self.send_command(&AtCommand::ExitToTransparent)?;
         let responses = self.read_response(Some(2000))?;
-        
+
         let success = responses.iter().any(|r| r == "OK");
         if success {
             self.mode = TransportMode::Transparent;
@@ -182,9 +186,10 @@ impl AtTransport {
             return Err(ComBridgeError::ble("当前不在透传模式，无法发送透传数据"));
         }
 
-        let port = self.port.as_mut().ok_or_else(|| {
-            ComBridgeError::ble("串口未打开")
-        })?;
+        let port = self
+            .port
+            .as_mut()
+            .ok_or_else(|| ComBridgeError::ble("串口未打开"))?;
 
         debug!("发送透传数据: {} 字节", data.len());
 
@@ -197,10 +202,18 @@ impl AtTransport {
         Ok(())
     }
 
-    fn start_receive_thread(&self) {
+    fn start_receive_thread(&mut self) {
         if self.receive_thread_running.load(Ordering::SeqCst) {
             return;
         }
+
+        let port_clone = match self.port.as_ref().and_then(|p| p.try_clone().ok()) {
+            Some(p) => p,
+            None => {
+                error!("无法克隆串口用于接收线程");
+                return;
+            }
+        };
 
         self.receive_thread_running.store(true, Ordering::SeqCst);
         let running = self.receive_thread_running.clone();
@@ -210,19 +223,7 @@ impl AtTransport {
         let handle = thread::spawn(move || {
             info!("透传数据接收线程已启动: {}", port_name);
 
-            let port_result = serialport::new(&port_name, 115200)
-                .timeout(Duration::from_millis(100))
-                .open();
-
-            let mut port = match port_result {
-                Ok(p) => p,
-                Err(e) => {
-                    error!("接收线程无法打开串口: {}", e);
-                    running.store(false, Ordering::SeqCst);
-                    return;
-                }
-            };
-
+            let mut port = port_clone;
             let mut buffer = [0u8; 1024];
 
             while running.load(Ordering::SeqCst) {
@@ -230,7 +231,11 @@ impl AtTransport {
                     Ok(n) => {
                         if n > 0 {
                             debug!("透传接收: {} 字节", n);
-                            if let Some(callback) = data_callback.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                            if let Some(callback) = data_callback
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .as_ref()
+                            {
                                 callback(&buffer[..n]);
                             }
                         }
@@ -248,13 +253,21 @@ impl AtTransport {
             info!("透传数据接收线程已停止: {}", port_name);
         });
 
-        *self.receive_thread_handle.lock().unwrap_or_else(|e| e.into_inner()) = Some(handle);
+        *self
+            .receive_thread_handle
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(handle);
     }
 
     fn stop_receive_thread(&self) {
         self.receive_thread_running.store(false, Ordering::SeqCst);
 
-        if let Some(handle) = self.receive_thread_handle.lock().unwrap_or_else(|e| e.into_inner()).take() {
+        if let Some(handle) = self
+            .receive_thread_handle
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        {
             let _ = handle.join();
         }
     }
@@ -278,13 +291,9 @@ pub fn scan_at_ports() -> Result<Vec<String>> {
 
     let at_ports: Vec<String> = ports
         .into_iter()
-        .filter_map(|p| {
-            match p.port_type {
-                SerialPortType::UsbPort(_) | SerialPortType::BluetoothPort => {
-                    Some(p.port_name)
-                }
-                _ => None,
-            }
+        .filter_map(|p| match p.port_type {
+            SerialPortType::UsbPort(_) | SerialPortType::BluetoothPort => Some(p.port_name),
+            _ => None,
         })
         .collect();
 

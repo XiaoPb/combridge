@@ -1,6 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
 use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,11 +40,21 @@ pub struct DatasetConfig {
     pub value: String,
 }
 
-fn default_max() -> f64 { 100.0 }
-fn default_led_high() -> f64 { 1.0 }
-fn default_fft_samples() -> usize { 1024 }
-fn default_fft_sampling_rate() -> f64 { 100.0 }
-fn default_value() -> String { "--.--".to_string() }
+fn default_max() -> f64 {
+    100.0
+}
+fn default_led_high() -> f64 {
+    1.0
+}
+fn default_fft_samples() -> usize {
+    1024
+}
+fn default_fft_sampling_rate() -> f64 {
+    100.0
+}
+fn default_value() -> String {
+    "--.--".to_string()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -88,12 +98,15 @@ impl JsonConfigManager {
     pub fn new(app_data_dir: PathBuf) -> Self {
         let json_dir = app_data_dir.join("plugins").join("json");
         info!("JsonConfigManager initializing, json_dir: {:?}", json_dir);
-        
+
         if !json_dir.exists() {
             match fs::create_dir_all(&json_dir) {
                 Ok(_) => info!("Created json directory: {:?}", json_dir),
                 Err(e) => {
-                    info!("Failed to create json directory: {:?}, error: {}", json_dir, e);
+                    info!(
+                        "Failed to create json directory: {:?}, error: {}",
+                        json_dir, e
+                    );
                 }
             }
         } else {
@@ -104,17 +117,17 @@ impl JsonConfigManager {
 
     pub fn get_json_files(&self) -> Result<Vec<String>, String> {
         info!("Getting json files from: {:?}", self.json_dir);
-        
+
         if !self.json_dir.exists() {
             info!("Json directory does not exist, creating it");
             fs::create_dir_all(&self.json_dir)
                 .map_err(|e| format!("Failed to create json directory: {}", e))?;
         }
-        
+
         let mut files = Vec::new();
         let entries = fs::read_dir(&self.json_dir)
             .map_err(|e| format!("Failed to read json directory: {}", e))?;
-        
+
         for entry in entries {
             if let Ok(entry) = entry {
                 let path = entry.path();
@@ -125,71 +138,72 @@ impl JsonConfigManager {
                 }
             }
         }
-        
+
         files.sort();
         info!("Found {} json files", files.len());
         Ok(files)
     }
 
-    pub fn save_json_file(&self, file_name: &str, config: &DashboardJsonConfig) -> Result<(), String> {
+    pub fn save_json_file(
+        &self,
+        file_name: &str,
+        config: &DashboardJsonConfig,
+    ) -> Result<(), String> {
         info!("Saving json file: {} to {:?}", file_name, self.json_dir);
-        
+
         if !self.json_dir.exists() {
             info!("Json directory does not exist, creating it");
             fs::create_dir_all(&self.json_dir)
                 .map_err(|e| format!("Failed to create json directory: {}", e))?;
         }
-        
+
         let path = self.json_dir.join(file_name);
         info!("Full path: {:?}", path);
-        
-        let content = serde_json::to_string_pretty(config)
-            .map_err(|e| {
-                let err = format!("Failed to serialize config: {}", e);
-                info!("{}", err);
-                err
-            })?;
-        
+
+        let content = serde_json::to_string_pretty(config).map_err(|e| {
+            let err = format!("Failed to serialize config: {}", e);
+            info!("{}", err);
+            err
+        })?;
+
         info!("Serialized config, content length: {} bytes", content.len());
-        
-        fs::write(&path, content)
-            .map_err(|e| {
-                let err = format!("Failed to write json file {:?}: {}", path, e);
-                info!("{}", err);
-                err
-            })?;
-        
+
+        fs::write(&path, content).map_err(|e| {
+            let err = format!("Failed to write json file {:?}: {}", path, e);
+            info!("{}", err);
+            err
+        })?;
+
         info!("Successfully saved json config to: {:?}", path);
         Ok(())
     }
 
     pub fn delete_json_file(&self, file_name: &str) -> Result<(), String> {
         let path = self.json_dir.join(file_name);
-        
+
         if !path.exists() {
             return Err(format!("File not found: {}", file_name));
         }
-        
-        fs::remove_file(&path)
-            .map_err(|e| format!("Failed to delete json file: {}", e))?;
-        
+
+        fs::remove_file(&path).map_err(|e| format!("Failed to delete json file: {}", e))?;
+
         info!("Deleted json config: {:?}", path);
         Ok(())
     }
 
     pub fn load_json_file(&self, file_name: &str) -> Result<DashboardJsonConfig, String> {
         let path = self.json_dir.join(file_name);
-        
+
         if !path.exists() {
             return Err(format!("File not found: {}", file_name));
         }
-        
-        let content = fs::read_to_string(&path)
-            .map_err(|e| format!("Failed to read json file: {}", e))?;
-        
+
+        let content =
+            fs::read_to_string(&path).map_err(|e| format!("Failed to read json file: {}", e))?;
+
         let config: DashboardJsonConfig = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse json config: {}", e))?;
-        
+
         Ok(config)
     }
 }

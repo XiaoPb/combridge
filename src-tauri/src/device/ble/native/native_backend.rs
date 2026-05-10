@@ -3,12 +3,12 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tracing::info;
 
-use crate::error::{ComBridgeError, Result};
-use crate::service::event_bus::EventBus;
 use super::super::ble_traits::{
     BleBackend, BleCharacteristic, BleConnection, BleDevice, BleService, NotifyCallback,
 };
 use super::adapter::BleAdapter;
+use crate::error::{ComBridgeError, Result};
+use crate::service::event_bus::EventBus;
 
 pub struct NativeBleBackend {
     adapter: Option<Arc<BleAdapter>>,
@@ -56,9 +56,10 @@ impl BleBackend for NativeBleBackend {
     }
 
     async fn scan(&self, duration_ms: u64) -> Result<Vec<BleDevice>> {
-        let adapter = self.adapter.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("蓝牙适配器未初始化")
-        })?;
+        let adapter = self
+            .adapter
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
         adapter.start_scan().await?;
 
@@ -73,9 +74,10 @@ impl BleBackend for NativeBleBackend {
     }
 
     async fn stop_scan(&self) -> Result<Vec<BleDevice>> {
-        let adapter = self.adapter.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("蓝牙适配器未初始化")
-        })?;
+        let adapter = self
+            .adapter
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
         adapter.stop_scan().await?;
         let devices = adapter.get_scanned_devices().await?;
@@ -84,9 +86,10 @@ impl BleBackend for NativeBleBackend {
     }
 
     async fn connect(&self, address: &str) -> Result<BleConnection> {
-        let adapter = self.adapter.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("蓝牙适配器未初始化")
-        })?;
+        let adapter = self
+            .adapter
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
         adapter.connect_device(address).await?;
 
@@ -104,9 +107,10 @@ impl BleBackend for NativeBleBackend {
     }
 
     async fn disconnect(&self, address: &str) -> Result<()> {
-        let adapter = self.adapter.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("蓝牙适配器未初始化")
-        })?;
+        let adapter = self
+            .adapter
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
         if let Some(client) = adapter.get_client(address) {
             client.disconnect().await?;
@@ -121,9 +125,10 @@ impl BleBackend for NativeBleBackend {
     }
 
     async fn get_connections(&self) -> Result<Vec<BleConnection>> {
-        let adapter = self.adapter.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("蓝牙适配器未初始化")
-        })?;
+        let adapter = self
+            .adapter
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
         let clients = adapter.list_clients();
         let mut connections = Vec::new();
@@ -147,9 +152,10 @@ impl BleBackend for NativeBleBackend {
     }
 
     async fn discover_services(&self, address: &str) -> Result<Vec<BleService>> {
-        let adapter = self.adapter.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("蓝牙适配器未初始化")
-        })?;
+        let adapter = self
+            .adapter
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
         let client = adapter.get_or_create_client(address);
         client.discover_services().await
@@ -160,18 +166,20 @@ impl BleBackend for NativeBleBackend {
         address: &str,
         service_uuid: &str,
     ) -> Result<Vec<BleCharacteristic>> {
-        let adapter = self.adapter.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("蓝牙适配器未初始化")
-        })?;
+        let adapter = self
+            .adapter
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
         let client = adapter.get_or_create_client(address);
         client.discover_characteristics(service_uuid).await
     }
 
     async fn read_characteristic(&self, address: &str, char_uuid: &str) -> Result<Vec<u8>> {
-        let adapter = self.adapter.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("蓝牙适配器未初始化")
-        })?;
+        let adapter = self
+            .adapter
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
         let client = adapter.get_or_create_client(address);
         client.read_characteristic(char_uuid).await
@@ -183,9 +191,10 @@ impl BleBackend for NativeBleBackend {
         char_uuid: &str,
         data: &[u8],
     ) -> Result<()> {
-        let adapter = self.adapter.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("蓝牙适配器未初始化")
-        })?;
+        let adapter = self
+            .adapter
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
         let client = adapter.get_or_create_client(address);
         client.write_characteristic(char_uuid, data).await
@@ -197,9 +206,10 @@ impl BleBackend for NativeBleBackend {
         char_uuid: &str,
         data: &[u8],
     ) -> Result<()> {
-        let adapter = self.adapter.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("蓝牙适配器未初始化")
-        })?;
+        let adapter = self
+            .adapter
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
         let client = adapter.get_or_create_client(address);
         client.write_without_response(char_uuid, data).await
@@ -211,36 +221,40 @@ impl BleBackend for NativeBleBackend {
         char_uuid: &str,
         callback: NotifyCallback,
     ) -> Result<()> {
-        let adapter = self.adapter.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("蓝牙适配器未初始化")
-        })?;
+        let adapter = self
+            .adapter
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
         let client = adapter.get_or_create_client(address);
         client.subscribe_notify(char_uuid, callback).await
     }
 
     async fn unsubscribe_notify(&self, address: &str, char_uuid: &str) -> Result<()> {
-        let adapter = self.adapter.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("蓝牙适配器未初始化")
-        })?;
+        let adapter = self
+            .adapter
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
         let client = adapter.get_or_create_client(address);
         client.unsubscribe_notify(char_uuid).await
     }
 
     async fn get_rssi(&self, address: &str) -> Result<i16> {
-        let adapter = self.adapter.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("蓝牙适配器未初始化")
-        })?;
+        let adapter = self
+            .adapter
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
         let client = adapter.get_or_create_client(address);
         client.get_rssi().await
     }
 
     async fn set_mtu(&self, address: &str, mtu: u16) -> Result<u16> {
-        let adapter = self.adapter.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("蓝牙适配器未初始化")
-        })?;
+        let adapter = self
+            .adapter
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
         let client = adapter.get_or_create_client(address);
         client.set_mtu(mtu).await

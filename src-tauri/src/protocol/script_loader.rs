@@ -25,7 +25,11 @@ impl ScriptLoader {
         }
 
         let content = fs::read_to_string(&path).map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to read script file '{}': {}", path.display(), e))
+            ComBridgeError::protocol(format!(
+                "Failed to read script file '{}': {}",
+                path.display(),
+                e
+            ))
         })?;
 
         self.cache.insert(path.clone(), content.clone());
@@ -121,7 +125,11 @@ impl ScriptLoader {
         let mut scripts = Vec::new();
 
         let entries = fs::read_dir(dir).map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to read directory '{}': {}", dir.display(), e))
+            ComBridgeError::protocol(format!(
+                "Failed to read directory '{}': {}",
+                dir.display(),
+                e
+            ))
         })?;
 
         for entry in entries {

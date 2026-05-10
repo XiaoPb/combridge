@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check *)",
+      "Bash(cargo clippy *)",
+      "Bash(grep -B2 \"using \\\\`clone\\\\` on type \\\\`ConnectionStatus\\\\`\")",
+      "Bash(grep -A1 \"using \\\\`clone\\\\` on type \\\\`ConnectionStatus\\\\`\")",
+      "Bash(cargo fmt *)",
+      "Bash(git add *)",
+      "Bash(git commit -m *)",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}

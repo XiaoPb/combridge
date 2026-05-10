@@ -1,0 +1,15 @@
+{
+  "enabledPlugins": {
+    "oh-my-mermaid@oh-my-mermaid": true
+  },
+  "extraKnownMarketplaces": {
+    "oh-my-mermaid": {
+      "source": {
+        "source": "github",
+        "repo": "oh-my-mermaid/oh-my-mermaid"
+      }
+    }
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "theme": "dark"
+}

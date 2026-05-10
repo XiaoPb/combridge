@@ -12,7 +12,10 @@ pub async fn load_protocol(
     let path_buf = PathBuf::from(&path);
 
     if !path_buf.exists() {
-        return Err(ComBridgeError::protocol(format!("Script file not found: {}", path)).to_error_response());
+        return Err(
+            ComBridgeError::protocol(format!("Script file not found: {}", path))
+                .to_error_response(),
+        );
     }
 
     manager

@@ -22,23 +22,25 @@ pub mod types;
 pub use config_loader::{ConfigLoader, RegisterItem};
 pub use factory_test::FactoryTestManager;
 pub use hr_ref_monitor::{
-    HrRefMonitor, HrRefMonitorState,
-    init_hr_ref_monitor, start_hr_ref_monitor, stop_hr_ref_monitor,
-    get_hr_ref_monitor_state, get_hr_ref_monitor_current_hr, get_hr_ref_monitor_collected_count,
-    is_hr_ref_monitor_running, get_hr_ref_monitor_device_address,
+    get_hr_ref_monitor_collected_count, get_hr_ref_monitor_current_hr,
+    get_hr_ref_monitor_device_address, get_hr_ref_monitor_state, init_hr_ref_monitor,
+    is_hr_ref_monitor_running, start_hr_ref_monitor, stop_hr_ref_monitor, HrRefMonitor,
+    HrRefMonitorState,
 };
-pub use manager::{ChannelConfig, ChannelType, CsvConfig, Gh3036Manager, 
-    HrRefStatus, HrvRefStatus, Spo2RefStatus, RefDataStatus};
-pub use ref_data_manager::{RefDataManager, RefDataError, REF_DATA_TIMEOUT_SECS};
+pub use manager::{
+    ChannelConfig, ChannelType, CsvConfig, Gh3036Manager, HrRefStatus, HrvRefStatus, RefDataStatus,
+    Spo2RefStatus,
+};
+pub use ref_data_manager::{RefDataError, RefDataManager, REF_DATA_TIMEOUT_SECS};
 pub use threshold_config::{
-    ChannelEvaluationResult, FactoryEvaluationResult, FactoryThresholdConfig,
-    TestEvaluationResult, ThresholdConfigValidation, ThresholdOperator,
-    evaluate_test_data, validate_threshold_config_file,
+    evaluate_test_data, validate_threshold_config_file, ChannelEvaluationResult,
+    FactoryEvaluationResult, FactoryThresholdConfig, TestEvaluationResult,
+    ThresholdConfigValidation, ThresholdOperator,
 };
 pub use types::{
-    get_rpc_commands, get_version_types, Gh3036EventData, Gh3036FrameData, RpcCommand, RpcParam,
-    VersionTypeConfig, FactoryTestStep, FactoryTestStatus, FactoryTestResult,
-    FactoryTestStepResult, FactoryTestProgressEvent, ConfigValidationResult,
+    get_rpc_commands, get_version_types, ConfigValidationResult, FactoryTestProgressEvent,
+    FactoryTestResult, FactoryTestStatus, FactoryTestStep, FactoryTestStepResult, Gh3036EventData,
+    Gh3036FrameData, RpcCommand, RpcParam, VersionTypeConfig,
 };
 
 pub type Gh3036ManagerRef = std::sync::Arc<Gh3036Manager>;

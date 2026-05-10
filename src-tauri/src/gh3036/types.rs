@@ -5,19 +5,16 @@
 use serde::{Deserialize, Serialize};
 
 pub use gh_rpc::{
-    GhFuncFrame, GhFrameData, GhFuncFixIdx, GhGsensorData, GhAgcInfo, GhFrameDataFlag,
-    FrameDecoder, DecodeError,
-    KEY_GH3X_GET_VERSION, KEY_GH3X_REGS_WRITE_CMD, KEY_GH3X_REGS_READ_CMD,
-    KEY_GH3X_REG_BIT_FIELD_WRITE_CMD, KEY_GH3X_CHIP_CTRL, KEY_GH3X_SW_FUNCTION_CMD,
-    KEY_DOWNLOAD_CONFIG, KEY_GH3X_REGS_LIST_WRITE_CMD, KEY_GET_CHIP_LINK_STATUS,
-    KEY_GH_TIMESTAMP_SET, KEY_GH_TIME_SET, KEY_GH_SET_WORK_MODE_CMD, KEY_GH_LOW_POWER_CMD,
-    KEY_F_SET_MODE, KEY_F_GET_MODE,
-    FMT_GH3X_GET_VERSION, FMT_GH3X_REGS_WRITE_CMD, FMT_GH3X_REGS_READ_CMD,
-    FMT_GH3X_REG_BIT_FIELD_WRITE_CMD, FMT_GH3X_CHIP_CTRL, FMT_GH3X_SW_FUNCTION_CMD,
-    FMT_DOWNLOAD_CONFIG, FMT_GH3X_REGS_LIST_WRITE_CMD, FMT_GET_CHIP_LINK_STATUS,
-    FMT_GH_TIMESTAMP_SET, FMT_GH_TIME_SET, FMT_GH_SET_WORK_MODE_CMD, FMT_GH_LOW_POWER_CMD,
-    FMT_F_SET_MODE, FMT_F_GET_MODE,
-    RET_GH3X_GET_VERSION, RET_GH3X_REGS_READ_CMD, RET_GET_CHIP_LINK_STATUS, RET_F_GET_MODE,
+    DecodeError, FrameDecoder, GhAgcInfo, GhFrameData, GhFrameDataFlag, GhFuncFixIdx, GhFuncFrame,
+    GhGsensorData, FMT_DOWNLOAD_CONFIG, FMT_F_GET_MODE, FMT_F_SET_MODE, FMT_GET_CHIP_LINK_STATUS,
+    FMT_GH3X_CHIP_CTRL, FMT_GH3X_GET_VERSION, FMT_GH3X_REGS_LIST_WRITE_CMD, FMT_GH3X_REGS_READ_CMD,
+    FMT_GH3X_REGS_WRITE_CMD, FMT_GH3X_REG_BIT_FIELD_WRITE_CMD, FMT_GH3X_SW_FUNCTION_CMD,
+    FMT_GH_LOW_POWER_CMD, FMT_GH_SET_WORK_MODE_CMD, FMT_GH_TIMESTAMP_SET, FMT_GH_TIME_SET,
+    KEY_DOWNLOAD_CONFIG, KEY_F_GET_MODE, KEY_F_SET_MODE, KEY_GET_CHIP_LINK_STATUS,
+    KEY_GH3X_CHIP_CTRL, KEY_GH3X_GET_VERSION, KEY_GH3X_REGS_LIST_WRITE_CMD, KEY_GH3X_REGS_READ_CMD,
+    KEY_GH3X_REGS_WRITE_CMD, KEY_GH3X_REG_BIT_FIELD_WRITE_CMD, KEY_GH3X_SW_FUNCTION_CMD,
+    KEY_GH_LOW_POWER_CMD, KEY_GH_SET_WORK_MODE_CMD, KEY_GH_TIMESTAMP_SET, KEY_GH_TIME_SET,
+    RET_F_GET_MODE, RET_GET_CHIP_LINK_STATUS, RET_GH3X_GET_VERSION, RET_GH3X_REGS_READ_CMD,
 };
 
 pub use rpc::types::*;
@@ -91,7 +88,7 @@ impl GhFuncFixIdxExt for GhFuncFixIdx {
             _ => None,
         }
     }
-    
+
     fn name(&self) -> &'static str {
         match self {
             Self::Adt => "ADT",
@@ -137,17 +134,20 @@ impl Gh3036FrameData {
     pub fn from_func_frame(frame: &GhFuncFrame, ref_data: Option<&[i32]>) -> Self {
         let func_id = GhFuncFixIdx::from(frame.id as u8);
         let function_name = func_id.name().to_string();
-        
+
         let gs_data: Vec<i32> = [
             frame.gsensor_data.acc[0] as i32,
             frame.gsensor_data.acc[1] as i32,
             frame.gsensor_data.acc[2] as i32,
-        ].to_vec();
-        
+        ]
+        .to_vec();
+
         let rawdata: Vec<i32> = frame.data.iter().map(|d| d.rawdata).collect();
         let phy_value: Vec<i32> = frame.data.iter().map(|d| d.ipd_pa).collect();
-        
-        let agc_info: Vec<i32> = frame.data.iter()
+
+        let agc_info: Vec<i32> = frame
+            .data
+            .iter()
             .map(|d| {
                 let word0 = (d.agc_info.gain_code as u32)
                     | ((d.agc_info.bg_cancel_range as u32) << 4)
@@ -158,19 +158,31 @@ impl Gh3036FrameData {
                 word0 as i32
             })
             .collect();
-        
-        let flags: Vec<i32> = frame.data.iter()
+
+        let flags: Vec<i32> = frame
+            .data
+            .iter()
             .map(|d| {
                 let mut flag_val = 0i32;
-                if d.flag.led_adj_flag { flag_val |= 1; }
-                if d.flag.sa_flag { flag_val |= 2; }
-                if d.flag.param_change_flag { flag_val |= 4; }
-                if d.flag.dre_update { flag_val |= 8; }
-                if d.flag.skip_ok_flag { flag_val |= 16; }
+                if d.flag.led_adj_flag {
+                    flag_val |= 1;
+                }
+                if d.flag.sa_flag {
+                    flag_val |= 2;
+                }
+                if d.flag.param_change_flag {
+                    flag_val |= 4;
+                }
+                if d.flag.dre_update {
+                    flag_val |= 8;
+                }
+                if d.flag.skip_ok_flag {
+                    flag_val |= 16;
+                }
                 flag_val
             })
             .collect();
-        
+
         let ref_data = match ref_data {
             Some(data) if !data.is_empty() => {
                 let mut vec = vec![0i32; REF_DATA_COUNT];
@@ -180,7 +192,7 @@ impl Gh3036FrameData {
             }
             _ => vec![0; REF_DATA_COUNT],
         };
-        
+
         Self {
             function_id: frame.id as i32,
             function_name,
@@ -537,7 +549,7 @@ impl Gh3036EventData {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
-        
+
         Self {
             event_type,
             data: data.to_vec(),
@@ -552,23 +564,23 @@ pub struct Gh3036FramesEvent {
     pub function_name: String,
     pub frame_count: usize,
     pub channel_count: usize,
-    
+
     pub frame_cnts: Vec<u32>,
     pub timestamps: Vec<u64>,
     pub frame_ids: Vec<u32>,
-    
+
     pub ipd_pa: Vec<Vec<i32>>,
     pub rawdata: Vec<Vec<i32>>,
     pub flags: Vec<Vec<i32>>,
     pub agc_info: Vec<Vec<i32>>,
-    
+
     pub acc_x: Vec<i16>,
     pub acc_y: Vec<i16>,
     pub acc_z: Vec<i16>,
     pub gyro_x: Vec<i16>,
     pub gyro_y: Vec<i16>,
     pub gyro_z: Vec<i16>,
-    
+
     pub algo_results: Vec<Vec<i32>>,
     pub led_drv_fs: Vec<[u8; 2]>,
     pub ref_data: Vec<Vec<i32>>,
@@ -604,7 +616,7 @@ impl Gh3036FramesEvent {
         self.frame_cnts.push(frame.frame_cnt);
         self.timestamps.push(frame.timestamp);
         self.frame_ids.push(frame.frame_cnt);
-        
+
         if self.ipd_pa.is_empty() {
             self.channel_count = frame.ch_num as usize;
             self.ipd_pa = vec![Vec::new(); frame.ch_num as usize];
@@ -612,20 +624,30 @@ impl Gh3036FramesEvent {
             self.flags = vec![Vec::new(); frame.ch_num as usize];
             self.agc_info = vec![Vec::new(); frame.ch_num as usize];
         }
-        
+
         for (i, ch_data) in frame.data.iter().enumerate() {
             if i < self.ipd_pa.len() {
                 self.ipd_pa[i].push(ch_data.ipd_pa);
                 self.rawdata[i].push(ch_data.rawdata);
-                
+
                 let mut flag_val = 0i32;
-                if ch_data.flag.led_adj_flag { flag_val |= 1; }
-                if ch_data.flag.sa_flag { flag_val |= 2; }
-                if ch_data.flag.param_change_flag { flag_val |= 4; }
-                if ch_data.flag.dre_update { flag_val |= 8; }
-                if ch_data.flag.skip_ok_flag { flag_val |= 16; }
+                if ch_data.flag.led_adj_flag {
+                    flag_val |= 1;
+                }
+                if ch_data.flag.sa_flag {
+                    flag_val |= 2;
+                }
+                if ch_data.flag.param_change_flag {
+                    flag_val |= 4;
+                }
+                if ch_data.flag.dre_update {
+                    flag_val |= 8;
+                }
+                if ch_data.flag.skip_ok_flag {
+                    flag_val |= 16;
+                }
                 self.flags[i].push(flag_val);
-                
+
                 let word0 = (ch_data.agc_info.gain_code as u32)
                     | ((ch_data.agc_info.bg_cancel_range as u32) << 4)
                     | ((ch_data.agc_info.dc_cancel_range as u32) << 6)
@@ -635,20 +657,20 @@ impl Gh3036FramesEvent {
                 self.agc_info[i].push(word0 as i32);
             }
         }
-        
+
         self.acc_x.push(frame.gsensor_data.acc[0]);
         self.acc_y.push(frame.gsensor_data.acc[1]);
         self.acc_z.push(frame.gsensor_data.acc[2]);
         self.gyro_x.push(0);
         self.gyro_y.push(0);
         self.gyro_z.push(0);
-        
+
         self.algo_results.push(frame.algo_data.clone());
-        
+
         self.led_drv_fs.push(frame.led_drv_fs);
-        
+
         self.ref_data.push(vec![0; REF_DATA_COUNT]);
-        
+
         self.frame_count += 1;
     }
 
@@ -656,7 +678,7 @@ impl Gh3036FramesEvent {
         self.frame_cnts.push(frame.frame_cnt);
         self.timestamps.push(frame.timestamp);
         self.frame_ids.push(frame.frame_cnt);
-        
+
         if self.ipd_pa.is_empty() {
             self.channel_count = frame.ch_num as usize;
             self.ipd_pa = vec![Vec::new(); frame.ch_num as usize];
@@ -664,20 +686,30 @@ impl Gh3036FramesEvent {
             self.flags = vec![Vec::new(); frame.ch_num as usize];
             self.agc_info = vec![Vec::new(); frame.ch_num as usize];
         }
-        
+
         for (i, ch_data) in frame.data.iter().enumerate() {
             if i < self.ipd_pa.len() {
                 self.ipd_pa[i].push(ch_data.ipd_pa);
                 self.rawdata[i].push(ch_data.rawdata);
-                
+
                 let mut flag_val = 0i32;
-                if ch_data.flag.led_adj_flag { flag_val |= 1; }
-                if ch_data.flag.sa_flag { flag_val |= 2; }
-                if ch_data.flag.param_change_flag { flag_val |= 4; }
-                if ch_data.flag.dre_update { flag_val |= 8; }
-                if ch_data.flag.skip_ok_flag { flag_val |= 16; }
+                if ch_data.flag.led_adj_flag {
+                    flag_val |= 1;
+                }
+                if ch_data.flag.sa_flag {
+                    flag_val |= 2;
+                }
+                if ch_data.flag.param_change_flag {
+                    flag_val |= 4;
+                }
+                if ch_data.flag.dre_update {
+                    flag_val |= 8;
+                }
+                if ch_data.flag.skip_ok_flag {
+                    flag_val |= 16;
+                }
                 self.flags[i].push(flag_val);
-                
+
                 let word0 = (ch_data.agc_info.gain_code as u32)
                     | ((ch_data.agc_info.bg_cancel_range as u32) << 4)
                     | ((ch_data.agc_info.dc_cancel_range as u32) << 6)
@@ -687,20 +719,20 @@ impl Gh3036FramesEvent {
                 self.agc_info[i].push(word0 as i32);
             }
         }
-        
+
         self.acc_x.push(frame.gsensor_data.acc[0]);
         self.acc_y.push(frame.gsensor_data.acc[1]);
         self.acc_z.push(frame.gsensor_data.acc[2]);
         self.gyro_x.push(0);
         self.gyro_y.push(0);
         self.gyro_z.push(0);
-        
+
         self.algo_results.push(frame.algo_data.clone());
-        
+
         self.led_drv_fs.push(frame.led_drv_fs);
-        
+
         self.ref_data.push(ref_data);
-        
+
         self.frame_count += 1;
     }
 
@@ -714,10 +746,18 @@ impl Gh3036FramesEvent {
         self.frame_cnts.clear();
         self.timestamps.clear();
         self.frame_ids.clear();
-        for ch in &mut self.ipd_pa { ch.clear(); }
-        for rd in &mut self.rawdata { rd.clear(); }
-        for f in &mut self.flags { f.clear(); }
-        for a in &mut self.agc_info { a.clear(); }
+        for ch in &mut self.ipd_pa {
+            ch.clear();
+        }
+        for rd in &mut self.rawdata {
+            rd.clear();
+        }
+        for f in &mut self.flags {
+            f.clear();
+        }
+        for a in &mut self.agc_info {
+            a.clear();
+        }
         self.acc_x.clear();
         self.acc_y.clear();
         self.acc_z.clear();

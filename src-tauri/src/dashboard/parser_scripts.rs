@@ -1,9 +1,9 @@
+use mlua::{Lua, Value};
+use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use parking_lot::Mutex;
-use mlua::{Lua, Value};
-use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,13 +71,22 @@ impl ParserScriptManager {
         if !self.user_scripts_dir.exists() {
             fs::create_dir_all(&self.user_scripts_dir)
                 .map_err(|e| format!("Failed to create user scripts directory: {}", e))?;
-            info!("Created user scripts directory: {:?}", self.user_scripts_dir);
+            info!(
+                "Created user scripts directory: {:?}",
+                self.user_scripts_dir
+            );
         }
 
         if self.built_in_scripts_dir.exists() {
-            info!("Built-in scripts directory exists: {:?}", self.built_in_scripts_dir);
+            info!(
+                "Built-in scripts directory exists: {:?}",
+                self.built_in_scripts_dir
+            );
         } else {
-            warn!("Built-in scripts directory not found: {:?}", self.built_in_scripts_dir);
+            warn!(
+                "Built-in scripts directory not found: {:?}",
+                self.built_in_scripts_dir
+            );
         }
 
         self.refresh_scripts_cache();
@@ -126,11 +135,9 @@ impl ParserScriptManager {
         let description = extract_lua_field(&content, "description")
             .unwrap_or_else(|| "No description".to_string());
 
-        let author = extract_lua_field(&content, "author")
-            .unwrap_or_else(|| "Unknown".to_string());
+        let author = extract_lua_field(&content, "author").unwrap_or_else(|| "Unknown".to_string());
 
-        let version = extract_lua_field(&content, "version")
-            .unwrap_or_else(|| "1.0.0".to_string());
+        let version = extract_lua_field(&content, "version").unwrap_or_else(|| "1.0.0".to_string());
 
         Some(ParserScriptInfo {
             name,
@@ -151,8 +158,7 @@ impl ParserScriptManager {
         let cache = self.scripts_cache.lock();
 
         if let Some(info) = cache.get(name) {
-            fs::read_to_string(&info.file_path)
-                .map_err(|e| format!("Failed to read script: {}", e))
+            fs::read_to_string(&info.file_path).map_err(|e| format!("Failed to read script: {}", e))
         } else {
             Err(format!("Script not found: {}", name))
         }
@@ -161,8 +167,7 @@ impl ParserScriptManager {
     pub fn save_script(&self, name: &str, content: &str) -> Result<(), String> {
         let file_path = self.user_scripts_dir.join(format!("{}.lua", name));
 
-        fs::write(&file_path, content)
-            .map_err(|e| format!("Failed to write script: {}", e))?;
+        fs::write(&file_path, content).map_err(|e| format!("Failed to write script: {}", e))?;
 
         info!("Saved parser script: {}", name);
 
@@ -182,8 +187,7 @@ impl ParserScriptManager {
             let path = PathBuf::from(&info.file_path);
             drop(cache);
 
-            fs::remove_file(&path)
-                .map_err(|e| format!("Failed to delete script: {}", e))?;
+            fs::remove_file(&path).map_err(|e| format!("Failed to delete script: {}", e))?;
 
             info!("Deleted parser script: {}", name);
 
@@ -205,19 +209,20 @@ impl ParserScriptManager {
             warn!("Failed to load JSON library: {}", e);
         }
 
-        let chunk = lua.load(&content)
-            .set_name(name);
+        let chunk = lua.load(&content).set_name(name);
 
-        let parser: Value = chunk.eval()
+        let parser: Value = chunk
+            .eval()
             .map_err(|e| format!("Failed to execute script: {}", e))?;
 
-        let table = parser.as_table()
-            .ok_or("Script must return a table")?;
+        let table = parser.as_table().ok_or("Script must return a table")?;
 
-        let parse_fn: mlua::Function = table.get("parse")
+        let parse_fn: mlua::Function = table
+            .get("parse")
             .map_err(|_| "Script must have a 'parse' function")?;
 
-        let result: Value = parse_fn.call(data)
+        let result: Value = parse_fn
+            .call(data)
             .map_err(|e| format!("Parse function failed: {}", e))?;
 
         let mut output = HashMap::new();
@@ -236,8 +241,8 @@ impl ParserScriptManager {
     }
 
     pub fn analyze_json_structure(&self, json_content: &str) -> Result<JsonStructureInfo, String> {
-        let value: serde_json::Value = serde_json::from_str(json_content)
-            .map_err(|e| format!("Invalid JSON: {}", e))?;
+        let value: serde_json::Value =
+            serde_json::from_str(json_content).map_err(|e| format!("Invalid JSON: {}", e))?;
 
         let mut fields = Vec::new();
         let is_array = value.is_array();
@@ -251,18 +256,17 @@ impl ParserScriptManager {
         Self::extract_json_fields(&value, "", 0, &mut fields);
 
         let array_item_type = if is_array {
-            value.as_array()
-                .and_then(|a| a.first())
-                .map(|item| {
-                    match item {
-                        serde_json::Value::Object(_) => "object",
-                        serde_json::Value::Array(_) => "array",
-                        serde_json::Value::String(_) => "string",
-                        serde_json::Value::Number(_) => "number",
-                        serde_json::Value::Bool(_) => "boolean",
-                        serde_json::Value::Null => "null",
-                    }.to_string()
-                })
+            value.as_array().and_then(|a| a.first()).map(|item| {
+                match item {
+                    serde_json::Value::Object(_) => "object",
+                    serde_json::Value::Array(_) => "array",
+                    serde_json::Value::String(_) => "string",
+                    serde_json::Value::Number(_) => "number",
+                    serde_json::Value::Bool(_) => "boolean",
+                    serde_json::Value::Null => "null",
+                }
+                .to_string()
+            })
         } else {
             None
         };
@@ -337,18 +341,15 @@ impl ParserScriptManager {
     ) -> Result<String, String> {
         let structure = self.analyze_json_structure(json_content)?;
 
-        let fields_def: Vec<String> = structure.fields
+        let fields_def: Vec<String> = structure
+            .fields
             .iter()
             .filter(|f| selected_fields.contains(&f.path) && f.field_type == "number")
-            .map(|f| {
-                format!(
-                    "    {{ key = \"{}\", path = \"{}\" }}",
-                    f.name, f.path
-                )
-            })
+            .map(|f| format!("    {{ key = \"{}\", path = \"{}\" }}", f.name, f.path))
             .collect();
 
-        let extract_statements: Vec<String> = structure.fields
+        let extract_statements: Vec<String> = structure
+            .fields
             .iter()
             .filter(|f| selected_fields.contains(&f.path) && f.field_type == "number")
             .map(|f| {
@@ -362,7 +363,7 @@ impl ParserScriptManager {
             .collect();
 
         let script = format!(
-r#"-- Auto-generated parser script
+            r#"-- Auto-generated parser script
 -- Generated from JSON structure
 -- Script name: {}
 
@@ -417,7 +418,8 @@ return parser
 
         let existing_fields = Self::extract_existing_fields(&existing_content);
 
-        let new_fields: Vec<&JsonFieldInfo> = new_structure.fields
+        let new_fields: Vec<&JsonFieldInfo> = new_structure
+            .fields
             .iter()
             .filter(|f| {
                 selected_fields.contains(&f.path)
@@ -432,12 +434,7 @@ return parser
 
         let new_field_defs: Vec<String> = new_fields
             .iter()
-            .map(|f| {
-                format!(
-                    "    {{ key = \"{}\", path = \"{}\" }}",
-                    f.name, f.path
-                )
-            })
+            .map(|f| format!("    {{ key = \"{}\", path = \"{}\" }}", f.name, f.path))
             .collect();
 
         let new_extract_statements: Vec<String> = new_fields
@@ -452,30 +449,33 @@ return parser
             })
             .collect();
 
-        let fields_section_end = existing_content.find("}\n\nfunction parser.parse")
+        let fields_section_end = existing_content
+            .find("}\n\nfunction parser.parse")
             .or_else(|| existing_content.find("}\nfunction parser.parse"))
             .ok_or("Cannot find fields section in existing script")?;
 
-        let updated_fields = if existing_content[..fields_section_end].contains("parser.fields = {}") {
-            existing_content.replacen(
-                "parser.fields = {}",
-                &format!("parser.fields = {{\n{}\n    }}", new_field_defs.join(",\n")),
-                1
-            )
-        } else {
-            let last_field_end = existing_content[..fields_section_end]
-                .rfind("}")
-                .ok_or("Cannot find last field definition")?;
+        let updated_fields =
+            if existing_content[..fields_section_end].contains("parser.fields = {}") {
+                existing_content.replacen(
+                    "parser.fields = {}",
+                    &format!("parser.fields = {{\n{}\n    }}", new_field_defs.join(",\n")),
+                    1,
+                )
+            } else {
+                let last_field_end = existing_content[..fields_section_end]
+                    .rfind("}")
+                    .ok_or("Cannot find last field definition")?;
 
-            format!(
-                "{}\n{},\n{}",
-                &existing_content[..last_field_end + 1],
-                new_field_defs.join(",\n"),
-                &existing_content[last_field_end + 1..]
-            )
-        };
+                format!(
+                    "{}\n{},\n{}",
+                    &existing_content[..last_field_end + 1],
+                    new_field_defs.join(",\n"),
+                    &existing_content[last_field_end + 1..]
+                )
+            };
 
-        let result_section_start = updated_fields.find("local result = {}")
+        let result_section_start = updated_fields
+            .find("local result = {}")
             .ok_or("Cannot find result initialization in script")?;
 
         let result_section_end = updated_fields[result_section_start..]

@@ -1,15 +1,18 @@
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, RwLock,
+};
 
 use bluest::{Adapter, Device, DeviceId};
 use futures::StreamExt;
 use tracing::info;
 
-use crate::error::{ComBridgeError, LockResultExt, Result};
-use crate::service::event_bus::{EventBus, BleConnectionEvent};
-use crate::service::event_bus::topics;
 use super::super::ble_traits::BleDevice;
-use super::gatt_client::{GattClient, DisconnectCallback};
+use super::gatt_client::{DisconnectCallback, GattClient};
+use crate::error::{ComBridgeError, LockResultExt, Result};
+use crate::service::event_bus::topics;
+use crate::service::event_bus::{BleConnectionEvent, EventBus};
 
 pub struct BleAdapter {
     adapter: Arc<Adapter>,
@@ -58,7 +61,10 @@ impl BleAdapter {
     pub async fn start_scan(&self) -> Result<()> {
         info!("开始扫描BLE设备");
 
-        self.scanned_devices.write().unwrap_or_else(|e| e.into_inner()).clear();
+        self.scanned_devices
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
         self.scan_cancelled.store(false, Ordering::SeqCst);
 
         let adapter = self.adapter.clone();
@@ -83,7 +89,8 @@ impl BleAdapter {
 
                         info!("发现BLE设备: {:?} RSSI: {:?}", name, rssi);
 
-                        let mut devices_guard = scanned_devices.write().unwrap_or_else(|e| e.into_inner());
+                        let mut devices_guard =
+                            scanned_devices.write().unwrap_or_else(|e| e.into_inner());
                         devices_guard.insert(device_id, (Arc::new(device), rssi));
                     }
                     info!("BLE扫描任务结束");
@@ -124,7 +131,10 @@ impl BleAdapter {
     }
 
     fn get_device(&self, device_id: &str) -> Option<Arc<Device>> {
-        let devices = self.scanned_devices.read().unwrap_or_else(|e| e.into_inner());
+        let devices = self
+            .scanned_devices
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         devices
             .iter()
             .find(|(id, _)| id.to_string() == device_id)
@@ -162,7 +172,10 @@ impl BleAdapter {
     }
 
     pub fn clear_scanned_device(&self, address: &str) {
-        let mut devices = self.scanned_devices.write().unwrap_or_else(|e| e.into_inner());
+        let mut devices = self
+            .scanned_devices
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         devices.retain(|id, _| id.to_string() != address);
         info!("已清理扫描缓存: {}", address);
     }

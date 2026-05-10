@@ -5,8 +5,7 @@ use tracing_subscriber::{
     fmt::{self, format::FmtSpan, time::FormatTime},
     layer::SubscriberExt,
     util::SubscriberInitExt,
-    Layer,
-    EnvFilter,
+    EnvFilter, Layer,
 };
 
 static LOGGER: OnceLock<LoggerService> = OnceLock::new();
@@ -23,7 +22,10 @@ pub fn set_timezone(timezone: &str) {
 }
 
 pub fn get_timezone() -> String {
-    get_timezone_lock().read().map(|tz| tz.clone()).unwrap_or_else(|_| "Asia/Shanghai".to_string())
+    get_timezone_lock()
+        .read()
+        .map(|tz| tz.clone())
+        .unwrap_or_else(|_| "Asia/Shanghai".to_string())
 }
 
 struct TimezoneTime;
@@ -32,7 +34,7 @@ impl FormatTime for TimezoneTime {
     fn format_time(&self, w: &mut tracing_subscriber::fmt::format::Writer<'_>) -> std::fmt::Result {
         let timezone_str = get_timezone();
         let now = chrono::Utc::now();
-        
+
         if let Ok(tz) = timezone_str.parse::<chrono_tz::Tz>() {
             let local_time = now.with_timezone(&tz);
             write!(w, "{}", local_time.format("%Y-%m-%d %H:%M:%S%.3f"))
@@ -71,23 +73,25 @@ pub struct LoggerService {
 }
 
 impl LoggerService {
-    pub fn init(config: LoggerConfig) -> Result<&'static LoggerService, Box<dyn std::error::Error>> {
+    pub fn init(
+        config: LoggerConfig,
+    ) -> Result<&'static LoggerService, Box<dyn std::error::Error>> {
         if LOGGER.get().is_some() {
             return Err("Logger already initialized".into());
         }
-        
+
         let (service, log_path) = Self::create_service(config.clone())?;
-        
+
         LOGGER
             .set(service)
             .map_err(|_| "Logger already initialized")?;
-        
+
         let _ = tracing_log::LogTracer::init();
-        
+
         if let Some(path) = log_path {
             tracing::info!("日志系统初始化完成，日志文件: {}", path.display());
         }
-        
+
         Ok(LOGGER.get().expect("LOGGER must be initialized after set"))
     }
 
@@ -95,7 +99,9 @@ impl LoggerService {
         Self::init(LoggerConfig::default())
     }
 
-    fn create_service(config: LoggerConfig) -> Result<(Self, Option<PathBuf>), Box<dyn std::error::Error>> {
+    fn create_service(
+        config: LoggerConfig,
+    ) -> Result<(Self, Option<PathBuf>), Box<dyn std::error::Error>> {
         let level = Self::parse_level(&config.level);
         let mut layers = Vec::new();
 
@@ -111,10 +117,14 @@ impl LoggerService {
         }
 
         let mut log_path = None;
-        
+
         if config.file_enabled {
-            let log_dir = config.file_path.parent().unwrap_or(&PathBuf::from(".")).to_path_buf();
-            
+            let log_dir = config
+                .file_path
+                .parent()
+                .unwrap_or(&PathBuf::from("."))
+                .to_path_buf();
+
             if !log_dir.exists() {
                 std::fs::create_dir_all(&log_dir)?;
             }
@@ -135,7 +145,7 @@ impl LoggerService {
                 .write(true)
                 .truncate(true)
                 .open(&path)?;
-            
+
             let file_layer = fmt::layer()
                 .with_timer(TimezoneTime)
                 .with_span_events(FmtSpan::CLOSE)
@@ -183,7 +193,7 @@ impl LoggerService {
     pub fn config(&self) -> &LoggerConfig {
         &self.config
     }
-    
+
     pub fn log_path(&self) -> Option<&PathBuf> {
         self.log_path.as_ref()
     }

@@ -1,7 +1,9 @@
+use super::json_config::{DashboardJsonConfig, JsonConfigManager};
+use super::parser_scripts::{
+    FieldDefinition, JsonStructureInfo, ParserScriptInfo, ParserScriptManager,
+};
 use std::sync::Arc;
 use tauri::State;
-use super::parser_scripts::{ParserScriptManager, ParserScriptInfo, JsonStructureInfo, FieldDefinition};
-use super::json_config::{JsonConfigManager, DashboardJsonConfig};
 
 pub type ParserScriptManagerRef = Arc<ParserScriptManager>;
 pub type JsonConfigManagerRef = Arc<JsonConfigManager>;
@@ -111,17 +113,17 @@ pub async fn save_json_file(
     file_name: String,
     config: DashboardJsonConfig,
 ) -> Result<(), String> {
-    use tracing::{info, debug};
+    use tracing::{debug, info};
     info!("[save_json_file] Received request to save: {}", file_name);
     debug!("[save_json_file] Config: {:?}", config);
-    
+
     let result = manager.save_json_file(&file_name, &config);
-    
+
     match &result {
         Ok(_) => info!("[save_json_file] Successfully saved: {}", file_name),
         Err(e) => info!("[save_json_file] Failed to save {}: {}", file_name, e),
     }
-    
+
     result
 }
 

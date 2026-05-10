@@ -45,16 +45,16 @@ impl ConfigLoader {
 
     pub fn load<P: AsRef<Path>>(&mut self, path: P) -> Result<(), String> {
         let path = path.as_ref();
-        
+
         if !path.exists() {
             return Err(format!("配置文件不存在: {}", path.display()));
         }
 
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("读取配置文件失败: {}", e))?;
+        let content =
+            std::fs::read_to_string(path).map_err(|e| format!("读取配置文件失败: {}", e))?;
 
         self.parse_register_list(&content)?;
-        
+
         info!(
             "[ConfigLoader] 从 {} 加载了 {} 个寄存器",
             path.display(),
@@ -83,7 +83,10 @@ impl ConfigLoader {
                 continue;
             }
 
-            if trimmed.starts_with('[') && trimmed.ends_with(']') && !trimmed.starts_with("[Register_List]") {
+            if trimmed.starts_with('[')
+                && trimmed.ends_with(']')
+                && !trimmed.starts_with("[Register_List]")
+            {
                 break;
             }
 
@@ -109,7 +112,7 @@ impl ConfigLoader {
 
     fn parse_register_line(&self, line: &str, line_num: usize) -> Option<RegisterItem> {
         let line = line.split("//").next()?.trim();
-        
+
         let line = line.trim_end_matches(',');
 
         if !line.starts_with('{') || !line.ends_with('}') {
@@ -124,8 +127,14 @@ impl ConfigLoader {
             return None;
         }
 
-        let addr_str = parts[0].trim().trim_start_matches("0x").trim_start_matches("0X");
-        let val_str = parts[1].trim().trim_start_matches("0x").trim_start_matches("0X");
+        let addr_str = parts[0]
+            .trim()
+            .trim_start_matches("0x")
+            .trim_start_matches("0X");
+        let val_str = parts[1]
+            .trim()
+            .trim_start_matches("0x")
+            .trim_start_matches("0X");
 
         let addr = u16::from_str_radix(addr_str, 16).ok()?;
         let value = u16::from_str_radix(val_str, 16).ok()?;
@@ -142,7 +151,10 @@ impl ConfigLoader {
     }
 
     pub fn get_addr_value_pairs(&self) -> Vec<(u16, u16)> {
-        self.register_list.iter().map(|r| (r.addr, r.value)).collect()
+        self.register_list
+            .iter()
+            .map(|r| (r.addr, r.value))
+            .collect()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -191,7 +203,7 @@ mod tests {
     #[test]
     fn test_parse_register_line() {
         let loader = ConfigLoader::new();
-        
+
         let item = loader.parse_register_line("{0x0016,0x001f},// comment", 1);
         assert!(item.is_some());
         let item = item.unwrap();

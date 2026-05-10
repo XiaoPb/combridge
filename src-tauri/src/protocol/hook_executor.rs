@@ -34,7 +34,10 @@ impl std::str::FromStr for HookType {
             "on_connect" => Ok(HookType::OnConnect),
             "on_disconnect" => Ok(HookType::OnDisconnect),
             "on_error" => Ok(HookType::OnError),
-            _ => Err(ComBridgeError::protocol(format!("Unknown hook type: {}", s))),
+            _ => Err(ComBridgeError::protocol(format!(
+                "Unknown hook type: {}",
+                s
+            ))),
         }
     }
 }
@@ -90,10 +93,9 @@ impl HookExecutor {
     }
 
     pub fn execute_data_hook(&self, hook_type: HookType, data: &[u8]) -> Result<HookResult> {
-        let function_name = self
-            .registered_hooks
-            .get(&hook_type)
-            .ok_or_else(|| ComBridgeError::protocol(format!("Hook {:?} not registered", hook_type)))?;
+        let function_name = self.registered_hooks.get(&hook_type).ok_or_else(|| {
+            ComBridgeError::protocol(format!("Hook {:?} not registered", hook_type))
+        })?;
 
         match hook_type {
             HookType::OnDataReceived | HookType::OnDataSend => {
@@ -112,10 +114,9 @@ impl HookExecutor {
     }
 
     pub fn execute_event_hook(&self, hook_type: HookType) -> Result<HookResult> {
-        let function_name = self
-            .registered_hooks
-            .get(&hook_type)
-            .ok_or_else(|| ComBridgeError::protocol(format!("Hook {:?} not registered", hook_type)))?;
+        let function_name = self.registered_hooks.get(&hook_type).ok_or_else(|| {
+            ComBridgeError::protocol(format!("Hook {:?} not registered", hook_type))
+        })?;
 
         self.engine.call_void_function(function_name, vec![])?;
 
@@ -128,8 +129,7 @@ impl HookExecutor {
             .get(&HookType::OnError)
             .ok_or_else(|| ComBridgeError::protocol("Error hook not registered"))?;
 
-        self.engine
-            .set_global_string("LAST_ERROR", error_message)?;
+        self.engine.set_global_string("LAST_ERROR", error_message)?;
         self.engine.call_void_function(function_name, vec![])?;
 
         Ok(HookResult::default())
@@ -196,7 +196,9 @@ mod tests {
             .unwrap();
 
         let data = vec![1, 2, 3];
-        let result = executor.execute_data_hook(HookType::OnDataReceived, &data).unwrap();
+        let result = executor
+            .execute_data_hook(HookType::OnDataReceived, &data)
+            .unwrap();
 
         assert!(result.success);
         assert_eq!(result.data, Some(vec![2, 3, 4]));

@@ -91,9 +91,10 @@ impl RegexParser {
 
 impl DataParser for RegexParser {
     fn parse(&self, data: &str) -> Result<Vec<String>, crate::error::ComBridgeError> {
-        let captures = self.regex.captures(data).ok_or_else(|| {
-            crate::error::ComBridgeError::parse("Regex pattern did not match")
-        })?;
+        let captures = self
+            .regex
+            .captures(data)
+            .ok_or_else(|| crate::error::ComBridgeError::parse("Regex pattern did not match"))?;
 
         let mut values = Vec::new();
         for i in 1..captures.len() {
@@ -126,7 +127,11 @@ impl ParserManager {
         }
     }
 
-    pub fn create_parser(&self, id: &str, config: ParserConfig) -> Result<(), crate::error::ComBridgeError> {
+    pub fn create_parser(
+        &self,
+        id: &str,
+        config: ParserConfig,
+    ) -> Result<(), crate::error::ComBridgeError> {
         let parser: Arc<dyn DataParser> = match config.parser_type {
             ParserType::Delimiter => Arc::new(DelimiterParser::new(config)),
             ParserType::Regex => Arc::new(RegexParser::new(config)?),

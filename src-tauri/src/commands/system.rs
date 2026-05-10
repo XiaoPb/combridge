@@ -8,7 +8,7 @@ use tauri::Manager;
 use tracing::{info, warn};
 
 use crate::error::{ComBridgeError, Result};
-use crate::service::logger::{set_timezone, get_timezone};
+use crate::service::logger::{get_timezone, set_timezone};
 
 static SYSTEM: Lazy<Mutex<System>> = Lazy::new(|| {
     let mut sys = System::new_all();
@@ -87,7 +87,6 @@ pub struct RuntimeStatus {
     pub active_connections: usize,
     pub serial_ports_open: usize,
     pub ble_connections: usize,
-    pub websocket_connections: usize,
     pub protocols_loaded: usize,
     pub uptime_secs: u64,
 }
@@ -118,7 +117,7 @@ pub async fn get_system_info() -> Result<SystemInfo> {
 #[tauri::command]
 pub async fn get_system_status() -> Result<SystemStatus> {
     let sys = SYSTEM.lock();
-    
+
     let cpu_usage = sys.global_cpu_info().cpu_usage();
     let total_memory = sys.total_memory();
     let used_memory = sys.used_memory();
@@ -185,12 +184,10 @@ pub async fn get_log_config() -> Result<LogConfig> {
 pub async fn get_runtime_status(
     serial_manager: tauri::State<'_, crate::device::SerialManagerRef>,
     ble_manager: tauri::State<'_, crate::device::BleManagerRef>,
-    connection_pool: tauri::State<'_, crate::websocket::ConnectionPoolRef>,
     plugin_manager: tauri::State<'_, std::sync::Arc<crate::protocol::PluginManager>>,
 ) -> Result<RuntimeStatus> {
     let serial_ports_open = serial_manager.inner().get_open_ports()?.len();
     let ble_connections = ble_manager.inner().get_connections().await?.len();
-    let websocket_connections = connection_pool.inner().get_all_status().await.len();
     let protocols_loaded = plugin_manager.inner().list_protocols()?.len();
 
     let uptime_secs = SystemTime::now()
@@ -199,10 +196,9 @@ pub async fn get_runtime_status(
         .unwrap_or(0);
 
     Ok(RuntimeStatus {
-        active_connections: serial_ports_open + ble_connections + websocket_connections,
+        active_connections: serial_ports_open + ble_connections,
         serial_ports_open,
         ble_connections,
-        websocket_connections,
         protocols_loaded,
         uptime_secs,
     })
@@ -248,7 +244,10 @@ pub async fn open_url(url: String) -> Result<()> {
 pub async fn show_in_folder(path: String) -> Result<()> {
     let path = std::path::Path::new(&path);
     if !path.exists() {
-        return Err(ComBridgeError::io(format!("路径不存在: {}", path.display())));
+        return Err(ComBridgeError::io(format!(
+            "路径不存在: {}",
+            path.display()
+        )));
     }
 
     #[cfg(target_os = "windows")]
@@ -300,12 +299,24 @@ pub async fn get_window_status(app: tauri::AppHandle) -> Result<WindowStatus> {
         .ok_or_else(|| ComBridgeError::io("未找到主窗口".to_string()))?;
 
     let label = window.label().to_string();
-    let title = window.title().map_err(|e| ComBridgeError::io(format!("获取窗口标题失败: {}", e)))?;
-    let visible = window.is_visible().map_err(|e| ComBridgeError::io(format!("获取窗口可见性失败: {}", e)))?;
-    let focused = window.is_focused().map_err(|e| ComBridgeError::io(format!("获取窗口焦点状态失败: {}", e)))?;
-    let maximized = window.is_maximized().map_err(|e| ComBridgeError::io(format!("获取窗口最大化状态失败: {}", e)))?;
-    let minimized = window.is_minimized().map_err(|e| ComBridgeError::io(format!("获取窗口最小化状态失败: {}", e)))?;
-    let fullscreen = window.is_fullscreen().map_err(|e| ComBridgeError::io(format!("获取窗口全屏状态失败: {}", e)))?;
+    let title = window
+        .title()
+        .map_err(|e| ComBridgeError::io(format!("获取窗口标题失败: {}", e)))?;
+    let visible = window
+        .is_visible()
+        .map_err(|e| ComBridgeError::io(format!("获取窗口可见性失败: {}", e)))?;
+    let focused = window
+        .is_focused()
+        .map_err(|e| ComBridgeError::io(format!("获取窗口焦点状态失败: {}", e)))?;
+    let maximized = window
+        .is_maximized()
+        .map_err(|e| ComBridgeError::io(format!("获取窗口最大化状态失败: {}", e)))?;
+    let minimized = window
+        .is_minimized()
+        .map_err(|e| ComBridgeError::io(format!("获取窗口最小化状态失败: {}", e)))?;
+    let fullscreen = window
+        .is_fullscreen()
+        .map_err(|e| ComBridgeError::io(format!("获取窗口全屏状态失败: {}", e)))?;
 
     let scale_factor = window
         .scale_factor()
@@ -355,7 +366,11 @@ pub async fn show_main_window(app: tauri::AppHandle) -> Result<()> {
 
     for attempt in 1..=MAX_RETRIES {
         if attempt > 1 {
-            info!("第 {} 次重试显示窗口，等待 {}ms", attempt - 1, RETRY_DELAY_MS);
+            info!(
+                "第 {} 次重试显示窗口，等待 {}ms",
+                attempt - 1,
+                RETRY_DELAY_MS
+            );
             tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
         }
 
@@ -399,16 +414,14 @@ async fn attempt_delayed_show(window: &tauri::WebviewWindow, retries: u32) -> Re
     info!("执行延迟显示窗口备用方案，延迟 {}ms 后再次尝试", DELAY_MS);
     tokio::time::sleep(Duration::from_millis(DELAY_MS)).await;
 
-    window
-        .show()
-        .map_err(|e| {
-            warn!("延迟显示窗口失败: {}", e);
-            ComBridgeError::io(format!(
-                "显示窗口失败（已重试 {} 次并尝试延迟显示）: {}",
-                retries + 1,
-                e
-            ))
-        })?;
+    window.show().map_err(|e| {
+        warn!("延迟显示窗口失败: {}", e);
+        ComBridgeError::io(format!(
+            "显示窗口失败（已重试 {} 次并尝试延迟显示）: {}",
+            retries + 1,
+            e
+        ))
+    })?;
 
     info!("延迟显示窗口成功");
 

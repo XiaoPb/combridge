@@ -6,4 +6,3 @@ pub mod serial;
 pub mod state;
 pub mod system;
 pub mod waveform;
-pub mod websocket;

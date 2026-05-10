@@ -53,7 +53,10 @@ impl AtCache {
 
     pub fn get_all_devices(&self) -> Vec<(String, DeviceCache)> {
         let devices = self.devices.read().unwrap_or_else(|e| e.into_inner());
-        devices.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+        devices
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
     }
 }
 

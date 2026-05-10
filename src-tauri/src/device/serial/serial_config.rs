@@ -226,8 +226,7 @@ mod tests {
 
     #[test]
     fn test_serial_port_config_serde() {
-        let config = SerialPortConfig::new("COM3")
-            .baud_rate(BaudRate::B115200);
+        let config = SerialPortConfig::new("COM3").baud_rate(BaudRate::B115200);
 
         let json = serde_json::to_string(&config).unwrap();
         let parsed: SerialPortConfig = serde_json::from_str(&json).unwrap();

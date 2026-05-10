@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
-use crate::error::{ComBridgeError, Result};
 use super::at_commands::{AtResponse, ScanDevice};
+use crate::error::{ComBridgeError, Result};
 
 pub struct AtParser {
     buffer: VecDeque<u8>,
@@ -63,7 +63,10 @@ impl AtParser {
                 let error_content = parts[1].trim();
                 let error_parts: Vec<&str> = error_content.splitn(2, ':').collect();
                 if error_parts.len() == 2 {
-                    (error_parts[0].trim().parse().unwrap_or(-1), error_parts[1].trim().to_string())
+                    (
+                        error_parts[0].trim().parse().unwrap_or(-1),
+                        error_parts[1].trim().to_string(),
+                    )
                 } else {
                     (error_content.parse().unwrap_or(-1), String::new())
                 }
@@ -95,17 +98,29 @@ impl AtParser {
         }
 
         if line.starts_with("+TXUUID:") {
-            let uuid = line.strip_prefix("+TXUUID:").unwrap_or("").trim().to_string();
+            let uuid = line
+                .strip_prefix("+TXUUID:")
+                .unwrap_or("")
+                .trim()
+                .to_string();
             return Ok(AtResponse::TxUuid { uuid });
         }
 
         if line.starts_with("+RXUUID:") {
-            let uuid = line.strip_prefix("+RXUUID:").unwrap_or("").trim().to_string();
+            let uuid = line
+                .strip_prefix("+RXUUID:")
+                .unwrap_or("")
+                .trim()
+                .to_string();
             return Ok(AtResponse::RxUuid { uuid });
         }
 
         if line.starts_with("+SVRUUD:") {
-            let uuid = line.strip_prefix("+SVRUUD:").unwrap_or("").trim().to_string();
+            let uuid = line
+                .strip_prefix("+SVRUUD:")
+                .unwrap_or("")
+                .trim()
+                .to_string();
             return Ok(AtResponse::SrvUuid { uuid });
         }
 
@@ -159,12 +174,13 @@ impl AtParser {
                 } else {
                     None
                 };
-                let rssi = parts.last()
+                let rssi = parts
+                    .last()
                     .and_then(|s| s.trim().strip_prefix('-'))
                     .and_then(|s| s.parse::<i16>().ok())
                     .map(|v| -v)
                     .unwrap_or(-100);
-                
+
                 devices.push(ScanDevice {
                     address,
                     name,
@@ -178,7 +194,7 @@ impl AtParser {
     fn parse_rssi_response(&self, line: &str) -> Result<AtResponse> {
         let content = line.strip_prefix("+RSSI:").unwrap_or("");
         let parts: Vec<&str> = content.split(',').collect();
-        
+
         if parts.len() >= 1 {
             let rssi_hex = parts[0].trim();
             if let Ok(rssi_byte) = u8::from_str_radix(rssi_hex, 16) {
@@ -241,7 +257,13 @@ mod tests {
     fn test_parse_error() {
         let parser = AtParser::new();
         let response = parser.parse_response("ERROR=1:Timeout").unwrap();
-        assert_eq!(response, AtResponse::Error { code: 1, message: "Timeout".to_string() });
+        assert_eq!(
+            response,
+            AtResponse::Error {
+                code: 1,
+                message: "Timeout".to_string()
+            }
+        );
     }
 
     #[test]
@@ -254,7 +276,9 @@ mod tests {
     #[test]
     fn test_parse_scan_result() {
         let parser = AtParser::new();
-        let response = parser.parse_response("+SCAN:112233445566,Device1,-50|778899AABBCC,Device2,-60").unwrap();
+        let response = parser
+            .parse_response("+SCAN:112233445566,Device1,-50|778899AABBCC,Device2,-60")
+            .unwrap();
         if let AtResponse::ScanResult { devices } = response {
             assert_eq!(devices.len(), 2);
             assert_eq!(devices[0].address, "112233445566");
@@ -269,7 +293,12 @@ mod tests {
     fn test_parse_connected() {
         let parser = AtParser::new();
         let response = parser.parse_response("+CONN:112233445566").unwrap();
-        assert_eq!(response, AtResponse::Connected { address: "112233445566".to_string() });
+        assert_eq!(
+            response,
+            AtResponse::Connected {
+                address: "112233445566".to_string()
+            }
+        );
     }
 
     #[test]

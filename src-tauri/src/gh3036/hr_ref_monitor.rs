@@ -2,15 +2,15 @@
 //!
 //! 本模块实现从标准心率蓝牙服务设备获取心率数据，并自动写入金标
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::Arc;
 
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use tracing::{debug, error, info, warn};
 
-use crate::device::BleManagerRef;
 use super::ref_data_manager::RefDataManager;
+use crate::device::BleManagerRef;
 
 const HEART_RATE_MEASUREMENT_UUID: &str = "00002a37-0000-1000-8000-00805f9b34fb";
 
@@ -60,8 +60,10 @@ impl HrRefMonitorInner {
 }
 
 static HR_REF_MONITOR: Lazy<HrRefMonitorInner> = Lazy::new(HrRefMonitorInner::new);
-static HR_REF_MONITOR_BLE_MANAGER: Lazy<Mutex<Option<BleManagerRef>>> = Lazy::new(|| Mutex::new(None));
-static HR_REF_MONITOR_REF_DATA_MANAGER: Lazy<Mutex<Option<Arc<RefDataManager>>>> = Lazy::new(|| Mutex::new(None));
+static HR_REF_MONITOR_BLE_MANAGER: Lazy<Mutex<Option<BleManagerRef>>> =
+    Lazy::new(|| Mutex::new(None));
+static HR_REF_MONITOR_REF_DATA_MANAGER: Lazy<Mutex<Option<Arc<RefDataManager>>>> =
+    Lazy::new(|| Mutex::new(None));
 
 pub fn init_hr_ref_monitor(ble_manager: BleManagerRef, ref_data_manager: Arc<RefDataManager>) {
     *HR_REF_MONITOR_BLE_MANAGER.lock() = Some(ble_manager);
@@ -142,7 +144,9 @@ pub async fn start_hr_ref_monitor(device_address: &str) -> Result<(), String> {
                 values.push(hr);
                 let count = values.len() as i32;
                 collected_count_clone.store(count, Ordering::SeqCst);
-                HR_REF_MONITOR.collected_count.store(count, Ordering::SeqCst);
+                HR_REF_MONITOR
+                    .collected_count
+                    .store(count, Ordering::SeqCst);
                 info!("[HrRefMonitor] 采集心率金标 [{}/4]: {} bpm", count, hr);
 
                 if values.len() == 4 {
@@ -172,7 +176,10 @@ pub async fn start_hr_ref_monitor(device_address: &str) -> Result<(), String> {
         }
     }
 
-    match ble_manager.subscribe_notify(&device_address_owned, HEART_RATE_MEASUREMENT_UUID, callback).await {
+    match ble_manager
+        .subscribe_notify(&device_address_owned, HEART_RATE_MEASUREMENT_UUID, callback)
+        .await
+    {
         Ok(_) => {
             info!("[HrRefMonitor] 订阅心率特征成功");
             *HR_REF_MONITOR.state.lock() = HrRefMonitorState::Monitoring;
@@ -201,10 +208,13 @@ pub async fn stop_hr_ref_monitor() -> Result<(), String> {
 
     let ble_manager = HR_REF_MONITOR_BLE_MANAGER.lock().clone();
     let address = HR_REF_MONITOR.device_address.lock().take();
-    
+
     if let Some(ble_manager) = ble_manager {
         if let Some(address) = address {
-            if let Err(e) = ble_manager.unsubscribe_notify(&address, HEART_RATE_MEASUREMENT_UUID).await {
+            if let Err(e) = ble_manager
+                .unsubscribe_notify(&address, HEART_RATE_MEASUREMENT_UUID)
+                .await
+            {
                 warn!("[HrRefMonitor] 取消订阅失败: {}", e);
             }
 
@@ -336,7 +346,10 @@ impl HrRefMonitor {
             }
         }
 
-        match ble_manager.subscribe_notify(&device_address, HEART_RATE_MEASUREMENT_UUID, callback).await {
+        match ble_manager
+            .subscribe_notify(&device_address, HEART_RATE_MEASUREMENT_UUID, callback)
+            .await
+        {
             Ok(_) => {
                 info!("[HrRefMonitor] 订阅心率特征成功");
                 *self.state.lock() = HrRefMonitorState::Monitoring;
@@ -364,7 +377,11 @@ impl HrRefMonitor {
         self.is_running.store(false, Ordering::SeqCst);
 
         if let Some(address) = self.device_address.lock().take() {
-            if let Err(e) = self.ble_manager.unsubscribe_notify(&address, HEART_RATE_MEASUREMENT_UUID).await {
+            if let Err(e) = self
+                .ble_manager
+                .unsubscribe_notify(&address, HEART_RATE_MEASUREMENT_UUID)
+                .await
+            {
                 warn!("[HrRefMonitor] 取消订阅失败: {}", e);
             }
 

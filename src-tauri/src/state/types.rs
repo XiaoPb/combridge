@@ -52,7 +52,7 @@ impl ChannelBuffer {
             data: data.to_vec(),
         });
         self.total_bytes += data.len();
-        
+
         while self.total_bytes > max_size {
             if let Some(removed) = self.entries.pop_front() {
                 self.total_bytes -= removed.data.len();
@@ -61,7 +61,7 @@ impl ChannelBuffer {
             }
         }
     }
-    
+
     pub fn clear(&mut self) {
         self.entries.clear();
         self.total_bytes = 0;
@@ -87,8 +87,6 @@ impl Channel {
         }
     }
 }
-
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -125,9 +123,15 @@ pub struct SerialDevice {
 impl SerialDevice {
     pub fn new(id: String, name: String) -> Self {
         let mut channels = HashMap::new();
-        channels.insert("tx".to_string(), Channel::new("tx".to_string(), ChannelDirection::Write));
-        channels.insert("rx".to_string(), Channel::new("rx".to_string(), ChannelDirection::Read));
-        
+        channels.insert(
+            "tx".to_string(),
+            Channel::new("tx".to_string(), ChannelDirection::Write),
+        );
+        channels.insert(
+            "rx".to_string(),
+            Channel::new("rx".to_string(), ChannelDirection::Read),
+        );
+
         Self {
             id,
             name,
@@ -140,19 +144,19 @@ impl SerialDevice {
             channels,
         }
     }
-    
+
     pub fn tx_channel(&self) -> Option<&Channel> {
         self.channels.get("tx")
     }
-    
+
     pub fn rx_channel(&self) -> Option<&Channel> {
         self.channels.get("rx")
     }
-    
+
     pub fn tx_channel_mut(&mut self) -> Option<&mut Channel> {
         self.channels.get_mut("tx")
     }
-    
+
     pub fn rx_channel_mut(&mut self) -> Option<&mut Channel> {
         self.channels.get_mut("rx")
     }
@@ -184,8 +188,12 @@ impl BleDeviceState {
             channels: HashMap::new(),
         }
     }
-    
-    pub fn add_channel(&mut self, characteristic_uuid: &str, direction: ChannelDirection) -> String {
+
+    pub fn add_channel(
+        &mut self,
+        characteristic_uuid: &str,
+        direction: ChannelDirection,
+    ) -> String {
         let channel_id = format!("{}_{}", characteristic_uuid, direction);
         if !self.channels.contains_key(&channel_id) {
             self.channels.insert(
@@ -195,15 +203,15 @@ impl BleDeviceState {
         }
         channel_id
     }
-    
+
     pub fn get_channel(&self, channel_id: &str) -> Option<&Channel> {
         self.channels.get(channel_id)
     }
-    
+
     pub fn get_channel_mut(&mut self, channel_id: &str) -> Option<&mut Channel> {
         self.channels.get_mut(channel_id)
     }
-    
+
     pub fn remove_channel(&mut self, channel_id: &str) -> Option<Channel> {
         self.channels.remove(channel_id)
     }
@@ -223,49 +231,49 @@ impl Device {
             Device::Ble(d) => &d.id,
         }
     }
-    
+
     pub fn name(&self) -> &str {
         match self {
             Device::Serial(d) => &d.name,
             Device::Ble(d) => &d.name,
         }
     }
-    
+
     pub fn connected(&self) -> bool {
         match self {
             Device::Serial(d) => d.connected,
             Device::Ble(d) => d.connected,
         }
     }
-    
+
     pub fn connectable(&self) -> bool {
         match self {
             Device::Serial(d) => d.connectable,
             Device::Ble(d) => d.connectable,
         }
     }
-    
+
     pub fn set_connected(&mut self, connected: bool) {
         match self {
             Device::Serial(d) => d.connected = connected,
             Device::Ble(d) => d.connected = connected,
         }
     }
-    
+
     pub fn get_channel(&self, channel_id: &str) -> Option<&Channel> {
         match self {
             Device::Serial(d) => d.channels.get(channel_id),
             Device::Ble(d) => d.channels.get(channel_id),
         }
     }
-    
+
     pub fn get_channel_mut(&mut self, channel_id: &str) -> Option<&mut Channel> {
         match self {
             Device::Serial(d) => d.channels.get_mut(channel_id),
             Device::Ble(d) => d.channels.get_mut(channel_id),
         }
     }
-    
+
     pub fn channel_count(&self) -> usize {
         match self {
             Device::Serial(d) => d.channels.len(),
@@ -459,7 +467,7 @@ impl Gh3036CsvPreferences {
             .map(|exe_dir| exe_dir.join("data"))
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| String::from("data"));
-        
+
         Self {
             enabled: true,
             output_dir,

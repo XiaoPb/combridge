@@ -20,8 +20,8 @@ impl Default for CompatInfo {
 
 #[cfg(target_os = "windows")]
 pub fn check_transparent_window_support() -> bool {
-    use winapi::um::dwmapi::DwmIsCompositionEnabled;
     use winapi::shared::minwindef::BOOL;
+    use winapi::um::dwmapi::DwmIsCompositionEnabled;
 
     unsafe {
         let mut enabled: BOOL = 0;
@@ -50,9 +50,9 @@ pub fn check_webview2_runtime() -> (bool, Option<String>) {
         r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
     ];
 
-    use winreg::RegKey;
-    use winreg::enums::HKEY_LOCAL_MACHINE;
     use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::enums::HKEY_LOCAL_MACHINE;
+    use winreg::RegKey;
 
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
@@ -72,10 +72,14 @@ pub fn check_webview2_runtime() -> (bool, Option<String>) {
         }
     }
 
-    let program_files = std::env::var("ProgramFiles(x86)").unwrap_or_else(|_| r"C:\Program Files (x86)".to_string());
+    let program_files = std::env::var("ProgramFiles(x86)")
+        .unwrap_or_else(|_| r"C:\Program Files (x86)".to_string());
     let webview2_paths = [
         format!(r"{}\Microsoft\EdgeWebView\Application", program_files),
-        format!(r"{}\Microsoft\EdgeWebView\Application", std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".to_string())),
+        format!(
+            r"{}\Microsoft\EdgeWebView\Application",
+            std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".to_string())
+        ),
     ];
 
     for path in &webview2_paths {

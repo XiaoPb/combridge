@@ -1,10 +1,10 @@
-pub mod ble_traits;
 pub mod at;
-pub mod native;
 pub mod ble_manager;
+pub mod ble_traits;
+pub mod native;
 
+pub use ble_manager::{AtConfig, AtConnectionTab, BleManager, BleManagerRef, BleMode};
 pub use ble_traits::{
-    BleBackend, BleDevice, BleConnection, BleService, BleCharacteristic,
-    BleCharacteristicProperties, NotifyCallback,
+    BleBackend, BleCharacteristic, BleCharacteristicProperties, BleConnection, BleDevice,
+    BleService, NotifyCallback,
 };
-pub use ble_manager::{BleManager, BleManagerRef, BleMode, AtConfig, AtConnectionTab};

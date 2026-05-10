@@ -2,9 +2,9 @@ use crate::error::{ComBridgeError, ErrorResponse};
 use crate::waveform::{
     ParserConfig, ParserManager, WaveformBuffer, WaveformBufferConfig, WaveformData, WaveformStatus,
 };
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 
 pub struct WaveformManager {
     buffers: RwLock<HashMap<String, Arc<WaveformBuffer>>>,
@@ -19,10 +19,17 @@ impl WaveformManager {
         }
     }
 
-    pub fn create_buffer(&self, buffer_id: &str, config: WaveformBufferConfig) -> Result<(), ComBridgeError> {
+    pub fn create_buffer(
+        &self,
+        buffer_id: &str,
+        config: WaveformBufferConfig,
+    ) -> Result<(), ComBridgeError> {
         let mut buffers = self.buffers.write();
         if buffers.contains_key(buffer_id) {
-            return Err(ComBridgeError::parse(format!("Buffer '{}' already exists", buffer_id)));
+            return Err(ComBridgeError::parse(format!(
+                "Buffer '{}' already exists",
+                buffer_id
+            )));
         }
         buffers.insert(buffer_id.to_string(), Arc::new(WaveformBuffer::new(config)));
         Ok(())
@@ -30,9 +37,10 @@ impl WaveformManager {
 
     pub fn get_buffer(&self, buffer_id: &str) -> Result<Arc<WaveformBuffer>, ComBridgeError> {
         let buffers = self.buffers.read();
-        buffers.get(buffer_id).cloned().ok_or_else(|| {
-            ComBridgeError::parse(format!("Buffer '{}' not found", buffer_id))
-        })
+        buffers
+            .get(buffer_id)
+            .cloned()
+            .ok_or_else(|| ComBridgeError::parse(format!("Buffer '{}' not found", buffer_id)))
     }
 
     pub fn remove_buffer(&self, buffer_id: &str) {
@@ -40,7 +48,11 @@ impl WaveformManager {
         buffers.remove(buffer_id);
     }
 
-    pub fn configure_parser(&self, buffer_id: &str, config: ParserConfig) -> Result<(), ComBridgeError> {
+    pub fn configure_parser(
+        &self,
+        buffer_id: &str,
+        config: ParserConfig,
+    ) -> Result<(), ComBridgeError> {
         self.parser_manager.create_parser(buffer_id, config)
     }
 
@@ -70,11 +82,11 @@ impl WaveformManager {
         let buffer = self.get_buffer(buffer_id)?;
         let mut status = buffer.get_status();
         status.buffer_id = buffer_id.to_string();
-        
+
         if let Some(config) = self.parser_manager.get_parser_config(buffer_id) {
             status.parser_type = Some(config.parser_type);
         }
-        
+
         Ok(status)
     }
 
@@ -186,12 +198,12 @@ mod tests {
         let config = WaveformBufferConfig::default();
 
         manager.create_buffer("test", config).unwrap();
-        
+
         let parser_config = ParserConfig::default();
         manager.configure_parser("test", parser_config).unwrap();
-        
+
         manager.parse_and_store("test", "1,2,3,4,5").unwrap();
-        
+
         let data = manager.read_data("test", 10).unwrap();
         assert_eq!(data.rows.len(), 1);
         assert_eq!(data.rows[0], vec![1.0, 2.0, 3.0, 4.0, 5.0]);

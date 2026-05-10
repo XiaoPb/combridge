@@ -51,20 +51,26 @@ impl AppState {
         let device = SerialDevice::new(id.clone(), name);
         self.devices.insert(id.clone(), Device::Serial(device));
         info!("添加串口设备: {}", id);
-        self.devices.get(&id).and_then(|d| match d {
-            Device::Serial(sd) => Some(sd),
-            _ => None,
-        }).expect("刚插入的设备必须存在且类型匹配")
+        self.devices
+            .get(&id)
+            .and_then(|d| match d {
+                Device::Serial(sd) => Some(sd),
+                _ => None,
+            })
+            .expect("刚插入的设备必须存在且类型匹配")
     }
 
     pub fn add_ble_device(&mut self, id: String, name: String, mac: String) -> &BleDeviceState {
         let device = BleDeviceState::new(id.clone(), name, mac.clone());
         self.devices.insert(id.clone(), Device::Ble(device));
         info!("添加蓝牙设备: {} ({})", id, mac);
-        self.devices.get(&id).and_then(|d| match d {
-            Device::Ble(bd) => Some(bd),
-            _ => None,
-        }).expect("刚插入的设备必须存在且类型匹配")
+        self.devices
+            .get(&id)
+            .and_then(|d| match d {
+                Device::Ble(bd) => Some(bd),
+                _ => None,
+            })
+            .expect("刚插入的设备必须存在且类型匹配")
     }
 
     pub fn remove_device(&mut self, device_id: &str) -> Option<Device> {
@@ -127,15 +133,23 @@ impl AppState {
     }
 
     pub fn get_devices_by_type(&self, is_serial: bool) -> Vec<&Device> {
-        self.devices.values().filter(|d| match d {
-            Device::Serial(_) => is_serial,
-            Device::Ble(_) => !is_serial,
-        }).collect()
+        self.devices
+            .values()
+            .filter(|d| match d {
+                Device::Serial(_) => is_serial,
+                Device::Ble(_) => !is_serial,
+            })
+            .collect()
     }
 
     // ==================== 通道管理 ====================
 
-    pub fn add_channel(&mut self, device_id: &str, channel_id: String, direction: ChannelDirection) -> bool {
+    pub fn add_channel(
+        &mut self,
+        device_id: &str,
+        channel_id: String,
+        direction: ChannelDirection,
+    ) -> bool {
         if let Some(device) = self.devices.get_mut(device_id) {
             match device {
                 Device::Serial(_sd) => {
@@ -162,7 +176,12 @@ impl AppState {
         self.devices.get_mut(device_id)?.get_channel_mut(channel_id)
     }
 
-    pub fn set_channel_subscribed(&mut self, device_id: &str, channel_id: &str, subscribed: bool) -> bool {
+    pub fn set_channel_subscribed(
+        &mut self,
+        device_id: &str,
+        channel_id: &str,
+        subscribed: bool,
+    ) -> bool {
         if let Some(channel) = self.get_channel_mut(device_id, channel_id) {
             channel.subscribed = subscribed;
             debug!("通道 {}/{} 订阅状态: {}", device_id, channel_id, subscribed);
@@ -178,7 +197,12 @@ impl AppState {
         let max_size = self.settings.max_buffer_size;
         if let Some(channel) = self.get_channel_mut(device_id, channel_id) {
             channel.buffer.add_entry(data, max_size);
-            debug!("通道 {}/{} 添加数据: {} 字节", device_id, channel_id, data.len());
+            debug!(
+                "通道 {}/{} 添加数据: {} 字节",
+                device_id,
+                channel_id,
+                data.len()
+            );
             true
         } else {
             warn!("通道不存在: {}/{}", device_id, channel_id);
@@ -228,7 +252,14 @@ impl AppState {
         }
     }
 
-    pub fn update_serial_config(&mut self, device_id: &str, baud_rate: u32, data_bits: DataBits, parity: Parity, stop_bits: StopBits) -> bool {
+    pub fn update_serial_config(
+        &mut self,
+        device_id: &str,
+        baud_rate: u32,
+        data_bits: DataBits,
+        parity: Parity,
+        stop_bits: StopBits,
+    ) -> bool {
         if let Some(sd) = self.get_serial_device_mut(device_id) {
             sd.baud_rate = baud_rate;
             sd.data_bits = data_bits;
@@ -253,7 +284,11 @@ impl AppState {
         }
     }
 
-    pub fn update_ble_connection_params(&mut self, device_id: &str, params: ConnectionParams) -> bool {
+    pub fn update_ble_connection_params(
+        &mut self,
+        device_id: &str,
+        params: ConnectionParams,
+    ) -> bool {
         if let Some(bd) = self.get_ble_device_mut(device_id) {
             bd.connection_params = params;
             debug!("蓝牙设备 {} 连接参数已更新", device_id);
@@ -278,7 +313,12 @@ impl AppState {
 
     // ==================== TAB 管理 ====================
 
-    pub fn add_tab(&mut self, device_id: String, channel_id: Option<String>, label: String) -> String {
+    pub fn add_tab(
+        &mut self,
+        device_id: String,
+        channel_id: Option<String>,
+        label: String,
+    ) -> String {
         let key = format!("tab-{}-{}", device_id, current_timestamp());
         let tab = TabState {
             key: key.clone(),
@@ -287,11 +327,11 @@ impl AppState {
             label,
             is_active: true,
         };
-        
+
         for t in &mut self.window_state.tabs {
             t.is_active = false;
         }
-        
+
         self.window_state.tabs.push(tab);
         self.window_state.active_tab_key = Some(key.clone());
         debug!("TAB 已添加: {}", key);
@@ -302,7 +342,8 @@ impl AppState {
         if let Some(pos) = self.window_state.tabs.iter().position(|t| t.key == tab_key) {
             self.window_state.tabs.remove(pos);
             if self.window_state.active_tab_key.as_deref() == Some(tab_key) {
-                self.window_state.active_tab_key = self.window_state.tabs.last().map(|t| t.key.clone());
+                self.window_state.active_tab_key =
+                    self.window_state.tabs.last().map(|t| t.key.clone());
             }
             debug!("TAB 已移除: {}", tab_key);
             true

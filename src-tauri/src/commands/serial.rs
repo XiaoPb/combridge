@@ -3,8 +3,7 @@ use tauri::{AppHandle, State};
 use tracing::{debug, error, info};
 
 use crate::device::{
-    BaudRate, DataBits, FlowControl, Parity, PortInfo, SerialManagerRef,
-    SerialPortConfig, StopBits,
+    BaudRate, DataBits, FlowControl, Parity, PortInfo, SerialManagerRef, SerialPortConfig, StopBits,
 };
 use crate::error::{ComBridgeError, Result};
 
@@ -144,11 +143,9 @@ fn parse_flow_control(s: &str) -> Result<FlowControl> {
 }
 
 #[tauri::command]
-pub async fn scan_serial_ports(
-    manager: State<'_, SerialManagerRef>,
-) -> Result<Vec<PortInfo>> {
+pub async fn scan_serial_ports(manager: State<'_, SerialManagerRef>) -> Result<Vec<PortInfo>> {
     info!("开始扫描串口设备");
-    
+
     let manager = manager.inner();
     match manager.scan_ports() {
         Ok(ports) => {
@@ -171,7 +168,7 @@ pub async fn open_serial_port(
     config: SerialPortConfigDto,
 ) -> Result<()> {
     info!("尝试打开串口: {}", config.port_name);
-    
+
     let manager = manager.inner();
     let config: SerialPortConfig = match config.try_into() {
         Ok(c) => c,
@@ -182,7 +179,7 @@ pub async fn open_serial_port(
     };
 
     let port_name = config.port_name.clone();
-    
+
     match manager.open_port(config, move |name, data| {
         debug!("串口 {} 接收到 {} 字节数据", name, data.len());
     }) {
@@ -224,7 +221,12 @@ pub async fn send_serial_data(
     data: Vec<u8>,
 ) -> Result<usize> {
     let data_hex = format_hex(&data);
-    info!("[SEND] 串口 {} 发送 {} 字节: {}", port_name, data.len(), data_hex);
+    info!(
+        "[SEND] 串口 {} 发送 {} 字节: {}",
+        port_name,
+        data.len(),
+        data_hex
+    );
 
     let manager = manager.inner();
     match manager.send_data(&port_name, &data) {
@@ -240,11 +242,9 @@ pub async fn send_serial_data(
 }
 
 #[tauri::command]
-pub async fn get_open_ports(
-    manager: State<'_, SerialManagerRef>,
-) -> Result<Vec<String>> {
+pub async fn get_open_ports(manager: State<'_, SerialManagerRef>) -> Result<Vec<String>> {
     debug!("获取已打开的端口列表");
-    
+
     let manager = manager.inner();
     let ports = manager.get_open_ports()?;
     debug!("当前已打开 {} 个端口", ports.len());
@@ -252,15 +252,16 @@ pub async fn get_open_ports(
 }
 
 #[tauri::command]
-pub async fn is_port_open(
-    manager: State<'_, SerialManagerRef>,
-    port_name: String,
-) -> Result<bool> {
+pub async fn is_port_open(manager: State<'_, SerialManagerRef>, port_name: String) -> Result<bool> {
     debug!("检查端口 {} 是否已打开", port_name);
-    
+
     let manager = manager.inner();
     let is_open = manager.is_port_open(&port_name)?;
-    debug!("端口 {} 状态: {}", port_name, if is_open { "已打开" } else { "已关闭" });
+    debug!(
+        "端口 {} 状态: {}",
+        port_name,
+        if is_open { "已打开" } else { "已关闭" }
+    );
     Ok(is_open)
 }
 
@@ -306,7 +307,9 @@ pub async fn export_serial_data(
         .filter(|entry| entry.direction == "receive")
         .map(|entry| {
             let timestamp_str = format_timestamp(entry.timestamp);
-            let data_ascii: String = entry.data.iter()
+            let data_ascii: String = entry
+                .data
+                .iter()
                 .map(|b| {
                     if *b >= 32 && *b <= 126 {
                         (*b as char).to_string()
@@ -315,7 +318,12 @@ pub async fn export_serial_data(
                     }
                 })
                 .collect();
-            format!("[{}][RX][{} byte] {}", timestamp_str, entry.data.len(), data_ascii)
+            format!(
+                "[{}][RX][{} byte] {}",
+                timestamp_str,
+                entry.data.len(),
+                data_ascii
+            )
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -338,7 +346,11 @@ pub async fn export_serial_data(
         ComBridgeError::serial(format!("写入数据文件失败: {}", e))
     })?;
 
-    info!("数据导出成功: log={}, dat={}", log_path.display(), dat_path.display());
+    info!(
+        "数据导出成功: log={}, dat={}",
+        log_path.display(),
+        dat_path.display()
+    );
 
     Ok(ExportResult {
         log_path: log_path.to_string_lossy().to_string(),

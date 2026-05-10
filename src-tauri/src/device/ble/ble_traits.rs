@@ -76,11 +76,21 @@ impl Default for BleCharacteristicProperties {
 impl std::fmt::Display for BleCharacteristicProperties {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut props = Vec::new();
-        if self.read { props.push("read"); }
-        if self.write { props.push("write"); }
-        if self.write_without_response { props.push("write_without_response"); }
-        if self.notify { props.push("notify"); }
-        if self.indicate { props.push("indicate"); }
+        if self.read {
+            props.push("read");
+        }
+        if self.write {
+            props.push("write");
+        }
+        if self.write_without_response {
+            props.push("write_without_response");
+        }
+        if self.notify {
+            props.push("notify");
+        }
+        if self.indicate {
+            props.push("indicate");
+        }
         write!(f, "{}", props.join(", "))
     }
 }
@@ -96,11 +106,26 @@ pub trait BleBackend: Send + Sync {
     async fn disconnect(&self, address: &str) -> Result<()>;
     async fn get_connections(&self) -> Result<Vec<BleConnection>>;
     async fn discover_services(&self, address: &str) -> Result<Vec<BleService>>;
-    async fn discover_characteristics(&self, address: &str, service_uuid: &str) -> Result<Vec<BleCharacteristic>>;
+    async fn discover_characteristics(
+        &self,
+        address: &str,
+        service_uuid: &str,
+    ) -> Result<Vec<BleCharacteristic>>;
     async fn read_characteristic(&self, address: &str, char_uuid: &str) -> Result<Vec<u8>>;
-    async fn write_characteristic(&self, address: &str, char_uuid: &str, data: &[u8]) -> Result<()>;
-    async fn write_without_response(&self, address: &str, char_uuid: &str, data: &[u8]) -> Result<()>;
-    async fn subscribe_notify(&self, address: &str, char_uuid: &str, callback: NotifyCallback) -> Result<()>;
+    async fn write_characteristic(&self, address: &str, char_uuid: &str, data: &[u8])
+        -> Result<()>;
+    async fn write_without_response(
+        &self,
+        address: &str,
+        char_uuid: &str,
+        data: &[u8],
+    ) -> Result<()>;
+    async fn subscribe_notify(
+        &self,
+        address: &str,
+        char_uuid: &str,
+        callback: NotifyCallback,
+    ) -> Result<()>;
     async fn unsubscribe_notify(&self, address: &str, char_uuid: &str) -> Result<()>;
     async fn get_rssi(&self, address: &str) -> Result<i16>;
     async fn set_mtu(&self, address: &str, mtu: u16) -> Result<u16>;

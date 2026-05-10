@@ -1,11 +1,11 @@
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::info;
 
+use super::ble::{AtConfig, BleConnection, BleManager, BleManagerRef};
+use super::serial::{SerialManager, SerialManagerRef, SerialPortConfig};
 use crate::error::{ComBridgeError, Result};
 use crate::service::event_bus::EventBus;
-use super::serial::{SerialManager, SerialManagerRef, SerialPortConfig};
-use super::ble::{BleManager, BleManagerRef, BleConnection, AtConfig};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeviceType {
@@ -48,8 +48,7 @@ impl DeviceManager {
                 self.serial_manager.send_data(device_name, data)?;
             }
             DeviceType::Ble => {
-                let uuid = char_uuid
-                    .ok_or_else(|| ComBridgeError::ble("缺少特征UUID"))?;
+                let uuid = char_uuid.ok_or_else(|| ComBridgeError::ble("缺少特征UUID"))?;
                 self.ble_manager
                     .write_characteristic(device_name, uuid, data)
                     .await?;
@@ -60,7 +59,8 @@ impl DeviceManager {
     }
 
     pub async fn open_serial(&self, config: SerialPortConfig) -> Result<()> {
-        self.serial_manager.open_port(config.clone(), move |_name, _data| {})?;
+        self.serial_manager
+            .open_port(config.clone(), move |_name, _data| {})?;
         info!("串口已打开: {}", config.port_name);
         Ok(())
     }

@@ -9,11 +9,8 @@ pub use config::ConfigService;
 pub use data_queue::DataQueue;
 pub use event_bridge::{EventBridge, EventFilter};
 pub use event_bus::{
-    EventBus, Event, 
-    SerialDataEvent, SerialConnectedEvent, SerialDisconnectedEvent,
-    BleDataEvent, BleConnectionEvent,
-    Gh3036FrameEvent, ProtocolParsedEvent,
-    topics,
+    topics, BleConnectionEvent, BleDataEvent, Event, EventBus, Gh3036FrameEvent,
+    ProtocolParsedEvent, SerialConnectedEvent, SerialDataEvent, SerialDisconnectedEvent,
 };
 pub use logger::LoggerService;
 pub use msgpack_handler::{

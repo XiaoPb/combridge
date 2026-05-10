@@ -2,10 +2,9 @@ use tauri::State;
 
 use crate::error::{ComBridgeError, ErrorResponse};
 use crate::gh3036::{
-    ChannelConfig, ChannelType, CsvConfig, FactoryTestResult,
-    FactoryTestStep, FactoryTestStatus, Gh3036ManagerRef, RpcCommand, VersionTypeConfig,
-    ConfigValidationResult, ThresholdConfigValidation, FactoryThresholdConfig,
-    FactoryEvaluationResult, RefDataStatus,
+    ChannelConfig, ChannelType, ConfigValidationResult, CsvConfig, FactoryEvaluationResult,
+    FactoryTestResult, FactoryTestStatus, FactoryTestStep, FactoryThresholdConfig,
+    Gh3036ManagerRef, RefDataStatus, RpcCommand, ThresholdConfigValidation, VersionTypeConfig,
 };
 use crate::state::StatePersistenceRef;
 
@@ -18,7 +17,7 @@ pub async fn gh3036_init(
     let prefs = persistence.load_preferences().await.map_err(|e| {
         ComBridgeError::config(format!("加载偏好设置失败: {}", e)).to_error_response()
     })?;
-    
+
     let csv_config = CsvConfig {
         enabled: prefs.gh3036_csv.enabled,
         output_dir: prefs.gh3036_csv.output_dir,
@@ -26,7 +25,7 @@ pub async fn gh3036_init(
     manager.set_csv_config(csv_config).map_err(|e| {
         ComBridgeError::protocol(format!("设置CSV配置失败: {}", e)).to_error_response()
     })?;
-    
+
     manager
         .initialize()
         .map_err(|e| ComBridgeError::protocol(e).to_error_response())
@@ -50,11 +49,10 @@ pub async fn gh3036_configure_tx_channel(
         "serial" => ChannelType::Serial,
         "ble" => ChannelType::Ble,
         _ => {
-            return Err(ComBridgeError::protocol(format!(
-                "不支持的通道类型: {}",
-                channel_type
-            ))
-            .to_error_response())
+            return Err(
+                ComBridgeError::protocol(format!("不支持的通道类型: {}", channel_type))
+                    .to_error_response(),
+            )
         }
     };
 
@@ -80,11 +78,10 @@ pub async fn gh3036_configure_rx_channel(
         "serial" => ChannelType::Serial,
         "ble" => ChannelType::Ble,
         _ => {
-            return Err(ComBridgeError::protocol(format!(
-                "不支持的通道类型: {}",
-                channel_type
-            ))
-            .to_error_response())
+            return Err(
+                ComBridgeError::protocol(format!("不支持的通道类型: {}", channel_type))
+                    .to_error_response(),
+            )
         }
     };
 
@@ -125,7 +122,10 @@ pub async fn gh3036_set_csv_config(
     output_dir: String,
     manager: State<'_, Gh3036ManagerRef>,
 ) -> Result<(), ErrorResponse> {
-    let config = CsvConfig { enabled, output_dir };
+    let config = CsvConfig {
+        enabled,
+        output_dir,
+    };
     manager
         .set_csv_config(config)
         .map_err(|e| ComBridgeError::protocol(e).to_error_response())
@@ -337,9 +337,7 @@ pub async fn gh3036_get_ref_data_status(
 }
 
 #[tauri::command]
-pub async fn gh3036_start_hr_ref_monitor(
-    device_address: String,
-) -> Result<(), ErrorResponse> {
+pub async fn gh3036_start_hr_ref_monitor(device_address: String) -> Result<(), ErrorResponse> {
     crate::gh3036::start_hr_ref_monitor(&device_address)
         .await
         .map_err(|e| ComBridgeError::protocol(e).to_error_response())

@@ -44,7 +44,7 @@ impl WaveformBuffer {
             data.pop_front();
         }
         data.push_back(values);
-        
+
         let mut ts = self.timestamp.write();
         *ts = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -52,20 +52,21 @@ impl WaveformBuffer {
             .unwrap_or(0);
     }
 
-    pub fn append_row_from_strings(&self, values: Vec<String>) -> Result<(), crate::error::ComBridgeError> {
-        let parsed: Result<Vec<f64>, _> = values
-            .iter()
-            .map(|s| s.trim().parse::<f64>())
-            .collect();
+    pub fn append_row_from_strings(
+        &self,
+        values: Vec<String>,
+    ) -> Result<(), crate::error::ComBridgeError> {
+        let parsed: Result<Vec<f64>, _> = values.iter().map(|s| s.trim().parse::<f64>()).collect();
 
         match parsed {
             Ok(nums) => {
                 self.append_row(nums);
                 Ok(())
             }
-            Err(_) => Err(crate::error::ComBridgeError::parse(
-                format!("Failed to parse values: {:?}", values)
-            ))
+            Err(_) => Err(crate::error::ComBridgeError::parse(format!(
+                "Failed to parse values: {:?}",
+                values
+            ))),
         }
     }
 
@@ -170,8 +171,10 @@ mod tests {
             column_names: vec!["CH0".to_string(), "CH1".to_string()],
         });
 
-        buffer.append_row_from_strings(vec!["1.5".to_string(), "2.5".to_string()]).unwrap();
-        
+        buffer
+            .append_row_from_strings(vec!["1.5".to_string(), "2.5".to_string()])
+            .unwrap();
+
         let data = buffer.read_last_n_rows(10);
         assert_eq!(data.len(), 1);
         assert_eq!(data[0], vec![1.5, 2.5]);

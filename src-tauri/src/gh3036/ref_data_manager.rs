@@ -270,10 +270,7 @@ impl RefDataManager {
                     ref_data[SPO2_REF_START + i] = spo2_ref.values[i];
                 }
                 ref_data[SPO2_REF_NUM_IDX] = spo2_ref.count;
-                debug!(
-                    "[RefDataManager] SpO2金标有效: count={}",
-                    spo2_ref.count
-                );
+                debug!("[RefDataManager] SpO2金标有效: count={}", spo2_ref.count);
             }
         }
 
@@ -478,14 +475,14 @@ mod tests {
     #[test]
     fn test_time_based_expiration() {
         let manager = RefDataManager::new();
-        
+
         manager.set_hr_ref(&[72]).unwrap();
-        
+
         let ref_data = manager.get_ref_data(10);
         assert_eq!(ref_data[HR_REF_NUM_IDX], 1);
-        
+
         thread::sleep(Duration::from_millis(500));
-        
+
         let ref_data = manager.get_ref_data(10);
         assert_eq!(ref_data[HR_REF_NUM_IDX], 1);
     }

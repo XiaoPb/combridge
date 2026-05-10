@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
@@ -36,7 +36,9 @@ impl ThresholdOperator {
             Self::Ge => threshold.value.map_or(false, |t| value >= t),
             Self::Eq => threshold.value.map_or(false, |t| value == t),
             Self::Ne => threshold.value.map_or(false, |t| value != t),
-            Self::Range => threshold.range.map_or(false, |r| value >= r[0] && value <= r[1]),
+            Self::Range => threshold
+                .range
+                .map_or(false, |r| value >= r[0] && value <= r[1]),
         }
     }
 }
@@ -128,12 +130,14 @@ impl TestItemConfig {
         }
 
         if let Some(gt) = &self.global_threshold {
-            gt.validate().map_err(|e| format!("{} global_threshold: {}", test_name, e))?;
+            gt.validate()
+                .map_err(|e| format!("{} global_threshold: {}", test_name, e))?;
         }
 
         if let Some(rules) = &self.channel_rules {
             for (i, rule) in rules.iter().enumerate() {
-                rule.validate().map_err(|e| format!("{} channel_rules[{}]: {}", test_name, i, e))?;
+                rule.validate()
+                    .map_err(|e| format!("{} channel_rules[{}]: {}", test_name, i, e))?;
             }
         }
 
@@ -201,8 +205,7 @@ pub struct FactoryThresholdConfig {
 
 impl FactoryThresholdConfig {
     pub fn from_yaml(yaml_str: &str) -> Result<Self, String> {
-        serde_yaml::from_str(yaml_str)
-            .map_err(|e| format!("Failed to parse YAML: {}", e))
+        serde_yaml::from_str(yaml_str).map_err(|e| format!("Failed to parse YAML: {}", e))
     }
 
     pub fn from_file(path: &Path) -> Result<Self, String> {
@@ -247,8 +250,8 @@ impl FactoryThresholdConfig {
             let path = entry.path();
             if let Some(file_name) = path.file_name() {
                 let file_name_str = file_name.to_string_lossy();
-                if file_name_str.starts_with("factory_config_") 
-                    && file_name_str.ends_with(".yaml") {
+                if file_name_str.starts_with("factory_config_") && file_name_str.ends_with(".yaml")
+                {
                     matches.push(path);
                 }
             }
@@ -277,8 +280,8 @@ impl FactoryThresholdConfig {
             let path = entry.path();
             if let Some(file_name) = path.file_name() {
                 let file_name_str = file_name.to_string_lossy();
-                if file_name_str.starts_with("factory_config_") 
-                    && file_name_str.ends_with(".yaml") {
+                if file_name_str.starts_with("factory_config_") && file_name_str.ends_with(".yaml")
+                {
                     matches.push(path);
                 }
             }
@@ -346,9 +349,11 @@ impl TestEvaluationResult {
         let mut failed_channels = Vec::new();
 
         for (idx, &value) in values.iter().enumerate() {
-            let threshold = config.as_ref().and_then(|c| c.find_threshold_for_channel(idx));
-            
-            let (pass, threshold_display, operator, threshold_value, threshold_range, description) = 
+            let threshold = config
+                .as_ref()
+                .and_then(|c| c.find_threshold_for_channel(idx));
+
+            let (pass, threshold_display, operator, threshold_value, threshold_range, description) =
                 match threshold {
                     Some(t) => {
                         let p = t.operator.evaluate(value, &t);
@@ -356,9 +361,14 @@ impl TestEvaluationResult {
                         let op = t.operator.display_symbol().to_string();
                         (p, display, op, t.value, t.range, t.description.clone())
                     }
-                    None => {
-                        (true, "No threshold configured".to_string(), String::new(), None, None, None)
-                    }
+                    None => (
+                        true,
+                        "No threshold configured".to_string(),
+                        String::new(),
+                        None,
+                        None,
+                        None,
+                    ),
                 };
 
             if !pass {
@@ -522,7 +532,10 @@ pub fn validate_threshold_config_file(config_dir: &Path) -> ThresholdConfigValid
             info!("[ThresholdConfig] Found config file: {:?}", path);
             match FactoryThresholdConfig::from_file(&path) {
                 Ok(config) => {
-                    info!("[ThresholdConfig] Loaded config for project: {}", config.project);
+                    info!(
+                        "[ThresholdConfig] Loaded config for project: {}",
+                        config.project
+                    );
                     ThresholdConfigValidation::from_config(&config, Some(&path))
                 }
                 Err(e) => {
@@ -538,8 +551,11 @@ pub fn validate_threshold_config_file(config_dir: &Path) -> ThresholdConfigValid
                 warn!("[ThresholdConfig] {}", msg);
                 ThresholdConfigValidation::from_error(msg, None)
             } else {
-                let msg = format!("Found {} factory_config_*.yaml files, expected exactly 1: {:?}", 
-                    all_configs.len(), all_configs);
+                let msg = format!(
+                    "Found {} factory_config_*.yaml files, expected exactly 1: {:?}",
+                    all_configs.len(),
+                    all_configs
+                );
                 warn!("[ThresholdConfig] {}", msg);
                 ThresholdConfigValidation::from_error(msg, None)
             }
@@ -556,11 +572,13 @@ pub fn evaluate_test_data(
 ) -> FactoryEvaluationResult {
     let mut result = FactoryEvaluationResult::new(&config.project);
 
-    let mut base_noise_result = TestEvaluationResult::new("base_noise", config.tests.base_noise.as_ref());
+    let mut base_noise_result =
+        TestEvaluationResult::new("base_noise", config.tests.base_noise.as_ref());
     base_noise_result.evaluate_channels(base_noise, config.tests.base_noise.as_ref());
     result.add_test_result(base_noise_result);
 
-    let mut ppg_noise_result = TestEvaluationResult::new("ppg_noise", config.tests.ppg_noise.as_ref());
+    let mut ppg_noise_result =
+        TestEvaluationResult::new("ppg_noise", config.tests.ppg_noise.as_ref());
     ppg_noise_result.evaluate_channels(ppg_noise, config.tests.ppg_noise.as_ref());
     result.add_test_result(ppg_noise_result);
 
@@ -619,7 +637,10 @@ pub fn generate_error_codes(
 
             for channel_result in &test_result.channel_results {
                 if !channel_result.pass {
-                    let error_code = format!("0x{:04X}", base_code + channel_result.channel_index as u32 + 1);
+                    let error_code = format!(
+                        "0x{:04X}",
+                        base_code + channel_result.channel_index as u32 + 1
+                    );
                     error_codes.push(error_code);
                 }
             }

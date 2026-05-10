@@ -6,7 +6,6 @@ pub enum ErrorCode {
     SerialError = 1000,
     BleError = 2000,
     ProtocolError = 3000,
-    WebSocketError = 4000,
     ConfigError = 5000,
     IoError = 6000,
     ParseError = 7000,
@@ -19,7 +18,6 @@ impl fmt::Display for ErrorCode {
             ErrorCode::SerialError => write!(f, "E1000"),
             ErrorCode::BleError => write!(f, "E2000"),
             ErrorCode::ProtocolError => write!(f, "E3000"),
-            ErrorCode::WebSocketError => write!(f, "E4000"),
             ErrorCode::ConfigError => write!(f, "E5000"),
             ErrorCode::IoError => write!(f, "E6000"),
             ErrorCode::ParseError => write!(f, "E7000"),
@@ -36,8 +34,6 @@ pub enum ComBridgeError {
     BleError(String),
     #[error("[E3000] {0}")]
     ProtocolError(String),
-    #[error("[E4000] {0}")]
-    WebSocketError(String),
     #[error("[E5000] {0}")]
     ConfigError(String),
     #[error("[E6000] {0}")]
@@ -49,19 +45,24 @@ pub enum ComBridgeError {
 }
 
 impl serde::Serialize for ComBridgeError {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
         use serde::ser::SerializeMap;
         let mut map = serializer.serialize_map(Some(1))?;
         match self {
             ComBridgeError::SerialError(msg) => map.serialize_entry("SerialError", msg)?,
             ComBridgeError::BleError(msg) => map.serialize_entry("BleError", msg)?,
             ComBridgeError::ProtocolError(msg) => map.serialize_entry("ProtocolError", msg)?,
-            ComBridgeError::WebSocketError(msg) => map.serialize_entry("WebSocketError", msg)?,
             ComBridgeError::ConfigError(msg) => map.serialize_entry("ConfigError", msg)?,
             ComBridgeError::IoError(msg) => map.serialize_entry("IoError", msg)?,
             ComBridgeError::ParseError(msg) => map.serialize_entry("ParseError", msg)?,
             ComBridgeError::DeviceError { code, message } => {
-                map.serialize_entry("DeviceError", &serde_json::json!({"code": *code as i32, "message": message}))?;
+                map.serialize_entry(
+                    "DeviceError",
+                    &serde_json::json!({"code": *code as i32, "message": message}),
+                )?;
             }
         }
         map.end()
@@ -74,7 +75,6 @@ impl ComBridgeError {
             ComBridgeError::SerialError(_) => ErrorCode::SerialError,
             ComBridgeError::BleError(_) => ErrorCode::BleError,
             ComBridgeError::ProtocolError(_) => ErrorCode::ProtocolError,
-            ComBridgeError::WebSocketError(_) => ErrorCode::WebSocketError,
             ComBridgeError::ConfigError(_) => ErrorCode::ConfigError,
             ComBridgeError::IoError(_) => ErrorCode::IoError,
             ComBridgeError::ParseError(_) => ErrorCode::ParseError,
@@ -87,7 +87,6 @@ impl ComBridgeError {
             ComBridgeError::SerialError(msg) => msg,
             ComBridgeError::BleError(msg) => msg,
             ComBridgeError::ProtocolError(msg) => msg,
-            ComBridgeError::WebSocketError(msg) => msg,
             ComBridgeError::ConfigError(msg) => msg,
             ComBridgeError::IoError(msg) => msg,
             ComBridgeError::ParseError(msg) => msg,
@@ -113,10 +112,6 @@ impl ComBridgeError {
 
     pub fn protocol<T: Into<String>>(msg: T) -> Self {
         ComBridgeError::ProtocolError(msg.into())
-    }
-
-    pub fn websocket<T: Into<String>>(msg: T) -> Self {
-        ComBridgeError::WebSocketError(msg.into())
     }
 
     pub fn config<T: Into<String>>(msg: T) -> Self {

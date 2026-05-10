@@ -72,13 +72,13 @@
 │                          后端模块层                                          │
 │  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐                │
 │  │ Serial    │  │ BLE       │  │ GH3036    │  │ Protocol  │                │
-│  │ Manager   │  │ Manager   │  │ Manager   │  │ Manager   │                │
+│  │ Manager   │  │ Manager   │  │ Manager   │                               │
 │  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └──────┬────┘                │
 │        │              │              │               │                      │
-│  ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐  ┌──────┴────┐                │
-│  │ Waveform  │  │ State     │  │ Dashboard │  │ WebSocket │                │
-│  │ Manager   │  │ Dispatcher│  │ Manager   │  │ Manager   │                │
-│  └───────────┘  └───────────┘  └───────────┘  └───────────┘                │
+│  ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐                               │
+│  │ Waveform  │  │ State     │  │ Dashboard │                               │
+│  │ Manager   │  │ Dispatcher│  │ Manager   │                               │
+│  └───────────┘  └───────────┘  └───────────┘                               │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -592,7 +592,6 @@ let filter = EventFilter::with_prefixes(vec![
 | `serial` | 串口管理 | 串口设备相关事件 |
 | `ble` | BLE管理 | 蓝牙设备相关事件 |
 | `gh3036` | GH3036协议 | GH3036协议处理事件 |
-| `ws` | WebSocket | WebSocket连接事件 |
 | `protocol` | 协议插件 | 协议解析事件 |
 | `waveform` | 波形数据 | 波形处理事件 |
 | `state` | 状态管理 | 应用状态事件 |
@@ -1043,7 +1042,6 @@ impl Gh3036Manager {
 │ SerialManager   │ 无（仅发布）                                             │
 │ BleManager      │ 无（仅发布）                                             │
 │ Gh3036Manager   │ serial:data, ble:data                                   │
-│ WebSocketManager│ 无（仅发布）                                             │
 │ ProtocolManager │ serial:data, ble:data                                   │
 │ WaveformManager │ protocol:parsed, serial:data, ble:data                  │
 │ StateDispatcher │ serial:data, ble:data, serial:connected, ble:connected  │

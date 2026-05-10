@@ -220,7 +220,6 @@ pub enum ErrorCode {
     SerialError = 1000,
     BleError = 2000,
     ProtocolError = 3000,
-    WebSocketError = 4000,
     ConfigError = 5000,
     IoError = 6000,
     ParseError = 7000,
@@ -239,7 +238,6 @@ pub enum ComBridgeError {
     ProtocolError(String),
 
     #[error("[E4000] {0}")]
-    WebSocketError(String),
 
     #[error("[E5000] {0}")]
     ConfigError(String),

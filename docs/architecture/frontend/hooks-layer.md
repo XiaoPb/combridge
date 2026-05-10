@@ -13,7 +13,6 @@ Hooks 层封装了可复用的业务逻辑，将 API 调用、状态管理和事
 |------|------|
 | `useSerial.ts` | 串口 Hook |
 | `useBle.ts` | BLE Hook |
-| `useWebSocket.ts` | WebSocket Hook |
 | `useAppState.ts` | 应用状态 Hook |
 | `useAppDispatch.ts` | 动作分发 Hook |
 | `useProtocol.ts` | 协议 Hook |
@@ -231,19 +230,6 @@ sequenceDiagram
     Backend->>Backend: 状态机处理
     Backend-->>UI: emit('state-change', newState)
 ```
-
-### useWebSocket
-
-WebSocket 操作 Hook：
-
-```typescript
-interface UseWebSocketReturn {
-  connections: string[];
-  status: Record<string, WebSocketStatus>;
-  connect: (id: string, url: string, reconnect?: boolean) => Promise<void>;
-  send: (id: string, message: string) => Promise<void>;
-  disconnect: (id: string) => Promise<void>;
-}
 ```
 
 ### useAppState
@@ -392,7 +378,6 @@ graph TB
     subgraph Hooks
         useSerial
         useBle
-        useWebSocket
         useProtocol
         useWaveform
         useAppDispatch
@@ -424,7 +409,6 @@ graph TB
     subgraph API
         serialApi
         bleApi
-        websocketApi
         protocolApi
         waveformApi
         stateApi

@@ -20,7 +20,6 @@
 | **后端框架**      | Tauri 2.0 (Rust)                      | 跨平台桌面应用         |
 | **异步运行时**     | Tokio                                 | Rust 异步运行时      |
 | **序列化**       | Serde + Serde JSON                    | Rust 数据序列化      |
-| **WebSocket** | Tauri WebSocket Plugin                | 原生 WebSocket 支持 |
 | **串口通信**      | serialport-rs                         | 跨平台串口库          |
 | **BLE 通信**    | Tauri BLE Plugin (原生) / bluer (Linux) | 原生蓝牙支持          |
 | **AT指令解析**    | 自定义 AT 命令解析器                          | 串口 AT 指令 BLE 模块 |
@@ -54,7 +53,6 @@ combridge/
 │   │   │   ├── ble.rs                  # BLE 命令：配置、扫描、连接、读写、订阅、AT透传
 │   │   │   ├── protocol.rs             # 协议命令：加载、卸载、绑定、列表
 │   │   │   ├── system.rs               # 系统命令：信息、状态、日志配置、窗口管理
-│   │   │   ├── websocket.rs            # WebSocket 命令：连接、发送、断开
 │   │   │   ├── gh3036.rs               # GH3036 命令：初始化、通道配置、RPC、CSV导出
 │   │   │   ├── waveform.rs             # 波形命令：缓冲区管理、解析器、数据读写
 │   │   │   ├── state.rs                # 状态命令：动作分发、状态读写、设备查询
@@ -103,13 +101,6 @@ combridge/
 │   │   │   ├── data_queue.rs           # 数据队列：异步数据缓冲，背压控制
 │   │   │   ├── event_bus.rs            # 事件总线：模块间事件通信，订阅发布
 │   │   │   └── msgpack_handler.rs      # MsgPack 处理器：二进制打包/解包
-│   │   │
-│   │   ├── websocket/                  # WebSocket 客户端
-│   │   │   ├── mod.rs
-│   │   │   ├── client.rs               # WebSocket 客户端：连接管理，心跳维护
-│   │   │   ├── message_handler.rs      # 消息处理器：JSON 请求/响应处理
-│   │   │   ├── connection_pool.rs      # 连接池管理：多连接支持
-│   │   │   └── reconnection.rs         # 重连机制：断线自动重连
 │   │   │
 │   │   ├── dashboard/                  # Dashboard 模块
 │   │   │   ├── mod.rs
@@ -221,7 +212,6 @@ combridge/
 │   │       ├── index.tsx               # 系统主页面
 │   │       ├── SystemInfo.tsx          # 系统信息：版本、构建信息
 │   │       ├── LogViewer.tsx           # 日志查看器：日志级别过滤、搜索
-│   │       └── WebSocketConfig.tsx     # WebSocket 配置：远程服务器配置
 │   │
 │   ├── components/                     # 公共组件
 │   │   ├── Layout/
@@ -253,7 +243,6 @@ combridge/
 │   │       └── HexInput.tsx            # 十六进制输入组件
 │   │
 │   ├── hooks/                          # 自定义 Hooks
-│   │   ├── useWebSocket.ts             # WebSocket Hook：连接管理、消息收发
 │   │   ├── useSerial.ts                # 串口 Hook：串口操作封装
 │   │   ├── useBle.ts                   # BLE Hook：BLE 操作封装，模式感知
 │   │   ├── useNotification.ts          # 通知 Hook：系统通知、Toast
@@ -397,7 +386,6 @@ graph TB
 | **BLE 命令**        | `commands/ble.rs`                     | 配置、扫描、连接、断开、GATT 操作、AT透传、UUID配置 |
 | **协议命令**          | `commands/protocol.rs`                | 加载/卸载协议、启用/禁用、绑定设备         |
 | **系统命令**          | `commands/system.rs`                  | 获取系统信息、运行状态、配置日志、窗口管理   |
-| **WebSocket 命令**  | `commands/websocket.rs`               | 连接/断开远程服务器、发送消息            |
 | **GH3036 命令**     | `commands/gh3036.rs`                  | GH3036 初始化、通道配置、RPC、CSV导出    |
 | **波形命令**          | `commands/waveform.rs`                | 波形缓冲区管理、解析器配置、数据读写       |
 | **状态命令**          | `commands/state.rs`                   | 动作分发、状态读写、设备查询、窗口状态      |
@@ -425,10 +413,6 @@ graph TB
 | **数据队列**          | `service/data_queue.rs`               | 异步数据缓冲、背压控制                |
 | **事件总线**          | `service/event_bus.rs`                | 模块间事件通信、订阅发布模式             |
 | **MsgPack 处理器**   | `service/msgpack_handler.rs`          | 二进制数据打包/解包                 |
-| **WebSocket 客户端** | `websocket/client.rs`                 | 连接管理、心跳维护                  |
-| **消息处理器**         | `websocket/message_handler.rs`        | JSON 请求/响应处理               |
-| **连接池**           | `websocket/connection_pool.rs`        | 多 WebSocket 连接管理           |
-| **重连机制**          | `websocket/reconnection.rs`           | 断线自动重连、指数退避                |
 | **Dashboard 命令**  | `dashboard/commands.rs`               | 解析脚本CRUD、JSON结构分析、配置文件管理  |
 | **解析脚本管理**       | `dashboard/parser_scripts.rs`         | 脚本加载/保存/执行、JSON分析、字段提取    |
 | **JSON 配置管理**    | `dashboard/json_config.rs`            | Dashboard JSON配置文件读写           |
@@ -497,7 +481,6 @@ graph TB
 | **系统页面**           | `pages/System/index.tsx`               | 系统管理主页面                |
 | **系统信息**           | `pages/System/SystemInfo.tsx`          | 版本、构建信息                |
 | **日志查看器**          | `pages/System/LogViewer.tsx`           | 日志查看过滤                 |
-| **WebSocket 配置**   | `pages/System/WebSocketConfig.tsx`     | 远程服务器配置                |
 | **主布局**            | `components/Layout/MainLayout.tsx`     | 整体布局框架                 |
 | **侧边栏**            | `components/Layout/Sidebar.tsx`        | 导航菜单                   |
 | **头部**             | `components/Layout/Header.tsx`         | 状态栏、设置入口               |
@@ -517,7 +500,6 @@ graph TB
 | **错误边界**           | `components/Common/ErrorBoundary.tsx`  | React 错误捕获             |
 | **确认对话框**          | `components/Common/ConfirmDialog.tsx`  | 操作确认弹窗                 |
 | **十六进制输入**         | `components/Common/HexInput.tsx`       | 专用输入组件                 |
-| **WebSocket Hook** | `hooks/useWebSocket.ts`                | 连接管理、消息收发              |
 | **串口 Hook**        | `hooks/useSerial.ts`                   | 串口操作封装                 |
 | **BLE Hook**       | `hooks/useBle.ts`                      | BLE 操作封装，模式感知          |
 | **通知 Hook**        | `hooks/useNotification.ts`             | 系统通知、Toast             |
@@ -717,7 +699,6 @@ flowchart LR
         BleCmd[ble.rs]
         ProtocolCmd[protocol.rs]
         SystemCmd[system.rs]
-        WsCmd[websocket.rs]
         Gh3036Cmd[gh3036.rs]
         WaveformCmd[waveform.rs]
         StateCmd[state.rs]
@@ -746,14 +727,12 @@ flowchart LR
     end
     
     subgraph 通信层
-        WsClient[websocket_client]
     end
     
     Main --> SerialCmd
     Main --> BleCmd
     Main --> ProtocolCmd
     Main --> SystemCmd
-    Main --> WsCmd
     Main --> Gh3036Cmd
     Main --> WaveformCmd
     Main --> StateCmd
@@ -765,7 +744,6 @@ flowchart LR
     ProtocolCmd --> PluginMgr
     SystemCmd --> Logger
     SystemCmd --> Config
-    WsCmd --> WsClient
     
     SerialMgr --> DevMgr
     BleMgr --> DevMgr
@@ -817,7 +795,6 @@ flowchart TB
     subgraph Hook层
         useSerial
         useBle
-        useWebSocket
         useDataParser
     end
     
@@ -826,7 +803,6 @@ flowchart TB
         BleAPI[Ble API]
         ProtocolAPI[Protocol API]
         SystemAPI[System API]
-        WsAPI[WebSocket API]
         DashboardAPI[Dashboard API]
         Gh3036API[GH3036 API]
         WaveformAPI[Waveform API]
@@ -848,7 +824,6 @@ flowchart TB
     
     useSerial --> SerialAPI
     useBle --> BleAPI
-    useWebSocket --> WsAPI
     
     SerialAPI --> Formatter
     BleAPI --> Formatter
@@ -925,18 +900,6 @@ flowchart TB
 | `get_system_status` | invoke | 获取运行状态 |
 | `configure_log`     | invoke | 配置日志级别 |
 
-### 7.5 WebSocket API
-
-| 命令                       | 方法     | 说明               |
-| ------------------------ | ------ | ---------------- |
-| `connect_websocket`      | invoke | 连接 WebSocket 服务器 |
-| `send_websocket_message` | invoke | 发送消息             |
-| `disconnect_websocket`   | invoke | 断开连接             |
-| `get_websocket_status`   | invoke | 获取连接状态           |
-| `get_all_websocket_connections` | invoke | 获取所有连接 ID   |
-| `get_all_websocket_status` | invoke | 获取所有连接状态      |
-
-### 7.6 Dashboard API
 
 | 命令                          | 方法     | 说明                |
 | --------------------------- | ------ | ----------------- |

@@ -7,7 +7,6 @@
 - [串口模块 (Serial)](#串口模块-serial)
 - [BLE 模块 (BLE)](#ble-模块-ble)
 - [协议模块 (Protocol)](#协议模块-protocol)
-- [WebSocket 模块 (WebSocket)](#websocket-模块-websocket)
 - [系统模块 (System)](#系统模块-system)
 - [Dashboard 模块 (Dashboard)](#dashboard-模块-dashboard)
 - [GH3036 模块 (GH3036)](#gh3036-模块-gh3036)
@@ -933,128 +932,6 @@ const protocols = await invoke<PluginInfo[]>('get_bound_protocols', { deviceId: 
 
 ***
 
-## WebSocket 模块 (WebSocket)
-
-### connect\_websocket
-
-连接 WebSocket 服务器。
-
-**后端命令**: `connect_websocket`
-
-**参数**:
-
-| 参数名                             | 类型      | 必填 | 描述                |
-| ------------------------------- | ------- | -- | ----------------- |
-| config                          | object  | 是  | WebSocket 配置对象    |
-| config.id                       | string  | 是  | 连接 ID             |
-| config.url                      | string  | 是  | 服务器 URL           |
-| config.reconnect                | boolean | 否  | 是否自动重连，默认 true    |
-| config.reconnect\_interval\_ms  | number  | 否  | 重连间隔（毫秒），默认 5000  |
-| config.max\_reconnect\_attempts | number  | 否  | 最大重连次数，默认 10      |
-| config.heartbeat\_interval\_ms  | number  | 否  | 心跳间隔（毫秒），默认 30000 |
-| config.connection\_timeout\_ms  | number  | 否  | 连接超时（毫秒），默认 10000 |
-
-**返回**: `string` (连接 ID)
-
-```typescript
-const id = await invoke<string>('connect_websocket', {
-  config: { id: 'ws1', url: 'ws://localhost:8080' },
-});
-```
-
-***
-
-### send\_websocket\_message
-
-发送 WebSocket 消息。
-
-**后端命令**: `send_websocket_message`
-
-**参数**:
-
-| 参数名     | 类型     | 必填 | 描述    |
-| ------- | ------ | -- | ----- |
-| id      | string | 是  | 连接 ID |
-| message | string | 是  | 消息内容  |
-
-**返回**: `void`
-
-```typescript
-await invoke('send_websocket_message', { id: 'ws1', message: 'Hello, server!' });
-```
-
-***
-
-### disconnect\_websocket
-
-断开 WebSocket 连接。
-
-**后端命令**: `disconnect_websocket`
-
-**参数**:
-
-| 参数名 | 类型     | 必填 | 描述    |
-| --- | ------ | -- | ----- |
-| id  | string | 是  | 连接 ID |
-
-**返回**: `void`
-
-```typescript
-await invoke('disconnect_websocket', { id: 'ws1' });
-```
-
-***
-
-### get\_websocket\_status
-
-获取连接状态。
-
-**后端命令**: `get_websocket_status`
-
-**参数**:
-
-| 参数名 | 类型     | 必填 | 描述    |
-| --- | ------ | -- | ----- |
-| id  | string | 是  | 连接 ID |
-
-**返回**: `ConnectionStatus | null`
-
-```typescript
-const status = await invoke<ConnectionStatus | null>('get_websocket_status', { id: 'ws1' });
-```
-
-***
-
-### get\_all\_websocket\_connections
-
-获取所有连接 ID。
-
-**后端命令**: `get_all_websocket_connections`
-
-**参数**: 无
-
-**返回**: `string[]`
-
-```typescript
-const ids = await invoke<string[]>('get_all_websocket_connections');
-```
-
-***
-
-### get\_all\_websocket\_status
-
-获取所有连接状态。
-
-**后端命令**: `get_all_websocket_status`
-
-**参数**: 无
-
-**返回**: `Record<string, ConnectionStatus>`
-
-```typescript
-const statuses = await invoke<Record<string, ConnectionStatus>>('get_all_websocket_status');
-```
-
 ***
 
 ## 系统模块 (System)
@@ -1135,7 +1012,6 @@ interface RuntimeStatus {
   active_connections: number;
   serial_ports_open: number;
   ble_connections: number;
-  websocket_connections: number;
   protocols_loaded: number;
   uptime_secs: number;
 }
@@ -2333,24 +2209,6 @@ const unlisten = await listen<BleDataPayload>('ble:data', (event) => {
 
 ***
 
-### websocket-status
-
-WebSocket 连接状态变化事件。
-
-```typescript
-interface WebSocketStatusEvent {
-  id: string;
-  status: ConnectionStatus;
-}
-
-import { listen } from '@tauri-apps/api/event';
-const unlisten = await listen<WebSocketStatusEvent>('websocket-status', (event) => {
-  console.log('WebSocket状态:', event.payload.id, event.payload.status);
-});
-```
-
-***
-
 ## 类型定义汇总
 
 ### 串口类型
@@ -2497,7 +2355,6 @@ interface RuntimeStatus {
   active_connections: number;
   serial_ports_open: number;
   ble_connections: number;
-  websocket_connections: number;
   protocols_loaded: number;
   uptime_secs: number;
 }

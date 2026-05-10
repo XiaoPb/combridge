@@ -42,7 +42,6 @@ graph TB
     subgraph Hooks [Hooks 层]
         useSerial
         useBle
-        useWebSocket
         useAppState
         useAppDispatch
         useProtocol
@@ -70,7 +69,6 @@ graph TB
     subgraph API [API 层]
         serialApi
         bleApi
-        websocketApi
         systemApi
         protocolApi
         preferencesApi
@@ -101,7 +99,7 @@ graph TB
 src/
 ├── api/                    # API 层
 │   ├── index.ts           # 统一导出
-│   ├── tauri.ts           # Tauri 命令封装（serial/ble/websocket/system/protocol/preferences）
+│   ├── tauri.ts           # Tauri 命令封装（serial/ble/system/protocol/preferences）
 │   ├── events.ts          # 事件监听封装（串口/BLE 事件类型定义与监听）
 │   ├── stateApi.ts        # 状态 API（dispatch/getState/restore/save）
 │   ├── dashboard.ts       # 仪表盘 API（解析器脚本/JSON 配置管理）
@@ -119,7 +117,6 @@ src/
 │   ├── index.ts           # 统一导出
 │   ├── useSerial.ts       # 串口 Hook
 │   ├── useBle.ts          # BLE Hook
-│   ├── useWebSocket.ts    # WebSocket Hook
 │   ├── useAppState.ts     # 状态 Hook
 │   ├── useAppDispatch.ts  # 动作分发 Hook（设备/通道/标签操作）
 │   ├── useProtocol.ts     # 协议 Hook（加载/卸载/启用/禁用/绑定/解绑）

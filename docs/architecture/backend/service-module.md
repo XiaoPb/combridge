@@ -109,15 +109,12 @@ graph TB
     subgraph Consumers
         Commands[命令层]
         DeviceMgr[设备管理器]
-        WebSocket[WebSocket]
     end
     
     Logger --> Commands
     Config --> Commands
     EventBus --> DeviceMgr
-    EventBus --> WebSocket
     DataQueue --> DeviceMgr
-    MsgPack --> WebSocket
 ```
 
 ## 日志服务
@@ -342,5 +339,4 @@ println!("消息类型: {:?}", decoded.msg_type);
 ## 相关模块
 
 - [命令层](./commands-module.md) - 服务调用
-- [WebSocket](./websocket-module.md) - MsgPack 消息处理
 - [设备管理](./device-manager.md) - 事件总线使用

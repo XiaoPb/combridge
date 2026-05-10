@@ -24,7 +24,6 @@ pub enum ErrorCode {
     SerialError = 1000,     // 串口错误 (1000-1999)
     BleError = 2000,        // BLE 错误 (2000-2999)
     ProtocolError = 3000,   // 协议错误 (3000-3999)
-    WebSocketError = 4000,  // WebSocket 错误 (4000-4999)
     ConfigError = 5000,     // 配置错误 (5000-5999)
     IoError = 6000,         // IO 错误 (6000-6999)
     ParseError = 7000,      // 解析错误 (7000-7999)
@@ -40,7 +39,6 @@ impl fmt::Display for ErrorCode {
             ErrorCode::SerialError => write!(f, "E1000"),
             ErrorCode::BleError => write!(f, "E2000"),
             ErrorCode::ProtocolError => write!(f, "E3000"),
-            ErrorCode::WebSocketError => write!(f, "E4000"),
             ErrorCode::ConfigError => write!(f, "E5000"),
             ErrorCode::IoError => write!(f, "E6000"),
             ErrorCode::ParseError => write!(f, "E7000"),
@@ -63,7 +61,6 @@ pub enum ComBridgeError {
     #[error("[E3000] {0}")]
     ProtocolError(String),
     #[error("[E4000] {0}")]
-    WebSocketError(String),
     #[error("[E5000] {0}")]
     ConfigError(String),
     #[error("[E6000] {0}")]
@@ -113,7 +110,6 @@ pub type Result<T> = std::result::Result<T, ComBridgeError>;
 | E1000 | SerialError | 1000-1999 | 串口相关错误 |
 | E2000 | BleError | 2000-2999 | BLE 相关错误 |
 | E3000 | ProtocolError | 3000-3999 | 协议相关错误 |
-| E4000 | WebSocketError | 4000-4999 | WebSocket 相关错误 |
 | E5000 | ConfigError | 5000-5999 | 配置相关错误 |
 | E6000 | IoError | 6000-6999 | IO 相关错误 |
 | E7000 | ParseError | 7000-7999 | 解析相关错误 |
@@ -128,7 +124,6 @@ impl ComBridgeError {
     pub fn serial<T: Into<String>>(msg: T) -> Self { ComBridgeError::SerialError(msg.into()) }
     pub fn ble<T: Into<String>>(msg: T) -> Self { ComBridgeError::BleError(msg.into()) }
     pub fn protocol<T: Into<String>>(msg: T) -> Self { ComBridgeError::ProtocolError(msg.into()) }
-    pub fn websocket<T: Into<String>>(msg: T) -> Self { ComBridgeError::WebSocketError(msg.into()) }
     pub fn config<T: Into<String>>(msg: T) -> Self { ComBridgeError::ConfigError(msg.into()) }
     pub fn io<T: Into<String>>(msg: T) -> Self { ComBridgeError::IoError(msg.into()) }
     pub fn parse<T: Into<String>>(msg: T) -> Self { ComBridgeError::ParseError(msg.into()) }

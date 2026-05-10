@@ -1,6 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
-use serde::{Deserialize, Serialize};
 
 use crate::error::{ComBridgeError, Result};
 
@@ -24,6 +24,7 @@ pub struct RingBuffer {
     capacity: usize,
     head: usize,
     tail: usize,
+    len: usize,
     entries: VecDeque<CacheEntry>,
 }
 
@@ -38,6 +39,7 @@ impl RingBuffer {
             capacity,
             head: 0,
             tail: 0,
+            len: 0,
             entries: VecDeque::new(),
         }
     }
@@ -49,34 +51,33 @@ impl RingBuffer {
             .unwrap_or(0);
 
         let data_len = data.len();
-        
+
         if data_len == 0 {
             return;
         }
 
         if data_len >= self.capacity {
-            self.head = 0;
-            self.tail = self.capacity;
             self.buffer[..self.capacity].copy_from_slice(&data[data_len - self.capacity..]);
+            self.head = 0;
+            self.tail = 0;
+            self.len = self.capacity;
         } else {
             let space_to_end = self.capacity - self.tail;
-            
+
             if data_len <= space_to_end {
                 self.buffer[self.tail..self.tail + data_len].copy_from_slice(data);
-                self.tail += data_len;
             } else {
                 self.buffer[self.tail..].copy_from_slice(&data[..space_to_end]);
                 self.buffer[..data_len - space_to_end].copy_from_slice(&data[space_to_end..]);
-                self.tail = data_len - space_to_end;
             }
+            self.tail = (self.tail + data_len) % self.capacity;
 
-            if self.tail > self.head || (self.tail <= self.head && data_len > 0) {
-                if self.tail <= self.head && self.head < self.capacity {
-                    self.head = (self.head + data_len) % self.capacity;
-                    if self.head == self.tail {
-                        self.head = (self.head + 1) % self.capacity;
-                    }
-                }
+            let new_len = self.len + data_len;
+            if new_len > self.capacity {
+                self.head = self.tail;
+                self.len = self.capacity;
+            } else {
+                self.len = new_len;
             }
         }
 
@@ -95,14 +96,14 @@ impl RingBuffer {
     }
 
     pub fn read_all(&self) -> Vec<u8> {
-        if self.head == self.tail {
+        if self.len == 0 {
             return Vec::new();
         }
 
-        if self.tail > self.head {
+        if self.head < self.tail {
             self.buffer[self.head..self.tail].to_vec()
         } else {
-            let mut result = Vec::with_capacity(self.capacity);
+            let mut result = Vec::with_capacity(self.len);
             result.extend_from_slice(&self.buffer[self.head..]);
             result.extend_from_slice(&self.buffer[..self.tail]);
             result
@@ -124,19 +125,16 @@ impl RingBuffer {
     pub fn clear(&mut self) {
         self.head = 0;
         self.tail = 0;
+        self.len = 0;
         self.entries.clear();
     }
 
     pub fn len(&self) -> usize {
-        if self.tail >= self.head {
-            self.tail - self.head
-        } else {
-            self.capacity - self.head + self.tail
-        }
+        self.len
     }
 
     pub fn is_empty(&self) -> bool {
-        self.head == self.tail
+        self.len == 0
     }
 
     pub fn capacity(&self) -> usize {
@@ -174,39 +172,51 @@ impl ThreadSafeRingBuffer {
     }
 
     pub fn write(&self, data: &[u8]) -> Result<()> {
-        let mut buffer = self.inner.lock()
+        let mut buffer = self
+            .inner
+            .lock()
             .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
         buffer.write(data);
         Ok(())
     }
 
     pub fn read_all(&self) -> Result<Vec<u8>> {
-        let buffer = self.inner.lock()
+        let buffer = self
+            .inner
+            .lock()
             .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
         Ok(buffer.read_all())
     }
 
     pub fn get_cache_data(&self) -> Result<CacheData> {
-        let buffer = self.inner.lock()
+        let buffer = self
+            .inner
+            .lock()
             .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
         Ok(buffer.get_cache_data())
     }
 
     pub fn clear(&self) -> Result<()> {
-        let mut buffer = self.inner.lock()
+        let mut buffer = self
+            .inner
+            .lock()
             .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
         buffer.clear();
         Ok(())
     }
 
     pub fn len(&self) -> Result<usize> {
-        let buffer = self.inner.lock()
+        let buffer = self
+            .inner
+            .lock()
             .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
         Ok(buffer.len())
     }
 
     pub fn is_empty(&self) -> Result<bool> {
-        let buffer = self.inner.lock()
+        let buffer = self
+            .inner
+            .lock()
             .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
         Ok(buffer.is_empty())
     }
@@ -235,11 +245,11 @@ mod tests {
     #[test]
     fn test_ring_buffer_basic() {
         let mut buffer = RingBuffer::with_capacity(10);
-        
+
         buffer.write(&[1, 2, 3]);
         assert_eq!(buffer.len(), 3);
         assert_eq!(buffer.read_all(), vec![1, 2, 3]);
-        
+
         buffer.write(&[4, 5]);
         assert_eq!(buffer.len(), 5);
         assert_eq!(buffer.read_all(), vec![1, 2, 3, 4, 5]);
@@ -248,10 +258,10 @@ mod tests {
     #[test]
     fn test_ring_buffer_overflow() {
         let mut buffer = RingBuffer::with_capacity(5);
-        
+
         buffer.write(&[1, 2, 3, 4, 5]);
         assert_eq!(buffer.len(), 5);
-        
+
         buffer.write(&[6, 7]);
         let data = buffer.read_all();
         assert!(data.contains(&6));
@@ -261,10 +271,10 @@ mod tests {
     #[test]
     fn test_ring_buffer_clear() {
         let mut buffer = RingBuffer::new();
-        
+
         buffer.write(&[1, 2, 3]);
         assert!(!buffer.is_empty());
-        
+
         buffer.clear();
         assert!(buffer.is_empty());
         assert_eq!(buffer.len(), 0);
@@ -273,10 +283,10 @@ mod tests {
     #[test]
     fn test_ring_buffer_entries() {
         let mut buffer = RingBuffer::new();
-        
+
         buffer.write(&[1, 2, 3]);
         buffer.write(&[4, 5]);
-        
+
         let entries = buffer.get_entries();
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].data, vec![1, 2, 3]);
@@ -286,13 +296,13 @@ mod tests {
     #[test]
     fn test_thread_safe_ring_buffer() {
         let buffer = create_ring_buffer_with_capacity(100);
-        
+
         buffer.write(&[1, 2, 3]).unwrap();
         buffer.write(&[4, 5]).unwrap();
-        
+
         assert_eq!(buffer.len().unwrap(), 5);
         assert_eq!(buffer.read_all().unwrap(), vec![1, 2, 3, 4, 5]);
-        
+
         buffer.clear().unwrap();
         assert!(buffer.is_empty().unwrap());
     }
@@ -300,10 +310,10 @@ mod tests {
     #[test]
     fn test_cache_data() {
         let mut buffer = RingBuffer::new();
-        
+
         buffer.write(&[1, 2, 3]);
         buffer.write(&[4, 5]);
-        
+
         let cache_data = buffer.get_cache_data();
         assert_eq!(cache_data.entry_count, 2);
         assert_eq!(cache_data.total_bytes, 5);

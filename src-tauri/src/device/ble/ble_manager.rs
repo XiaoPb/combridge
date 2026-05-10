@@ -5,16 +5,16 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
-use crate::error::{ComBridgeError, Result};
-use crate::service::event_bus::{EventBus, BleDataEvent, BleConnectionEvent};
-use crate::service::event_bus::topics;
-use super::ble_traits::{
-    BleBackend, BleDevice, BleConnection, BleService, BleCharacteristic, NotifyCallback,
-};
 use super::at::at_backend::AtBleBackend;
 use super::at::at_commands::AtConnectionConfig;
 use super::at::at_transport::AtTransport;
+use super::ble_traits::{
+    BleBackend, BleCharacteristic, BleConnection, BleDevice, BleService, NotifyCallback,
+};
 use super::native::native_backend::NativeBleBackend;
+use crate::error::{ComBridgeError, Result};
+use crate::service::event_bus::topics;
+use crate::service::event_bus::{BleConnectionEvent, BleDataEvent, EventBus};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BleMode {
@@ -138,22 +138,20 @@ impl BleManager {
 
     pub async fn set_mode(&self, mode: BleMode) -> Result<()> {
         match mode {
-            BleMode::Native => {
-                match self.configure_native().await {
-                    Ok(()) => {
-                        info!("BLE模式切换为: {}", mode);
-                        Ok(())
-                    }
-                    Err(e) => {
-                        error!("切换到原生BLE模式失败: {}", e);
-                        warn!("回退到AT模式");
-                        let config = self.at_config.read().await.clone();
-                        self.configure_at(config).await?;
-                        info!("BLE模式回退为: AT (原生不可用)");
-                        Ok(())
-                    }
+            BleMode::Native => match self.configure_native().await {
+                Ok(()) => {
+                    info!("BLE模式切换为: {}", mode);
+                    Ok(())
                 }
-            }
+                Err(e) => {
+                    error!("切换到原生BLE模式失败: {}", e);
+                    warn!("回退到AT模式");
+                    let config = self.at_config.read().await.clone();
+                    self.configure_at(config).await?;
+                    info!("BLE模式回退为: AT (原生不可用)");
+                    Ok(())
+                }
+            },
             BleMode::At => {
                 let config = self.at_config.read().await.clone();
                 self.configure_at(config).await?;
@@ -166,10 +164,10 @@ impl BleManager {
     pub async fn configure_native(&self) -> Result<()> {
         let mut backend = NativeBleBackend::with_event_bus(self.event_bus.clone());
         backend.configure().await?;
-        
+
         let mut backend_guard = self.backend.write().await;
         *backend_guard = Some(Backend::Native(backend));
-        
+
         *self.mode.write().await = BleMode::Native;
         info!("原生BLE后端配置完成");
         Ok(())
@@ -180,14 +178,17 @@ impl BleManager {
         let connection_config = AtConnectionConfig::from(&config);
         let mut backend = AtBleBackend::with_config(transport, connection_config);
         backend.configure().await?;
-        
+
         *self.at_config.write().await = config;
-        
+
         let mut backend_guard = self.backend.write().await;
         *backend_guard = Some(Backend::At(backend));
-        
+
         *self.mode.write().await = BleMode::At;
-        info!("AT BLE后端配置完成: {}", self.at_config.read().await.port_name);
+        info!(
+            "AT BLE后端配置完成: {}",
+            self.at_config.read().await.port_name
+        );
         Ok(())
     }
 
@@ -195,7 +196,12 @@ impl BleManager {
         self.at_config.read().await.clone()
     }
 
-    pub async fn update_at_uuid_config(&self, tx_uuid: Option<String>, rx_uuid: Option<String>, srv_uuid: Option<String>) {
+    pub async fn update_at_uuid_config(
+        &self,
+        tx_uuid: Option<String>,
+        rx_uuid: Option<String>,
+        srv_uuid: Option<String>,
+    ) {
         let mut config = self.at_config.write().await;
         if let Some(tx) = tx_uuid {
             config.tx_uuid = Some(tx);
@@ -211,10 +217,10 @@ impl BleManager {
 
     pub async fn scan(&self, duration_ms: u64) -> Result<Vec<BleDevice>> {
         let backend_guard = self.backend.read().await;
-        let backend = backend_guard.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("BLE后端未配置")
-        })?;
-        
+        let backend = backend_guard
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("BLE后端未配置"))?;
+
         match backend {
             Backend::Native(b) => b.scan(duration_ms).await,
             Backend::At(b) => b.scan(duration_ms).await,
@@ -223,10 +229,10 @@ impl BleManager {
 
     pub async fn stop_scan(&self) -> Result<Vec<BleDevice>> {
         let backend_guard = self.backend.read().await;
-        let backend = backend_guard.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("BLE后端未配置")
-        })?;
-        
+        let backend = backend_guard
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("BLE后端未配置"))?;
+
         match backend {
             Backend::Native(b) => b.stop_scan().await,
             Backend::At(b) => b.stop_scan().await,
@@ -234,25 +240,35 @@ impl BleManager {
     }
 
     pub async fn connect(&self, address: &str) -> Result<BleConnection> {
+        let mode = self.mode.read().await;
+
+        // Validate AT mode config before attempting connection
+        if *mode == BleMode::At {
+            let config = self.at_config.read().await;
+            if config.tx_uuid.is_none() {
+                return Err(ComBridgeError::ble("AT模式连接需要配置tx_uuid"));
+            }
+            if config.rx_uuid.is_none() {
+                return Err(ComBridgeError::ble("AT模式连接需要配置rx_uuid"));
+            }
+        }
+        let is_at_mode = *mode == BleMode::At;
+        drop(mode);
+
         let backend_guard = self.backend.read().await;
-        let backend = backend_guard.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("BLE后端未配置")
-        })?;
-        
+        let backend = backend_guard
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("BLE后端未配置"))?;
+
         let connection = match backend {
             Backend::Native(b) => b.connect(address).await?,
             Backend::At(b) => b.connect(address).await?,
         };
 
-        let mode = self.mode.read().await;
-        if *mode == BleMode::At {
+        if is_at_mode {
             let config = self.at_config.read().await;
-            let tx_uuid = config.tx_uuid.clone().ok_or_else(|| {
-                ComBridgeError::ble("AT模式连接需要配置tx_uuid")
-            })?;
-            let rx_uuid = config.rx_uuid.clone().ok_or_else(|| {
-                ComBridgeError::ble("AT模式连接需要配置rx_uuid")
-            })?;
+            let tx_uuid = config.tx_uuid.clone().unwrap_or_default();
+            let rx_uuid = config.rx_uuid.clone().unwrap_or_default();
             let tab = AtConnectionTab {
                 id: format!("at-{}-{}", address, chrono::Utc::now().timestamp()),
                 address: address.to_string(),
@@ -273,16 +289,16 @@ impl BleManager {
         let event = BleConnectionEvent::new(address, connection.name.clone());
         self.event_bus.publish_typed(topics::BLE_CONNECTED, &event);
         info!("BLE设备已连接: {}", address);
-        
+
         Ok(connection)
     }
 
     pub async fn disconnect(&self, address: &str) -> Result<()> {
         let backend_guard = self.backend.read().await;
-        let backend = backend_guard.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("BLE后端未配置")
-        })?;
-        
+        let backend = backend_guard
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("BLE后端未配置"))?;
+
         match backend {
             Backend::Native(b) => b.disconnect(address).await?,
             Backend::At(b) => b.disconnect(address).await?,
@@ -297,18 +313,19 @@ impl BleManager {
         tabs.retain(|_, tab| tab.address != address);
 
         let event = BleConnectionEvent::new(address, None);
-        self.event_bus.publish_typed(topics::BLE_DISCONNECTED, &event);
+        self.event_bus
+            .publish_typed(topics::BLE_DISCONNECTED, &event);
         info!("BLE设备已断开: {}", address);
-        
+
         Ok(())
     }
 
     pub async fn get_connections(&self) -> Result<Vec<BleConnection>> {
         let backend_guard = self.backend.read().await;
-        let backend = backend_guard.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("BLE后端未配置")
-        })?;
-        
+        let backend = backend_guard
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("BLE后端未配置"))?;
+
         match backend {
             Backend::Native(b) => b.get_connections().await,
             Backend::At(b) => b.get_connections().await,
@@ -317,10 +334,10 @@ impl BleManager {
 
     pub async fn discover_services(&self, address: &str) -> Result<Vec<BleService>> {
         let backend_guard = self.backend.read().await;
-        let backend = backend_guard.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("BLE后端未配置")
-        })?;
-        
+        let backend = backend_guard
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("BLE后端未配置"))?;
+
         let mut services = match backend {
             Backend::Native(b) => b.discover_services(address).await?,
             Backend::At(b) => b.discover_services(address).await?,
@@ -336,16 +353,20 @@ impl BleManager {
                 }
             }
         }
-        
+
         Ok(services)
     }
 
-    pub async fn discover_characteristics(&self, address: &str, service_uuid: &str) -> Result<Vec<BleCharacteristic>> {
+    pub async fn discover_characteristics(
+        &self,
+        address: &str,
+        service_uuid: &str,
+    ) -> Result<Vec<BleCharacteristic>> {
         let backend_guard = self.backend.read().await;
-        let backend = backend_guard.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("BLE后端未配置")
-        })?;
-        
+        let backend = backend_guard
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("BLE后端未配置"))?;
+
         let mut characteristics = match backend {
             Backend::Native(b) => b.discover_characteristics(address, service_uuid).await?,
             Backend::At(b) => b.discover_characteristics(address, service_uuid).await?,
@@ -359,69 +380,85 @@ impl BleManager {
                 }
             }
         }
-        
+
         Ok(characteristics)
     }
 
     pub async fn read_characteristic(&self, address: &str, char_uuid: &str) -> Result<Vec<u8>> {
         let backend_guard = self.backend.read().await;
-        let backend = backend_guard.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("BLE后端未配置")
-        })?;
-        
+        let backend = backend_guard
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("BLE后端未配置"))?;
+
         match backend {
             Backend::Native(b) => b.read_characteristic(address, char_uuid).await,
             Backend::At(b) => b.read_characteristic(address, char_uuid).await,
         }
     }
 
-    pub async fn write_characteristic(&self, address: &str, char_uuid: &str, data: &[u8]) -> Result<()> {
+    pub async fn write_characteristic(
+        &self,
+        address: &str,
+        char_uuid: &str,
+        data: &[u8],
+    ) -> Result<()> {
         let backend_guard = self.backend.read().await;
-        let backend = backend_guard.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("BLE后端未配置")
-        })?;
-        
+        let backend = backend_guard
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("BLE后端未配置"))?;
+
         match backend {
             Backend::Native(b) => b.write_characteristic(address, char_uuid, data).await,
             Backend::At(b) => b.write_characteristic(address, char_uuid, data).await,
         }
     }
 
-    pub async fn write_without_response(&self, address: &str, char_uuid: &str, data: &[u8]) -> Result<()> {
+    pub async fn write_without_response(
+        &self,
+        address: &str,
+        char_uuid: &str,
+        data: &[u8],
+    ) -> Result<()> {
         let backend_guard = self.backend.read().await;
-        let backend = backend_guard.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("BLE后端未配置")
-        })?;
-        
+        let backend = backend_guard
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("BLE后端未配置"))?;
+
         match backend {
             Backend::Native(b) => b.write_without_response(address, char_uuid, data).await,
             Backend::At(b) => b.write_without_response(address, char_uuid, data).await,
         }
     }
 
-    pub async fn subscribe_notify(&self, address: &str, char_uuid: &str, callback: NotifyCallback) -> Result<()> {
+    pub async fn subscribe_notify(
+        &self,
+        address: &str,
+        char_uuid: &str,
+        callback: NotifyCallback,
+    ) -> Result<()> {
         let backend_guard = self.backend.read().await;
-        let backend = backend_guard.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("BLE后端未配置")
-        })?;
+        let backend = backend_guard
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("BLE后端未配置"))?;
 
         let event_bus = self.event_bus.clone();
         let address_owned = address.to_string();
         let wrapped_callback = Arc::new(move |addr: &str, char: &str, data: &[u8]| {
-            let event = BleDataEvent::new(
-                &address_owned,
-                addr,
-                char,
-                data.to_vec(),
-            );
+            let event = BleDataEvent::new(&address_owned, addr, char, data.to_vec());
             event_bus.publish_msgpack(topics::BLE_DATA, &event);
 
             callback(addr, char, data);
         });
-        
+
         match backend {
-            Backend::Native(b) => b.subscribe_notify(address, char_uuid, wrapped_callback).await?,
-            Backend::At(b) => b.subscribe_notify(address, char_uuid, wrapped_callback).await?,
+            Backend::Native(b) => {
+                b.subscribe_notify(address, char_uuid, wrapped_callback)
+                    .await?
+            }
+            Backend::At(b) => {
+                b.subscribe_notify(address, char_uuid, wrapped_callback)
+                    .await?
+            }
         }
 
         let mut subscriptions = self.subscriptions.write().await;
@@ -430,16 +467,16 @@ impl BleManager {
             .or_insert_with(HashSet::new)
             .insert(char_uuid.to_string());
         info!("记录订阅状态: 设备 {}, 特征 {}", address, char_uuid);
-        
+
         Ok(())
     }
 
     pub async fn unsubscribe_notify(&self, address: &str, char_uuid: &str) -> Result<()> {
         let backend_guard = self.backend.read().await;
-        let backend = backend_guard.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("BLE后端未配置")
-        })?;
-        
+        let backend = backend_guard
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("BLE后端未配置"))?;
+
         match backend {
             Backend::Native(b) => b.unsubscribe_notify(address, char_uuid).await?,
             Backend::At(b) => b.unsubscribe_notify(address, char_uuid).await?,
@@ -453,16 +490,16 @@ impl BleManager {
             }
         }
         info!("移除订阅状态: 设备 {}, 特征 {}", address, char_uuid);
-        
+
         Ok(())
     }
 
     pub async fn get_rssi(&self, address: &str) -> Result<i16> {
         let backend_guard = self.backend.read().await;
-        let backend = backend_guard.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("BLE后端未配置")
-        })?;
-        
+        let backend = backend_guard
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("BLE后端未配置"))?;
+
         match backend {
             Backend::Native(b) => b.get_rssi(address).await,
             Backend::At(b) => b.get_rssi(address).await,
@@ -471,10 +508,10 @@ impl BleManager {
 
     pub async fn set_mtu(&self, address: &str, mtu: u16) -> Result<u16> {
         let backend_guard = self.backend.read().await;
-        let backend = backend_guard.as_ref().ok_or_else(|| {
-            ComBridgeError::ble("BLE后端未配置")
-        })?;
-        
+        let backend = backend_guard
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("BLE后端未配置"))?;
+
         match backend {
             Backend::Native(b) => b.set_mtu(address, mtu).await,
             Backend::At(b) => b.set_mtu(address, mtu).await,

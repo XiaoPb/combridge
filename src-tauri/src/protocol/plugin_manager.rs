@@ -1,6 +1,8 @@
 use crate::error::{ComBridgeError, Result};
 use crate::protocol::{HookExecutor, HookType, LuaEngine, ProtocolConfig, ScriptLoader};
-use crate::service::event_bus::{topics, BleDataEvent, EventBus, ProtocolParsedEvent, SerialDataEvent};
+use crate::service::event_bus::{
+    topics, BleDataEvent, EventBus, ProtocolParsedEvent, SerialDataEvent,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -76,116 +78,145 @@ impl PluginManager {
         let plugins_clone = Arc::clone(&plugins);
         let plugin_infos_clone = Arc::clone(&plugin_infos);
         let event_bus_clone = Arc::clone(&event_bus);
-        self.event_bus.subscribe_msgpack::<SerialDataEvent, _>(topics::SERIAL_DATA, move |_topic, serial_event| {
-            let device_id = &serial_event.device_id;
-            let data = &serial_event.data;
+        self.event_bus.subscribe_msgpack::<SerialDataEvent, _>(
+            topics::SERIAL_DATA,
+            move |_topic, serial_event| {
+                let device_id = &serial_event.device_id;
+                let data = &serial_event.data;
 
-            let plugins_guard = plugins_clone.lock().unwrap_or_else(|e| {
-                tracing::error!("Failed to lock plugins: {}", e);
-                panic!("PluginManager lock poisoned");
-            });
+                let plugins_guard = match plugins_clone.lock() {
+                    Ok(g) => g,
+                    Err(e) => {
+                        tracing::error!("Failed to lock plugins: {}", e);
+                        return;
+                    }
+                };
 
-            let plugin_infos_guard = plugin_infos_clone.lock().unwrap_or_else(|e| {
-                tracing::error!("Failed to lock plugin_infos: {}", e);
-                panic!("PluginManager lock poisoned");
-            });
+                let plugin_infos_guard = match plugin_infos_clone.lock() {
+                    Ok(g) => g,
+                    Err(e) => {
+                        tracing::error!("Failed to lock plugin_infos: {}", e);
+                        return;
+                    }
+                };
 
-            for (plugin_id, info) in plugin_infos_guard.iter() {
-                if info.state == PluginState::Enabled && info.bound_devices.contains(device_id) {
-                    if let Some(plugin) = plugins_guard.get(plugin_id) {
-                        if plugin.executor.has_hook(&HookType::OnDataReceived) {
-                            match plugin.executor.execute_data_hook(HookType::OnDataReceived, data) {
-                                Ok(result) => {
-                                    if let Some(parsed_data) = result.data {
-                                        let parsed_event = ProtocolParsedEvent::new(
-                                            plugin_id.clone(),
-                                            device_id.clone(),
-                                            data.clone(),
-                                            serde_json::to_value(&parsed_data).unwrap_or(serde_json::Value::Null),
-                                        );
-                                        event_bus_clone.publish_msgpack(topics::PROTOCOL_PARSED, &parsed_event);
-                                        tracing::debug!(
+                for (plugin_id, info) in plugin_infos_guard.iter() {
+                    if info.state == PluginState::Enabled && info.bound_devices.contains(device_id)
+                    {
+                        if let Some(plugin) = plugins_guard.get(plugin_id) {
+                            if plugin.executor.has_hook(&HookType::OnDataReceived) {
+                                match plugin
+                                    .executor
+                                    .execute_data_hook(HookType::OnDataReceived, data)
+                                {
+                                    Ok(result) => {
+                                        if let Some(parsed_data) = result.data {
+                                            let parsed_event = ProtocolParsedEvent::new(
+                                                plugin_id.clone(),
+                                                device_id.clone(),
+                                                data.clone(),
+                                                serde_json::to_value(&parsed_data)
+                                                    .unwrap_or(serde_json::Value::Null),
+                                            );
+                                            event_bus_clone.publish_msgpack(
+                                                topics::PROTOCOL_PARSED,
+                                                &parsed_event,
+                                            );
+                                            tracing::debug!(
                                             "Protocol parsed: plugin={}, device={}, data_len={}",
                                             plugin_id,
                                             device_id,
                                             parsed_data.len()
                                         );
+                                        }
                                     }
-                                }
-                                Err(e) => {
-                                    tracing::error!(
-                                        "Failed to execute protocol hook: plugin={}, error={}",
-                                        plugin_id,
-                                        e
-                                    );
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "Failed to execute protocol hook: plugin={}, error={}",
+                                            plugin_id,
+                                            e
+                                        );
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-        });
+            },
+        );
 
         let plugins_for_ble = Arc::clone(&plugins);
         let plugin_infos_for_ble = Arc::clone(&plugin_infos);
         let event_bus_for_ble = Arc::clone(&event_bus);
-        self.event_bus.subscribe_msgpack::<BleDataEvent, _>(topics::BLE_DATA, move |_topic, ble_event| {
-            let device_id = &ble_event.device_id;
-            let data = &ble_event.data;
+        self.event_bus.subscribe_msgpack::<BleDataEvent, _>(
+            topics::BLE_DATA,
+            move |_topic, ble_event| {
+                let device_id = &ble_event.device_id;
+                let data = &ble_event.data;
 
-            let plugins_guard = plugins_for_ble.lock().unwrap_or_else(|e| {
-                tracing::error!("Failed to lock plugins: {}", e);
-                panic!("PluginManager lock poisoned");
-            });
+                let plugins_guard = plugins_for_ble.lock().unwrap_or_else(|e| {
+                    tracing::error!("Failed to lock plugins: {}", e);
+                    panic!("PluginManager lock poisoned");
+                });
 
-            let plugin_infos_guard = plugin_infos_for_ble.lock().unwrap_or_else(|e| {
-                tracing::error!("Failed to lock plugin_infos: {}", e);
-                panic!("PluginManager lock poisoned");
-            });
+                let plugin_infos_guard = plugin_infos_for_ble.lock().unwrap_or_else(|e| {
+                    tracing::error!("Failed to lock plugin_infos: {}", e);
+                    panic!("PluginManager lock poisoned");
+                });
 
-            for (plugin_id, info) in plugin_infos_guard.iter() {
-                if info.state == PluginState::Enabled && info.bound_devices.contains(device_id) {
-                    if let Some(plugin) = plugins_guard.get(plugin_id) {
-                        if plugin.executor.has_hook(&HookType::OnDataReceived) {
-                            match plugin.executor.execute_data_hook(HookType::OnDataReceived, data) {
-                                Ok(result) => {
-                                    if let Some(parsed_data) = result.data {
-                                        let parsed_event = ProtocolParsedEvent::new(
-                                            plugin_id.clone(),
-                                            device_id.clone(),
-                                            data.clone(),
-                                            serde_json::to_value(&parsed_data).unwrap_or(serde_json::Value::Null),
-                                        );
-                                        event_bus_for_ble.publish_msgpack(topics::PROTOCOL_PARSED, &parsed_event);
-                                        tracing::debug!(
+                for (plugin_id, info) in plugin_infos_guard.iter() {
+                    if info.state == PluginState::Enabled && info.bound_devices.contains(device_id)
+                    {
+                        if let Some(plugin) = plugins_guard.get(plugin_id) {
+                            if plugin.executor.has_hook(&HookType::OnDataReceived) {
+                                match plugin
+                                    .executor
+                                    .execute_data_hook(HookType::OnDataReceived, data)
+                                {
+                                    Ok(result) => {
+                                        if let Some(parsed_data) = result.data {
+                                            let parsed_event = ProtocolParsedEvent::new(
+                                                plugin_id.clone(),
+                                                device_id.clone(),
+                                                data.clone(),
+                                                serde_json::to_value(&parsed_data)
+                                                    .unwrap_or(serde_json::Value::Null),
+                                            );
+                                            event_bus_for_ble.publish_msgpack(
+                                                topics::PROTOCOL_PARSED,
+                                                &parsed_event,
+                                            );
+                                            tracing::debug!(
                                             "Protocol parsed: plugin={}, device={}, data_len={}",
                                             plugin_id,
                                             device_id,
                                             parsed_data.len()
                                         );
+                                        }
                                     }
-                                }
-                                Err(e) => {
-                                    tracing::error!(
-                                        "Failed to execute protocol hook: plugin={}, error={}",
-                                        plugin_id,
-                                        e
-                                    );
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "Failed to execute protocol hook: plugin={}, error={}",
+                                            plugin_id,
+                                            e
+                                        );
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-        });
+            },
+        );
 
         tracing::info!("PluginManager subscribed to serial:data and ble:data events");
     }
 
     pub fn load_plugin(&self, plugin_id: &str, path: PathBuf) -> Result<PluginInfo> {
-        let mut plugins = self.plugins.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugins: {}", e))
-        })?;
+        let mut plugins = self
+            .plugins
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugins: {}", e)))?;
 
         if plugins.contains_key(plugin_id) {
             return Err(ComBridgeError::protocol(format!(
@@ -194,9 +225,10 @@ impl PluginManager {
             )));
         }
 
-        let mut loader = self.loader.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock loader: {}", e))
-        })?;
+        let mut loader = self
+            .loader
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock loader: {}", e)))?;
 
         let engine = loader.load_and_compile(&path)?;
 
@@ -233,22 +265,25 @@ impl PluginManager {
             error_message: None,
         };
 
-        let mut plugin_infos = self.plugin_infos.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e))
-        })?;
+        let mut plugin_infos = self
+            .plugin_infos
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e)))?;
         plugin_infos.insert(plugin_id.to_string(), info.clone());
 
         Ok(info)
     }
 
     pub fn unload_plugin(&self, plugin_id: &str) -> Result<()> {
-        let mut plugins = self.plugins.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugins: {}", e))
-        })?;
+        let mut plugins = self
+            .plugins
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugins: {}", e)))?;
 
-        let mut plugin_infos = self.plugin_infos.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e))
-        })?;
+        let mut plugin_infos = self
+            .plugin_infos
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e)))?;
 
         if let Some(_plugin) = plugins.remove(plugin_id) {
             let path = plugin_infos.get(plugin_id).map(|info| info.path.clone());
@@ -266,13 +301,15 @@ impl PluginManager {
     }
 
     pub fn enable_plugin(&self, plugin_id: &str) -> Result<()> {
-        let mut plugins = self.plugins.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugins: {}", e))
-        })?;
+        let mut plugins = self
+            .plugins
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugins: {}", e)))?;
 
-        let mut plugin_infos = self.plugin_infos.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e))
-        })?;
+        let mut plugin_infos = self
+            .plugin_infos
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e)))?;
 
         if let Some(plugin) = plugins.get_mut(plugin_id) {
             plugin.state = PluginState::Enabled;
@@ -290,13 +327,15 @@ impl PluginManager {
     }
 
     pub fn disable_plugin(&self, plugin_id: &str) -> Result<()> {
-        let mut plugins = self.plugins.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugins: {}", e))
-        })?;
+        let mut plugins = self
+            .plugins
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugins: {}", e)))?;
 
-        let mut plugin_infos = self.plugin_infos.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e))
-        })?;
+        let mut plugin_infos = self
+            .plugin_infos
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e)))?;
 
         if let Some(plugin) = plugins.get_mut(plugin_id) {
             plugin.state = PluginState::Disabled;
@@ -314,13 +353,15 @@ impl PluginManager {
     }
 
     pub fn bind_protocol(&self, plugin_id: &str, device_id: &str) -> Result<()> {
-        let mut plugins = self.plugins.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugins: {}", e))
-        })?;
+        let mut plugins = self
+            .plugins
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugins: {}", e)))?;
 
-        let mut plugin_infos = self.plugin_infos.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e))
-        })?;
+        let mut plugin_infos = self
+            .plugin_infos
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e)))?;
 
         if let Some(plugin) = plugins.get_mut(plugin_id) {
             if !plugin.bound_devices.contains(&device_id.to_string()) {
@@ -342,13 +383,15 @@ impl PluginManager {
     }
 
     pub fn unbind_protocol(&self, plugin_id: &str, device_id: &str) -> Result<()> {
-        let mut plugins = self.plugins.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugins: {}", e))
-        })?;
+        let mut plugins = self
+            .plugins
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugins: {}", e)))?;
 
-        let mut plugin_infos = self.plugin_infos.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e))
-        })?;
+        let mut plugin_infos = self
+            .plugin_infos
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e)))?;
 
         if let Some(plugin) = plugins.get_mut(plugin_id) {
             plugin.bound_devices.retain(|id| id != device_id);
@@ -366,9 +409,10 @@ impl PluginManager {
     }
 
     pub fn get_plugin(&self, plugin_id: &str) -> Result<PluginInfo> {
-        let plugin_infos = self.plugin_infos.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e))
-        })?;
+        let plugin_infos = self
+            .plugin_infos
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e)))?;
 
         plugin_infos
             .get(plugin_id)
@@ -377,17 +421,24 @@ impl PluginManager {
     }
 
     pub fn list_protocols(&self) -> Result<Vec<PluginInfo>> {
-        let plugin_infos = self.plugin_infos.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e))
-        })?;
+        let plugin_infos = self
+            .plugin_infos
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e)))?;
 
         Ok(plugin_infos.values().cloned().collect())
     }
 
-    pub fn execute_hook(&self, plugin_id: &str, hook_type: HookType, data: &[u8]) -> Result<Vec<u8>> {
-        let plugins = self.plugins.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugins: {}", e))
-        })?;
+    pub fn execute_hook(
+        &self,
+        plugin_id: &str,
+        hook_type: HookType,
+        data: &[u8],
+    ) -> Result<Vec<u8>> {
+        let plugins = self
+            .plugins
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugins: {}", e)))?;
 
         let plugin = plugins
             .get(plugin_id)
@@ -402,15 +453,16 @@ impl PluginManager {
 
         let result = plugin.executor.execute_data_hook(hook_type, data)?;
 
-        result.data.ok_or_else(|| {
-            ComBridgeError::protocol("Hook execution returned no data".to_string())
-        })
+        result
+            .data
+            .ok_or_else(|| ComBridgeError::protocol("Hook execution returned no data".to_string()))
     }
 
     pub fn execute_event(&self, plugin_id: &str, hook_type: HookType) -> Result<()> {
-        let plugins = self.plugins.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugins: {}", e))
-        })?;
+        let plugins = self
+            .plugins
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugins: {}", e)))?;
 
         let plugin = plugins
             .get(plugin_id)
@@ -429,9 +481,10 @@ impl PluginManager {
     }
 
     pub fn get_bound_plugins(&self, device_id: &str) -> Result<Vec<PluginInfo>> {
-        let plugin_infos = self.plugin_infos.lock().map_err(|e| {
-            ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e))
-        })?;
+        let plugin_infos = self
+            .plugin_infos
+            .lock()
+            .map_err(|e| ComBridgeError::protocol(format!("Failed to lock plugin infos: {}", e)))?;
 
         let bound: Vec<PluginInfo> = plugin_infos
             .values()
@@ -453,9 +506,6 @@ impl Clone for PluginManager {
         }
     }
 }
-
-unsafe impl Send for PluginManager {}
-unsafe impl Sync for PluginManager {}
 
 #[cfg(test)]
 mod tests {
@@ -495,7 +545,9 @@ mod tests {
         let temp_file = create_test_plugin_file();
         let manager = PluginManager::new(create_event_bus());
 
-        let info = manager.load_plugin("test", temp_file.path().to_path_buf()).unwrap();
+        let info = manager
+            .load_plugin("test", temp_file.path().to_path_buf())
+            .unwrap();
         assert_eq!(info.id, "test");
         assert_eq!(info.name, "TestProtocol");
         assert_eq!(info.state, PluginState::Loaded);
@@ -506,7 +558,9 @@ mod tests {
         let temp_file = create_test_plugin_file();
         let manager = PluginManager::new(create_event_bus());
 
-        manager.load_plugin("test", temp_file.path().to_path_buf()).unwrap();
+        manager
+            .load_plugin("test", temp_file.path().to_path_buf())
+            .unwrap();
 
         manager.enable_plugin("test").unwrap();
         let info = manager.get_plugin("test").unwrap();
@@ -522,7 +576,9 @@ mod tests {
         let temp_file = create_test_plugin_file();
         let manager = PluginManager::new(create_event_bus());
 
-        manager.load_plugin("test", temp_file.path().to_path_buf()).unwrap();
+        manager
+            .load_plugin("test", temp_file.path().to_path_buf())
+            .unwrap();
         manager.bind_protocol("test", "device1").unwrap();
 
         let info = manager.get_plugin("test").unwrap();
@@ -538,7 +594,9 @@ mod tests {
         let temp_file = create_test_plugin_file();
         let manager = PluginManager::new(create_event_bus());
 
-        manager.load_plugin("test", temp_file.path().to_path_buf()).unwrap();
+        manager
+            .load_plugin("test", temp_file.path().to_path_buf())
+            .unwrap();
         assert!(manager.get_plugin("test").is_ok());
 
         manager.unload_plugin("test").unwrap();
@@ -550,8 +608,12 @@ mod tests {
         let temp_file = create_test_plugin_file();
         let manager = PluginManager::new(create_event_bus());
 
-        manager.load_plugin("test1", temp_file.path().to_path_buf()).unwrap();
-        manager.load_plugin("test2", temp_file.path().to_path_buf()).unwrap();
+        manager
+            .load_plugin("test1", temp_file.path().to_path_buf())
+            .unwrap();
+        manager
+            .load_plugin("test2", temp_file.path().to_path_buf())
+            .unwrap();
 
         let list = manager.list_protocols().unwrap();
         assert_eq!(list.len(), 2);

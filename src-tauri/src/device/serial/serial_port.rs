@@ -7,8 +7,8 @@ use std::time::Duration;
 use serialport::{SerialPort as SerialPortTrait, SerialPortType};
 use tracing::{debug, info, warn};
 
-use crate::error::{ComBridgeError, LockResultExt, Result};
 use super::serial_config::{DataBits, FlowControl, Parity, PortInfo, SerialPortConfig, StopBits};
+use crate::error::{ComBridgeError, LockResultExt, Result};
 
 const READ_TIMEOUT_MS: u64 = 100;
 
@@ -50,9 +50,14 @@ impl SerialPort {
             .flow_control(flow_control)
             .timeout(Duration::from_millis(READ_TIMEOUT_MS))
             .open()
-            .map_err(|e| ComBridgeError::serial(format!("无法打开串口 {}: {}", config.port_name, e)))?;
+            .map_err(|e| {
+                ComBridgeError::serial(format!("无法打开串口 {}: {}", config.port_name, e))
+            })?;
 
-        info!("串口 {} 已打开 (读取超时: {}ms)", config.port_name, READ_TIMEOUT_MS);
+        info!(
+            "串口 {} 已打开 (读取超时: {}ms)",
+            config.port_name, READ_TIMEOUT_MS
+        );
 
         Ok(Self {
             write_port: Mutex::new(port),
@@ -67,11 +72,18 @@ impl SerialPort {
     }
 
     pub fn port_name(&self) -> String {
-        self.config.read().unwrap_or_else(|e| e.into_inner()).port_name.clone()
+        self.config
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .port_name
+            .clone()
     }
 
     pub fn config(&self) -> SerialPortConfig {
-        self.config.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.config
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     pub fn write(&self, data: &[u8]) -> Result<usize> {
@@ -79,13 +91,8 @@ impl SerialPort {
             return Err(ComBridgeError::serial("串口未打开"));
         }
 
-        let data_hex: String = data.iter()
-            .map(|b| format!("{:02X}", b))
-            .collect::<Vec<_>>()
-            .join(" ");
-
         let port_name = self.port_name();
-        
+
         let mut port = self.write_port.lock().lock_err("串口写入")?;
         port.write_all(data)
             .map_err(|e| ComBridgeError::serial(format!("写入数据失败: {}", e)))?;
@@ -93,7 +100,19 @@ impl SerialPort {
         port.flush()
             .map_err(|e| ComBridgeError::serial(format!("刷新缓冲区失败: {}", e)))?;
 
-        debug!("[WRITE] 串口 {} 发送 {} 字节: {}", port_name, data.len(), data_hex);
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            let data_hex: String = data
+                .iter()
+                .map(|b| format!("{:02X}", b))
+                .collect::<Vec<_>>()
+                .join(" ");
+            debug!(
+                "[WRITE] 串口 {} 发送 {} 字节: {}",
+                port_name,
+                data.len(),
+                data_hex
+            );
+        }
         Ok(data.len())
     }
 
@@ -103,14 +122,18 @@ impl SerialPort {
     {
         let is_open = Arc::clone(&self.is_open);
         let port_name = self.port_name();
-        let pack_timeout_ms = self.config.read().unwrap_or_else(|e| e.into_inner()).pack_timeout_ms;
+        let pack_timeout_ms = self
+            .config
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .pack_timeout_ms;
 
         let read_port = {
             let port = self.write_port.lock().lock_err("串口克隆")?;
             port.try_clone()
                 .map_err(|e| ComBridgeError::serial(format!("克隆串口句柄失败: {}", e)))?
         };
-        
+
         info!("[RECV] 串口 {} 已克隆读取句柄", port_name);
 
         let handle = thread::spawn(move || {
@@ -118,8 +141,11 @@ impl SerialPort {
             let mut data_buffer: Vec<u8> = Vec::new();
             let mut last_data_time: Option<std::time::Instant> = None;
             let mut read_port = read_port;
-            
-            info!("[RECV] 串口 {} 读取线程已启动 (组包超时: {}ms)", port_name, pack_timeout_ms);
+
+            info!(
+                "[RECV] 串口 {} 读取线程已启动 (组包超时: {}ms)",
+                port_name, pack_timeout_ms
+            );
 
             while is_open.load(Ordering::SeqCst) {
                 let result = read_port.read(&mut buffer);
@@ -128,7 +154,7 @@ impl SerialPort {
                     Ok(size) if size > 0 => {
                         data_buffer.extend_from_slice(&buffer[..size]);
                         last_data_time = Some(std::time::Instant::now());
-                        
+
                         let data_hex: String = buffer[..size]
                             .iter()
                             .map(|b| format!("{:02X}", b))
@@ -139,13 +165,20 @@ impl SerialPort {
                     Ok(_) => {}
                     Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
                         if let Some(last_time) = last_data_time {
-                            if last_time.elapsed() >= Duration::from_millis(pack_timeout_ms) && !data_buffer.is_empty() {
+                            if last_time.elapsed() >= Duration::from_millis(pack_timeout_ms)
+                                && !data_buffer.is_empty()
+                            {
                                 let data_hex: String = data_buffer
                                     .iter()
                                     .map(|b| format!("{:02X}", b))
                                     .collect::<Vec<_>>()
                                     .join(" ");
-                                info!("[RECV] 串口 {} 组包完成，共 {} 字节: {}", port_name, data_buffer.len(), data_hex);
+                                info!(
+                                    "[RECV] 串口 {} 组包完成，共 {} 字节: {}",
+                                    port_name,
+                                    data_buffer.len(),
+                                    data_hex
+                                );
                                 callback(&port_name, &data_buffer);
                                 data_buffer.clear();
                                 last_data_time = None;
@@ -163,7 +196,11 @@ impl SerialPort {
             }
 
             if !data_buffer.is_empty() {
-                info!("[RECV] 串口 {} 刷新剩余缓冲数据 {} 字节", port_name, data_buffer.len());
+                info!(
+                    "[RECV] 串口 {} 刷新剩余缓冲数据 {} 字节",
+                    port_name,
+                    data_buffer.len()
+                );
                 callback(&port_name, &data_buffer);
             }
 
@@ -188,7 +225,7 @@ impl SerialPort {
             let mut read_thread = self.read_thread.lock().lock_err("串口读取线程")?;
             read_thread.take()
         };
-        
+
         if let Some(handle) = handle {
             let _ = handle.join();
         }
@@ -270,7 +307,7 @@ pub fn scan_ports() -> Result<Vec<PortInfo>> {
                     manufacturer: None,
                     product: None,
                     serial_number: None,
-                }
+                },
             };
             port_type
         })

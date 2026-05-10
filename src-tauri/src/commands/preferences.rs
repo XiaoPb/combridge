@@ -2,22 +2,20 @@ use tauri::State;
 use tracing::{debug, error, info};
 
 use crate::error::Result;
-use crate::state::{StatePersistenceRef, Preferences};
-use crate::gh3036::Gh3036ManagerRef;
 use crate::gh3036::CsvConfig;
+use crate::gh3036::Gh3036ManagerRef;
+use crate::state::{Preferences, StatePersistenceRef};
 
 #[tauri::command]
-pub async fn get_preferences(
-    persistence: State<'_, StatePersistenceRef>,
-) -> Result<Preferences> {
+pub async fn get_preferences(persistence: State<'_, StatePersistenceRef>) -> Result<Preferences> {
     debug!("获取偏好设置");
-    
+
     let persistence = persistence.inner().read().await;
     let prefs = persistence.load_preferences().await.map_err(|e| {
         error!("加载偏好设置失败: {}", e);
         e
     })?;
-    
+
     Ok(prefs)
 }
 
@@ -27,13 +25,13 @@ pub async fn save_preferences(
     prefs: Preferences,
 ) -> Result<()> {
     info!("保存偏好设置");
-    
+
     let persistence = persistence.inner().read().await;
     persistence.save_preferences(&prefs).await.map_err(|e| {
         error!("保存偏好设置失败: {}", e);
         e
     })?;
-    
+
     debug!("偏好设置保存完成");
     Ok(())
 }
@@ -49,24 +47,25 @@ pub async fn update_serial_preferences(
     auto_scroll: bool,
 ) -> Result<()> {
     debug!("更新串口偏好设置");
-    
-    let persistence = persistence.inner().read().await;
-    let mut prefs = persistence.load_preferences().await.unwrap_or_else(|_| {
-        Preferences::default()
-    });
-    
+
+    let persistence = persistence.inner().write().await;
+    let mut prefs = persistence
+        .load_preferences()
+        .await
+        .unwrap_or_else(|_| Preferences::default());
+
     prefs.serial.display_format = display_format;
     prefs.serial.display_mode = display_mode;
     prefs.serial.send_format = send_format;
     prefs.serial.append_newline = append_newline;
     prefs.serial.newline_type = newline_type;
     prefs.serial.auto_scroll = auto_scroll;
-    
+
     persistence.save_preferences(&prefs).await.map_err(|e| {
         error!("保存偏好设置失败: {}", e);
         e
     })?;
-    
+
     Ok(())
 }
 
@@ -82,12 +81,13 @@ pub async fn update_ble_preferences(
     panel_collapsed: bool,
 ) -> Result<()> {
     debug!("更新BLE偏好设置");
-    
-    let persistence = persistence.inner().read().await;
-    let mut prefs = persistence.load_preferences().await.unwrap_or_else(|_| {
-        Preferences::default()
-    });
-    
+
+    let persistence = persistence.inner().write().await;
+    let mut prefs = persistence
+        .load_preferences()
+        .await
+        .unwrap_or_else(|_| Preferences::default());
+
     prefs.ble.display_format = display_format;
     prefs.ble.auto_scroll = auto_scroll;
     prefs.ble.input_format = input_format;
@@ -95,12 +95,12 @@ pub async fn update_ble_preferences(
     prefs.ble.config_collapsed = config_collapsed;
     prefs.ble.gatt_collapsed = gatt_collapsed;
     prefs.ble.panel_collapsed = panel_collapsed;
-    
+
     persistence.save_preferences(&prefs).await.map_err(|e| {
         error!("保存偏好设置失败: {}", e);
         e
     })?;
-    
+
     Ok(())
 }
 
@@ -112,21 +112,22 @@ pub async fn update_waveform_preferences(
     sidebar_collapsed: bool,
 ) -> Result<()> {
     debug!("更新波形偏好设置");
-    
-    let persistence = persistence.inner().read().await;
-    let mut prefs = persistence.load_preferences().await.unwrap_or_else(|_| {
-        Preferences::default()
-    });
-    
+
+    let persistence = persistence.inner().write().await;
+    let mut prefs = persistence
+        .load_preferences()
+        .await
+        .unwrap_or_else(|_| Preferences::default());
+
     prefs.waveform.display_rows = display_rows;
     prefs.waveform.refresh_interval = refresh_interval;
     prefs.waveform.sidebar_collapsed = sidebar_collapsed;
-    
+
     persistence.save_preferences(&prefs).await.map_err(|e| {
         error!("保存偏好设置失败: {}", e);
         e
     })?;
-    
+
     Ok(())
 }
 
@@ -140,23 +141,24 @@ pub async fn update_gh3036_channel_preferences(
     rx_char: String,
 ) -> Result<()> {
     debug!("更新GH3036通道偏好设置");
-    
-    let persistence = persistence.inner().read().await;
-    let mut prefs = persistence.load_preferences().await.unwrap_or_else(|_| {
-        Preferences::default()
-    });
-    
+
+    let persistence = persistence.inner().write().await;
+    let mut prefs = persistence
+        .load_preferences()
+        .await
+        .unwrap_or_else(|_| Preferences::default());
+
     prefs.gh3036_channel.connection_type = connection_type;
     prefs.gh3036_channel.serial_port = serial_port;
     prefs.gh3036_channel.ble_device = ble_device;
     prefs.gh3036_channel.tx_char = tx_char;
     prefs.gh3036_channel.rx_char = rx_char;
-    
+
     persistence.save_preferences(&prefs).await.map_err(|e| {
         error!("保存偏好设置失败: {}", e);
         e
     })?;
-    
+
     Ok(())
 }
 
@@ -168,25 +170,29 @@ pub async fn update_gh3036_csv_preferences(
     output_dir: String,
 ) -> Result<()> {
     debug!("更新GH3036 CSV偏好设置");
-    
-    let persistence = persistence.inner().read().await;
-    let mut prefs = persistence.load_preferences().await.unwrap_or_else(|_| {
-        Preferences::default()
-    });
-    
+
+    let persistence = persistence.inner().write().await;
+    let mut prefs = persistence
+        .load_preferences()
+        .await
+        .unwrap_or_else(|_| Preferences::default());
+
     prefs.gh3036_csv.enabled = enabled;
     prefs.gh3036_csv.output_dir = output_dir.clone();
-    
+
     persistence.save_preferences(&prefs).await.map_err(|e| {
         error!("保存偏好设置失败: {}", e);
         e
     })?;
-    
-    let config = CsvConfig { enabled, output_dir };
+
+    let config = CsvConfig {
+        enabled,
+        output_dir,
+    };
     if let Err(e) = manager.set_csv_config(config) {
         error!("同步更新后端CSV配置失败: {}", e);
     }
-    
+
     info!("GH3036 CSV偏好设置已更新并同步到后端");
     Ok(())
 }

@@ -83,9 +83,7 @@ impl MessageData {
         match self {
             MessageData::Text(s) => Some(s.clone()),
             MessageData::Json(v) => Some(v.to_string()),
-            MessageData::Raw(b) | MessageData::Binary(b) => {
-                String::from_utf8(b.clone()).ok()
-            }
+            MessageData::Raw(b) | MessageData::Binary(b) => String::from_utf8(b.clone()).ok(),
         }
     }
 
@@ -93,11 +91,9 @@ impl MessageData {
         match self {
             MessageData::Json(v) => Some(v.clone()),
             MessageData::Text(s) => serde_json::from_str(s).ok(),
-            MessageData::Raw(b) | MessageData::Binary(b) => {
-                String::from_utf8(b.clone())
-                    .ok()
-                    .and_then(|s| serde_json::from_str(&s).ok())
-            }
+            MessageData::Raw(b) | MessageData::Binary(b) => String::from_utf8(b.clone())
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok()),
         }
     }
 
@@ -172,6 +168,12 @@ impl MsgPackHandler {
     pub fn unpack(&mut self, data: &[u8]) -> Result<Vec<MsgPackMessage>> {
         self.buffer.extend_from_slice(data);
 
+        if self.buffer.len() > self.max_message_size * 4 {
+            warn!("MsgPack 缓冲区过大 ({} bytes)，清空", self.buffer.len());
+            self.buffer.clear();
+            return Ok(Vec::new());
+        }
+
         let mut messages = Vec::new();
         let mut offset = 0;
 
@@ -181,7 +183,10 @@ impl MsgPackHandler {
             }
 
             if self.buffer[offset] != MAGIC_BYTE {
-                warn!("无效的魔数: 0x{:02X}, 期望: 0x{:02X}", self.buffer[offset], MAGIC_BYTE);
+                warn!(
+                    "无效的魔数: 0x{:02X}, 期望: 0x{:02X}",
+                    self.buffer[offset], MAGIC_BYTE
+                );
                 offset += 1;
                 continue;
             }
@@ -197,7 +202,8 @@ impl MsgPackHandler {
             if self.buffer.len() < cursor + 2 {
                 break;
             }
-            let id_len = u16::from_be_bytes([self.buffer[cursor], self.buffer[cursor + 1]]) as usize;
+            let id_len =
+                u16::from_be_bytes([self.buffer[cursor], self.buffer[cursor + 1]]) as usize;
             cursor += 2;
 
             if self.buffer.len() < cursor + id_len {
@@ -224,19 +230,22 @@ impl MsgPackHandler {
             if self.buffer.len() < cursor + 2 {
                 break;
             }
-            let type_len = u16::from_be_bytes([self.buffer[cursor], self.buffer[cursor + 1]]) as usize;
+            let type_len =
+                u16::from_be_bytes([self.buffer[cursor], self.buffer[cursor + 1]]) as usize;
             cursor += 2;
 
             if self.buffer.len() < cursor + type_len {
                 break;
             }
-            let msg_type = String::from_utf8_lossy(&self.buffer[cursor..cursor + type_len]).to_string();
+            let msg_type =
+                String::from_utf8_lossy(&self.buffer[cursor..cursor + type_len]).to_string();
             cursor += type_len;
 
             if self.buffer.len() < cursor + 2 {
                 break;
             }
-            let meta_len = u16::from_be_bytes([self.buffer[cursor], self.buffer[cursor + 1]]) as usize;
+            let meta_len =
+                u16::from_be_bytes([self.buffer[cursor], self.buffer[cursor + 1]]) as usize;
             cursor += 2;
 
             if self.buffer.len() < cursor + meta_len {
@@ -275,7 +284,10 @@ impl MsgPackHandler {
 
             let expected_checksum = self.calculate_checksum(&self.buffer[offset..cursor - 2]);
             if checksum != expected_checksum {
-                warn!("校验和不匹配: 收到 {}, 期望 {}", checksum, expected_checksum);
+                warn!(
+                    "校验和不匹配: 收到 {}, 期望 {}",
+                    checksum, expected_checksum
+                );
                 offset = cursor;
                 continue;
             }
@@ -295,7 +307,11 @@ impl MsgPackHandler {
             self.buffer.drain(..offset);
         }
 
-        debug!("解析完成，共 {} 条消息，剩余 {} 字节", messages.len(), self.buffer.len());
+        debug!(
+            "解析完成，共 {} 条消息，剩余 {} 字节",
+            messages.len(),
+            self.buffer.len()
+        );
         Ok(messages)
     }
 
@@ -376,7 +392,11 @@ pub fn create_command_message(command: &str, params: serde_json::Value) -> MsgPa
     }
 }
 
-pub fn create_response_message(request_id: &str, success: bool, data: serde_json::Value) -> MsgPackMessage {
+pub fn create_response_message(
+    request_id: &str,
+    success: bool,
+    data: serde_json::Value,
+) -> MsgPackMessage {
     let mut metadata = HashMap::new();
     metadata.insert("request_id".to_string(), request_id.to_string());
 
@@ -447,7 +467,10 @@ mod tests {
     fn test_message_type() {
         assert_eq!(MessageType::from("data"), MessageType::Data);
         assert_eq!(MessageType::from("command"), MessageType::Command);
-        assert_eq!(MessageType::from("custom_type"), MessageType::Custom("custom_type".to_string()));
+        assert_eq!(
+            MessageType::from("custom_type"),
+            MessageType::Custom("custom_type".to_string())
+        );
     }
 
     #[test]

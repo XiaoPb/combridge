@@ -91,7 +91,6 @@ graph TB
 | Dashboard | [dashboard-module.md](./backend/dashboard-module.md) | Dashboard 数据解析与配置 |
 | 状态管理 | [state-module.md](./backend/state-module.md) | 应用状态持久化 |
 | 服务层 | [service-module.md](./backend/service-module.md) | 日志、配置、事件总线等 |
-| WebSocket | [websocket-module.md](./backend/websocket-module.md) | WebSocket 客户端 |
 | 波形模块 | [waveform-module.md](./backend/waveform-module.md) | 波形数据缓冲和解析 |
 | 命令层 | [commands-module.md](./backend/commands-module.md) | Tauri 命令定义 |
 | 错误处理 | [error-handling.md](./backend/error-handling.md) | 统一错误处理机制 |
@@ -147,8 +146,7 @@ combridge-rust/
 │   │   ├── protocol/             # 协议插件
 │   │   ├── service/              # 服务层
 │   │   ├── state/                # 状态管理
-│   │   ├── waveform/             # 波形模块
-│   │   └── websocket/            # WebSocket
+│   │   └── waveform/             # 波形模块
 │   ├── parser_scripts/           # 预置 Lua 解析脚本
 │   │   ├── csv_parser.lua
 │   │   ├── custom_example.lua

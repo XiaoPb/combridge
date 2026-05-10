@@ -53,7 +53,6 @@
 | [serial_manager.rs](../../src-tauri/src/device/serial/serial_manager.rs) | ✅ 有测试 |
 | [at_parser.rs](../../src-tauri/src/device/ble/at/at_parser.rs) | ✅ 有测试 |
 | [msgpack_handler.rs](../../src-tauri/src/service/msgpack_handler.rs) | ✅ 有测试 |
-| [reconnection.rs](../../src-tauri/src/websocket/reconnection.rs) | ✅ 有测试 |
 | [buffer.rs](../../src-tauri/src/waveform/buffer.rs) | ✅ 4 个测试 |
 | [parser.rs](../../src-tauri/src/waveform/parser.rs) | ✅ 有测试 |
 | [waveform commands](../../src-tauri/src/commands/waveform.rs) | ✅ 有测试 |

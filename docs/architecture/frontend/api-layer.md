@@ -12,7 +12,7 @@ API 层封装了所有 Tauri 命令调用和事件监听，提供类型安全的
 | 文件 | 说明 |
 |------|------|
 | `index.ts` | 统一导出所有 API 模块 |
-| `tauri.ts` | Tauri 命令封装（serial/ble/websocket/system/protocol/preferences） |
+| `tauri.ts` | Tauri 命令封装（serial/ble/system/protocol/preferences） |
 | `events.ts` | 事件监听封装与事件类型定义 |
 | `stateApi.ts` | 状态 API（dispatch/getState/restore/save） |
 | `dashboard.ts` | 仪表盘 API（解析器脚本/JSON 配置管理） |
@@ -62,18 +62,6 @@ BLE 相关 API，源码位于 [tauri.ts](file:///e:/Code/CPP/combridge-rust/src/
 | `getCache(charUuid)` | `get_ble_cache` | 获取 BLE 缓存 |
 | `getSubscriptions(deviceId)` | `get_ble_subscriptions` | 获取订阅列表 |
 
-### WebSocketApi
-
-WebSocket 相关 API：
-
-| 方法 | 后端命令 | 说明 |
-|------|----------|------|
-| `connect(id, url, reconnect?)` | `connect_websocket` | 连接 WebSocket |
-| `send(id, message)` | `send_websocket_message` | 发送消息 |
-| `disconnect(id)` | `disconnect_websocket` | 断开连接 |
-| `getStatus(id)` | `get_websocket_status` | 获取连接状态 |
-| `getAllConnections()` | `get_all_websocket_connections` | 获取所有连接 ID |
-| `getAllStatus()` | `get_all_websocket_status` | 获取所有连接状态 |
 
 ### SystemApi
 
@@ -319,7 +307,7 @@ export const eventBus = {
 ```mermaid
 graph TB
     subgraph API Layer
-        TauriAPI[tauri.ts<br/>serial/ble/websocket/system/protocol/preferences]
+        TauriAPI[tauri.ts<br/>serial/ble/system/protocol/preferences]
         EventsAPI[events.ts<br/>事件类型与监听]
         StateAPI[stateApi.ts<br/>状态分发与查询]
         DashboardAPI[dashboard.ts<br/>解析器/JSON管理]

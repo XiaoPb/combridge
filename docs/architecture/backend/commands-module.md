@@ -13,7 +13,6 @@
   - `ble.rs` - BLE 命令（含 AT 专用命令）
   - `protocol.rs` - 协议命令
   - `system.rs` - 系统命令
-  - `websocket.rs` - WebSocket 命令
   - `state.rs` - 状态命令
   - `preferences.rs` - 偏好设置命令
   - `gh3036.rs` - GH3036 命令
@@ -65,13 +64,6 @@
     commands::ble::remove_at_tab,
     commands::ble::send_at_data,
 
-    // WebSocket 命令 (6)
-    commands::websocket::connect_websocket,
-    commands::websocket::send_websocket_message,
-    commands::websocket::disconnect_websocket,
-    commands::websocket::get_websocket_status,
-    commands::websocket::get_all_websocket_connections,
-    commands::websocket::get_all_websocket_status,
 
     // 协议命令 (9)
     commands::protocol::load_protocol,
@@ -223,17 +215,6 @@
 | `remove_at_tab` | `tab_id: String` | `()` | 移除 AT 连接 TAB |
 | `send_at_data` | `device_id: String, data: Vec<u8>` | `()` | AT 透传数据发送 |
 
-## WebSocket 命令
-
-| 命令 | 参数 | 返回值 | 说明 |
-|------|------|--------|------|
-| `connect_websocket` | `id: String, url: String` | `()` | 连接服务器 |
-| `send_websocket_message` | `id: String, message: String` | `()` | 发送消息 |
-| `disconnect_websocket` | `id: String` | `()` | 断开连接 |
-| `get_websocket_status` | `id: String` | `ConnectionStatus` | 获取状态 |
-| `get_all_websocket_connections` | 无 | `Vec<String>` | 获取所有连接 |
-| `get_all_websocket_status` | 无 | `HashMap<String, ConnectionStatus>` | 获取所有状态 |
-
 ## 协议命令
 
 | 命令 | 参数 | 返回值 | 说明 |
@@ -361,7 +342,6 @@
 | 串口 | 8 | 基础串口操作（含缓存获取） |
 | BLE 通用 | 19 | 原生/AT 通用 BLE 操作（含缓存获取） |
 | AT 专用 | 7 | AT 模式特有命令 |
-| WebSocket | 6 | WebSocket 客户端 |
 | 协议 | 9 | Lua 协议插件管理 |
 | 系统 | 16 | 系统信息与窗口管理（含 2 个 feature-gated） |
 | 状态 | 7 | 应用状态管理 |

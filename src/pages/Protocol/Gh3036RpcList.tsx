@@ -117,12 +117,12 @@ const Gh3036RpcList: React.FC = () => {
   const handleWriteReg = async () => {
     const addr = parseInt(rpcConfig.writeRegAddr, 16);
     const value = parseInt(rpcConfig.writeRegValue, 16);
-    await handleExecuteRpc('W', [addr.toString(), value.toString()]);
+    await handleExecuteRpc('W', ['0x' + addr.toString(16), '0x' + value.toString(16)]);
   };
 
   const handleReadReg = async () => {
     const addr = parseInt(rpcConfig.readRegAddr, 16);
-    const result = await executeRpc('R', [addr.toString(), '1']);
+    const result = await executeRpc('R', ['0x' + addr.toString(16), '1']);
     if (result && result.length >= 2) {
       const value = (result[1] << 8) | result[0];
       setRpcConfig({ readRegValue: value.toString(16).toUpperCase().padStart(4, '0') });
@@ -208,7 +208,7 @@ const Gh3036RpcList: React.FC = () => {
       lplctr: 0x20,
     };
     const modeBits = bitMap[rpcConfig.factoryMode] || 0;
-    await handleExecuteRpc('FS', [modeBits.toString()]);
+    await handleExecuteRpc('FS', ['0x' + modeBits.toString(16)]);
   };
 
   const handleFactoryGetMode = async () => {
@@ -225,7 +225,7 @@ const Gh3036RpcList: React.FC = () => {
       lplctr: 0x20,
     };
     const modeBits = bitMap[rpcConfig.factoryMode] || 0;
-    const result = await executeRpc('FG', [modeBits.toString()]);
+    const result = await executeRpc('FG', ['0x' + modeBits.toString(16)]);
     if (result && result.length >= 2) {
       const values: string[] = [];
       for (let i = 0; i < result.length; i += 2) {

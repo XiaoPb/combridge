@@ -641,7 +641,7 @@ impl FactoryTestManager {
         );
 
         manager
-            .execute_rpc("S", &["0x0".to_string(), "0".to_string()])
+            .execute_rpc("S", &["0x0".to_string(), "1".to_string()])
             .await
             .map_err(|e| format!("关闭功能失败: {}", e))?;
 
@@ -864,7 +864,7 @@ impl FactoryTestManager {
         );
 
         manager
-            .execute_rpc("S", &["0x1".to_string(), "1".to_string()])
+            .execute_rpc("S", &["0x40".to_string(), "0".to_string()])
             .await
             .map_err(|e| format!("启动 TEST1 失败: {}", e))?;
 
@@ -887,7 +887,7 @@ impl FactoryTestManager {
         );
 
         manager
-            .execute_rpc("S", &["0x1".to_string(), "0".to_string()])
+            .execute_rpc("S", &["0x40".to_string(), "1".to_string()])
             .await
             .map_err(|e| format!("停止 TEST1 失败: {}", e))?;
 
@@ -1010,14 +1010,14 @@ impl FactoryTestManager {
         );
 
         manager
-            .execute_rpc("S", &["0x1".to_string(), "1".to_string()])
+            .execute_rpc("S", &["0x40".to_string(), "0".to_string()])
             .await
             .map_err(|e| format!("启动 TEST1 失败: {}", e))?;
 
         thread::sleep(Duration::from_secs(3));
 
         manager
-            .execute_rpc("S", &["0x1".to_string(), "0".to_string()])
+            .execute_rpc("S", &["0x40".to_string(), "1".to_string()])
             .await
             .map_err(|e| format!("停止 TEST1 失败: {}", e))?;
 
@@ -1140,14 +1140,14 @@ impl FactoryTestManager {
         );
 
         manager
-            .execute_rpc("S", &["0x1".to_string(), "1".to_string()])
+            .execute_rpc("S", &["0x40".to_string(), "0".to_string()])
             .await
             .map_err(|e| format!("启动 TEST1 失败: {}", e))?;
 
         thread::sleep(Duration::from_secs(3));
 
         manager
-            .execute_rpc("S", &["0x1".to_string(), "0".to_string()])
+            .execute_rpc("S", &["0x40".to_string(), "1".to_string()])
             .await
             .map_err(|e| format!("停止 TEST1 失败: {}", e))?;
 
@@ -1270,14 +1270,14 @@ impl FactoryTestManager {
         );
 
         manager
-            .execute_rpc("S", &["0x1".to_string(), "1".to_string()])
+            .execute_rpc("S", &["0x40".to_string(), "0".to_string()])
             .await
             .map_err(|e| format!("启动 TEST1 失败: {}", e))?;
 
         thread::sleep(Duration::from_secs(3));
 
         manager
-            .execute_rpc("S", &["0x1".to_string(), "0".to_string()])
+            .execute_rpc("S", &["0x40".to_string(), "1".to_string()])
             .await
             .map_err(|e| format!("停止 TEST1 失败: {}", e))?;
 
@@ -1339,7 +1339,7 @@ impl FactoryTestManager {
         );
 
         manager
-            .execute_rpc("S", &["0x0".to_string(), "0".to_string()])
+            .execute_rpc("S", &["0x0".to_string(), "1".to_string()])
             .await
             .map_err(|e| format!("关闭功能失败: {}", e))?;
 

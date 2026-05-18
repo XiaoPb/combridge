@@ -1063,7 +1063,13 @@ impl Gh3036Manager {
     async fn execute_sw_function_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let target_func_mode: u32 = params
             .first()
-            .and_then(|s| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok())
+            .and_then(|s| {
+                if s.starts_with("0x") || s.starts_with("0X") {
+                    u32::from_str_radix(&s[2..], 16).ok()
+                } else {
+                    s.parse().ok()
+                }
+            })
             .ok_or("缺少目标功能模式参数")?;
 
         let ctrl_type: u8 = params.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
@@ -1085,7 +1091,13 @@ impl Gh3036Manager {
     async fn execute_low_power_cmd_async(&self, params: &[String]) -> Result<Vec<u8>, String> {
         let target_func_mode: u32 = params
             .first()
-            .and_then(|s| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok())
+            .and_then(|s| {
+                if s.starts_with("0x") || s.starts_with("0X") {
+                    u32::from_str_radix(&s[2..], 16).ok()
+                } else {
+                    s.parse().ok()
+                }
+            })
             .ok_or("缺少目标功能模式参数")?;
 
         let ctrl_type: u8 = params.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);

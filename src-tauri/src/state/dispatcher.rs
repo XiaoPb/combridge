@@ -26,7 +26,7 @@ pub struct ActionDispatcher {
     serial_manager: SerialManagerRef,
     ble_manager: BleManagerRef,
     last_save: Mutex<Option<Instant>>,
-    runtime_handle: tokio::runtime::Handle,
+    runtime_handle: Mutex<Option<tokio::runtime::Handle>>,
 }
 
 impl ActionDispatcher {
@@ -42,8 +42,18 @@ impl ActionDispatcher {
             serial_manager,
             ble_manager,
             last_save: Mutex::new(None),
-            runtime_handle: tokio::runtime::Handle::current(),
+            runtime_handle: Mutex::new(None),
         }
+    }
+
+    fn get_runtime_handle(&self) -> tokio::runtime::Handle {
+        let mut guard = self.runtime_handle.lock().unwrap();
+        if let Some(ref handle) = *guard {
+            return handle.clone();
+        }
+        let handle = tokio::runtime::Handle::current();
+        *guard = Some(handle.clone());
+        handle
     }
 
     pub async fn dispatch(&self, action: Action, app: &AppHandle) -> ActionResult {
@@ -221,7 +231,7 @@ impl ActionDispatcher {
         let state = self.state.clone();
         let device_id_owned = device_id.to_string();
         let app_clone = app.clone();
-        let handle = self.runtime_handle.clone();
+        let handle = self.get_runtime_handle();
 
         match self
             .serial_manager

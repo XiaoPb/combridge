@@ -1,7 +1,7 @@
 # ComBridge
 
 <p align="center">
-  <strong>跨平台串口与 BLE 蓝牙通信调试工具</strong>
+  <strong>GH3036 传感器芯片产测工具</strong>
 </p>
 
 <p align="center">
@@ -10,71 +10,23 @@
   <a href="#环境要求">环境要求</a> •
   <a href="#安装">安装</a> •
   <a href="#使用指南">使用指南</a> •
-  <a href="#开发指南">开发指南</a> •
-  <a href="#项目结构">项目结构</a>
+  <a href="#开发指南">开发指南</a>
 </p>
 
 ---
 
 ## 简介
 
-ComBridge 是一款基于 Tauri 2.0 构建的跨平台串口与 BLE 蓝牙通信调试工具，专为嵌入式开发者、物联网工程师和硬件调试场景设计。支持串口通信、原生 BLE 和 AT 指令 BLE 双模式，提供灵活的协议插件系统、可配置的 Dashboard 仪表盘和波形数据展示，帮助开发者高效地进行设备通信调试。
+ComBridge 是一款基于 Tauri 2.0 构建的跨平台桌面工具，专为 GH3036 传感器芯片的产线测试场景设计。通过原生 BLE 蓝牙自动连接设备，执行底噪、PPG 噪声、LPCTR、LPLCTR 等自动化测试项目，并根据可配置的卡控规则输出 PASS/FAIL 结果。
 
 ## 功能特性
 
-### 🔌 串口通信
-- 自动扫描可用串口设备
-- 支持自定义波特率、数据位、校验位、停止位
-- 实时数据收发与十六进制/文本显示
-- 数据发送历史记录
-- 数据导出功能（日志文件 + 原始数据）
-
-### 📡 BLE 蓝牙通信（双模式）
-- **原生 BLE 模式**：直接使用操作系统原生蓝牙 API
-- **AT 指令 BLE 模式**：通过串口 + AT 指令控制 BLE 模块（支持 ESP32、N32WB 等）
-- 设备扫描与信号强度显示
-- GATT 服务/特征浏览
-- 特征值读写与通知订阅
-- 连接参数配置（MTU、PHY、连接间隔）
-
-### 📜 协议插件系统
-- Lua 脚本驱动的协议解析
-- 支持自定义数据解析钩子
-- 协议与设备灵活绑定
-- 内置 GH3036 协议支持
-- 预置常用协议解析脚本（CSV、JSON、IMU、NMEA）
-
-### 📊 Dashboard 仪表盘
-- 可配置的 Widget 展示系统
-- Lua 脚本数据解析
-- JSON 配置文件定义 Widget 布局
-- 支持多种 Widget 类型：
-  - 文本显示
-  - 仪表盘
-  - LED 指示灯
-  - 加速度计
-  - 指南针
-  - 折线图
-- 脚本热加载与动态切换
-
-### 📈 波形数据展示
-- 多通道实时波形显示
-- 支持 CSV、JSON、二进制等多种数据格式
-- 可配置的缓冲区大小
-- 数据解析器支持
-- CSV 文件导入功能
-
-### 🌐 WebSocket 客户端
-- 多连接管理
-- 自动重连与心跳维护
-- 消息收发监控
-
-### 🎨 现代化界面
-- 基于 Ant Design v6.3.5 的美观 UI
-- 深色/浅色主题切换
-- 多标签页管理
-- 国际化支持（中文/英文）
-- 自定义无标题栏窗口
+- **BLE 自动连接**：输入设备名称关键词，一键扫描并自动完成连接、GATT 发现、特征订阅、通道配置全流程
+- **自动化产测**：顺序执行底噪、PPG 噪声、LPCTR、LPLCTR 测试，支持中途环境切换确认
+- **可配置卡控规则**：通过 YAML 配置文件定义每个测试项的通过条件（阈值、范围、单位），无需修改代码
+- **逐通道结果展示**：测试完成后展示每个通道的实测值、判断条件和 PASS/FAIL 状态
+- **读写寄存器**：通过 CardiffRPC 命令对设备寄存器进行读写测试（顶部"通道配置"标签页）
+- **版本信息查询**：读取固件、协议、算法等各类版本号（顶部"版本信息"标签页）
 
 ## 技术栈
 
@@ -104,7 +56,7 @@ ComBridge 是一款基于 Tauri 2.0 构建的跨平台串口与 BLE 蓝牙通信
 
 ### 开发环境
 - **Node.js**: >= 18.0.0
-- **Rust**: >= 1.70.0
+- **Rust**: >= 1.88.0（推荐通过 `rustup update stable` 保持最新）
 - **pnpm/npm/yarn**: 任意包管理器
 
 #### 平台特定依赖
@@ -133,240 +85,245 @@ sudo apt install libwebkit2gtk-4.0-dev build-essential curl wget file libssl-dev
 
 ### 从源码构建
 
+#### 前置依赖
+
+所有平台都需要：
+- **Node.js** >= 18.0.0
+- **Rust** >= 1.88.0（通过 [rustup](https://rustup.rs/) 安装）
+- 本地依赖库 `../libs/protocol_rust/`（需与本仓库同级目录存在）
+
 ```bash
-# 克隆仓库
+# 安装/升级 Rust 到最新稳定版
+rustup update stable
+```
+
+---
+
+#### macOS
+
+**额外依赖：**
+```bash
+xcode-select --install
+```
+
+**编译（Apple Silicon）：**
+```bash
+# 添加目标架构（首次需要）
+rustup target add aarch64-apple-darwin
+
 git clone https://github.com/XiaoPb/combridge.git
 cd combridge
-
-# 安装前端依赖
 npm install
+npm run tauri build -- --target aarch64-apple-darwin
+```
 
-# 开发模式运行
-npm run tauri dev
+**编译（Intel）：**
+```bash
+rustup target add x86_64-apple-darwin
+npm run tauri build -- --target x86_64-apple-darwin
+```
 
-# 构建生产版本
+产物位于 `src-tauri/target/<target>/release/bundle/`，包含 `.app` 和 `.dmg`。
+
+> **注意**：macOS 蓝牙权限需要 `src-tauri/Info.plist` 中的 `NSBluetoothAlwaysUsageDescription`，该文件已包含在仓库中，无需额外配置。
+
+---
+
+#### Windows
+
+**额外依赖：**
+- [Microsoft Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)（勾选 "Desktop development with C++"）
+- WebView2（Windows 10/11 已内置；Windows 7/8 需手动安装）
+
+**编译：**
+```bash
+git clone https://github.com/XiaoPb/combridge.git
+cd combridge
+npm install
 npm run tauri build
 ```
 
+产物位于 `src-tauri/target/release/bundle/`，包含 `.msi` 和 `.exe` 安装包。
+
+---
+
+#### Linux（Ubuntu / Debian）
+
+**额外依赖：**
+```bash
+sudo apt update
+sudo apt install -y \
+  libwebkit2gtk-4.1-dev \
+  build-essential \
+  curl \
+  wget \
+  file \
+  libssl-dev \
+  libgtk-3-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev \
+  libdbus-1-dev \
+  libudev-dev
+```
+
+**编译：**
+```bash
+git clone https://github.com/XiaoPb/combridge.git
+cd combridge
+npm install
+npm run tauri build
+```
+
+产物位于 `src-tauri/target/release/bundle/`，包含 `.AppImage` 和 `.deb` 包。
+
+> **注意**：Linux 上使用原生 BLE 需要 BlueZ >= 5.50，并确保当前用户在 `bluetooth` 用户组中：
+> ```bash
+> sudo usermod -aG bluetooth $USER
+> ```
+
+---
+
+#### 开发模式（所有平台）
+
+```bash
+npm install
+npm run tauri dev
+```
+
+开发模式会同时启动 Vite 开发服务器（端口 1420）和 Tauri 窗口，支持前端热更新。
+
 ## 使用指南
 
-### 串口通信
+### 界面布局
 
-1. 点击左侧导航栏「串口」进入串口页面
-2. 点击「扫描」按钮扫描可用串口
-3. 选择目标串口，配置波特率等参数
-4. 点击「连接」打开串口
-5. 在发送面板输入数据，选择发送格式（文本/十六进制）
-6. 接收数据将在数据视图中实时显示
-7. 可通过导出功能保存通信数据
+启动后默认进入产测页面。顶部标签栏有三个标签：
 
-### BLE 通信
+- **产测**：主界面，完成 BLE 连接和自动化测试
+- **通道配置**：CardiffRPC 寄存器读写，默认折叠
+- **版本信息**：查询设备各类版本号
 
-#### 原生 BLE 模式
-1. 点击左侧导航栏「BLE」进入 BLE 页面
-2. 选择「原生模式」
-3. 点击「扫描」搜索周围 BLE 设备
-4. 点击目标设备进行连接
-5. 浏览 GATT 服务和特征
-6. 对特征进行读写或订阅通知
+---
 
-#### AT 指令 BLE 模式
-1. 选择「AT 模式」
-2. 配置 AT 模块连接的串口
-3. 后续操作与原生模式相同
+### 第一步：准备配置目录
 
-### Dashboard 仪表盘
+产测需要一个配置目录，目录中包含以下文件：
 
-1. 点击左侧导航栏「Dashboard」进入仪表盘页面
-2. 选择数据源（串口/BLE 设备）
-3. 选择解析脚本（或使用预置脚本）
-4. 导入或编辑 JSON 配置文件定义 Widget 布局
-5. Widget 将实时显示解析后的数据
+| 文件 | 说明 |
+|------|------|
+| `factory_config_GH3036.yaml` | 卡控规则配置，定义各测试项的通过条件 |
+| `Base_Noise_TEST1_*.config` | 底噪测试参数 |
+| `PPG_Noise_TEST1_*.config` | PPG 噪声测试参数 |
+| `LPCTR_TEST1_*.config` | LPCTR 测试参数 |
+| `LPLCTR_TEST1_*.config` | LPLCTR 测试参数 |
 
-### 波形数据展示
+`factory_config_GH3036.yaml` 示例：
 
-1. 点击左侧导航栏「波形」进入波形页面
-2. 配置波形缓冲区参数
-3. 选择数据解析器类型（CSV/JSON/二进制）
-4. 选择数据源并开始接收数据
-5. 波形图将实时显示数据变化
-6. 支持导入 CSV 文件进行离线分析
+```yaml
+project: "GH3036"
+version: "1.0"
 
-### 协议插件
+tests:
+  base_noise:
+    enabled: true
+    description: "底噪测试"
+    unit: "uV"
+    global_threshold:
+      operator: "lt"
+      value: 95
+      description: "所有通道底噪应小于 95 uV"
 
-1. 点击左侧导航栏「协议」进入协议页面
-2. 点击「加载协议」选择 Lua 脚本文件
-3. 在绑定配置中将协议绑定到设备
-4. 设备数据将自动经过协议解析
+  ppg_noise:
+    enabled: true
+    description: "PPG噪声测试"
+    unit: "uV"
+    global_threshold:
+      operator: "lt"
+      value: 280
 
-## 项目结构
+  lpctr:
+    enabled: true
+    description: "LPCTR测试"
+    unit: "nA/mA"
+    global_threshold:
+      operator: "range"
+      range: [100, 3000]
 
-```
-combridge-rust/
-├── src/                          # 前端源码 (React + TypeScript)
-│   ├── api/                      # Tauri API 封装
-│   │   ├── index.ts              # API 导出
-│   │   ├── tauri.ts              # Tauri 命令封装
-│   │   ├── events.ts             # 事件监听封装
-│   │   ├── stateApi.ts           # 状态管理 API
-│   │   ├── waveform.ts           # 波形 API
-│   │   ├── gh3036.ts             # GH3036 API
-│   │   └── dashboard.ts          # Dashboard API
-│   ├── components/               # 公共组件
-│   │   ├── Common/               # 通用组件
-│   │   ├── Layout/               # 布局组件
-│   │   ├── TitleBar/             # 标题栏组件
-│   │   └── DataLogger/           # 数据日志组件
-│   ├── hooks/                    # 自定义 Hooks
-│   │   ├── useSerial.ts          # 串口 Hook
-│   │   ├── useBle.ts             # BLE Hook
-│   │   ├── useProtocol.ts        # 协议 Hook
-│   │   ├── useWaveform.ts        # 波形 Hook
-│   │   ├── useAppDispatch.ts     # 应用调度 Hook
-│   │   ├── useAppState.ts        # 应用状态 Hook
-│   │   ├── useConnectedDevices.ts # 已连接设备 Hook
-│   │   ├── useDataParser.ts      # 数据解析 Hook
-│   │   ├── useDebounce.ts        # 防抖 Hook
-│   │   ├── useLog.ts             # 日志 Hook
-│   │   ├── useModuleSubscribe.ts # 模块订阅 Hook
-│   │   ├── useNotification.ts    # 通知 Hook
-│   │   └── useTheme.ts           # 主题 Hook
-│   ├── i18n/                     # 国际化配置
-│   ├── locales/                  # 多语言资源
-│   │   ├── zh-CN/                # 中文
-│   │   └── en-US/                # 英文
-│   ├── pages/                    # 页面组件
-│   │   ├── Home/                 # 首页
-│   │   ├── Serial/               # 串口页面
-│   │   ├── Ble/                  # BLE 页面
-│   │   ├── Protocol/             # 协议页面
-│   │   ├── Dashboard/            # Dashboard 页面
-│   │   ├── Waveform/             # 波形页面
-│   │   ├── Gh3036/               # GH3036 页面
-│   │   └── System/               # 系统页面
-│   ├── services/                 # 服务层
-│   │   ├── eventListeners.ts     # 事件监听器
-│   │   ├── messageParser.ts      # 消息解析
-│   │   ├── storageService.ts     # 存储服务
-│   │   └── dataFormatter.ts      # 数据格式化服务
-│   ├── stores/                   # Zustand 状态管理
-│   │   ├── serialStore.ts        # 串口状态
-│   │   ├── bleStore.ts           # BLE 状态
-│   │   ├── protocolStore.ts      # 协议状态
-│   │   ├── dashboardStore.ts     # Dashboard 状态
-│   │   ├── waveformStore.ts      # 波形状态
-│   │   ├── gh3036Store.ts        # GH3036 状态
-│   │   ├── configStore.ts        # 配置状态
-│   │   ├── csvChartStore.ts      # CSV 图表状态
-│   │   ├── logStore.ts           # 日志状态
-│   │   ├── notificationStore.ts  # 通知状态
-│   │   └── pageTabsStore.ts      # 页面标签状态
-│   ├── types/                    # TypeScript 类型定义
-│   └── utils/                    # 工具函数
-│
-├── src-tauri/                    # Tauri 后端 (Rust)
-│   ├── src/
-│   │   ├── main.rs               # 应用入口
-│   │   ├── lib.rs                # 模块导出与配置
-│   │   ├── compat.rs             # 系统兼容性检测
-│   │   ├── error.rs              # 错误定义
-│   │   ├── commands/             # Tauri 命令
-│   │   │   ├── serial.rs         # 串口命令
-│   │   │   ├── ble.rs            # BLE 命令
-│   │   │   ├── protocol.rs       # 协议命令
-│   │   │   ├── waveform.rs       # 波形命令
-│   │   │   ├── gh3036.rs         # GH3036 命令
-│   │   │   ├── state.rs          # 状态命令
-│   │   │   ├── system.rs         # 系统命令
-│   │   │   ├── websocket.rs      # WebSocket 命令
-│   │   │   └── preferences.rs    # 偏好设置命令
-│   │   ├── device/               # 设备管理
-│   │   │   ├── device_manager.rs # 设备管理器
-│   │   │   ├── cache.rs          # 设备缓存
-│   │   │   ├── serial/           # 串口模块
-│   │   │   │   ├── serial_manager.rs
-│   │   │   │   ├── serial_config.rs
-│   │   │   │   └── serial_port.rs
-│   │   │   └── ble/              # BLE 模块
-│   │   │       ├── ble_manager.rs
-│   │   │       ├── ble_traits.rs
-│   │   │       ├── native/       # 原生 BLE
-│   │   │       │   ├── adapter.rs
-│   │   │       │   ├── gatt_client.rs
-│   │   │       │   └── native_backend.rs
-│   │   │       └── at/           # AT 指令 BLE
-│   │   │           ├── at_backend.rs
-│   │   │           ├── at_cache.rs
-│   │   │           ├── at_commands.rs
-│   │   │           ├── at_parser.rs
-│   │   │           └── at_transport.rs
-│   │   ├── dashboard/            # Dashboard 模块
-│   │   │   ├── commands.rs       # Dashboard 命令
-│   │   │   ├── parser_scripts.rs # 解析脚本管理
-│   │   │   └── json_config.rs    # JSON 配置管理
-│   │   ├── waveform/             # 波形模块
-│   │   │   ├── buffer.rs         # 波形缓冲区
-│   │   │   └── parser.rs         # 数据解析器
-│   │   ├── gh3036/               # GH3036 协议
-│   │   │   ├── manager.rs        # GH3036 管理器
-│   │   │   ├── types.rs          # 类型定义
-│   │   │   ├── config_loader.rs  # 配置加载
-│   │   │   ├── factory_test.rs   # 工厂测试
-│   │   │   ├── csv_writer.rs     # CSV 写入器
-│   │   │   └── threshold_config.rs # 阈值配置
-│   │   ├── protocol/             # 协议插件
-│   │   │   ├── lua_engine.rs     # Lua 引擎
-│   │   │   ├── plugin_manager.rs # 插件管理
-│   │   │   ├── hook_executor.rs  # 钩子执行器
-│   │   │   └── script_loader.rs  # 脚本加载器
-│   │   ├── service/              # 服务层
-│   │   │   ├── event_bus.rs      # 事件总线
-│   │   │   ├── event_bridge.rs   # 事件桥接
-│   │   │   ├── logger.rs         # 日志服务
-│   │   │   ├── config.rs         # 配置服务
-│   │   │   ├── data_queue.rs     # 数据队列
-│   │   │   └── msgpack_handler.rs # MsgPack 处理器
-│   │   ├── state/                # 状态管理
-│   │   │   ├── app_state.rs      # 应用状态
-│   │   │   ├── action.rs         # 状态动作
-│   │   │   ├── dispatcher.rs     # 状态分发器
-│   │   │   ├── persistence.rs    # 状态持久化
-│   │   │   └── types.rs          # 状态类型
-│   │   └── websocket/            # WebSocket 客户端
-│   │       ├── client.rs         # WebSocket 客户端
-│   │       ├── connection_pool.rs # 连接池
-│   │       ├── message_handler.rs # 消息处理器
-│   │       └── reconnection.rs   # 重连机制
-│   ├── parser_scripts/           # 预置 Lua 解析脚本
-│   │   ├── csv_parser.lua
-│   │   ├── json_parser.lua
-│   │   ├── json.lua              # JSON 库
-│   │   ├── imu_parser.lua
-│   │   ├── nmea_parser.lua
-│   │   └── custom_example.lua    # 自定义示例
-│   ├── capabilities/             # Tauri 权限配置
-│   ├── Cargo.toml                # Rust 依赖配置
-│   └── tauri.conf.json           # Tauri 配置
-│
-├── libs/                         # C/C++ 库
-│   └── protocol_rust/            # GH3036 协议库
-│       ├── gh-rpc/               # GH-RPC 通信库
-│       └── rpc/                  # RPC 框架
-│
-├── config/                       # 配置文件
-│   └── factory/                  # 工厂配置
-│       └── factory_config_GH3036.yaml
-│
-└── docs/                         # 文档
-    ├── api.md                    # API 文档
-    ├── architecture/             # 架构文档
-    │   ├── README.md             # 架构概览
-    │   ├── backend/              # 后端模块文档
-    │   └── frontend/             # 前端模块文档
-    └── device-management.md      # 设备管理文档
+  lplctr:
+    enabled: true
+    description: "LPLCTR测试"
+    unit: "nA/mA"
+    global_threshold:
+      operator: "range"
+      range: [0, 6]
 ```
 
-## 开发指南
+支持的 `operator`：`lt`（小于）、`le`（小于等于）、`gt`（大于）、`ge`（大于等于）、`eq`（等于）、`ne`（不等于）、`range`（范围，需配合 `range: [min, max]`）。
+
+---
+
+### 第二步：连接设备
+
+在产测页面的"蓝牙连接"卡片中：
+
+1. **设备名称过滤**：默认填写 `ChelseaA_OS`，可修改为实际设备名称的关键词（支持模糊匹配）
+2. 点击**扫描并连接**，工具会自动完成：
+   - 扫描周围 BLE 设备（超时 15 秒）
+   - 按名称过滤，连接第一个匹配的设备
+   - 发现 GATT 服务
+   - 订阅 RX 特征（`00000003-0000-1000-8000-00805f9b34fb`）
+   - 配置 TX/RX 通道
+3. 连接成功后卡片显示**已连接**状态
+
+**连接失败排查**：点击"扫描到的设备"可展开查看本次扫描到的所有设备列表（含设备名、MAC 地址、RSSI），确认目标设备是否在广播范围内。
+
+---
+
+### 第三步：选择配置目录
+
+点击"配置目录"卡片中的**选择目录**按钮，选择包含上述配置文件的目录。
+
+选择后工具会自动校验配置文件是否完整，每个配置文件旁显示**就绪**（绿色）或**缺失**（红色）状态。
+
+---
+
+### 第四步：执行测试
+
+配置目录就绪且设备已连接后，点击**开始测试**。
+
+测试按以下顺序自动执行：
+
+1. 底噪测试（Base Noise）
+2. PPG 噪声测试（PPG Noise）
+3. LPCTR 测试
+4. **环境切换确认**：弹出对话框，提示切换测试环境（如遮光/开光），确认后继续
+5. LPLCTR 测试
+
+进度条实时显示当前进度，状态标签显示当前阶段。
+
+---
+
+### 第五步：查看结果
+
+测试完成后，结果卡片展示：
+
+- **总体结论**：PASS / FAIL
+- **芯片初始化状态**
+- **UUID**（可复制）
+- **各测试项详情**（可展开/折叠）：每个通道的实测值、判断条件、PASS/FAIL
+
+---
+
+### 读写寄存器
+
+切换到顶部**通道配置**标签页，展开"RPC 命令"面板，可对设备寄存器进行读写操作，用于调试验证。
+
+---
+
+### 查询版本信息
+
+切换到顶部**版本信息**标签页，点击**刷新全部**或单独刷新某一项，读取设备固件、协议、算法等版本号。需要设备已连接（TX 通道已配置）。
+
+## 开发指南（内部）
 
 ### 开发命令
 
@@ -374,14 +331,17 @@ combridge-rust/
 # 安装依赖
 npm install
 
-# 启动开发服务器
+# 启动开发服务器（前端热更新 + Tauri 窗口）
 npm run tauri dev
 
 # 构建生产版本
 npm run tauri build
 
-# 类型检查
+# 仅构建前端（输出到 dist/）
 npm run build
+
+# TypeScript 类型检查
+npx tsc --noEmit
 
 # Rust 代码检查
 cd src-tauri && cargo clippy
@@ -411,56 +371,6 @@ cd src-tauri && cargo fmt
 3. 在 `src-tauri/src/lib.rs` 的 `.invoke_handler()` 中注册
 4. 在前端 `src/api/` 添加封装函数
 5. 更新 `docs/api.md` 文档
-
-### 添加新的协议支持
-
-1. 编写 Lua 协议解析脚本
-2. 将脚本放入 `src-tauri/parser_scripts/` 目录
-3. 通过「协议」页面加载脚本
-4. 绑定到目标设备
-
-### 添加新的 Dashboard Widget
-
-1. 在 `src/pages/Dashboard/widgets/` 创建 Widget 组件
-2. 定义 Widget 的配置接口
-3. 在 `WidgetRenderer.tsx` 中添加渲染逻辑
-4. 更新 JSON 配置 Schema
-
-### 测试
-
-- **单元测试**：核心设备管理逻辑（SerialManager、BleManager）有单元测试
-- **集成测试**：BLE 双模式切换、协议加载/绑定流程有集成测试
-- **前端测试**：关键页面组件（SerialPage、BlePage）有渲染和交互测试
-
-## 架构文档
-
-详细的架构文档请参阅 [docs/architecture/README.md](docs/architecture/README.md)
-
-### 后端模块文档
-
-- [设备管理](docs/architecture/backend/device-manager.md)
-- [串口模块](docs/architecture/backend/serial-module.md)
-- [BLE 模块](docs/architecture/backend/ble-module.md)
-- [协议插件](docs/architecture/backend/protocol-module.md)
-- [Dashboard 模块](docs/architecture/backend/dashboard-module.md)
-- [波形模块](docs/architecture/backend/waveform-module.md)
-- [GH3036 模块](docs/architecture/backend/gh3036-module.md)
-- [状态管理](docs/architecture/backend/state-module.md)
-- [服务层](docs/architecture/backend/service-module.md)
-- [WebSocket](docs/architecture/backend/websocket-module.md)
-- [命令模块](docs/architecture/backend/commands-module.md)
-- [错误处理](docs/architecture/backend/error-handling.md)
-- [工厂测试](docs/architecture/backend/factory-test-module.md)
-
-### 前端模块文档
-
-- [架构概览](docs/architecture/frontend/overview.md)
-- [API 层](docs/architecture/frontend/api-layer.md)
-- [状态管理层](docs/architecture/frontend/store-layer.md)
-- [Hooks 层](docs/architecture/frontend/hooks-layer.md)
-- [页面层](docs/architecture/frontend/pages-layer.md)
-- [组件层](docs/architecture/frontend/components-layer.md)
-- [服务层](docs/architecture/frontend/services-layer.md)
 
 ## 许可证
 

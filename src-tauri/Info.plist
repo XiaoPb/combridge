@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSBluetoothAlwaysUsageDescription</key>
+  <string>ComBridge 需要蓝牙权限以连接和通信 BLE 设备</string>
+  <key>NSBluetoothPeripheralUsageDescription</key>
+  <string>ComBridge 需要蓝牙权限以连接和通信 BLE 设备</string>
+</dict>
+</plist>

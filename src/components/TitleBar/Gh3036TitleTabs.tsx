@@ -1,5 +1,5 @@
 import React from 'react';
-import { SettingOutlined, LineChartOutlined, InfoCircleOutlined, ExperimentOutlined } from '@ant-design/icons';
+import { ExperimentOutlined, CodeOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { usePageTabsStore } from '../../stores/pageTabsStore';
 import { useTranslation } from 'react-i18next';
 
@@ -8,10 +8,9 @@ const Gh3036TitleTabs: React.FC = () => {
   const { t } = useTranslation('gh3036');
 
   const tabs = [
-    { key: 'config', label: t('tabs.config'), icon: <SettingOutlined /> },
-    { key: 'monitor', label: t('tabs.monitor'), icon: <LineChartOutlined /> },
-    { key: 'version', label: t('tabs.version'), icon: <InfoCircleOutlined /> },
     { key: 'factory', label: t('tabs.factory'), icon: <ExperimentOutlined /> },
+    { key: 'config', label: t('tabs.config'), icon: <CodeOutlined /> },
+    { key: 'version', label: t('tabs.version'), icon: <InfoCircleOutlined /> },
   ] as const;
 
   return (

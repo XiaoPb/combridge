@@ -15,7 +15,7 @@ export const usePageTabsStore = create<PageTabsState>((set) => ({
   systemActiveTab: 'info',
   protocolActiveTab: 'editor',
   waveformActiveTab: 'realtime',
-  gh3036ActiveTab: 'monitor',
+  gh3036ActiveTab: 'factory',
   setSystemActiveTab: (tab) => set({ systemActiveTab: tab }),
   setProtocolActiveTab: (tab) => set({ protocolActiveTab: tab }),
   setWaveformActiveTab: (tab) => set({ waveformActiveTab: tab }),

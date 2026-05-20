@@ -2,16 +2,9 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu } from 'antd';
 import {
-  HomeOutlined,
-  UsbOutlined,
-  ApiOutlined,
-  CodeOutlined,
-  SettingOutlined,
+  ExperimentOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  LineChartOutlined,
-  DashboardOutlined,
-  HeartOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 
@@ -29,44 +22,9 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
 
   const menuItems = [
     {
-      key: '/',
-      icon: <HomeOutlined />,
-      label: t('menu.home'),
-    },
-    {
-      key: '/serial',
-      icon: <UsbOutlined />,
-      label: t('menu.serial'),
-    },
-    {
-      key: '/ble',
-      icon: <ApiOutlined />,
-      label: t('menu.ble'),
-    },
-    {
-      key: '/dashboard',
-      icon: <DashboardOutlined />,
-      label: t('menu.dashboard'),
-    },
-    {
       key: '/gh3036',
-      icon: <HeartOutlined />,
+      icon: <ExperimentOutlined />,
       label: t('menu.gh3036'),
-    },
-    {
-      key: '/protocol',
-      icon: <CodeOutlined />,
-      label: t('menu.protocol'),
-    },
-    {
-      key: '/waveform',
-      icon: <LineChartOutlined />,
-      label: t('menu.waveform'),
-    },
-    {
-      key: '/system',
-      icon: <SettingOutlined />,
-      label: t('menu.system'),
     },
   ];
 

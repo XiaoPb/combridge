@@ -11,63 +11,44 @@ tests:
   base_noise:
     enabled: true
     description: "底噪测试"
-    unit: "LSB"
+    unit: "uV"
     global_threshold:
       operator: "lt"
-      value: 100
-      description: "所有通道底噪应小于100 LSB"
-    channel_rules:
-      - channels: [0, 1]
-        operator: "lt"
-        value: 50
-        description: "通道0-1底噪应小于50 LSB"
-      - channels: [2, 3]
-        operator: "range"
-        range: [0, 80]
-        description: "通道2-3底噪应在0-80 LSB范围"
+      value: 95
+      description: "所有通道底噪应小于95 uV"
 
   ppg_noise:
     enabled: true
     description: "PPG噪声测试"
-    unit: "LSB"
+    unit: "uV"
     global_threshold:
       operator: "lt"
-      value: 200
-      description: "所有通道PPG噪声应小于200 LSB"
-    channel_rules:
-      - channels: [0, 1, 2]
-        operator: "lt"
-        value: 150
-        description: "通道0-2 PPG噪声应小于150 LSB"
-      - channels: [3]
-        operator: "range"
-        range: [50, 200]
-        description: "通道3 PPG噪声应在50-200 LSB范围"
+      value: 280
+      description: "所有通道PPG噪声应小于280 uV"
+    # channel_rules:
+    #   - channels: [0, 1, 2]
+    #     operator: "lt"
+    #     value: 150
+    #     description: "通道0-2 PPG噪声应小于150 LSB"
+    #   - channels: [3]
+    #     operator: "range"
+    #     range: [50, 200]
+    #     description: "通道3 PPG噪声应在50-200 LSB范围"
 
   lpctr:
     enabled: true
     description: "LPCTR测试"
-    unit: "count"
+    unit: "nA/mA"
     global_threshold:
       operator: "range"
-      range: [0, 1000]
-      description: "所有通道LPCTR应在0-1000范围"
-    channel_rules:
-      - channels: [0, 1, 2, 3, 4]
-        operator: "range"
-        range: [100, 800]
-        description: "通道0-4 LPCTR应在100-800范围"
+      range: [100, 3000]
+      description: "所有通道LPCTR应在100-3000范围"
 
   lplctr:
     enabled: true
     description: "LPLCTR测试"
-    unit: "count"
+    unit: "nA/mA"
     global_threshold:
       operator: "range"
-      range: [0, 2000]
-      description: "所有通道LPLCTR应在0-2000范围"
-    channel_rules:
-      - channels: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-        operator: "range"
-        range: [100, 1500]
-        description: "通道0-9 LPLCTR应在100-1500范围"
+      range: [0, 6]
+      description: "所有通道LPLCTR应在0-6范围"

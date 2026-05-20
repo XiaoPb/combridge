@@ -52,6 +52,9 @@
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
       "timestampUrl": ""
+    },
+    "macOS": {
+      "infoPlist": "Info.plist"
     }
   },
   "plugins": {

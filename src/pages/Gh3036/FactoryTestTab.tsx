@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Card,
   Button,
@@ -14,6 +14,9 @@ import {
   Divider,
   Table,
   Collapse,
+  Alert,
+  Steps,
+  Input,
 } from 'antd';
 import {
   PlayCircleOutlined,
@@ -21,13 +24,28 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   FolderOpenOutlined,
+  SearchOutlined,
+  ApiOutlined,
+  SettingOutlined,
+  LoadingOutlined,
+  UnorderedListOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useGh3036Store } from '../../stores/gh3036Store';
+import { useBleStore, formatMacAddress } from '../../stores/bleStore';
+import { bleApi } from '../../api/tauri';
 import type { TestEvaluationResult, ChannelEvaluationResult } from '../../api/types';
+import type { BleDeviceInfo } from '../../types/ble';
 
 const { Text, Paragraph } = Typography;
+
+const CHELSEA_DEVICE_NAME = 'ChelseaA_OS';
+const RX_CHAR_UUID = '00000003-0000-1000-8000-00805f9b34fb';
+const TX_CHAR_UUID = '00000004-0000-1000-8000-00805f9b34fb';
+const SCAN_TIMEOUT_MS = 15000;
+
+type SetupStep = 'idle' | 'scanning' | 'connecting' | 'discovering' | 'subscribing' | 'configuring' | 'ready' | 'error';
 
 const FactoryTestTab: React.FC = () => {
   const { t } = useTranslation('gh3036');
@@ -45,15 +63,26 @@ const FactoryTestTab: React.FC = () => {
     validateThresholdConfig,
     loadThresholdConfig,
     loadEvaluationResult,
+    configureTxChannel,
+    configureRxChannel,
+    updateChannelConfig,
   } = useGh3036Store();
 
-  const factoryTestListenerIdRef = React.useRef<number | null>(null);
+  const { connections, addConnection, setCurrentDevice, setDevices, clearDevices } = useBleStore();
+
+  const factoryTestListenerIdRef = useRef<number | null>(null);
   const [showEnvSwitchModal, setShowEnvSwitchModal] = useState(false);
+
+  const [setupStep, setSetupStep] = useState<SetupStep>('idle');
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [connectedDevice, setConnectedDevice] = useState<{ address: string; name?: string } | null>(null);
+  const [nameFilter, setNameFilter] = useState(CHELSEA_DEVICE_NAME);
+  const [scannedDevices, setScannedDevices] = useState<BleDeviceInfo[]>([]);
+  const autoSetupDoneRef = useRef(false);
 
   useEffect(() => {
     const listenerId = Date.now() + Math.random();
     factoryTestListenerIdRef.current = listenerId;
-
     subscribeFactoryTestEvents(listenerId);
     return () => {
       unsubscribeFactoryTestEvents(factoryTestListenerIdRef.current ?? undefined);
@@ -80,11 +109,108 @@ const FactoryTestTab: React.FC = () => {
     }
   }, [factoryTest.status, loadEvaluationResult]);
 
+  // 检查是否已有连接的设备，如果有则跳过扫描直接进入ready状态
+  useEffect(() => {
+    if (autoSetupDoneRef.current) return;
+    if (connections.length > 0 && setupStep === 'idle') {
+      const conn = connections[0];
+      setConnectedDevice({ address: conn.address, name: conn.name || undefined });
+      autoSetupDoneRef.current = true;
+      setSetupStep('ready');
+    }
+  }, [connections, setupStep]);
+
+  const handleScan = useCallback(async () => {
+    setSetupError(null);
+    setSetupStep('scanning');
+    autoSetupDoneRef.current = false;
+    clearDevices();
+    setScannedDevices([]);
+
+    try {
+      await bleApi.configureBle('native');
+      const deviceList = await bleApi.scanBleDevices({ timeout: SCAN_TIMEOUT_MS });
+      setDevices(deviceList);
+      setScannedDevices(deviceList);
+
+      const filter = nameFilter.trim();
+      const target = deviceList.find((d) =>
+        filter ? d.name?.toLowerCase().includes(filter.toLowerCase()) : true
+      );
+
+      if (!target) {
+        setSetupError(`未找到名称包含 "${filter}" 的设备，请确认设备已开机并在附近`);
+        setSetupStep('error');
+        return;
+      }
+
+      // 自动连接
+      setSetupStep('connecting');
+      const connection = await bleApi.connectBle(target.address);
+      addConnection(connection);
+      setCurrentDevice(target.address);
+      setConnectedDevice({ address: target.address, name: target.name });
+
+      // 自动发现GATT服务
+      setSetupStep('discovering');
+      const services = await bleApi.discoverBleServices(target.address);
+
+      // 自动订阅 RX 特征
+      setSetupStep('subscribing');
+      const rxChar = services
+        .flatMap((s) => s.characteristics || [])
+        .find((c) => c.uuid === RX_CHAR_UUID);
+
+      if (!rxChar) {
+        setSetupError(`未找到特征 ${RX_CHAR_UUID}，请确认设备固件版本`);
+        setSetupStep('error');
+        return;
+      }
+
+      await bleApi.subscribeBleNotify(target.address, RX_CHAR_UUID);
+
+      // 自动配置GH3036通道
+      setSetupStep('configuring');
+      const txOk = await configureTxChannel('ble', target.address, TX_CHAR_UUID);
+      if (!txOk) {
+        setSetupError('配置TX通道失败');
+        setSetupStep('error');
+        return;
+      }
+      const rxOk = await configureRxChannel('ble', target.address, RX_CHAR_UUID);
+      if (!rxOk) {
+        setSetupError('配置RX通道失败');
+        setSetupStep('error');
+        return;
+      }
+      await updateChannelConfig({
+        connectionType: 'ble',
+        bleDevice: target.address,
+        txChar: TX_CHAR_UUID,
+        rxChar: RX_CHAR_UUID,
+      });
+
+      autoSetupDoneRef.current = true;
+      setSetupStep('ready');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSetupError(msg);
+      setSetupStep('error');
+    }
+  }, [nameFilter, clearDevices, setDevices, addConnection, setCurrentDevice, configureTxChannel, configureRxChannel, updateChannelConfig]);
+
+  const handleDisconnect = useCallback(async () => {
+    if (!connectedDevice) return;
+    try {
+      await bleApi.disconnectBle(connectedDevice.address);
+    } catch {}
+    setConnectedDevice(null);
+    setSetupStep('idle');
+    autoSetupDoneRef.current = false;
+  }, [connectedDevice]);
+
   const handleSelectDir = async () => {
-    const selected = await open({
-      directory: true,
-      multiple: false,
-    });
+    const selected = await open({ directory: true, multiple: false });
     if (selected && typeof selected === 'string') {
       await setFactoryTestConfigDirAsync(selected);
       validateFactoryTestConfig();
@@ -94,15 +220,8 @@ const FactoryTestTab: React.FC = () => {
   };
 
   const handleStart = async () => {
-    const ts = () => new Date().toISOString().substr(11, 12);
-    console.log(`[${ts()}] [FactoryTestTab] handleStart 被调用`);
-    console.log(`[${ts()}] [FactoryTestTab] 当前状态: isRunning=${factoryTest.isRunning}, status=${factoryTest.status}`);
-    console.log(`[${ts()}] [FactoryTestTab] configValidation:`, factoryTest.configValidation);
-    
     resetFactoryTest();
-    console.log(`[${ts()}] [FactoryTestTab] resetFactoryTest 完成，准备调用 startFactoryTest`);
     await startFactoryTest();
-    console.log(`[${ts()}] [FactoryTestTab] startFactoryTest 完成`);
   };
 
   const handleStop = async () => {
@@ -128,32 +247,24 @@ const FactoryTestTab: React.FC = () => {
   };
 
   const getConfigStatusTag = (configPath: string | null) => {
-    if (configPath === null) {
-      return <Tag color="error">{t('factory.configMissing')}</Tag>;
-    }
+    if (configPath === null) return <Tag color="error">{t('factory.configMissing')}</Tag>;
     return <Tag color="success">{t('factory.configReady')}</Tag>;
   };
 
   const formatUuid = (uuid: number[]): string => {
     if (!uuid || uuid.length === 0) return '--';
-    
     const formatSingleUuid = (bytes: number[]): string => {
       const hex = bytes.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join('');
       return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
     };
-
     if (uuid.length === 32) {
-      const uuid1 = formatSingleUuid(uuid.slice(0, 16));
-      const uuid2 = formatSingleUuid(uuid.slice(16, 32));
-      return `${uuid1}\n${uuid2}`;
+      return `${formatSingleUuid(uuid.slice(0, 16))}\n${formatSingleUuid(uuid.slice(16, 32))}`;
     }
-    
     return formatSingleUuid(uuid);
   };
 
   const renderTestResult = (testResult: TestEvaluationResult) => {
     const testDisplayName = t(`factory.test_${testResult.test_name}`, { defaultValue: testResult.description || testResult.test_name });
-    
     const columns = [
       {
         title: t('factory.channel'),
@@ -191,7 +302,6 @@ const FactoryTestTab: React.FC = () => {
         ),
       },
     ];
-
     return (
       <Collapse.Panel
         key={testResult.test_name}
@@ -228,9 +338,7 @@ const FactoryTestTab: React.FC = () => {
   const renderResultAndEvaluation = () => {
     const { result, evaluationResult } = factoryTest;
     if (!result && !evaluationResult) return null;
-
     const overallPass = evaluationResult?.overall_pass ?? (result?.overall_result === 'PASS');
-
     return (
       <Card size="small" title={t('factory.result')} style={{ marginTop: 8 }}>
         <div style={{ marginBottom: 8 }}>
@@ -248,7 +356,6 @@ const FactoryTestTab: React.FC = () => {
             </Tag>
           </Space>
         </div>
-
         {result && (
           <>
             <Descriptions size="small" column={1} bordered>
@@ -268,9 +375,7 @@ const FactoryTestTab: React.FC = () => {
                 </Paragraph>
               </Descriptions.Item>
             </Descriptions>
-            
             <Divider style={{ margin: '12px 0' }} />
-            
             <Collapse size="small" bordered={false} defaultActiveKey={evaluationResult?.test_results.map(r => r.test_name)}>
               {evaluationResult?.test_results.map(renderTestResult)}
             </Collapse>
@@ -285,17 +390,160 @@ const FactoryTestTab: React.FC = () => {
     borderRadius: token.borderRadius,
   };
 
+  const getSetupStepIndex = () => {
+    const map: Record<SetupStep, number> = {
+      idle: 0, scanning: 0, connecting: 1, discovering: 2,
+      subscribing: 2, configuring: 2, ready: 3, error: -1,
+    };
+    return map[setupStep] ?? 0;
+  };
+
+  const isSetupInProgress = ['scanning', 'connecting', 'discovering', 'subscribing', 'configuring'].includes(setupStep);
+
+  const renderBleSetup = () => (
+    <Card
+      size="small"
+      title={
+        <Space>
+          <ApiOutlined />
+          <span>蓝牙连接</span>
+          {setupStep === 'ready' && connectedDevice && (
+            <Tag color="success">
+              已连接: {connectedDevice.name || formatMacAddress(connectedDevice.address)}
+            </Tag>
+          )}
+        </Space>
+      }
+      style={cardStyle}
+      extra={
+        setupStep === 'ready' && connectedDevice ? (
+          <Button size="small" danger onClick={handleDisconnect}>断开</Button>
+        ) : null
+      }
+    >
+      {setupStep !== 'ready' && (
+        <Space style={{ width: '100%', marginBottom: 12 }} direction="vertical" size={8}>
+          <Space>
+            <Text style={{ fontSize: 12, whiteSpace: 'nowrap' }}>设备名称过滤:</Text>
+            <Input
+              size="small"
+              value={nameFilter}
+              onChange={(e) => setNameFilter(e.target.value)}
+              placeholder="输入设备名称关键词"
+              style={{ width: 180 }}
+              disabled={isSetupInProgress}
+            />
+            <Button
+              type="primary"
+              size="small"
+              icon={isSetupInProgress ? <LoadingOutlined /> : <SearchOutlined />}
+              onClick={handleScan}
+              disabled={isSetupInProgress}
+              loading={isSetupInProgress}
+            >
+              {isSetupInProgress ? '连接中...' : '扫描并连接'}
+            </Button>
+          </Space>
+
+          {isSetupInProgress && (
+            <Steps
+              size="small"
+              current={getSetupStepIndex()}
+              items={[
+                { title: '扫描设备', icon: setupStep === 'scanning' ? <LoadingOutlined /> : undefined },
+                { title: '建立连接', icon: setupStep === 'connecting' ? <LoadingOutlined /> : undefined },
+                { title: '发现服务/订阅', icon: ['discovering', 'subscribing', 'configuring'].includes(setupStep) ? <LoadingOutlined /> : undefined },
+                { title: '就绪' },
+              ]}
+            />
+          )}
+
+          {setupStep === 'error' && setupError && (
+            <Alert
+              type="error"
+              message={setupError}
+              showIcon
+              action={
+                <Button size="small" onClick={handleScan}>重试</Button>
+              }
+            />
+          )}
+
+          {scannedDevices.length > 0 && (
+            <Collapse
+              size="small"
+              ghost
+              items={[{
+                key: 'devices',
+                label: (
+                  <Space size={4}>
+                    <UnorderedListOutlined />
+                    <span style={{ fontSize: 12 }}>扫描到的设备 ({scannedDevices.length})</span>
+                  </Space>
+                ),
+                children: (
+                  <Table
+                    dataSource={scannedDevices}
+                    rowKey="address"
+                    size="small"
+                    pagination={false}
+                    scroll={{ y: 160 }}
+                    columns={[
+                      {
+                        title: '设备名称',
+                        dataIndex: 'name',
+                        key: 'name',
+                        render: (name?: string) => name || <Text type="secondary">未知</Text>,
+                      },
+                      {
+                        title: '地址',
+                        dataIndex: 'address',
+                        key: 'address',
+                        render: (addr: string) => <Text code style={{ fontSize: 11 }}>{formatMacAddress(addr)}</Text>,
+                      },
+                      {
+                        title: 'RSSI',
+                        dataIndex: 'rssi',
+                        key: 'rssi',
+                        width: 70,
+                        render: (rssi?: number) => rssi != null ? `${rssi} dBm` : '--',
+                      },
+                    ]}
+                  />
+                ),
+              }]}
+            />
+          )}
+        </Space>
+      )}
+
+      {setupStep === 'ready' && connectedDevice && (
+        <Space direction="vertical" size={4} style={{ width: '100%' }}>
+          <Space size={4}>
+            <SettingOutlined style={{ color: token.colorSuccess }} />
+            <Text style={{ fontSize: 12 }}>已自动订阅 RX 特征并配置通道</Text>
+          </Space>
+          <Text type="secondary" style={{ fontSize: 11 }}>
+            TX: {TX_CHAR_UUID}
+          </Text>
+          <Text type="secondary" style={{ fontSize: 11 }}>
+            RX: {RX_CHAR_UUID}
+          </Text>
+        </Space>
+      )}
+    </Card>
+  );
+
   return (
     <div style={{ height: '100%', overflow: 'auto', padding: '8px 0' }}>
       <Row gutter={[8, 8]}>
+        <Col span={24}>{renderBleSetup()}</Col>
+
         <Col span={24}>
           <Card size="small" title={t('factory.configDir')} style={cardStyle}>
-            <Space orientation="vertical" style={{ width: '100%' }}>
+            <Space direction="vertical" style={{ width: '100%' }}>
               <Space.Compact style={{ width: '100%' }}>
-                <Text
-                  code
-                  style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}
-                >
+                <Text code style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {factoryTest.configDir || t('factory.selectDir')}
                 </Text>
                 <Button
@@ -350,7 +598,8 @@ const FactoryTestTab: React.FC = () => {
                   onClick={handleStart}
                   disabled={
                     factoryTest.isRunning ||
-                    !factoryTest.configValidation?.is_valid
+                    !factoryTest.configValidation?.is_valid ||
+                    setupStep !== 'ready'
                   }
                   size="small"
                 >
@@ -369,7 +618,12 @@ const FactoryTestTab: React.FC = () => {
             }
             style={cardStyle}
           >
-            <Space orientation="vertical" style={{ width: '100%' }}>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              {setupStep !== 'ready' && !factoryTest.isRunning && (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  请先完成蓝牙连接，再选择配置目录，然后点击开始测试
+                </Text>
+              )}
               <Progress
                 percent={Math.round(factoryTest.progress * 100)}
                 status={

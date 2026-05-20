@@ -70,7 +70,7 @@ const Gh3036Page: React.FC = () => {
       case 'version':
         return <VersionTab />;
       default:
-        return <MonitorTab />;
+        return <FactoryTestTab />;
     }
   };
 

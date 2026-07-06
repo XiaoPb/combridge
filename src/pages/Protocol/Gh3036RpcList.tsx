@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Input, Select, Typography, message, Row, Col, theme } from 'antd';
+import { Button, Input, Select, Typography, message, Row, Col, theme, Modal, Table } from 'antd';
 import { PlayCircleOutlined, ReloadOutlined, FolderOpenOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
 import { gh3036Api } from '../../api/gh3036';
 import { open } from '@tauri-apps/plugin-dialog';
-import type { Gh3036VersionTypeConfig } from '../../api/types';
+import type { Gh3036ConfigRegisterPreview, Gh3036VersionTypeConfig } from '../../api/types';
 
 const { Text } = Typography;
 const { useToken } = theme;
@@ -143,10 +143,70 @@ const Gh3036RpcList: React.FC = () => {
     setRpcConfig({ configPath: pathStr });
     
     try {
-      const regs = await gh3036Api.loadConfigFile(pathStr);
-      message.success(t('gh3036.configParsed', { count: regs.length }));
-      
-      await handleExecuteRpc('L', regs);
+      const preview = await gh3036Api.loadConfigFile(pathStr);
+      const fileName = pathStr.split(/[\\/]/).pop() || pathStr;
+      const dataSource = preview.registers.map((reg, index) => ({
+        ...reg,
+        key: `${reg.addr}-${index}`,
+        index: index + 1,
+      }));
+
+      Modal.confirm({
+        title: t('gh3036.configLoad'),
+        width: 680,
+        okText: t('gh3036.loadConfig'),
+        cancelText: '取消',
+        content: (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ marginBottom: 12, lineHeight: 1.8 }}>
+              <div>
+                <Text strong>配置文件：</Text>
+                <Text>{fileName}</Text>
+              </div>
+              <div>
+                <Text strong>寄存器数量：</Text>
+                <Text>{preview.registerCount}</Text>
+              </div>
+            </div>
+            <Table<Gh3036ConfigRegisterPreview & { key: string; index: number }>
+              size="small"
+              pagination={false}
+              scroll={{ y: 360 }}
+              dataSource={dataSource}
+              columns={[
+                {
+                  title: '#',
+                  dataIndex: 'index',
+                  width: 64,
+                },
+                {
+                  title: '地址',
+                  dataIndex: 'addr',
+                  width: 160,
+                },
+                {
+                  title: '值',
+                  dataIndex: 'value',
+                  width: 160,
+                },
+              ]}
+            />
+          </div>
+        ),
+        onOk: async () => {
+          try {
+            if (!txChannel) {
+              throw new Error(t('gh3036.noTxChannel'));
+            }
+
+            await gh3036Api.downloadConfigFile(pathStr);
+            message.success(`配置下载完成，共 ${preview.registerCount} 个寄存器`);
+          } catch (err) {
+            message.error(`配置下载失败: ${String(err)}`);
+            throw err;
+          }
+        },
+      });
     } catch (err) {
       message.error(t('gh3036.configParseFailed', { error: String(err) }));
     }

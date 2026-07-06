@@ -4,7 +4,8 @@ use crate::error::{ComBridgeError, ErrorResponse};
 use crate::gh3036::{
     ChannelConfig, ChannelType, ConfigValidationResult, CsvConfig, FactoryEvaluationResult,
     FactoryTestResult, FactoryTestStatus, FactoryTestStep, FactoryThresholdConfig,
-    Gh3036ManagerRef, RefDataStatus, RpcCommand, ThresholdConfigValidation, VersionTypeConfig,
+    Gh3036ConfigPreview, Gh3036ManagerRef, RefDataStatus, RpcCommand, ThresholdConfigValidation,
+    VersionTypeConfig,
 };
 use crate::state::StatePersistenceRef;
 
@@ -178,9 +179,20 @@ pub async fn gh3036_get_library_status(
 pub async fn gh3036_load_config_file(
     file_path: String,
     manager: State<'_, Gh3036ManagerRef>,
-) -> Result<Vec<String>, ErrorResponse> {
+) -> Result<Gh3036ConfigPreview, ErrorResponse> {
     manager
         .load_config_file(&file_path)
+        .await
+        .map_err(|e| ComBridgeError::protocol(e).to_error_response())
+}
+
+#[tauri::command]
+pub async fn gh3036_download_config_file(
+    file_path: String,
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(), ErrorResponse> {
+    manager
+        .download_config_file(&file_path)
         .await
         .map_err(|e| ComBridgeError::protocol(e).to_error_response())
 }

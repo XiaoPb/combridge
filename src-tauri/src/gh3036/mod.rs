@@ -39,8 +39,9 @@ pub use threshold_config::{
 };
 pub use types::{
     get_rpc_commands, get_version_types, ConfigValidationResult, FactoryTestProgressEvent,
-    FactoryTestResult, FactoryTestStatus, FactoryTestStep, FactoryTestStepResult, Gh3036EventData,
-    Gh3036FrameData, RpcCommand, RpcParam, VersionTypeConfig,
+    FactoryTestResult, FactoryTestStatus, FactoryTestStep, FactoryTestStepResult,
+    Gh3036ConfigPreview, Gh3036ConfigRegisterPreview, Gh3036EventData, Gh3036FrameData, RpcCommand,
+    RpcParam, VersionTypeConfig,
 };
 
 pub type Gh3036ManagerRef = std::sync::Arc<Gh3036Manager>;

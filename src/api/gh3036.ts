@@ -5,6 +5,7 @@ import type {
   Gh3036FrameData, 
   Gh3036RpcCommand,
   Gh3036VersionTypeConfig,
+  Gh3036ConfigPreview,
   FactoryTestStep,
   FactoryTestStatus,
   FactoryTestResult,
@@ -94,8 +95,12 @@ export const gh3036Api = {
     return invoke<LibraryStatus>('gh3036_get_library_status');
   },
 
-  async loadConfigFile(filePath: string): Promise<string[]> {
-    return invoke<string[]>('gh3036_load_config_file', { filePath });
+  async loadConfigFile(filePath: string): Promise<Gh3036ConfigPreview> {
+    return invoke<Gh3036ConfigPreview>('gh3036_load_config_file', { filePath });
+  },
+
+  async downloadConfigFile(filePath: string): Promise<void> {
+    await invoke<void>('gh3036_download_config_file', { filePath });
   },
 
   async setSpo2Ref(values: number[]): Promise<void> {

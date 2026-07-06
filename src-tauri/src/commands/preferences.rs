@@ -4,7 +4,7 @@ use tracing::{debug, error, info};
 use crate::error::Result;
 use crate::gh3036::CsvConfig;
 use crate::gh3036::Gh3036ManagerRef;
-use crate::state::{Preferences, StatePersistenceRef};
+use crate::state::{MenuVisibilityPreferences, Preferences, StatePersistenceRef};
 
 #[tauri::command]
 pub async fn get_preferences(persistence: State<'_, StatePersistenceRef>) -> Result<Preferences> {
@@ -194,5 +194,28 @@ pub async fn update_gh3036_csv_preferences(
     }
 
     info!("GH3036 CSV偏好设置已更新并同步到后端");
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn update_menu_visibility_preferences(
+    persistence: State<'_, StatePersistenceRef>,
+    menu_visibility: MenuVisibilityPreferences,
+) -> Result<()> {
+    debug!("更新菜单显示偏好设置");
+
+    let persistence = persistence.inner().write().await;
+    let mut prefs = persistence
+        .load_preferences()
+        .await
+        .unwrap_or_else(|_| Preferences::default());
+
+    prefs.menu_visibility = menu_visibility;
+
+    persistence.save_preferences(&prefs).await.map_err(|e| {
+        error!("保存菜单显示偏好设置失败: {}", e);
+        e
+    })?;
+
     Ok(())
 }

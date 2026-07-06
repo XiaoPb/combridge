@@ -14,8 +14,18 @@ import {
   HeartOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { useMenuVisibilityStore, type SidebarMenuKey } from '../../stores/menuVisibilityStore';
+import { usePageTabsStore } from '../../stores/pageTabsStore';
+import { useDashboardStore } from '../../stores/dashboardStore';
 
 const { Sider } = Layout;
+
+interface SidebarMenuItem {
+  key: string;
+  visibilityKey: SidebarMenuKey;
+  icon: React.ReactNode;
+  label: string;
+}
 
 interface SidebarProps {
   collapsed: boolean;
@@ -26,51 +36,106 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation('sidebar');
+  const { menuVisibility } = useMenuVisibilityStore();
+  const { setWaveformActiveTab, setProtocolActiveTab, setSystemActiveTab, setGh3036ActiveTab } = usePageTabsStore();
+  const { setActiveTabs } = useDashboardStore();
 
-  const menuItems = [
+  const allMenuItems: SidebarMenuItem[] = [
     {
       key: '/',
+      visibilityKey: 'home',
       icon: <HomeOutlined />,
       label: t('menu.home'),
     },
     {
       key: '/serial',
+      visibilityKey: 'serial',
       icon: <UsbOutlined />,
       label: t('menu.serial'),
     },
     {
       key: '/ble',
+      visibilityKey: 'ble',
       icon: <ApiOutlined />,
       label: t('menu.ble'),
     },
     {
       key: '/dashboard',
+      visibilityKey: 'dashboard',
       icon: <DashboardOutlined />,
       label: t('menu.dashboard'),
     },
     {
       key: '/gh3036',
+      visibilityKey: 'gh3036',
       icon: <HeartOutlined />,
       label: t('menu.gh3036'),
     },
     {
       key: '/protocol',
+      visibilityKey: 'protocol',
       icon: <CodeOutlined />,
       label: t('menu.protocol'),
     },
     {
       key: '/waveform',
+      visibilityKey: 'waveform',
       icon: <LineChartOutlined />,
       label: t('menu.waveform'),
     },
     {
       key: '/system',
+      visibilityKey: 'system',
       icon: <SettingOutlined />,
       label: t('menu.system'),
     },
   ];
 
+  const menuItems = allMenuItems
+    .filter((item) => menuVisibility.sidebar[item.visibilityKey])
+    .map(({ visibilityKey: _visibilityKey, ...item }) => item);
+
   const handleMenuClick = ({ key }: { key: string }) => {
+    const firstVisibleTab = (moduleKey: keyof typeof menuVisibility.home) =>
+      Object.entries(menuVisibility.home[moduleKey].tabs).find(([, visible]) => visible)?.[0];
+
+    switch (key) {
+      case '/dashboard': {
+        const tab = firstVisibleTab('dashboard');
+        if (tab) {
+          setActiveTabs([tab as 'dashboard' | 'console' | 'settings' | 'jsonEditor']);
+        }
+        break;
+      }
+      case '/gh3036': {
+        const tab = firstVisibleTab('gh3036');
+        if (tab) {
+          setGh3036ActiveTab(tab as 'config' | 'monitor' | 'version' | 'factory');
+        }
+        break;
+      }
+      case '/protocol': {
+        const tab = firstVisibleTab('protocol');
+        if (tab) {
+          setProtocolActiveTab(tab as 'editor' | 'bind');
+        }
+        break;
+      }
+      case '/waveform': {
+        const tab = firstVisibleTab('waveform');
+        if (tab) {
+          setWaveformActiveTab(tab as 'realtime' | 'csvLoader');
+        }
+        break;
+      }
+      case '/system': {
+        const tab = firstVisibleTab('system');
+        if (tab) {
+          setSystemActiveTab(tab as 'info' | 'logs' | 'settings');
+        }
+        break;
+      }
+    }
     navigate(key);
   };
 

@@ -543,7 +543,7 @@ dependencies = [
 
 [[package]]
 name = "combridge-rust"
-version = "0.5.6"
+version = "0.5.7"
 dependencies = [
  "async-trait",
  "base64 0.22.1",

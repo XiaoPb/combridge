@@ -8,8 +8,10 @@ import { useTranslation } from 'react-i18next';
 import { MainLayout, ErrorBoundary } from './components';
 import { useTheme } from './hooks';
 import { useConfigStore } from './stores/configStore';
+import { useMenuVisibilityStore } from './stores/menuVisibilityStore';
 import { useNotificationStore } from './stores/notificationStore';
 import { initAllEventListeners, cleanupAllEventListeners } from './services/eventListeners';
+import MenuVisibilityConfigModal from './components/MenuVisibilityConfigModal';
 import './styles/global.css';
 
 const { defaultAlgorithm, darkAlgorithm } = theme;
@@ -82,7 +84,27 @@ function PageLoader({ onLoadTimeout }: PageLoaderProps) {
 function AppContent() {
   const { isDark } = useTheme();
   const { i18n } = useTranslation();
+  const { loadMenuVisibility } = useMenuVisibilityStore();
   const [antdLocale, setAntdLocale] = useState(zhCN);
+  const [menuConfigOpen, setMenuConfigOpen] = useState(false);
+
+  useEffect(() => {
+    loadMenuVisibility();
+  }, [loadMenuVisibility]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.altKey && event.code === 'KeyM') {
+        event.preventDefault();
+        setMenuConfigOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   useEffect(() => {
     const config = useConfigStore.getState().getConfig();
@@ -203,6 +225,10 @@ function AppContent() {
       }}
     >
       <BrowserRouter>
+        <MenuVisibilityConfigModal
+          open={menuConfigOpen}
+          onClose={() => setMenuConfigOpen(false)}
+        />
         <Routes>
           <Route
             path="/spo2-ref"

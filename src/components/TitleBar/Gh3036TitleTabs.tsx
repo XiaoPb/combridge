@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { SettingOutlined, LineChartOutlined, InfoCircleOutlined, ExperimentOutlined } from '@ant-design/icons';
 import { usePageTabsStore } from '../../stores/pageTabsStore';
 import { useTranslation } from 'react-i18next';
+import { useMenuVisibilityStore } from '../../stores/menuVisibilityStore';
 
 const Gh3036TitleTabs: React.FC = () => {
   const { gh3036ActiveTab, setGh3036ActiveTab } = usePageTabsStore();
+  const { menuVisibility } = useMenuVisibilityStore();
   const { t } = useTranslation('gh3036');
 
   const tabs = [
@@ -14,9 +16,17 @@ const Gh3036TitleTabs: React.FC = () => {
     { key: 'factory', label: t('tabs.factory'), icon: <ExperimentOutlined /> },
   ] as const;
 
+  const visibleTabs = tabs.filter((tab) => menuVisibility.home.gh3036.tabs[tab.key]);
+
+  useEffect(() => {
+    if (visibleTabs.length > 0 && !visibleTabs.some((tab) => tab.key === gh3036ActiveTab)) {
+      setGh3036ActiveTab(visibleTabs[0].key);
+    }
+  }, [gh3036ActiveTab, setGh3036ActiveTab, visibleTabs]);
+
   return (
     <div className="title-tabs-container">
-      {tabs.map((tab) => {
+      {visibleTabs.map((tab) => {
         const isActive = tab.key === gh3036ActiveTab;
 
         return (

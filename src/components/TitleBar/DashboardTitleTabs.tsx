@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Tag } from 'antd';
 import {
   DashboardOutlined,
@@ -9,6 +9,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import type { TabType } from '../../types/dashboard';
+import { useMenuVisibilityStore } from '../../stores/menuVisibilityStore';
 
 const tabIcons: Record<TabType, React.ReactNode> = {
   dashboard: <DashboardOutlined />,
@@ -26,7 +27,8 @@ const tabColors: Record<TabType, string> = {
 
 const DashboardTitleTabs: React.FC = () => {
   const { t } = useTranslation('dashboard');
-  const { activeTabs, toggleTab } = useDashboardStore();
+  const { activeTabs, setActiveTabs, toggleTab } = useDashboardStore();
+  const { menuVisibility } = useMenuVisibilityStore();
 
   const tabs: { key: TabType; label: string }[] = [
     { key: 'dashboard', label: t('tabs.dashboard') || '仪表盘' },
@@ -35,11 +37,22 @@ const DashboardTitleTabs: React.FC = () => {
     { key: 'jsonEditor', label: t('tabs.jsonEditor') || 'JSON编辑器' },
   ];
 
+  const visibleTabs = tabs.filter((tab) => menuVisibility.home.dashboard.tabs[tab.key]);
+
+  useEffect(() => {
+    const visibleKeys = new Set(visibleTabs.map((tab) => tab.key));
+    const nextActiveTabs = activeTabs.filter((tab) => visibleKeys.has(tab));
+
+    if (nextActiveTabs.length !== activeTabs.length) {
+      setActiveTabs(nextActiveTabs.length > 0 ? nextActiveTabs : visibleTabs.slice(0, 1).map((tab) => tab.key));
+    }
+  }, [activeTabs, setActiveTabs, visibleTabs]);
+
   const isJsonEditorActive = activeTabs.includes('jsonEditor');
 
   return (
     <div className="title-tabs-container" style={{ gap: 4 }}>
-      {tabs.map((tab) => {
+      {visibleTabs.map((tab) => {
         const isActive = activeTabs.includes(tab.key);
 
         return (

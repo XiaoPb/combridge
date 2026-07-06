@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 
 pub use crate::device::serial::serial_config::{DataBits, Parity, StopBits};
 
@@ -477,6 +477,130 @@ impl Gh3036CsvPreferences {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct MenuGroupVisibility {
+    pub visible: bool,
+    pub tabs: BTreeMap<String, bool>,
+}
+
+impl MenuGroupVisibility {
+    pub fn new(visible: bool, tabs: &[(&str, bool)]) -> Self {
+        Self {
+            visible,
+            tabs: tabs
+                .iter()
+                .map(|(key, visible)| ((*key).to_string(), *visible))
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HomeMenuVisibility {
+    pub connection: MenuGroupVisibility,
+    pub dashboard: MenuGroupVisibility,
+    pub gh3036: MenuGroupVisibility,
+    pub protocol: MenuGroupVisibility,
+    pub waveform: MenuGroupVisibility,
+    pub system: MenuGroupVisibility,
+}
+
+impl Default for HomeMenuVisibility {
+    fn default() -> Self {
+        Self::default_values()
+    }
+}
+
+impl HomeMenuVisibility {
+    pub fn default_values() -> Self {
+        Self {
+            connection: MenuGroupVisibility::new(true, &[("serial", true), ("ble", true)]),
+            dashboard: MenuGroupVisibility::new(
+                false,
+                &[
+                    ("dashboard", false),
+                    ("console", false),
+                    ("settings", false),
+                    ("jsonEditor", false),
+                ],
+            ),
+            gh3036: MenuGroupVisibility::new(
+                true,
+                &[
+                    ("config", true),
+                    ("monitor", true),
+                    ("version", true),
+                    ("factory", true),
+                ],
+            ),
+            protocol: MenuGroupVisibility::new(false, &[("editor", false), ("bind", false)]),
+            waveform: MenuGroupVisibility::new(true, &[("realtime", false), ("csvLoader", true)]),
+            system: MenuGroupVisibility::new(
+                true,
+                &[("info", false), ("logs", false), ("settings", true)],
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SidebarMenuVisibility {
+    pub home: bool,
+    pub serial: bool,
+    pub ble: bool,
+    pub dashboard: bool,
+    pub gh3036: bool,
+    pub protocol: bool,
+    pub waveform: bool,
+    pub system: bool,
+}
+
+impl Default for SidebarMenuVisibility {
+    fn default() -> Self {
+        Self::default_values()
+    }
+}
+
+impl SidebarMenuVisibility {
+    pub fn default_values() -> Self {
+        Self {
+            home: true,
+            serial: true,
+            ble: true,
+            dashboard: false,
+            gh3036: true,
+            protocol: false,
+            waveform: true,
+            system: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MenuVisibilityPreferences {
+    pub home: HomeMenuVisibility,
+    pub sidebar: SidebarMenuVisibility,
+}
+
+impl Default for MenuVisibilityPreferences {
+    fn default() -> Self {
+        Self::default_values()
+    }
+}
+
+impl MenuVisibilityPreferences {
+    pub fn default_values() -> Self {
+        Self {
+            home: HomeMenuVisibility::default_values(),
+            sidebar: SidebarMenuVisibility::default_values(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Preferences {
     #[serde(default = "SerialPreferences::default_values")]
     pub serial: SerialPreferences,
@@ -488,6 +612,8 @@ pub struct Preferences {
     pub gh3036_channel: Gh3036ChannelPreferences,
     #[serde(default = "Gh3036CsvPreferences::default_values")]
     pub gh3036_csv: Gh3036CsvPreferences,
+    #[serde(default = "MenuVisibilityPreferences::default_values")]
+    pub menu_visibility: MenuVisibilityPreferences,
 }
 
 impl Default for Preferences {
@@ -504,6 +630,7 @@ impl Preferences {
             waveform: WaveformPreferences::default_values(),
             gh3036_channel: Gh3036ChannelPreferences::default_values(),
             gh3036_csv: Gh3036CsvPreferences::default_values(),
+            menu_visibility: MenuVisibilityPreferences::default_values(),
         }
     }
 }

@@ -26,7 +26,8 @@
       "tabs": {
         "config": "通道配置",
         "monitor": "数据监控",
-        "version": "版本信息"
+        "version": "版本信息",
+        "factory": "产测"
       }
     },
     "protocol": {

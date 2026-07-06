@@ -16,6 +16,7 @@ import {
   InfoCircleOutlined,
   FileTextOutlined as LogsIcon,
   SettingOutlined as SettingsIcon,
+  ExperimentOutlined,
   RightOutlined,
   DashboardOutlined,
   DashboardOutlined as DashboardIcon,
@@ -27,8 +28,16 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { usePageTabsStore } from '../../stores/pageTabsStore';
 import { useDashboardStore } from '../../stores/dashboardStore';
+import { useMenuVisibilityStore, type HomeMenuKey } from '../../stores/menuVisibilityStore';
 
 const { Title, Text } = Typography;
+
+const CARD_HEIGHT = 284;
+const CARD_HEADER_HEIGHT = 82;
+const MENU_ITEM_HEIGHT = 36;
+const MENU_ITEM_GAP = 8;
+const MENU_LIST_HEIGHT = MENU_ITEM_HEIGHT * 4 + MENU_ITEM_GAP * 3;
+const PAGE_TOP_BAR_HEIGHT = 72;
 
 interface SubTab {
   key: string;
@@ -46,6 +55,13 @@ interface ModuleCardProps {
   onCardClick: (path: string) => void;
 }
 
+interface HomeModule {
+  key: HomeMenuKey;
+  icon: React.ReactNode;
+  path: string;
+  subTabs: SubTab[];
+}
+
 const ModuleCard: React.FC<ModuleCardProps> = ({
   icon,
   title,
@@ -58,18 +74,22 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
   return (
     <Card
       style={{
+        width: '100%',
         height: '100%',
+        minHeight: CARD_HEIGHT,
         display: 'flex',
         flexDirection: 'column',
-        borderRadius: 12,
+        borderRadius: 8,
         transition: 'all 0.3s ease',
+        overflow: 'hidden',
       }}
       styles={{
         body: {
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          padding: 20,
+          padding: 16,
+          minHeight: CARD_HEIGHT,
         },
       }}
       onMouseEnter={(e) => {
@@ -85,8 +105,12 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
         style={{
           display: 'flex',
           alignItems: 'center',
+          height: CARD_HEADER_HEIGHT,
+          minHeight: CARD_HEADER_HEIGHT,
+          maxHeight: CARD_HEADER_HEIGHT,
           marginBottom: 12,
           cursor: 'pointer',
+          overflow: 'hidden',
         }}
         onClick={() => onCardClick(path)}
       >
@@ -95,23 +119,50 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
             fontSize: 32,
             marginRight: 12,
             color: 'var(--ant-primary-color, #1890ff)',
+            width: 40,
+            height: 40,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
           }}
         >
           {icon}
         </div>
-        <div style={{ flex: 1 }}>
-          <Title level={4} style={{ margin: 0, marginBottom: 4 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Title
+            level={4}
+            style={{
+              margin: 0,
+              marginBottom: 4,
+              lineHeight: '24px',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
             {title}
           </Title>
-          <Text type="secondary" style={{ fontSize: 12 }}>
+          <Text
+            type="secondary"
+            style={{
+              display: '-webkit-box',
+              height: 36,
+              overflow: 'hidden',
+              fontSize: 12,
+              lineHeight: '18px',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+            }}
+          >
             {description}
           </Text>
         </div>
-        <RightOutlined style={{ color: 'var(--text-secondary)' }} />
+        <RightOutlined style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
       </div>
 
       {subTabs && subTabs.length > 0 && (
-        <div style={{ marginTop: 'auto' }}>
+        <div style={{ marginTop: 'auto', minHeight: MENU_LIST_HEIGHT + 25 }}>
           <div
             style={{
               borderTop: '1px solid var(--border-color)',
@@ -119,7 +170,16 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
               marginTop: 12,
             }}
           >
-            <Space orientation="vertical" style={{ width: '100%' }} size={8}>
+            <Space
+              orientation="vertical"
+              style={{
+                width: '100%',
+                height: MENU_LIST_HEIGHT,
+                overflowY: subTabs.length > 4 ? 'auto' : 'hidden',
+                paddingRight: subTabs.length > 4 ? 4 : 0,
+              }}
+              size={MENU_ITEM_GAP}
+            >
               {subTabs.map((tab) => (
                 <Button
                   key={tab.key}
@@ -129,9 +189,12 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
                   style={{
                     width: '100%',
                     justifyContent: 'flex-start',
-                    height: 36,
+                    height: MENU_ITEM_HEIGHT,
+                    minHeight: MENU_ITEM_HEIGHT,
+                    maxHeight: MENU_ITEM_HEIGHT,
                     borderRadius: 8,
                     transition: 'all 0.2s',
+                    overflow: 'hidden',
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
@@ -140,7 +203,16 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
                     e.currentTarget.style.backgroundColor = 'transparent';
                   }}
                 >
-                  {tab.label}
+                  <span
+                    style={{
+                      display: 'block',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {tab.label}
+                  </span>
                 </Button>
               ))}
             </Space>
@@ -156,8 +228,9 @@ const HomePage: React.FC = () => {
   const { t } = useTranslation('home');
   const { setWaveformActiveTab, setProtocolActiveTab, setSystemActiveTab, setGh3036ActiveTab } = usePageTabsStore();
   const { setActiveTabs } = useDashboardStore();
+  const { menuVisibility } = useMenuVisibilityStore();
 
-  const modules = [
+  const allModules: HomeModule[] = [
     {
       key: 'connection',
       icon: <ApiOutlined />,
@@ -186,6 +259,7 @@ const HomePage: React.FC = () => {
         { key: 'config', label: t('modules.gh3036.tabs.config'), icon: <ConfigIcon /> },
         { key: 'monitor', label: t('modules.gh3036.tabs.monitor'), icon: <MonitorIcon /> },
         { key: 'version', label: t('modules.gh3036.tabs.version'), icon: <InfoCircleOutlined /> },
+        { key: 'factory', label: t('modules.gh3036.tabs.factory'), icon: <ExperimentOutlined /> },
       ],
     },
     {
@@ -218,7 +292,54 @@ const HomePage: React.FC = () => {
     },
   ];
 
+  const modules = allModules.map((module) => ({
+    ...module,
+    subTabs: module.subTabs.filter((tab) => menuVisibility.home[module.key].tabs[tab.key] ?? true),
+  })).filter((module) => menuVisibility.home[module.key].visible);
+
+  const getFirstVisibleTab = (moduleKey: HomeMenuKey) => {
+    const module = modules.find((item) => item.key === moduleKey);
+    return module?.subTabs[0]?.key;
+  };
+
   const handleCardClick = (path: string) => {
+    switch (path) {
+      case '/waveform': {
+        const tab = getFirstVisibleTab('waveform');
+        if (tab) {
+          setWaveformActiveTab(tab as 'realtime' | 'csvLoader');
+        }
+        break;
+      }
+      case '/protocol': {
+        const tab = getFirstVisibleTab('protocol');
+        if (tab) {
+          setProtocolActiveTab(tab as 'editor' | 'bind');
+        }
+        break;
+      }
+      case '/system': {
+        const tab = getFirstVisibleTab('system');
+        if (tab) {
+          setSystemActiveTab(tab as 'info' | 'logs' | 'settings');
+        }
+        break;
+      }
+      case '/gh3036': {
+        const tab = getFirstVisibleTab('gh3036');
+        if (tab) {
+          setGh3036ActiveTab(tab as 'config' | 'monitor' | 'version' | 'factory');
+        }
+        break;
+      }
+      case '/dashboard': {
+        const tab = getFirstVisibleTab('dashboard');
+        if (tab) {
+          setActiveTabs([tab as 'dashboard' | 'console' | 'settings' | 'jsonEditor']);
+        }
+        break;
+      }
+    }
     navigate(path);
   };
 
@@ -241,7 +362,7 @@ const HomePage: React.FC = () => {
         setSystemActiveTab(tabKey as 'info' | 'logs' | 'settings');
         break;
       case '/gh3036':
-        setGh3036ActiveTab(tabKey as 'config' | 'monitor' | 'version');
+        setGh3036ActiveTab(tabKey as 'config' | 'monitor' | 'version' | 'factory');
         break;
       case '/dashboard':
         setActiveTabs([tabKey as 'dashboard' | 'console' | 'settings' | 'jsonEditor']);
@@ -260,7 +381,16 @@ const HomePage: React.FC = () => {
         overflow: 'auto',
       }}
     >
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
+      <div
+        style={{
+          textAlign: 'center',
+          height: PAGE_TOP_BAR_HEIGHT,
+          minHeight: PAGE_TOP_BAR_HEIGHT,
+          maxHeight: PAGE_TOP_BAR_HEIGHT,
+          marginBottom: 24,
+          overflow: 'hidden',
+        }}
+      >
         <Title level={2} style={{ marginBottom: 8 }}>
           {t('title')}
         </Title>
@@ -269,9 +399,17 @@ const HomePage: React.FC = () => {
         </Text>
       </div>
 
-      <Row gutter={[24, 24]} style={{ flex: 1 }}>
+      <Row gutter={[24, 24]} style={{ flex: 1, alignContent: 'flex-start' }}>
         {modules.map((module) => (
-          <Col key={module.key} xs={24} sm={12} md={12} lg={8} xl={8}>
+          <Col
+            key={module.key}
+            xs={24}
+            sm={12}
+            md={12}
+            lg={8}
+            xl={8}
+            style={{ display: 'flex' }}
+          >
             <ModuleCard
               icon={module.icon}
               title={t(`modules.${module.key}.name`)}

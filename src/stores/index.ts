@@ -2,6 +2,7 @@ export * from './serialStore';
 export * from './bleStore';
 export * from './protocolStore';
 export * from './logStore';
+export * from './menuVisibilityStore';
 export * from './pageTabsStore';
 export * from './dashboardStore';
 export * from './gh3036Store';

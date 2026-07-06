@@ -287,6 +287,7 @@ pub fn run() {
             commands::preferences::update_waveform_preferences,
             commands::preferences::update_gh3036_channel_preferences,
             commands::preferences::update_gh3036_csv_preferences,
+            commands::preferences::update_menu_visibility_preferences,
             commands::gh3036::gh3036_init,
             commands::gh3036::gh3036_is_initialized,
             commands::gh3036::gh3036_configure_tx_channel,

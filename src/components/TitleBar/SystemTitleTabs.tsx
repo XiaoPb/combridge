@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { InfoCircleOutlined, FileTextOutlined, SettingOutlined } from '@ant-design/icons';
 import { usePageTabsStore } from '../../stores/pageTabsStore';
 import { useTranslation } from 'react-i18next';
+import { useMenuVisibilityStore } from '../../stores/menuVisibilityStore';
 
 const SystemTitleTabs: React.FC = () => {
   const { systemActiveTab, setSystemActiveTab } = usePageTabsStore();
+  const { menuVisibility } = useMenuVisibilityStore();
   const { t } = useTranslation('system');
 
   const tabs = [
@@ -13,9 +15,17 @@ const SystemTitleTabs: React.FC = () => {
     { key: 'settings', label: t('tab.settings'), icon: <SettingOutlined /> },
   ] as const;
 
+  const visibleTabs = tabs.filter((tab) => menuVisibility.home.system.tabs[tab.key]);
+
+  useEffect(() => {
+    if (visibleTabs.length > 0 && !visibleTabs.some((tab) => tab.key === systemActiveTab)) {
+      setSystemActiveTab(visibleTabs[0].key);
+    }
+  }, [setSystemActiveTab, systemActiveTab, visibleTabs]);
+
   return (
     <div className="title-tabs-container">
-      {tabs.map((tab) => {
+      {visibleTabs.map((tab) => {
         const isActive = tab.key === systemActiveTab;
 
         return (

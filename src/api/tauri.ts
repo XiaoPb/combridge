@@ -275,12 +275,43 @@ export interface Gh3036CsvPreferences {
   outputDir: string;
 }
 
+export interface MenuGroupVisibility {
+  visible: boolean;
+  tabs: Record<string, boolean>;
+}
+
+export interface HomeMenuVisibility {
+  connection: MenuGroupVisibility;
+  dashboard: MenuGroupVisibility;
+  gh3036: MenuGroupVisibility;
+  protocol: MenuGroupVisibility;
+  waveform: MenuGroupVisibility;
+  system: MenuGroupVisibility;
+}
+
+export interface SidebarMenuVisibility {
+  home: boolean;
+  serial: boolean;
+  ble: boolean;
+  dashboard: boolean;
+  gh3036: boolean;
+  protocol: boolean;
+  waveform: boolean;
+  system: boolean;
+}
+
+export interface MenuVisibilityPreferences {
+  home: HomeMenuVisibility;
+  sidebar: SidebarMenuVisibility;
+}
+
 export interface Preferences {
   serial: SerialPreferences;
   ble: BlePreferences;
   waveform?: WaveformPreferences;
   gh3036_channel?: Gh3036ChannelPreferences;
   gh3036Csv?: Gh3036CsvPreferences;
+  menuVisibility?: MenuVisibilityPreferences;
 }
 
 export const preferencesApi = {
@@ -337,6 +368,12 @@ export const preferencesApi = {
     await invoke<void>('update_gh3036_csv_preferences', {
       enabled: prefs.enabled,
       outputDir: prefs.outputDir,
+    });
+  },
+
+  async updateMenuVisibility(prefs: MenuVisibilityPreferences): Promise<void> {
+    await invoke<void>('update_menu_visibility_preferences', {
+      menuVisibility: prefs,
     });
   },
 };

@@ -461,6 +461,21 @@ pub struct VersionTypeConfig {
     pub description: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Gh3036ConfigRegisterPreview {
+    pub addr: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Gh3036ConfigPreview {
+    pub file_path: String,
+    pub register_count: usize,
+    pub registers: Vec<Gh3036ConfigRegisterPreview>,
+}
+
 pub fn get_version_types() -> Vec<VersionTypeConfig> {
     vec![
         VersionTypeConfig {

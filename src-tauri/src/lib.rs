@@ -301,6 +301,7 @@ pub fn run() {
             commands::gh3036::gh3036_subscribe_events,
             commands::gh3036::gh3036_get_library_status,
             commands::gh3036::gh3036_load_config_file,
+            commands::gh3036::gh3036_download_config_file,
             commands::waveform::waveform_create_buffer,
             commands::waveform::waveform_remove_buffer,
             commands::waveform::waveform_configure_parser,

@@ -74,7 +74,7 @@ impl ConfigLoader {
             line_num += 1;
             let trimmed = line.trim();
 
-            if trimmed.starts_with("[Register_List]") {
+            if trimmed.eq_ignore_ascii_case("[Register_List]") {
                 in_register_list = true;
                 continue;
             }
@@ -85,7 +85,7 @@ impl ConfigLoader {
 
             if trimmed.starts_with('[')
                 && trimmed.ends_with(']')
-                && !trimmed.starts_with("[Register_List]")
+                && !trimmed.eq_ignore_ascii_case("[Register_List]")
             {
                 break;
             }
@@ -240,5 +240,42 @@ addr, value, default
         let loader = ConfigLoader::from_content(content).unwrap();
         let params = loader.format_for_download();
         assert_eq!(params, vec!["0x0016", "0x001F", "0x0020", "0x2919"]);
+    }
+
+    #[test]
+    fn test_parse_register_list_at_end_after_other_sections() {
+        let content = r#"
+[Meta]
+{"Functions":["HR","SPO2","TEST1"]}
+
+[phy_register_load]
+[
+    22, 31, 32, 10521
+]
+
+[basic_config]
+[
+    {"download_config":{"input":[0]}},
+    {"RegsListWrite":{"addr":[22,32],"value":[31,10521]}},
+    {"download_config":{"input":[1]}}
+]
+
+[Register_List]
+addr, value, default
+{0x0016,0x001f},// FASTEST_SAMPLE_RATE_DIVIDER:31,
+{0x0020,0x2919},// FIFO_WATER_LINE:25,
+"#;
+
+        let loader = ConfigLoader::from_content(content).unwrap();
+
+        assert_eq!(loader.len(), 2);
+        assert_eq!(
+            loader.get_addr_value_pairs(),
+            vec![(0x0016, 0x001f), (0x0020, 0x2919)]
+        );
+        assert_eq!(
+            loader.format_for_download(),
+            vec!["0x0016", "0x001F", "0x0020", "0x2919"]
+        );
     }
 }

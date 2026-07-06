@@ -350,7 +350,7 @@ export const useGh3036Store = create<Gh3036State>()(
     readRegAddr: '0000',
     readRegValue: '0000',
     configPath: '',
-    selectedFunctions: ['adt', 'hr', 'hrv', 'hsm', 'fpbp'],
+    selectedFunctions: [],
     isRunning: false,
     factoryMode: '',
     factoryResult: '-',

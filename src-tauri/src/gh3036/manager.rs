@@ -16,21 +16,22 @@ use serde::{Deserialize, Serialize};
 use tokio::runtime::Handle;
 use tracing::{debug, error, info, warn};
 
+use super::config_loader::ConfigLoader;
 use super::csv_writer::CsvWriter;
 use super::factory_test::FactoryTestManager;
 use super::ref_data_manager::RefDataManager;
 use super::types::{
-    ConfigValidationResult, FactoryTestResult, FactoryTestStatus, FactoryTestStep, Gh3036FrameData,
-    Gh3036FramesEvent, GhFuncFixIdx, GhFuncFixIdxExt, GhFuncFrame, FMT_DOWNLOAD_CONFIG,
-    FMT_F_GET_MODE, FMT_F_SET_MODE, FMT_GH3X_CHIP_CTRL, FMT_GH3X_GET_VERSION,
-    FMT_GH3X_REGS_LIST_WRITE_CMD, FMT_GH3X_REGS_READ_CMD, FMT_GH3X_REGS_WRITE_CMD,
-    FMT_GH3X_REG_BIT_FIELD_WRITE_CMD, FMT_GH3X_SW_FUNCTION_CMD, FMT_GH_LOW_POWER_CMD,
-    FMT_GH_SET_WORK_MODE_CMD, FMT_GH_TIMESTAMP_SET, FMT_GH_TIME_SET, KEY_DOWNLOAD_CONFIG,
-    KEY_F_GET_MODE, KEY_F_SET_MODE, KEY_GH3X_CHIP_CTRL, KEY_GH3X_GET_VERSION,
-    KEY_GH3X_REGS_LIST_WRITE_CMD, KEY_GH3X_REGS_READ_CMD, KEY_GH3X_REGS_WRITE_CMD,
-    KEY_GH3X_REG_BIT_FIELD_WRITE_CMD, KEY_GH3X_SW_FUNCTION_CMD, KEY_GH_LOW_POWER_CMD,
-    KEY_GH_SET_WORK_MODE_CMD, KEY_GH_TIMESTAMP_SET, KEY_GH_TIME_SET, RET_F_GET_MODE,
-    RET_GH3X_GET_VERSION, RET_GH3X_REGS_READ_CMD,
+    ConfigValidationResult, FactoryTestResult, FactoryTestStatus, FactoryTestStep,
+    Gh3036ConfigPreview, Gh3036ConfigRegisterPreview, Gh3036FrameData, Gh3036FramesEvent,
+    GhFuncFixIdx, GhFuncFixIdxExt, GhFuncFrame, FMT_DOWNLOAD_CONFIG, FMT_F_GET_MODE,
+    FMT_F_SET_MODE, FMT_GH3X_CHIP_CTRL, FMT_GH3X_GET_VERSION, FMT_GH3X_REGS_LIST_WRITE_CMD,
+    FMT_GH3X_REGS_READ_CMD, FMT_GH3X_REGS_WRITE_CMD, FMT_GH3X_REG_BIT_FIELD_WRITE_CMD,
+    FMT_GH3X_SW_FUNCTION_CMD, FMT_GH_LOW_POWER_CMD, FMT_GH_SET_WORK_MODE_CMD, FMT_GH_TIMESTAMP_SET,
+    FMT_GH_TIME_SET, KEY_DOWNLOAD_CONFIG, KEY_F_GET_MODE, KEY_F_SET_MODE, KEY_GH3X_CHIP_CTRL,
+    KEY_GH3X_GET_VERSION, KEY_GH3X_REGS_LIST_WRITE_CMD, KEY_GH3X_REGS_READ_CMD,
+    KEY_GH3X_REGS_WRITE_CMD, KEY_GH3X_REG_BIT_FIELD_WRITE_CMD, KEY_GH3X_SW_FUNCTION_CMD,
+    KEY_GH_LOW_POWER_CMD, KEY_GH_SET_WORK_MODE_CMD, KEY_GH_TIMESTAMP_SET, KEY_GH_TIME_SET,
+    RET_F_GET_MODE, RET_GH3X_GET_VERSION, RET_GH3X_REGS_READ_CMD,
 };
 use crate::device::DeviceManager;
 use crate::service::{
@@ -1231,11 +1232,10 @@ impl Gh3036Manager {
         (true, self.is_initialized())
     }
 
-    pub async fn load_config_file(&self, file_path: &str) -> Result<Vec<String>, String> {
-        use std::fs;
+    pub async fn load_config_file(&self, file_path: &str) -> Result<Gh3036ConfigPreview, String> {
         use std::path::Path;
 
-        info!("加载配置文件: {}", file_path);
+        info!("解析配置文件: {}", file_path);
 
         let path = Path::new(file_path);
         if !path.exists() {
@@ -1252,70 +1252,71 @@ impl Gh3036Manager {
             return Err(format!("不支持的文件类型: {}", extension));
         }
 
-        let content = fs::read_to_string(path).map_err(|e| format!("读取文件失败: {}", e))?;
-
-        let regs = Self::parse_config_registers(&content)?;
-
-        info!("解析到 {} 个寄存器", regs.len());
-
-        let reg_strings: Vec<String> = regs
-            .iter()
-            .map(|(addr, value)| format!("0x{:04X},0x{:04X}", addr, value))
-            .collect();
-
-        Ok(reg_strings)
-    }
-
-    fn parse_config_registers(content: &str) -> Result<Vec<(u16, u16)>, String> {
-        let mut regs = Vec::new();
-        let mut in_register_list = false;
-
-        for line in content.lines() {
-            let trimmed = line.trim();
-
-            if trimmed.starts_with('[') && trimmed.ends_with(']') {
-                let section = trimmed[1..trimmed.len() - 1].to_lowercase();
-                in_register_list = section == "register_list";
-                continue;
-            }
-
-            if !in_register_list {
-                continue;
-            }
-
-            if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("#") {
-                continue;
-            }
-
-            if trimmed.starts_with('{') && trimmed.contains('}') {
-                let inner = trimmed.trim_start_matches('{').trim_end_matches('}');
-                let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
-
-                if parts.len() >= 2 {
-                    let addr_str = parts[0].trim_start_matches("0x").trim_start_matches("0X");
-                    let value_str = parts[1]
-                        .split("//")
-                        .next()
-                        .unwrap_or("")
-                        .trim()
-                        .trim_start_matches("0x")
-                        .trim_start_matches("0X");
-
-                    if let (Ok(addr), Ok(value)) = (
-                        u16::from_str_radix(addr_str, 16),
-                        u16::from_str_radix(value_str, 16),
-                    ) {
-                        regs.push((addr, value));
-                    }
-                }
-            }
-        }
-
-        if regs.is_empty() {
+        let config_loader = ConfigLoader::from_file(path)?;
+        if config_loader.is_empty() {
             return Err("未找到寄存器配置".to_string());
         }
 
-        Ok(regs)
+        let registers: Vec<Gh3036ConfigRegisterPreview> = config_loader
+            .get_register_list()
+            .iter()
+            .map(|reg| Gh3036ConfigRegisterPreview {
+                addr: format!("0x{:04X}", reg.addr),
+                value: format!("0x{:04X}", reg.value),
+            })
+            .collect();
+
+        info!("解析到 {} 个寄存器", registers.len());
+
+        Ok(Gh3036ConfigPreview {
+            file_path: file_path.to_string(),
+            register_count: registers.len(),
+            registers,
+        })
+    }
+
+    pub async fn download_config_file(&self, file_path: &str) -> Result<(), String> {
+        use std::path::Path;
+
+        info!("下载配置文件: {}", file_path);
+
+        let path = Path::new(file_path);
+        if !path.exists() {
+            return Err(format!("文件不存在: {}", file_path));
+        }
+
+        let extension = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_lowercase())
+            .unwrap_or_default();
+
+        if extension != "config" && extension != "ini" {
+            return Err(format!("不支持的文件类型: {}", extension));
+        }
+
+        let config_loader = ConfigLoader::from_file(path)?;
+
+        if config_loader.is_empty() {
+            return Err("寄存器列表为空".to_string());
+        }
+
+        self.execute_rpc("D", &["0".to_string()])
+            .await
+            .map_err(|e| format!("下载配置阶段 0 失败: {}", e))?;
+
+        let params = config_loader.format_for_download();
+        self.execute_rpc("L", &params)
+            .await
+            .map_err(|e| format!("写入寄存器列表失败: {}", e))?;
+
+        self.execute_rpc("D", &["1".to_string()])
+            .await
+            .map_err(|e| format!("下载配置阶段 1 失败: {}", e))?;
+
+        info!("配置文件下载完成: {} 个寄存器", config_loader.len());
+
+        Ok(())
     }
 
     pub async fn factory_test_start(self: Arc<Self>) -> Result<(), String> {

@@ -173,6 +173,17 @@ export interface Gh3036VersionTypeConfig {
   description: string;
 }
 
+export interface Gh3036ConfigRegisterPreview {
+  addr: string;
+  value: string;
+}
+
+export interface Gh3036ConfigPreview {
+  filePath: string;
+  registerCount: number;
+  registers: Gh3036ConfigRegisterPreview[];
+}
+
 export type FactoryTestStep = 
   | 'idle' 
   | 'prepare' 

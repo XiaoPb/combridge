@@ -52,6 +52,23 @@ pub struct AtBleBackend {
     is_scanning: Arc<AtomicBool>,
 }
 
+struct ScanStateGuard<'a> {
+    is_scanning: &'a AtomicBool,
+}
+
+impl<'a> ScanStateGuard<'a> {
+    fn new(is_scanning: &'a AtomicBool) -> Self {
+        is_scanning.store(true, Ordering::SeqCst);
+        Self { is_scanning }
+    }
+}
+
+impl Drop for ScanStateGuard<'_> {
+    fn drop(&mut self) {
+        self.is_scanning.store(false, Ordering::SeqCst);
+    }
+}
+
 impl AtBleBackend {
     pub fn new() -> Self {
         Self {
@@ -251,7 +268,7 @@ impl BleBackend for AtBleBackend {
     }
 
     async fn scan(&self, duration_ms: u64) -> Result<Vec<BleDevice>> {
-        self.is_scanning.store(true, Ordering::SeqCst);
+        let _scan_guard = ScanStateGuard::new(&self.is_scanning);
 
         let responses = self.send_command_and_wait(&AtCommand::ScanStart, duration_ms + 2000)?;
 
@@ -270,7 +287,6 @@ impl BleBackend for AtBleBackend {
             }
         }
 
-        self.is_scanning.store(false, Ordering::SeqCst);
         info!("扫描完成，发现 {} 个设备", devices.len());
         Ok(devices)
     }

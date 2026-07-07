@@ -42,13 +42,11 @@ export const useBle = () => {
     setDevices,
     clearDevices,
     addConnection,
-    removeConnection,
+    clearDisconnectedDevice,
     setCurrentDevice,
     setServices,
-    clearServices,
     setCharacteristics,
     updateCharacteristic,
-    clearCharacteristics,
     clearNotifications,
     setIsScanning,
     setIsConnecting,
@@ -167,12 +165,7 @@ export const useBle = () => {
 
     try {
       await bleApi.disconnectBle(deviceId);
-      removeConnection(deviceId);
-      if (currentDevice === deviceId) {
-        setCurrentDevice(null);
-        clearServices();
-        clearCharacteristics();
-      }
+      clearDisconnectedDevice(deviceId);
       addLog('info', 'BleManager', `设备 ${deviceId} 已断开`);
       message.success('设备已断开');
     } catch (err) {
@@ -182,7 +175,7 @@ export const useBle = () => {
       message.error(errorMsg);
       throw err;
     }
-  }, [setError, removeConnection, currentDevice, setCurrentDevice, clearServices, clearCharacteristics, addLog]);
+  }, [setError, clearDisconnectedDevice, addLog]);
 
   const discoverServices = useCallback(async (deviceId?: string) => {
     const targetDevice = deviceId || currentDevice;

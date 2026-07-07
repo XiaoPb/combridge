@@ -110,6 +110,7 @@ interface BleState {
   addConnection: (connection: BleConnection) => void;
   updateConnection: (address: string, connection: Partial<BleConnection>) => void;
   removeConnection: (address: string) => void;
+  clearDisconnectedDevice: (address: string) => void;
   setCurrentDevice: (currentDevice: string | null) => void;
   setServices: (services: BleService[]) => void;
   addService: (service: BleService) => void;
@@ -222,6 +223,29 @@ export const useBleStore = create<BleState>((set, _get) => ({
       connections: state.connections.filter((c) => c.address !== address),
       currentDevice: state.currentDevice === address ? null : state.currentDevice,
     })),
+
+  clearDisconnectedDevice: (address: string) =>
+    set((state) => {
+      const { [address]: _removedTab, ...remainingTabs } = state.deviceTabs;
+      const remainingConnections = state.connections.filter((c) => c.address !== address);
+      const wasCurrentDevice = state.currentDevice === address;
+      const removedActiveAtTab = state.atTabs.some(
+        (tab) => tab.id === state.activeAtTabId && tab.address === address
+      );
+
+      return {
+        connections: remainingConnections,
+        currentDevice: wasCurrentDevice ? null : state.currentDevice,
+        services: wasCurrentDevice ? [] : state.services,
+        characteristics: wasCurrentDevice ? [] : state.characteristics,
+        notifications: wasCurrentDevice ? [] : state.notifications,
+        deviceTabs: remainingTabs,
+        atTabs: state.atTabs.filter((tab) => tab.address !== address),
+        activeAtTabId: removedActiveAtTab ? null : state.activeAtTabId,
+        isConnecting: false,
+        error: null,
+      };
+    }),
 
   setCurrentDevice: (currentDevice: string | null) => set({ currentDevice }),
 

@@ -17,9 +17,37 @@ use crate::service::event_bus::{BleConnectionEvent, EventBus};
 pub struct BleAdapter {
     adapter: Arc<Adapter>,
     scanned_devices: Arc<RwLock<HashMap<DeviceId, (Arc<Device>, Option<i16>)>>>,
-    clients: RwLock<HashMap<String, Arc<GattClient>>>,
+    clients: Arc<RwLock<HashMap<String, Arc<GattClient>>>>,
     scan_cancelled: Arc<AtomicBool>,
     event_bus: Option<Arc<EventBus>>,
+}
+
+#[derive(Clone)]
+struct BleAdapterHandles {
+    scanned_devices: Arc<RwLock<HashMap<DeviceId, (Arc<Device>, Option<i16>)>>>,
+    clients: Arc<RwLock<HashMap<String, Arc<GattClient>>>>,
+    event_bus: Option<Arc<EventBus>>,
+}
+
+impl BleAdapterHandles {
+    fn cleanup_passive_disconnect(&self, address: &str) {
+        {
+            let mut clients = self.clients.write().unwrap_or_else(|e| e.into_inner());
+            clients.remove(address);
+        }
+        {
+            let mut devices = self
+                .scanned_devices
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
+            devices.retain(|id, _| id.to_string() != address);
+        }
+        if let Some(event_bus) = &self.event_bus {
+            let event = BleConnectionEvent::new(address, None);
+            event_bus.publish_typed(topics::BLE_DISCONNECTED, &event);
+        }
+        info!("BLE设备被动断开并清理适配器状态: {}", address);
+    }
 }
 
 impl BleAdapter {
@@ -38,10 +66,18 @@ impl BleAdapter {
         Ok(Self {
             adapter: Arc::new(adapter),
             scanned_devices: Arc::new(RwLock::new(HashMap::new())),
-            clients: RwLock::new(HashMap::new()),
+            clients: Arc::new(RwLock::new(HashMap::new())),
             scan_cancelled: Arc::new(AtomicBool::new(false)),
             event_bus,
         })
+    }
+
+    fn clone_handles(&self) -> BleAdapterHandles {
+        BleAdapterHandles {
+            scanned_devices: self.scanned_devices.clone(),
+            clients: self.clients.clone(),
+            event_bus: self.event_bus.clone(),
+        }
     }
 
     pub fn is_available(&self) -> bool {
@@ -196,17 +232,13 @@ impl BleAdapter {
         client.set_device(device, self.adapter.clone())?;
         client.connect().await?;
 
-        if let Some(event_bus) = &self.event_bus {
-            let event_bus = event_bus.clone();
-            let client_clone = client.clone();
-            let callback: DisconnectCallback = Arc::new(move |addr: &str| {
-                client_clone.reset_state();
-                let event = BleConnectionEvent::new(addr, None);
-                event_bus.publish_typed(topics::BLE_DISCONNECTED, &event);
-                info!("BLE设备被动断开: {}", addr);
-            });
-            client.set_disconnect_callback(callback);
-        }
+        let adapter_for_callback = self.clone_handles();
+        let client_clone = client.clone();
+        let callback: DisconnectCallback = Arc::new(move |addr: &str| {
+            client_clone.reset_state();
+            adapter_for_callback.cleanup_passive_disconnect(addr);
+        });
+        client.set_disconnect_callback(callback);
 
         Ok(client)
     }

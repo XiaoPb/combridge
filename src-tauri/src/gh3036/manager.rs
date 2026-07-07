@@ -1018,6 +1018,10 @@ impl Gh3036Manager {
         Ok(vec![])
     }
 
+    fn regs_list_write_transport() -> &'static str {
+        "call"
+    }
+
     async fn execute_regs_list_write_cmd_async(
         &self,
         params: &[String],
@@ -1032,6 +1036,11 @@ impl Gh3036Manager {
         }
 
         info!("寄存器列表写入: {} 个值", regs.len());
+        info!(
+            "寄存器列表写入使用 {}: key={}",
+            Self::regs_list_write_transport(),
+            KEY_GH3X_REGS_LIST_WRITE_CMD
+        );
 
         let mut data = Vec::new();
         data.extend_from_slice(&(regs.len() as u16).to_le_bytes());
@@ -1425,5 +1434,15 @@ impl Gh3036Manager {
 impl Drop for Gh3036Manager {
     fn drop(&mut self) {
         self.stop_processing_thread();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Gh3036Manager;
+
+    #[test]
+    fn regs_list_write_uses_call_transport() {
+        assert_eq!(Gh3036Manager::regs_list_write_transport(), "call");
     }
 }

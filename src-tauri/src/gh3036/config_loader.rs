@@ -264,18 +264,19 @@ addr, value, default
 addr, value, default
 {0x0016,0x001f},// FASTEST_SAMPLE_RATE_DIVIDER:31,
 {0x0020,0x2919},// FIFO_WATER_LINE:25,
+{0x0024,0x0001}// file ends after this line
 "#;
 
         let loader = ConfigLoader::from_content(content).unwrap();
 
-        assert_eq!(loader.len(), 2);
+        assert_eq!(loader.len(), 3);
         assert_eq!(
             loader.get_addr_value_pairs(),
-            vec![(0x0016, 0x001f), (0x0020, 0x2919)]
+            vec![(0x0016, 0x001f), (0x0020, 0x2919), (0x0024, 0x0001)]
         );
         assert_eq!(
             loader.format_for_download(),
-            vec!["0x0016", "0x001F", "0x0020", "0x2919"]
+            vec!["0x0016", "0x001F", "0x0020", "0x2919", "0x0024", "0x0001"]
         );
     }
 }

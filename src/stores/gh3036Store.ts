@@ -21,6 +21,7 @@ import { decodePayload, type EventBusEvent } from '../utils/msgpack';
 import type { Gh3036FramePayload, Gh3036FramesPayload, Gh3036RefDataPayload } from '../api/events';
 import { getCurrentTimeString } from '../utils/helpers';
 import { useConfigStore } from './configStore';
+import { mergeGh3036Frames } from './gh3036FrameBuffer';
 
 const getTs = (): string => {
   const state = useConfigStore.getState();
@@ -412,33 +413,10 @@ export const useGh3036Store = create<Gh3036State>()(
     const newFramesData = new Map(framesData);
     
     const existing = newFramesData.get(frames.function_id);
-    if (existing) {
-      const combined: Gh3036FramesPayload = {
-        function_id: frames.function_id,
-        function_name: frames.function_name,
-        frame_count: existing.frame_count + frames.frame_count,
-        channel_count: frames.channel_count,
-        frame_cnts: [...existing.frame_cnts, ...frames.frame_cnts].slice(-maxFramesCount * 10),
-        timestamps: [...existing.timestamps, ...frames.timestamps].slice(-maxFramesCount * 10),
-        frame_ids: [...existing.frame_ids, ...frames.frame_ids].slice(-maxFramesCount * 10),
-        ipd_pa: existing.ipd_pa.map((ch, i) => [...ch, ...(frames.ipd_pa[i] || [])].slice(-maxFramesCount * 10)),
-        rawdata: existing.rawdata.map((rd, i) => [...rd, ...(frames.rawdata[i] || [])].slice(-maxFramesCount * 10)),
-        flags: existing.flags.map((f, i) => [...f, ...(frames.flags[i] || [])].slice(-maxFramesCount * 10)),
-        agc_info: existing.agc_info.map((a, i) => [...a, ...(frames.agc_info[i] || [])].slice(-maxFramesCount * 10)),
-        acc_x: [...existing.acc_x, ...frames.acc_x].slice(-maxFramesCount * 10),
-        acc_y: [...existing.acc_y, ...frames.acc_y].slice(-maxFramesCount * 10),
-        acc_z: [...existing.acc_z, ...frames.acc_z].slice(-maxFramesCount * 10),
-        gyro_x: [...existing.gyro_x, ...frames.gyro_x].slice(-maxFramesCount * 10),
-        gyro_y: [...existing.gyro_y, ...frames.gyro_y].slice(-maxFramesCount * 10),
-        gyro_z: [...existing.gyro_z, ...frames.gyro_z].slice(-maxFramesCount * 10),
-        algo_results: [...existing.algo_results, ...frames.algo_results].slice(-maxFramesCount * 10),
-        led_drv_fs: [...existing.led_drv_fs, ...frames.led_drv_fs].slice(-maxFramesCount * 10),
-        ref_data: [...(existing.ref_data ?? []), ...(frames.ref_data ?? [])].slice(-maxFramesCount * 10),
-      };
-      newFramesData.set(frames.function_id, combined);
-    } else {
-      newFramesData.set(frames.function_id, frames);
-    }
+    newFramesData.set(
+      frames.function_id,
+      mergeGh3036Frames(existing, frames, maxFramesCount)
+    );
     
     const newGsensorData = {
       acc_x: [...gsensorData.acc_x, ...frames.acc_x].slice(-maxGsensorCount),

@@ -824,19 +824,6 @@ impl Gh3036Manager {
             .map_err(|e| format!("RPC 发送失败: {:?}", e))
     }
 
-    async fn send_command_multi(&self, key: &str, format: &str, data: &[u8]) -> Result<(), String> {
-        let executor = {
-            let executor_guard = self.executor.lock();
-            executor_guard.as_ref().ok_or("RPC 核心未初始化")?.clone()
-        };
-
-        let exec = executor.read().await;
-        exec.sall(key, format, data)
-            .await
-            .map_err(|e| format!("RPC 多帧发送失败: {:?}", e))?;
-        Ok(())
-    }
-
     async fn publish_command(&self, key: &str, format: &str, data: &[u8]) -> Result<(), String> {
         let executor = {
             let executor_guard = self.executor.lock();
@@ -1052,7 +1039,7 @@ impl Gh3036Manager {
             data.extend_from_slice(&val.to_le_bytes());
         }
 
-        self.send_command_multi(
+        self.call_command(
             KEY_GH3X_REGS_LIST_WRITE_CMD,
             FMT_GH3X_REGS_LIST_WRITE_CMD,
             &data,

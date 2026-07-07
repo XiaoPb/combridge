@@ -215,6 +215,25 @@ impl BleManager {
         info!("AT UUID配置已更新");
     }
 
+    async fn clear_device_state(&self, address: &str) {
+        let mut subscriptions = self.subscriptions.write().await;
+        if subscriptions.remove(address).is_some() {
+            info!("清理设备 {} 的订阅记录", address);
+        }
+        drop(subscriptions);
+
+        let mut tabs = self.at_tabs.write().await;
+        let before = tabs.len();
+        tabs.retain(|_, tab| tab.address != address);
+        if tabs.len() != before {
+            info!("清理设备 {} 的AT连接TAB", address);
+        }
+    }
+
+    pub async fn clear_disconnected_state(&self, address: &str) {
+        self.clear_device_state(address).await;
+    }
+
     pub async fn scan(&self, duration_ms: u64) -> Result<Vec<BleDevice>> {
         let backend_guard = self.backend.read().await;
         let backend = backend_guard
@@ -304,13 +323,7 @@ impl BleManager {
             Backend::At(b) => b.disconnect(address).await?,
         }
 
-        let mut subscriptions = self.subscriptions.write().await;
-        if subscriptions.remove(address).is_some() {
-            info!("清理设备 {} 的订阅记录", address);
-        }
-
-        let mut tabs = self.at_tabs.write().await;
-        tabs.retain(|_, tab| tab.address != address);
+        self.clear_device_state(address).await;
 
         let event = BleConnectionEvent::new(address, None);
         self.event_bus
@@ -594,3 +607,41 @@ impl BleManager {
 }
 
 pub type BleManagerRef = Arc<BleManager>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn clear_disconnected_state_removes_subscriptions_and_at_tabs() {
+        let manager = BleManager::new(Arc::new(EventBus::new(16)));
+        let address = "AA:BB:CC:DD:EE:FF";
+
+        manager
+            .subscriptions
+            .write()
+            .await
+            .entry(address.to_string())
+            .or_insert_with(HashSet::new)
+            .insert("0000FFE1-0000-1000-8000-00805F9B34FB".to_string());
+
+        manager.at_tabs.write().await.insert(
+            "tab-1".to_string(),
+            AtConnectionTab {
+                id: "tab-1".to_string(),
+                address: address.to_string(),
+                name: Some("test-device".to_string()),
+                tx_uuid: "tx".to_string(),
+                rx_uuid: "rx".to_string(),
+                connected_at: 1,
+                received_data: Vec::new(),
+                sent_data: Vec::new(),
+            },
+        );
+
+        manager.clear_disconnected_state(address).await;
+
+        assert!(!manager.subscriptions.read().await.contains_key(address));
+        assert!(manager.at_tabs.read().await.is_empty());
+    }
+}

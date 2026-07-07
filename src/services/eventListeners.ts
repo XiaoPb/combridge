@@ -89,20 +89,11 @@ function handleBleDisconnected(payload: BleDisconnectedPayload) {
   console.log('[EventListeners] handleBleDisconnected called with payload:', payload);
   const store = useBleStore.getState();
   const deviceId = payload.address;
-  
-  const wasCurrentDevice = store.currentDevice === deviceId;
-  
-  store.removeConnection(deviceId);
-  store.removeDeviceTab(deviceId);
-  
-  if (wasCurrentDevice) {
-    store.setCurrentDevice(null);
-    store.clearServices();
-    store.clearCharacteristics();
-    store.clearNotifications();
-  }
-  
-  const deviceName = store.connections.find(c => c.address === deviceId)?.name || deviceId;
+  const connection = store.connections.find((c) => c.address === deviceId);
+
+  store.clearDisconnectedDevice(deviceId);
+
+  const deviceName = connection?.name || deviceId;
   useLogStore.getState().addLog('info', 'BleManager', `设备 ${deviceName} 已断开`);
   useNotificationStore.getState().addNotification('warning', `设备 ${deviceName} 已断开`);
 }

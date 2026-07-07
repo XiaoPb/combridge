@@ -17,6 +17,7 @@ use dashboard::{create_json_config_manager, create_parser_script_manager};
 use device::DeviceManager;
 use gh3036::Gh3036Manager;
 use protocol::PluginManager;
+use service::event_bus::{topics, BleConnectionEvent};
 use service::{EventBridge, EventBus, EventFilter};
 use state::{create_action_dispatcher, create_app_state_with_event_bus, create_state_persistence};
 use tauri::Manager;
@@ -83,6 +84,17 @@ pub fn run() {
     let waveform_manager = Arc::new(WaveformManager::new());
 
     let device_manager = Arc::new(DeviceManager::new(event_bus.clone()));
+    let ble_manager_for_disconnect = device_manager.ble_manager.clone();
+    event_bus.subscribe_json::<BleConnectionEvent, _>(
+        topics::BLE_DISCONNECTED,
+        move |_topic, event| {
+            let ble_manager = ble_manager_for_disconnect.clone();
+            tokio::spawn(async move {
+                ble_manager.clear_disconnected_state(&event.address).await;
+            });
+        },
+    );
+
     let gh3036_manager = Arc::new(Gh3036Manager::new(
         device_manager.clone(),
         event_bus.clone(),

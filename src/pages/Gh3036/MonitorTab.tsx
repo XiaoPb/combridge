@@ -11,6 +11,7 @@ import MultiLineChart from '../Waveform/MultiLineChart';
 import HrRefDeviceDialog from './components/HrRefDeviceDialog';
 import { gh3036Api } from '../../api/gh3036';
 import { openSpo2RefWindow } from '../../utils/spo2RefWindow';
+import { buildIpdPaChartData } from './monitorChartData';
 
 const DISPLAY_DURATION_SECONDS = 6;
 const DEFAULT_SAMPLE_RATE = 25;
@@ -100,32 +101,12 @@ const MonitorTab: React.FC = () => {
   }, [framesData, selectedFunctionId]);
 
   const ipdPaChartData = useMemo(() => {
-    if (!currentFrames || currentFrames.channel_count === 0) {
-      return { columns: [] as string[], rows: [] as number[][] };
-    }
-
-    const columns: string[] = [];
-    for (let i = 0; i < currentFrames.channel_count; i++) {
-      columns.push(`CH${i}`);
-    }
-
-    const maxPoints = DISPLAY_DURATION_SECONDS * sampleRate;
-    const startIndex = Math.max(0, currentFrames.frame_count - maxPoints);
-    
-    const rows: number[][] = [];
-    for (let frameIdx = startIndex; frameIdx < currentFrames.frame_count; frameIdx++) {
-      const row: number[] = [];
-      for (let chIdx = 0; chIdx < currentFrames.channel_count; chIdx++) {
-        if (ipdRawDataType === 'ipd') {
-          row.push(currentFrames.ipd_pa[chIdx]?.[frameIdx] ?? 0);
-        } else {
-          row.push(currentFrames.rawdata[chIdx]?.[frameIdx] ?? 0);
-        }
-      }
-      rows.push(row);
-    }
-
-    return { columns, rows };
+    return buildIpdPaChartData(
+      currentFrames,
+      sampleRate,
+      ipdRawDataType,
+      DISPLAY_DURATION_SECONDS
+    );
   }, [currentFrames, sampleRate, ipdRawDataType]);
 
   const gsensorChartData = useMemo(() => {

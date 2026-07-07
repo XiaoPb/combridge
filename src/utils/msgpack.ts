@@ -92,6 +92,7 @@ function convertArrayToObject(arr: unknown[], topic: string): Record<string, unk
         gyro_z: arr[16] as number[],
         algo_results: arr[17] as number[][],
         led_drv_fs: arr[18] as number[][],
+        ref_data: arr[19] as number[][],
       };
     case 'protocol:parsed':
       return {

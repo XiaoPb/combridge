@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
-import { Card, Table, Tag, Space, Button, Select, Input, Typography, Empty } from 'antd';
+import { Card, Table, Tag, Space, Button, Select, Input, Typography, Empty, Switch, Divider, message } from 'antd';
 import {
   ClearOutlined,
   DownloadOutlined,
   ReloadOutlined,
+  SaveOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import {
@@ -15,9 +16,35 @@ import {
   type LogEntry,
 } from '../../stores/logStore';
 import { useConfigStore } from '../../stores/configStore';
+import { systemApi, type LogConfig, type LogLevel as BackendLogLevel } from '../../api/tauri';
 
 const { Text } = Typography;
 const { Search } = Input;
+
+const LOG_LEVEL_OPTIONS: Array<{ value: BackendLogLevel; label: string }> = [
+  { value: 'error', label: 'Error' },
+  { value: 'warn', label: 'Warn' },
+  { value: 'info', label: 'Info' },
+  { value: 'debug', label: 'Debug' },
+  { value: 'trace', label: 'Trace' },
+];
+
+const DEFAULT_LOG_CONFIG: LogConfig = {
+  level: 'info',
+  maxFiles: 10,
+  maxSizeMb: 10,
+  consoleEnabled: true,
+  fileEnabled: true,
+  filePath: '',
+  modules: [
+    { name: 'rpc-core', enabled: true, level: 'info' },
+    { name: 'gh3036', enabled: true, level: 'info' },
+    { name: 'ble', enabled: true, level: 'info' },
+    { name: 'event-bus', enabled: true, level: 'warn' },
+    { name: 'device', enabled: true, level: 'info' },
+    { name: 'frontend', enabled: true, level: 'info' },
+  ],
+};
 
 const LogViewer: React.FC = () => {
   const { t } = useTranslation('system');
@@ -30,6 +57,8 @@ const LogViewer: React.FC = () => {
   const [sourceFilter, setSourceFilter] = useState<string>('');
   const [searchText, setSearchText] = useState('');
   const [autoScroll, setAutoScroll] = useState(true);
+  const [logConfig, setLogConfig] = useState<LogConfig>(DEFAULT_LOG_CONFIG);
+  const [savingConfig, setSavingConfig] = useState(false);
   const tableRef = useRef<HTMLDivElement>(null);
 
   const effectiveTimezone = hasHydrated ? timezone : 'Asia/Shanghai';
@@ -69,6 +98,22 @@ const LogViewer: React.FC = () => {
       ),
     },
   ], [t, effectiveTimezone]);
+
+  useEffect(() => {
+    const loadLogConfig = async () => {
+      try {
+        const config = await systemApi.getLogConfig();
+        setLogConfig({
+          ...DEFAULT_LOG_CONFIG,
+          ...config,
+          modules: config.modules?.length ? config.modules : DEFAULT_LOG_CONFIG.modules,
+        });
+      } catch (error) {
+        console.error('Failed to load log config:', error);
+      }
+    };
+    loadLogConfig();
+  }, []);
 
   useEffect(() => {
     let filtered: LogEntry[] = logs;
@@ -115,6 +160,32 @@ const LogViewer: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const handleSaveLogConfig = async () => {
+    setSavingConfig(true);
+    try {
+      await systemApi.configureLog(logConfig);
+      message.success(t('logViewer.config.saved'));
+    } catch (error) {
+      console.error('Failed to save log config:', error);
+      message.error(t('logViewer.config.saveFailed'));
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
+  const handleResetLogConfig = () => {
+    setLogConfig(DEFAULT_LOG_CONFIG);
+  };
+
+  const updateModule = (name: string, patch: Partial<LogConfig['modules'][number]>) => {
+    setLogConfig((current) => ({
+      ...current,
+      modules: current.modules.map((module) =>
+        module.name === name ? { ...module, ...patch } : module
+      ),
+    }));
+  };
+
   const sources = [...new Set(logs.map((log: LogEntry) => log.source))];
 
   return (
@@ -138,6 +209,68 @@ const LogViewer: React.FC = () => {
         </Space>
       }
     >
+      <div style={{ marginBottom: 16 }}>
+        <Space wrap align="center">
+          <Text strong>{t('logViewer.config.title')}</Text>
+          <Select
+            value={logConfig.level}
+            onChange={(level) => setLogConfig((current) => ({ ...current, level }))}
+            style={{ width: 112 }}
+            options={LOG_LEVEL_OPTIONS}
+          />
+          <Switch
+            checked={logConfig.consoleEnabled}
+            onChange={(checked) => setLogConfig((current) => ({ ...current, consoleEnabled: checked }))}
+            checkedChildren={t('logViewer.config.console')}
+            unCheckedChildren={t('logViewer.config.console')}
+          />
+          <Switch
+            checked={logConfig.fileEnabled}
+            onChange={(checked) => setLogConfig((current) => ({ ...current, fileEnabled: checked }))}
+            checkedChildren={t('logViewer.config.file')}
+            unCheckedChildren={t('logViewer.config.file')}
+          />
+          <Button icon={<SaveOutlined />} type="primary" loading={savingConfig} onClick={handleSaveLogConfig}>
+            {t('logViewer.config.save')}
+          </Button>
+          <Button onClick={handleResetLogConfig}>
+            {t('logViewer.config.reset')}
+          </Button>
+        </Space>
+
+        <Space wrap style={{ marginTop: 12 }}>
+          {logConfig.modules.map((module) => (
+            <Space
+              key={module.name}
+              size={6}
+              style={{
+                padding: '4px 8px',
+                border: '1px solid #f0f0f0',
+                borderRadius: 6,
+                background: module.enabled ? '#fff' : '#fafafa',
+              }}
+            >
+              <Switch
+                size="small"
+                checked={module.enabled}
+                onChange={(checked) => updateModule(module.name, { enabled: checked })}
+              />
+              <Text style={{ width: 76, fontSize: 12 }}>{module.name}</Text>
+              <Select
+                size="small"
+                value={module.level}
+                disabled={!module.enabled}
+                onChange={(level) => updateModule(module.name, { level })}
+                style={{ width: 92 }}
+                options={LOG_LEVEL_OPTIONS}
+              />
+            </Space>
+          ))}
+        </Space>
+      </div>
+
+      <Divider style={{ margin: '8px 0 16px' }} />
+
       <Space style={{ marginBottom: 16 }} wrap>
         <Select
           value={levelFilter}

@@ -78,6 +78,15 @@
       "refresh": "Refresh",
       "clear": "Clear",
       "export": "Export"
+    },
+    "config": {
+      "title": "Log Configuration",
+      "console": "Console",
+      "file": "File",
+      "save": "Save",
+      "reset": "Reset",
+      "saved": "Log configuration updated",
+      "saveFailed": "Failed to save log configuration"
     }
   },
   "timezone": {

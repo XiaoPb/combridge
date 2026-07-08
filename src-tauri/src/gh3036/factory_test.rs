@@ -30,14 +30,12 @@ use crate::service::EventBus;
 
 pub struct FactoryTestManager {
     config_dir: Mutex<PathBuf>,
-    status: Mutex<FactoryTestStatus>,
-    current_step: Mutex<FactoryTestStep>,
-    result: Mutex<Option<FactoryTestResult>>,
+    status: Arc<Mutex<FactoryTestStatus>>,
+    current_step: Arc<Mutex<FactoryTestStep>>,
+    result: Arc<Mutex<Option<FactoryTestResult>>>,
     running: Arc<AtomicBool>,
     event_bus: Arc<EventBus>,
     thread_handle: Mutex<Option<thread::JoinHandle<()>>>,
-    status_clone: Arc<Mutex<FactoryTestStatus>>,
-    result_clone: Arc<Mutex<Option<FactoryTestResult>>>,
     threshold_config: Mutex<Option<FactoryThresholdConfig>>,
     evaluation_result: Arc<Mutex<Option<FactoryEvaluationResult>>>,
 }
@@ -56,14 +54,12 @@ impl FactoryTestManager {
 
         Self {
             config_dir: Mutex::new(config_dir),
-            status: Mutex::new(FactoryTestStatus::Idle),
-            current_step: Mutex::new(FactoryTestStep::Idle),
-            result: Mutex::new(None),
+            status: Arc::new(Mutex::new(FactoryTestStatus::Idle)),
+            current_step: Arc::new(Mutex::new(FactoryTestStep::Idle)),
+            result: Arc::new(Mutex::new(None)),
             running: Arc::new(AtomicBool::new(false)),
             event_bus,
             thread_handle: Mutex::new(None),
-            status_clone: Arc::new(Mutex::new(FactoryTestStatus::Idle)),
-            result_clone: Arc::new(Mutex::new(None)),
             threshold_config: Mutex::new(None),
             evaluation_result: Arc::new(Mutex::new(None)),
         }
@@ -135,7 +131,7 @@ impl FactoryTestManager {
     }
 
     pub fn get_result(&self) -> Option<FactoryTestResult> {
-        self.result_clone.lock().clone()
+        self.result.lock().clone()
     }
 
     pub fn is_running(&self) -> bool {
@@ -288,10 +284,6 @@ impl FactoryTestManager {
             *status = FactoryTestStatus::Running;
         }
         {
-            let mut status = self.status_clone.lock();
-            *status = FactoryTestStatus::Running;
-        }
-        {
             let mut current_step = self.current_step.lock();
             *current_step = FactoryTestStep::Prepare;
         }
@@ -310,8 +302,9 @@ impl FactoryTestManager {
         let running = self.running.clone();
         let event_bus = self.event_bus.clone();
         let config_dir = self.config_dir.lock().clone();
-        let status_clone = self.status_clone.clone();
-        let result_clone = self.result_clone.clone();
+        let status_state = self.status.clone();
+        let current_step_state = self.current_step.clone();
+        let result_state = self.result.clone();
         let manager = gh3036_manager;
         let threshold_config = self.threshold_config.lock().clone();
         let evaluation_result_clone = self.evaluation_result.clone();
@@ -371,6 +364,7 @@ impl FactoryTestManager {
                     break;
                 }
 
+                Self::set_state(&status_state, &current_step_state, FactoryTestStatus::Running, *step);
                 Self::publish_progress_static(
                     &event_bus,
                     *step,
@@ -392,6 +386,7 @@ impl FactoryTestManager {
                         if let Some(step_result) = step_result_opt {
                             if !step_result.success {
                                 test_result.overall_result = "FAIL".to_string();
+                                Self::set_state(&status_state, &current_step_state, FactoryTestStatus::Failed, *step);
                                 Self::publish_progress_static(
                                     &event_bus,
                                     *step,
@@ -407,6 +402,7 @@ impl FactoryTestManager {
                     Err(e) => {
                         error!("[FactoryTest] 步骤 {:?} 执行失败: {}", step, e);
                         test_result.overall_result = "FAIL".to_string();
+                        Self::set_state(&status_state, &current_step_state, FactoryTestStatus::Failed, *step);
                         Self::publish_progress_static(
                             &event_bus,
                             *step,
@@ -428,10 +424,12 @@ impl FactoryTestManager {
                 );
 
                 if *step == FactoryTestStep::EnvironmentSwitch {
-                    {
-                        let mut status = status_clone.lock();
-                        *status = FactoryTestStatus::WaitingForEnvironmentSwitch;
-                    }
+                    Self::set_state(
+                        &status_state,
+                        &current_step_state,
+                        FactoryTestStatus::WaitingForEnvironmentSwitch,
+                        FactoryTestStep::EnvironmentSwitch,
+                    );
                     Self::publish_progress_static(
                         &event_bus,
                         FactoryTestStep::EnvironmentSwitch,
@@ -442,7 +440,7 @@ impl FactoryTestManager {
 
                     while running.load(Ordering::SeqCst) {
                         thread::sleep(Duration::from_millis(100));
-                        let current_status = *status_clone.lock();
+                        let current_status = *status_state.lock();
                         if current_status == FactoryTestStatus::Running {
                             break;
                         }
@@ -501,14 +499,15 @@ impl FactoryTestManager {
                 }
 
                 {
-                    let mut result = result_clone.lock();
+                    Self::set_state(
+                        &status_state,
+                        &current_step_state,
+                        FactoryTestStatus::Completed,
+                        FactoryTestStep::Completed,
+                    );
+                    let mut result = result_state.lock();
                     *result = Some(test_result);
                 }
-            }
-
-            {
-                let mut status = status_clone.lock();
-                *status = FactoryTestStatus::Idle;
             }
 
             running.store(false, Ordering::SeqCst);
@@ -534,8 +533,8 @@ impl FactoryTestManager {
             *status = FactoryTestStatus::Stopped;
         }
         {
-            let mut status = self.status_clone.lock();
-            *status = FactoryTestStatus::Stopped;
+            let mut current_step = self.current_step.lock();
+            *current_step = FactoryTestStep::Idle;
         }
 
         self.publish_progress(
@@ -554,7 +553,7 @@ impl FactoryTestManager {
     }
 
     pub fn continue_test(&self) -> Result<(), String> {
-        let current_status = *self.status_clone.lock();
+        let current_status = *self.status.lock();
         if current_status != FactoryTestStatus::WaitingForEnvironmentSwitch {
             return Err("当前不在等待环境切换状态".to_string());
         }
@@ -564,8 +563,8 @@ impl FactoryTestManager {
             *status = FactoryTestStatus::Running;
         }
         {
-            let mut status = self.status_clone.lock();
-            *status = FactoryTestStatus::Running;
+            let mut current_step = self.current_step.lock();
+            *current_step = FactoryTestStep::Lplctr;
         }
 
         self.publish_progress(
@@ -1496,6 +1495,16 @@ impl FactoryTestManager {
         message: &str,
     ) {
         Self::publish_progress_static(&self.event_bus, step, status, progress, message);
+    }
+
+    fn set_state(
+        status_state: &Arc<Mutex<FactoryTestStatus>>,
+        current_step_state: &Arc<Mutex<FactoryTestStep>>,
+        status: FactoryTestStatus,
+        step: FactoryTestStep,
+    ) {
+        *status_state.lock() = status;
+        *current_step_state.lock() = step;
     }
 
     fn publish_progress_static(

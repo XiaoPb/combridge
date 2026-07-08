@@ -406,7 +406,7 @@ impl FrameBuilder {
         secure: bool,
         invoke_idx: u8,
     ) -> Vec<Vec<u8>> {
-        let max_payload = Self::calculate_max_payload(key, secure, true);
+        let max_payload = Self::calculate_max_payload(key, secure, false);
 
         if data.len() <= max_payload {
             let frame = self.build_frame(key, data, secure, true, invoke_idx, 0);
@@ -729,6 +729,29 @@ mod tests {
         let frames = builder.build_frames("G", &data, false);
 
         assert!(frames.len() > 1);
+    }
+
+    #[test]
+    fn test_build_frames_never_exceed_frame_size() {
+        let mut builder = FrameBuilder::new();
+        let data: Vec<u8> = (0..=255u8).cycle().take(302).collect();
+
+        let frames = builder.build_frames_with_invoke_idx(
+            "GH3X_RegsListWriteCmd",
+            &data,
+            true,
+            0x0A,
+        );
+
+        assert!(frames.len() > 1);
+        for frame in frames {
+            assert!(
+                frame.len() <= GHRPC_FRAME_SIZE,
+                "frame length {} exceeds {}",
+                frame.len(),
+                GHRPC_FRAME_SIZE
+            );
+        }
     }
 
     #[test]

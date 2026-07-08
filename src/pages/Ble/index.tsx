@@ -95,6 +95,7 @@ const BlePage: React.FC = () => {
   const logContainerRefs = useRef<Record<string, TextAreaRef>>({});
   const lastLogCountRef = useRef<Record<string, number>>({});
   const discoveringDevicesRef = useRef<Set<string>>(new Set());
+  const autoSubscribedRef = useRef<Record<string, Set<string>>>({});
 
   useEffect(() => {
     loadPreferences()
@@ -108,6 +109,66 @@ const BlePage: React.FC = () => {
   useEffect(() => {
     serialApi.listPorts().then(setPorts).catch(console.error);
   }, [setPorts]);
+
+  const addLogToDeviceCallback = useCallback((deviceId: string, entry: Omit<DeviceLogEntry, 'id'>) => {
+    addDeviceLog(deviceId, { ...entry, id: `${Date.now()}-${Math.random()}` });
+  }, [addDeviceLog]);
+
+  const autoSubscribeNotifyCharacteristics = useCallback(
+    async (deviceId: string, characteristics: BleCharacteristic[]) => {
+      const notifyCharacteristics = characteristics.filter(
+        (char) => char.properties.notify || char.properties.indicate
+      );
+      if (notifyCharacteristics.length === 0) return;
+
+      const subscribed = autoSubscribedRef.current[deviceId] ?? new Set<string>();
+      autoSubscribedRef.current[deviceId] = subscribed;
+
+      const successUuids: string[] = [];
+      for (const char of notifyCharacteristics) {
+        if (char.subscribed || subscribed.has(char.uuid)) {
+          successUuids.push(char.uuid);
+          continue;
+        }
+
+        try {
+          await bleApi.subscribeBleNotify(deviceId, char.uuid);
+          subscribed.add(char.uuid);
+          successUuids.push(char.uuid);
+          addLogToDeviceCallback(deviceId, {
+            timestamp: Date.now(),
+            direction: 'SUBSCRIBE',
+            text: '自动订阅 notify',
+            characteristicUuid: char.uuid,
+          });
+        } catch (err) {
+          console.warn('[BlePage] auto subscribe notify failed:', char.uuid, err);
+          addLogToDeviceCallback(deviceId, {
+            timestamp: Date.now(),
+            direction: 'SUBSCRIBE',
+            text: '自动订阅 notify 失败',
+            characteristicUuid: char.uuid,
+          });
+        }
+      }
+
+      if (successUuids.length === 0) return;
+
+      const successSet = new Set(successUuids);
+      updateDeviceTab(deviceId, {
+        characteristics: characteristics.map((char) =>
+          successSet.has(char.uuid) ? { ...char, subscribed: true } : char
+        ),
+        subscribedUuids: [
+          ...new Set([
+            ...(useBleStore.getState().deviceTabs[deviceId]?.subscribedUuids ?? []),
+            ...successUuids,
+          ]),
+        ],
+      });
+    },
+    [addLogToDeviceCallback, updateDeviceTab]
+  );
 
   useEffect(() => {
     if (!preferencesLoaded) return;
@@ -212,12 +273,14 @@ const BlePage: React.FC = () => {
           discoveringServices: false,
           subscribedUuids,
         });
+
+        void autoSubscribeNotifyCharacteristics(currentDevice, allCharacteristics);
       })
       .catch(() => {
         discoveringDevicesRef.current.delete(currentDevice);
         updateDeviceTab(currentDevice, { discoveringServices: false });
       });
-  }, [currentDevice, connections, discoverServices, deviceTabs, setDeviceTabs, updateDeviceTab]);
+  }, [currentDevice, connections, discoverServices, deviceTabs, setDeviceTabs, updateDeviceTab, autoSubscribeNotifyCharacteristics]);
 
   useEffect(() => {
     if (!currentDevice || services.length === 0) return;
@@ -238,10 +301,6 @@ const BlePage: React.FC = () => {
 
   const handleSendAtCommand = (_command: string) => {
   };
-
-  const addLogToDeviceCallback = useCallback((deviceId: string, entry: Omit<DeviceLogEntry, 'id'>) => {
-    addDeviceLog(deviceId, { ...entry, id: `${Date.now()}-${Math.random()}` });
-  }, [addDeviceLog]);
 
   useEffect(() => {
     if (!notifications.length || !currentDevice) return;
@@ -302,6 +361,7 @@ const BlePage: React.FC = () => {
       // error already handled by hook
     }
     removeDeviceTab(deviceId);
+    delete autoSubscribedRef.current[deviceId];
     if (currentDevice === deviceId) {
       setCurrentDevice(null);
     }
@@ -312,11 +372,12 @@ const BlePage: React.FC = () => {
       try {
         const charList = await discoverCharacteristics(serviceUuid, deviceId);
         updateDeviceTab(deviceId, { characteristics: charList || [] });
+        void autoSubscribeNotifyCharacteristics(deviceId, charList || []);
       } catch (err) {
         console.error(t('message.discoverFailed'), err);
       }
     },
-    [discoverCharacteristics, updateDeviceTab]
+    [discoverCharacteristics, updateDeviceTab, autoSubscribeNotifyCharacteristics, t]
   );
 
   const handleCharacteristicSelectForDevice = useCallback(

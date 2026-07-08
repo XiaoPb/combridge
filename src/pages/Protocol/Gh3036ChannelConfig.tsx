@@ -3,8 +3,10 @@ import { Select, Switch, Input, Button, Space, Typography, message, Row, Col, th
 import { FolderOpenOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
+import { useBleStore } from '../../stores/bleStore';
 import { useConnectedDevices } from '../../hooks/useConnectedDevices';
 import { open } from '@tauri-apps/plugin-dialog';
+import type { BleCharacteristic } from '../../types';
 
 const { Text } = Typography;
 
@@ -20,6 +22,8 @@ const Gh3036ChannelConfig: React.FC = () => {
     configureRxChannel,
     updateCsvConfig,
   } = useGh3036Store();
+  const currentBleDevice = useBleStore((state) => state.currentDevice);
+  const bleDeviceTabs = useBleStore((state) => state.deviceTabs);
   const connectedDevices = useConnectedDevices();
 
   const [csvEnabled, setCsvEnabled] = useState(csvConfig.enabled);
@@ -41,6 +45,57 @@ const Gh3036ChannelConfig: React.FC = () => {
   const bleOptions = connectedDevices
     .filter((d) => d.type === 'ble')
     .map((d) => ({ label: d.name, value: d.id }));
+
+  const preferCharacteristic = (
+    characteristics: BleCharacteristic[],
+    preferredUuidPart: string,
+    predicate: (char: BleCharacteristic) => boolean
+  ) => {
+    const candidates = characteristics.filter(predicate);
+    return (
+      candidates.find((char) => char.uuid.toLowerCase().includes(preferredUuidPart)) ??
+      candidates[0]
+    );
+  };
+
+  useEffect(() => {
+    if (!currentBleDevice || channelConfig.connectionType !== 'ble') return;
+
+    const tab = bleDeviceTabs[currentBleDevice];
+    const characteristics = tab?.characteristics ?? [];
+    const txChar = preferCharacteristic(
+      characteristics,
+      '00000004',
+      (char) => char.properties.write || char.properties.writeWithoutResponse
+    );
+    const rxChar = preferCharacteristic(
+      characteristics,
+      '00000003',
+      (char) => char.properties.notify || char.properties.indicate
+    );
+
+    const nextConfig = {
+      bleDevice: currentBleDevice,
+      txChar: txChar?.uuid ?? channelConfig.txChar,
+      rxChar: rxChar?.uuid ?? channelConfig.rxChar,
+    };
+
+    if (
+      nextConfig.bleDevice !== channelConfig.bleDevice ||
+      nextConfig.txChar !== channelConfig.txChar ||
+      nextConfig.rxChar !== channelConfig.rxChar
+    ) {
+      void updateChannelConfig(nextConfig);
+    }
+  }, [
+    currentBleDevice,
+    bleDeviceTabs,
+    channelConfig.connectionType,
+    channelConfig.bleDevice,
+    channelConfig.txChar,
+    channelConfig.rxChar,
+    updateChannelConfig,
+  ]);
 
   const handleSaveSerialChannel = async () => {
     if (!channelConfig.serialPort) {

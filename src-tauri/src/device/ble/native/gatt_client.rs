@@ -39,6 +39,22 @@ fn format_ble_log(mac: &str, uuid: &str, direction: &str, data: &[u8]) -> String
     )
 }
 
+fn format_hex_preview(data: &[u8]) -> String {
+    const LIMIT: usize = 512;
+    let shown = data.len().min(LIMIT);
+    let mut output = String::new();
+    for (idx, byte) in data.iter().take(shown).enumerate() {
+        if idx > 0 {
+            output.push(' ');
+        }
+        output.push_str(&format!("{:02X}", byte));
+    }
+    if data.len() > shown {
+        output.push_str(&format!(" ...(+{} bytes)", data.len() - shown));
+    }
+    output
+}
+
 struct CharacteristicCache {
     tx_buffer: RingBufferRef,
     rx_buffer: RingBufferRef,
@@ -514,6 +530,13 @@ impl GattClient {
         let char = self.find_characteristic(char_uuid).await?;
 
         info!("{}", format_ble_log(&self.address, char_uuid, "W", data));
+        tracing::debug!(
+            "[BLE][TX_RAW] device={}, char={}, len={}, bytes={}",
+            extract_short_mac(&self.address),
+            extract_short_uuid(char_uuid),
+            data.len(),
+            format_hex_preview(data)
+        );
 
         {
             let caches = self
@@ -562,6 +585,13 @@ impl GattClient {
         let char = self.find_characteristic(char_uuid).await?;
 
         info!("{}", format_ble_log(&self.address, char_uuid, "W", data));
+        tracing::debug!(
+            "[BLE][TX_RAW] device={}, char={}, without_response=true, len={}, bytes={}",
+            extract_short_mac(&self.address),
+            extract_short_uuid(char_uuid),
+            data.len(),
+            format_hex_preview(data)
+        );
 
         {
             let caches = self
@@ -658,6 +688,13 @@ impl GattClient {
                                     error!("写入通知缓存失败: {}", e);
                                 }
                                 info!("{}", format_ble_log(&device_id, &uuid, "N", &data));
+                                tracing::debug!(
+                                    "[BLE][RX_RAW] device={}, char={}, len={}, bytes={}",
+                                    extract_short_mac(&device_id),
+                                    extract_short_uuid(&uuid),
+                                    data.len(),
+                                    format_hex_preview(&data)
+                                );
                                 callback(&device_id, &uuid, &data);
                             }
                             Err(e) => {

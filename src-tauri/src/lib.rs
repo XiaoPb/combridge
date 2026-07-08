@@ -34,14 +34,7 @@ fn init_logger() {
 
     let log_path = log_dir.join(&log_filename);
 
-    let config = service::logger::LoggerConfig {
-        level: "info".to_string(),
-        console_enabled: true,
-        file_enabled: true,
-        file_path: log_path.clone(),
-        max_file_size: 10 * 1024 * 1024,
-        max_files: 10,
-    };
+    let config = commands::system::load_initial_logger_config(log_path.clone());
 
     if let Err(e) = service::logger::LoggerService::init(config) {
         eprintln!("日志系统初始化失败: {}", e);

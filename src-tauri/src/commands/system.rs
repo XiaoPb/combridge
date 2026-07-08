@@ -8,7 +8,7 @@ use tauri::Manager;
 use tracing::{info, warn};
 
 use crate::error::{ComBridgeError, Result};
-use crate::service::logger::{get_timezone, set_timezone};
+use crate::service::logger::{get_timezone, set_timezone, LogModuleConfig, LoggerConfig, LoggerService};
 
 static SYSTEM: Lazy<Mutex<System>> = Lazy::new(|| {
     let mut sys = System::new_all();
@@ -62,12 +62,21 @@ pub struct DiskUsage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LogConfig {
     pub level: String,
+    #[serde(default)]
     pub max_files: usize,
+    #[serde(default)]
     pub max_size_mb: u64,
+    #[serde(default)]
     pub console_enabled: bool,
+    #[serde(default)]
     pub file_enabled: bool,
+    #[serde(default)]
+    pub file_path: String,
+    #[serde(default = "default_log_module_config")]
+    pub modules: Vec<LogModuleConfig>,
 }
 
 impl Default for LogConfig {
@@ -78,6 +87,116 @@ impl Default for LogConfig {
             max_size_mb: 10,
             console_enabled: true,
             file_enabled: true,
+            file_path: default_log_path().to_string_lossy().to_string(),
+            modules: default_log_module_config(),
+        }
+    }
+}
+
+fn default_log_module_config() -> Vec<LogModuleConfig> {
+    LoggerConfig::default().modules
+}
+
+fn default_log_path() -> std::path::PathBuf {
+    let exe_path = std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let exe_dir = exe_path.parent().unwrap_or(std::path::Path::new("."));
+    exe_dir.join("log").join("combridge.log")
+}
+
+fn log_config_path() -> std::path::PathBuf {
+    dirs::data_local_dir()
+        .or_else(|| dirs::data_dir())
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("combridge")
+        .join("log_config.json")
+}
+
+fn validate_log_level(level: &str) -> Result<()> {
+    let valid_levels = ["trace", "debug", "info", "warn", "error"];
+    if !valid_levels.contains(&level.to_lowercase().as_str()) {
+        return Err(ComBridgeError::config(format!(
+            "无效的日志级别: {}，有效值为: {:?}",
+            level, valid_levels
+        )));
+    }
+    Ok(())
+}
+
+fn normalize_log_config(mut config: LogConfig) -> Result<LogConfig> {
+    validate_log_level(&config.level)?;
+    for module in &config.modules {
+        validate_log_level(&module.level)?;
+    }
+
+    if config.max_files == 0 {
+        config.max_files = 10;
+    }
+    if config.max_size_mb == 0 {
+        config.max_size_mb = 10;
+    }
+    if config.file_path.trim().is_empty() {
+        config.file_path = default_log_path().to_string_lossy().to_string();
+    }
+    if config.modules.is_empty() {
+        config.modules = default_log_module_config();
+    }
+
+    Ok(config)
+}
+
+fn to_logger_config(config: &LogConfig) -> LoggerConfig {
+    LoggerConfig {
+        level: config.level.clone(),
+        console_enabled: config.console_enabled,
+        file_enabled: config.file_enabled,
+        file_path: std::path::PathBuf::from(&config.file_path),
+        max_file_size: config.max_size_mb * 1024 * 1024,
+        max_files: config.max_files,
+        modules: config.modules.clone(),
+    }
+}
+
+fn from_logger_config(config: LoggerConfig) -> LogConfig {
+    LogConfig {
+        level: config.level,
+        console_enabled: config.console_enabled,
+        file_enabled: config.file_enabled,
+        file_path: config.file_path.to_string_lossy().to_string(),
+        max_size_mb: (config.max_file_size / 1024 / 1024).max(1),
+        max_files: config.max_files,
+        modules: config.modules,
+    }
+}
+
+fn load_saved_log_config() -> Result<Option<LogConfig>> {
+    let path = log_config_path();
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let content = std::fs::read_to_string(&path)?;
+    let config = serde_json::from_str::<LogConfig>(&content)?;
+    Ok(Some(normalize_log_config(config)?))
+}
+
+fn save_log_config(config: &LogConfig) -> Result<()> {
+    let path = log_config_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let content = serde_json::to_string_pretty(config)?;
+    std::fs::write(path, content)?;
+    Ok(())
+}
+
+pub fn load_initial_logger_config(default_file_path: std::path::PathBuf) -> LoggerConfig {
+    match load_saved_log_config() {
+        Ok(Some(config)) => to_logger_config(&config),
+        Ok(None) | Err(_) => {
+            let mut config = LoggerConfig::default();
+            config.file_path = default_file_path;
+            config.max_files = 10;
+            config
         }
     }
 }
@@ -164,20 +283,27 @@ pub async fn get_system_status() -> Result<SystemStatus> {
 
 #[tauri::command]
 pub async fn configure_log(config: LogConfig) -> Result<()> {
-    let valid_levels = ["trace", "debug", "info", "warn", "error"];
-    if !valid_levels.contains(&config.level.to_lowercase().as_str()) {
-        return Err(ComBridgeError::config(format!(
-            "无效的日志级别: {}，有效值为: {:?}",
-            config.level, valid_levels
-        )));
-    }
+    let config = normalize_log_config(config)?;
+    let logger_config = to_logger_config(&config);
 
+    let logger = LoggerService::global()
+        .ok_or_else(|| ComBridgeError::config("日志系统尚未初始化"))?;
+    logger
+        .update_config(logger_config)
+        .map_err(|e| ComBridgeError::config(format!("更新日志配置失败: {}", e)))?;
+
+    save_log_config(&config)?;
+    info!("日志配置已更新: level={}, modules={}", config.level, config.modules.len());
     Ok(())
 }
 
 #[tauri::command]
 pub async fn get_log_config() -> Result<LogConfig> {
-    Ok(LogConfig::default())
+    if let Some(logger) = LoggerService::global() {
+        return Ok(from_logger_config(logger.config()));
+    }
+
+    load_saved_log_config().map(|config| config.unwrap_or_default())
 }
 
 #[tauri::command]
@@ -455,5 +581,37 @@ pub async fn close_devtools(app: tauri::AppHandle) -> Result<()> {
         Ok(())
     } else {
         Err(ComBridgeError::io("未找到主窗口".to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_log_config_fills_defaults() {
+        let config = LogConfig {
+            level: "debug".to_string(),
+            max_files: 0,
+            max_size_mb: 0,
+            console_enabled: true,
+            file_enabled: true,
+            file_path: String::new(),
+            modules: Vec::new(),
+        };
+
+        let normalized = normalize_log_config(config).unwrap();
+        assert_eq!(normalized.max_files, 10);
+        assert_eq!(normalized.max_size_mb, 10);
+        assert!(!normalized.file_path.is_empty());
+        assert!(normalized.modules.iter().any(|module| module.name == "rpc-core"));
+    }
+
+    #[test]
+    fn test_normalize_log_config_rejects_bad_module_level() {
+        let mut config = LogConfig::default();
+        config.modules = vec![LogModuleConfig::new("rpc-core", true, "verbose")];
+
+        assert!(normalize_log_config(config).is_err());
     }
 }

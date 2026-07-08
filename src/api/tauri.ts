@@ -201,12 +201,12 @@ export const systemApi = {
     await invoke<void>('show_in_folder', { path });
   },
 
-  async configureLog(level: string, filePath?: string): Promise<void> {
-    await invoke<void>('configure_log', { level, filePath });
+  async configureLog(config: LogConfig): Promise<void> {
+    await invoke<void>('configure_log', { config });
   },
 
-  async getLogConfig(): Promise<{ level: string; filePath: string }> {
-    return invoke<{ level: string; filePath: string }>('get_log_config');
+  async getLogConfig(): Promise<LogConfig> {
+    return invoke<LogConfig>('get_log_config');
   },
 
   async setTimezone(timezone: string): Promise<void> {
@@ -217,6 +217,24 @@ export const systemApi = {
     return invoke<string>('get_timezone_config');
   },
 };
+
+export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'trace';
+
+export interface LogModuleConfig {
+  name: string;
+  enabled: boolean;
+  level: LogLevel;
+}
+
+export interface LogConfig {
+  level: LogLevel;
+  maxFiles: number;
+  maxSizeMb: number;
+  consoleEnabled: boolean;
+  fileEnabled: boolean;
+  filePath: string;
+  modules: LogModuleConfig[];
+}
 
 export const protocolApi = {
   async loadProtocol(pluginId: string, path: string): Promise<PluginInfo> {

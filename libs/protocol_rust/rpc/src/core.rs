@@ -19,6 +19,7 @@ use crate::frame::{FrameBuilder, FrameParser, ParseResult};
 use crate::log::{LogCallback, NullLogger};
 
 const LAST_FRAME_FIX_INDEX: u8 = 255;
+const HEX_PREVIEW_LIMIT: usize = 512;
 
 #[derive(Debug, Clone)]
 pub struct RpcConfig {
@@ -228,6 +229,43 @@ impl RpcCore {
         Ok(())
     }
 
+    fn hex_bytes(data: &[u8]) -> String {
+        Self::hex_bytes_with_limit(data, HEX_PREVIEW_LIMIT)
+    }
+
+    fn hex_bytes_with_limit(data: &[u8], limit: usize) -> String {
+        let shown = data.len().min(limit);
+        let mut output = String::new();
+        for (idx, byte) in data.iter().take(shown).enumerate() {
+            if idx > 0 {
+                output.push(' ');
+            }
+            output.push_str(&format!("{:02X}", byte));
+        }
+        if data.len() > shown {
+            output.push_str(&format!(" ...(+{} bytes)", data.len() - shown));
+        }
+        output
+    }
+
+    fn log_tx_frames(&self, op: &str, key: &str, frames: &[Vec<u8>]) {
+        for (idx, frame) in frames.iter().enumerate() {
+            self.logger.log(
+                crate::types::LogLevel::Debug,
+                "rpc_core",
+                &format!(
+                    "[RpcCore][TX_FRAME] op={}, key={}, index={}/{}, len={}, bytes={}",
+                    op,
+                    key,
+                    idx + 1,
+                    frames.len(),
+                    frame.len(),
+                    Self::hex_bytes(frame)
+                ),
+            );
+        }
+    }
+
     pub async fn unregister(&self, key: &str) -> bool {
         let mut nodes = self.static_nodes.write().await;
         nodes.remove(key).is_some()
@@ -254,6 +292,7 @@ impl RpcCore {
             let mut builder = FrameBuilder::new();
             builder.build_frames(key, data, false)
         };
+        self.log_tx_frames("PUBLISH", key, &frames);
 
         let send_fn = self.send_function.lock().await;
         if let Some(ref send) = *send_fn {
@@ -304,6 +343,7 @@ impl RpcCore {
             let mut builder = FrameBuilder::new();
             builder.build_frames_with_invoke_idx(key, data, true, invoke_idx)
         };
+        self.log_tx_frames("SEND", key, &frames);
 
         self.logger.log(
             crate::types::LogLevel::Debug,
@@ -424,6 +464,7 @@ impl RpcCore {
             let mut builder = FrameBuilder::new();
             builder.build_frames_with_invoke_idx(key, data, false, invoke_idx)
         };
+        self.log_tx_frames("CALL", key, &frames);
 
         self.logger.log(
             crate::types::LogLevel::Debug,
@@ -545,6 +586,7 @@ impl RpcCore {
             let mut builder = FrameBuilder::new();
             builder.build_frames_with_invoke_idx(key, data, true, invoke_idx)
         };
+        self.log_tx_frames("SALL", key, &frames);
 
         self.logger.log(
             crate::types::LogLevel::Debug,
@@ -634,11 +676,35 @@ impl RpcCore {
     }
 
     pub async fn process(&self, data: &[u8]) -> Vec<Result<ParseResult, RpcError>> {
+        self.logger.log(
+            crate::types::LogLevel::Debug,
+            "rpc_core",
+            &format!(
+                "[RpcCore][RX_RAW] len={}, bytes={}",
+                data.len(),
+                Self::hex_bytes(data)
+            ),
+        );
+
         let mut parser = self.frame_parser.lock().await;
         let results = parser.process(data);
 
         for result in &results {
             if let Ok(parse_result) = result {
+                self.logger.log(
+                    crate::types::LogLevel::Debug,
+                    "rpc_core",
+                    &format!(
+                        "[RpcCore][RX_FRAME] key={}, secure={}, fin={}, invoke_idx={}, frame_idx={}, param_len={}, param={}",
+                        parse_result.key,
+                        parse_result.is_secure,
+                        parse_result.is_fin,
+                        parse_result.invoke_idx,
+                        parse_result.frame_idx,
+                        parse_result.param.len(),
+                        Self::hex_bytes(&parse_result.param)
+                    ),
+                );
                 if let Err(e) = self.handle_parse_result(parse_result.clone()).await {
                     self.logger.log(
                         crate::types::LogLevel::Error,
@@ -795,6 +861,16 @@ impl RpcCore {
             &format!("[RECV] Complete frame: key={}, total_len={}, data={:02X?}",
                 key, all_data.len(), all_data),
         );
+        self.logger.log(
+            crate::types::LogLevel::Debug,
+            "rpc_core",
+            &format!(
+                "[RpcCore][RX_COMPLETE] key={}, total_len={}, data={}",
+                key,
+                all_data.len(),
+                Self::hex_bytes(&all_data)
+            ),
+        );
 
         let nodes = self.static_nodes.read().await;
         if let Some(node) = nodes.get(key) {
@@ -873,6 +949,10 @@ impl RpcCore {
     pub fn get_config(&self) -> &RpcConfig {
         &self.config
     }
+}
+
+pub fn format_hex_preview(data: &[u8], limit: usize) -> String {
+    RpcCore::hex_bytes_with_limit(data, limit)
 }
 
 impl Default for RpcCore {
@@ -1005,5 +1085,11 @@ mod tests {
         assert_eq!(config.timeout_ms, DEFAULT_TIMEOUT_MS);
         assert_eq!(config.retry_count, MAX_RETRY_COUNT);
         assert_eq!(config.frame_size, GHRPC_FRAME_SIZE);
+    }
+
+    #[test]
+    fn test_format_hex_preview_truncates() {
+        let data = [0xAA, 0x11, 0x22, 0x33];
+        assert_eq!(format_hex_preview(&data, 3), "AA 11 22 ...(+1 bytes)");
     }
 }

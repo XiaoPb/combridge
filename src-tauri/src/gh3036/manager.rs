@@ -590,12 +590,22 @@ impl Gh3036Manager {
         struct TauriLogger;
         impl LogCallback for TauriLogger {
             fn log(&self, level: LogLevel, context: &str, message: &str) {
-                match level {
-                    LogLevel::Trace => tracing::trace!("[{}] {}", context, message),
-                    LogLevel::Debug => tracing::debug!("[{}] {}", context, message),
-                    LogLevel::Info => tracing::info!("[{}] {}", context, message),
-                    LogLevel::Warn => tracing::warn!("[{}] {}", context, message),
-                    LogLevel::Error => tracing::error!("[{}] {}", context, message),
+                if context == "rpc_core" || context == "RpcCore" {
+                    match level {
+                        LogLevel::Trace => tracing::trace!(target: "rpc_core", "[{}] {}", context, message),
+                        LogLevel::Debug => tracing::debug!(target: "rpc_core", "[{}] {}", context, message),
+                        LogLevel::Info => tracing::info!(target: "rpc_core", "[{}] {}", context, message),
+                        LogLevel::Warn => tracing::warn!(target: "rpc_core", "[{}] {}", context, message),
+                        LogLevel::Error => tracing::error!(target: "rpc_core", "[{}] {}", context, message),
+                    }
+                } else {
+                    match level {
+                        LogLevel::Trace => tracing::trace!(target: "combridge_rust_lib::gh3036::rpc", "[{}] {}", context, message),
+                        LogLevel::Debug => tracing::debug!(target: "combridge_rust_lib::gh3036::rpc", "[{}] {}", context, message),
+                        LogLevel::Info => tracing::info!(target: "combridge_rust_lib::gh3036::rpc", "[{}] {}", context, message),
+                        LogLevel::Warn => tracing::warn!(target: "combridge_rust_lib::gh3036::rpc", "[{}] {}", context, message),
+                        LogLevel::Error => tracing::error!(target: "combridge_rust_lib::gh3036::rpc", "[{}] {}", context, message),
+                    }
                 }
             }
         }

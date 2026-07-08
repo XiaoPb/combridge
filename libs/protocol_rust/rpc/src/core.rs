@@ -928,7 +928,7 @@ mod tests {
     #[tokio::test]
     async fn test_publish_without_send_function() {
         let core = RpcCore::default();
-        let result = core.publish("test", &[1, 2, 3]).await;
+        let result = core.publish("test", "<u8*>", &[3, 0, 1, 2, 3]).await;
         assert!(result.is_ok());
     }
 

@@ -1019,7 +1019,7 @@ impl Gh3036Manager {
     }
 
     fn regs_list_write_transport() -> &'static str {
-        "call"
+        "send"
     }
 
     async fn execute_regs_list_write_cmd_async(
@@ -1048,7 +1048,7 @@ impl Gh3036Manager {
             data.extend_from_slice(&val.to_le_bytes());
         }
 
-        self.call_command(
+        self.send_command(
             KEY_GH3X_REGS_LIST_WRITE_CMD,
             FMT_GH3X_REGS_LIST_WRITE_CMD,
             &data,
@@ -1443,6 +1443,6 @@ mod tests {
 
     #[test]
     fn regs_list_write_uses_call_transport() {
-        assert_eq!(Gh3036Manager::regs_list_write_transport(), "call");
+        assert_eq!(Gh3036Manager::regs_list_write_transport(), "send");
     }
 }

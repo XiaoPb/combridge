@@ -376,7 +376,8 @@ impl HrRefMonitor {
         *self.state.lock() = HrRefMonitorState::Stopping;
         self.is_running.store(false, Ordering::SeqCst);
 
-        if let Some(address) = self.device_address.lock().take() {
+        let device_address = { self.device_address.lock().take() };
+        if let Some(address) = device_address {
             if let Err(e) = self
                 .ble_manager
                 .unsubscribe_notify(&address, HEART_RATE_MEASUREMENT_UUID)

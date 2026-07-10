@@ -195,7 +195,7 @@ impl AtParser {
         let content = line.strip_prefix("+RSSI:").unwrap_or("");
         let parts: Vec<&str> = content.split(',').collect();
 
-        if parts.len() >= 1 {
+        if !parts.is_empty() {
             let rssi_hex = parts[0].trim();
             if let Ok(rssi_byte) = u8::from_str_radix(rssi_hex, 16) {
                 let rssi = rssi_byte as i8 as i16;

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { SettingOutlined, LineChartOutlined, InfoCircleOutlined, ExperimentOutlined } from '@ant-design/icons';
+import { SettingOutlined, LineChartOutlined, InfoCircleOutlined, ExperimentOutlined, FileProtectOutlined } from '@ant-design/icons';
 import { usePageTabsStore } from '../../stores/pageTabsStore';
 import { useTranslation } from 'react-i18next';
 import { useMenuVisibilityStore } from '../../stores/menuVisibilityStore';
@@ -14,6 +14,7 @@ const Gh3036TitleTabs: React.FC = () => {
     { key: 'monitor', label: t('tabs.monitor'), icon: <LineChartOutlined /> },
     { key: 'version', label: t('tabs.version'), icon: <InfoCircleOutlined /> },
     { key: 'factory', label: t('tabs.factory'), icon: <ExperimentOutlined /> },
+    { key: 'threshold', label: t('tabs.threshold'), icon: <FileProtectOutlined /> },
   ] as const;
 
   const visibleTabs = tabs.filter((tab) => menuVisibility.home.gh3036.tabs[tab.key]);

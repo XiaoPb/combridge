@@ -30,18 +30,10 @@ pub struct BufferEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct ChannelBuffer {
     pub entries: VecDeque<BufferEntry>,
     pub total_bytes: usize,
-}
-
-impl Default for ChannelBuffer {
-    fn default() -> Self {
-        Self {
-            entries: VecDeque::new(),
-            total_bytes: 0,
-        }
-    }
 }
 
 impl ChannelBuffer {
@@ -531,6 +523,7 @@ impl HomeMenuVisibility {
                     ("monitor", true),
                     ("version", true),
                     ("factory", true),
+                    ("threshold", true),
                 ],
             ),
             protocol: MenuGroupVisibility::new(false, &[("editor", false), ("bind", false)]),

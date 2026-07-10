@@ -201,6 +201,14 @@ export const factoryTestApi = {
   async getEvaluationResult(): Promise<FactoryEvaluationResult | null> {
     return invoke<FactoryEvaluationResult | null>('gh3036_get_evaluation_result');
   },
+
+  async generateThresholdYaml(config: FactoryThresholdConfig): Promise<string> {
+    return invoke<string>('gh3036_generate_threshold_yaml', { config });
+  },
+
+  async validateThresholdYaml(yaml: string): Promise<ThresholdConfigValidation> {
+    return invoke<ThresholdConfigValidation>('gh3036_validate_threshold_yaml', { yaml });
+  },
 };
 
 export type { Gh3036FrameData };

@@ -138,7 +138,7 @@ impl ScriptLoader {
             })?;
 
             let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "lua") {
+            if path.extension().is_some_and(|ext| ext == "lua") {
                 scripts.push(path);
             }
         }

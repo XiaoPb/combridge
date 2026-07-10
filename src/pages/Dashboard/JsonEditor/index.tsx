@@ -4,6 +4,7 @@ import { PlusOutlined, DeleteOutlined, SaveOutlined, FileOutlined } from '@ant-d
 import { useTranslation } from 'react-i18next';
 import { useDashboardStore } from '../../../stores/dashboardStore';
 import { useTheme } from '../../../hooks';
+import { dashboardApi } from '../../../api/dashboard';
 import type { DashboardJsonConfig } from '../../../types/dashboard';
 import FrameConfigEditor from './FrameConfigEditor';
 import GroupEditor from './GroupEditor';
@@ -32,9 +33,7 @@ const JsonEditor: React.FC = () => {
 
   const loadJsonFiles = async () => {
     try {
-      const files = await import('../../../api/dashboard').then((m) =>
-        m.dashboardApi.getJsonFiles()
-      );
+      const files = await dashboardApi.getJsonFiles();
       setJsonFiles(files);
     } catch (error) {
       console.error('Failed to load JSON files:', error);
@@ -77,8 +76,7 @@ const JsonEditor: React.FC = () => {
       console.debug('[JsonEditor] Saving file:', selectedFile);
       console.debug('[JsonEditor] Config data:', JSON.stringify(jsonConfig, null, 2));
       
-      const api = await import('../../../api/dashboard');
-      await api.dashboardApi.saveJsonFile(selectedFile, jsonConfig);
+      await dashboardApi.saveJsonFile(selectedFile, jsonConfig);
       
       console.debug('[JsonEditor] Save successful');
       message.success(t('jsonEditor.saveSuccess') || '保存成功');
@@ -99,9 +97,7 @@ const JsonEditor: React.FC = () => {
       content: t('jsonEditor.deleteConfirmMessage') || '确定要删除此文件吗？',
       onOk: async () => {
         try {
-          await import('../../../api/dashboard').then((m) =>
-            m.dashboardApi.deleteJsonFile(selectedFile)
-          );
+          await dashboardApi.deleteJsonFile(selectedFile);
           setSelectedFile(null);
           loadJsonFiles();
           message.success(t('jsonEditor.deleteSuccess') || '删除成功');
@@ -115,9 +111,7 @@ const JsonEditor: React.FC = () => {
 
   const handleSelectFile = async (fileName: string) => {
     try {
-      const config = await import('../../../api/dashboard').then((m) =>
-        m.dashboardApi.loadJsonFile(fileName)
-      );
+      const config = await dashboardApi.loadJsonFile(fileName);
       setJsonConfig(config);
       setSelectedFile(fileName);
     } catch (error) {

@@ -8,7 +8,9 @@ use tauri::Manager;
 use tracing::{info, warn};
 
 use crate::error::{ComBridgeError, Result};
-use crate::service::logger::{get_timezone, set_timezone, LogModuleConfig, LoggerConfig, LoggerService};
+use crate::service::logger::{
+    get_timezone, set_timezone, LogModuleConfig, LoggerConfig, LoggerService,
+};
 
 static SYSTEM: Lazy<Mutex<System>> = Lazy::new(|| {
     let mut sys = System::new_all();
@@ -105,7 +107,7 @@ fn default_log_path() -> std::path::PathBuf {
 
 fn log_config_path() -> std::path::PathBuf {
     dirs::data_local_dir()
-        .or_else(|| dirs::data_dir())
+        .or_else(dirs::data_dir)
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("combridge")
         .join("log_config.json")
@@ -192,12 +194,11 @@ fn save_log_config(config: &LogConfig) -> Result<()> {
 pub fn load_initial_logger_config(default_file_path: std::path::PathBuf) -> LoggerConfig {
     match load_saved_log_config() {
         Ok(Some(config)) => to_logger_config(&config),
-        Ok(None) | Err(_) => {
-            let mut config = LoggerConfig::default();
-            config.file_path = default_file_path;
-            config.max_files = 10;
-            config
-        }
+        Ok(None) | Err(_) => LoggerConfig {
+            file_path: default_file_path,
+            max_files: 10,
+            ..LoggerConfig::default()
+        },
     }
 }
 
@@ -286,14 +287,18 @@ pub async fn configure_log(config: LogConfig) -> Result<()> {
     let config = normalize_log_config(config)?;
     let logger_config = to_logger_config(&config);
 
-    let logger = LoggerService::global()
-        .ok_or_else(|| ComBridgeError::config("日志系统尚未初始化"))?;
+    let logger =
+        LoggerService::global().ok_or_else(|| ComBridgeError::config("日志系统尚未初始化"))?;
     logger
         .update_config(logger_config)
         .map_err(|e| ComBridgeError::config(format!("更新日志配置失败: {}", e)))?;
 
     save_log_config(&config)?;
-    info!("日志配置已更新: level={}, modules={}", config.level, config.modules.len());
+    info!(
+        "日志配置已更新: level={}, modules={}",
+        config.level,
+        config.modules.len()
+    );
     Ok(())
 }
 
@@ -454,8 +459,8 @@ pub async fn get_window_status(app: tauri::AppHandle) -> Result<WindowStatus> {
         .outer_position()
         .map_err(|e| ComBridgeError::io(format!("获取窗口位置失败: {}", e)))?;
 
-    let width = (inner_size.width as f64 / scale_factor as f64) as u32;
-    let height = (inner_size.height as f64 / scale_factor as f64) as u32;
+    let width = (inner_size.width as f64 / scale_factor) as u32;
+    let height = (inner_size.height as f64 / scale_factor) as u32;
     let x = outer_position.x;
     let y = outer_position.y;
 
@@ -604,7 +609,10 @@ mod tests {
         assert_eq!(normalized.max_files, 10);
         assert_eq!(normalized.max_size_mb, 10);
         assert!(!normalized.file_path.is_empty());
-        assert!(normalized.modules.iter().any(|module| module.name == "rpc-core"));
+        assert!(normalized
+            .modules
+            .iter()
+            .any(|module| module.name == "rpc-core"));
     }
 
     #[test]

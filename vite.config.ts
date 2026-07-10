@@ -25,6 +25,7 @@ export default defineConfig(async () => ({
     target: ["es2020", "chrome83", "edge83", "firefox78", "safari14"],
     minify: "esbuild",
     cssMinify: true,
+    chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
         manualChunks: (id) => {

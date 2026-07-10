@@ -228,7 +228,7 @@ impl EventBus {
         });
         subscribers
             .entry(topic.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(Box::new(callback));
     }
 
@@ -242,7 +242,7 @@ impl EventBus {
         });
         subscribers
             .entry(topic.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(Box::new(callback));
     }
 

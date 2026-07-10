@@ -592,19 +592,39 @@ impl Gh3036Manager {
             fn log(&self, level: LogLevel, context: &str, message: &str) {
                 if context == "rpc_core" || context == "RpcCore" {
                     match level {
-                        LogLevel::Trace => tracing::trace!(target: "rpc_core", "[{}] {}", context, message),
-                        LogLevel::Debug => tracing::debug!(target: "rpc_core", "[{}] {}", context, message),
-                        LogLevel::Info => tracing::info!(target: "rpc_core", "[{}] {}", context, message),
-                        LogLevel::Warn => tracing::warn!(target: "rpc_core", "[{}] {}", context, message),
-                        LogLevel::Error => tracing::error!(target: "rpc_core", "[{}] {}", context, message),
+                        LogLevel::Trace => {
+                            tracing::trace!(target: "rpc_core", "[{}] {}", context, message)
+                        }
+                        LogLevel::Debug => {
+                            tracing::debug!(target: "rpc_core", "[{}] {}", context, message)
+                        }
+                        LogLevel::Info => {
+                            tracing::info!(target: "rpc_core", "[{}] {}", context, message)
+                        }
+                        LogLevel::Warn => {
+                            tracing::warn!(target: "rpc_core", "[{}] {}", context, message)
+                        }
+                        LogLevel::Error => {
+                            tracing::error!(target: "rpc_core", "[{}] {}", context, message)
+                        }
                     }
                 } else {
                     match level {
-                        LogLevel::Trace => tracing::trace!(target: "combridge_rust_lib::gh3036::rpc", "[{}] {}", context, message),
-                        LogLevel::Debug => tracing::debug!(target: "combridge_rust_lib::gh3036::rpc", "[{}] {}", context, message),
-                        LogLevel::Info => tracing::info!(target: "combridge_rust_lib::gh3036::rpc", "[{}] {}", context, message),
-                        LogLevel::Warn => tracing::warn!(target: "combridge_rust_lib::gh3036::rpc", "[{}] {}", context, message),
-                        LogLevel::Error => tracing::error!(target: "combridge_rust_lib::gh3036::rpc", "[{}] {}", context, message),
+                        LogLevel::Trace => {
+                            tracing::trace!(target: "combridge_rust_lib::gh3036::rpc", "[{}] {}", context, message)
+                        }
+                        LogLevel::Debug => {
+                            tracing::debug!(target: "combridge_rust_lib::gh3036::rpc", "[{}] {}", context, message)
+                        }
+                        LogLevel::Info => {
+                            tracing::info!(target: "combridge_rust_lib::gh3036::rpc", "[{}] {}", context, message)
+                        }
+                        LogLevel::Warn => {
+                            tracing::warn!(target: "combridge_rust_lib::gh3036::rpc", "[{}] {}", context, message)
+                        }
+                        LogLevel::Error => {
+                            tracing::error!(target: "combridge_rust_lib::gh3036::rpc", "[{}] {}", context, message)
+                        }
                     }
                 }
             }
@@ -912,7 +932,7 @@ impl Gh3036Manager {
             .filter_map(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16).ok())
             .collect();
 
-        if regs.is_empty() || regs.len() % 2 != 0 {
+        if regs.is_empty() || !regs.len().is_multiple_of(2) {
             return Err("寄存器数据格式错误，需要成对的地址和值".to_string());
         }
 

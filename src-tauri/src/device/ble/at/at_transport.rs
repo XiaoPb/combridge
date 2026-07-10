@@ -139,10 +139,10 @@ impl AtTransport {
                 let last = responses
                     .last()
                     .ok_or_else(|| ComBridgeError::ble("AT响应为空"))?;
-                if last == "OK" || last.starts_with("ERROR") || last.starts_with("+") {
-                    if last == "OK" || last.starts_with("ERROR") {
-                        break;
-                    }
+                if (last == "OK" || last.starts_with("ERROR") || last.starts_with("+"))
+                    && (last == "OK" || last.starts_with("ERROR"))
+                {
+                    break;
                 }
             }
         }

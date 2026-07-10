@@ -56,6 +56,7 @@ export const useBle = () => {
 
   const addLog = useLogStore((state) => state.addLog);
   const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scanRequestIdRef = useRef(0);
 
   const configure = useCallback(async (newMode: BleMode, port?: string) => {
     setError(null);
@@ -75,6 +76,8 @@ export const useBle = () => {
   }, [setError, setMode, setSerialPort, addLog]);
 
   const scanDevices = useCallback(async (options?: BleScanOptions) => {
+    const requestId = scanRequestIdRef.current + 1;
+    scanRequestIdRef.current = requestId;
     setIsScanning(true);
     setError(null);
     clearDevices();
@@ -90,12 +93,25 @@ export const useBle = () => {
       if (options?.timeout) {
         scanTimeoutRef.current = setTimeout(() => {
           scanTimeoutRef.current = null;
-          setIsScanning(false);
-          bleApi.stopBleScan().catch(() => {});
+          bleApi.stopBleScan()
+            .then((deviceList) => {
+              if (scanRequestIdRef.current === requestId) {
+                setDevices(deviceList);
+              }
+            })
+            .catch(() => {})
+            .finally(() => {
+              if (scanRequestIdRef.current === requestId) {
+                setIsScanning(false);
+              }
+            });
         }, options.timeout);
       }
 
       const deviceList = await bleApi.scanBleDevices(options);
+      if (scanRequestIdRef.current !== requestId) {
+        return deviceList;
+      }
       setDevices(deviceList);
 
       if (scanTimeoutRef.current) {
@@ -112,6 +128,9 @@ export const useBle = () => {
         message.success(`扫描到 ${deviceList.length} 个设备`);
       }
     } catch (err) {
+      if (scanRequestIdRef.current !== requestId) {
+        return [];
+      }
       const errorMsg = handleBleError('scanDevices', { options }, err);
       setError(errorMsg);
       addLog('error', 'BleManager', `扫描BLE设备失败: ${errorMsg}`);
@@ -122,21 +141,27 @@ export const useBle = () => {
         clearTimeout(scanTimeoutRef.current);
         scanTimeoutRef.current = null;
       }
+      return [];
     }
   }, [setIsScanning, setError, clearDevices, setDevices, setIsConfigured, isConfigured, mode, serialPort, addLog]);
 
   const stopScan = useCallback(async () => {
-    setIsScanning(false);
+    scanRequestIdRef.current += 1;
     if (scanTimeoutRef.current) {
       clearTimeout(scanTimeoutRef.current);
       scanTimeoutRef.current = null;
     }
     try {
-      await bleApi.stopBleScan();
-    } catch {}
+      const deviceList = await bleApi.stopBleScan();
+      setDevices(deviceList);
+    } catch {
+      // best-effort stop
+    } finally {
+      setIsScanning(false);
+    }
     addLog('info', 'BleManager', '扫描已停止');
     message.info('扫描已停止');
-  }, [setIsScanning, addLog]);
+  }, [setIsScanning, setDevices, addLog]);
 
   const connectDevice = useCallback(async (address: string) => {
     setIsConnecting(true);

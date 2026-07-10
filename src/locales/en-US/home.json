@@ -27,7 +27,8 @@
         "config": "Channel Config",
         "monitor": "Data Monitor",
         "version": "Version Info",
-        "factory": "Factory Test"
+        "factory": "Factory Test",
+        "threshold": "Factory Config Generator"
       }
     },
     "protocol": {

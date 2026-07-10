@@ -4,11 +4,11 @@ interface PageTabsState {
   systemActiveTab: 'info' | 'logs' | 'settings';
   protocolActiveTab: 'editor' | 'bind';
   waveformActiveTab: 'realtime' | 'csvLoader';
-  gh3036ActiveTab: 'config' | 'monitor' | 'version' | 'factory';
+  gh3036ActiveTab: 'config' | 'monitor' | 'version' | 'factory' | 'threshold';
   setSystemActiveTab: (tab: 'info' | 'logs' | 'settings') => void;
   setProtocolActiveTab: (tab: 'editor' | 'bind') => void;
   setWaveformActiveTab: (tab: 'realtime' | 'csvLoader') => void;
-  setGh3036ActiveTab: (tab: 'config' | 'monitor' | 'version' | 'factory') => void;
+  setGh3036ActiveTab: (tab: 'config' | 'monitor' | 'version' | 'factory' | 'threshold') => void;
 }
 
 export const usePageTabsStore = create<PageTabsState>((set) => ({

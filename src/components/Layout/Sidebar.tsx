@@ -110,7 +110,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
       case '/gh3036': {
         const tab = firstVisibleTab('gh3036');
         if (tab) {
-          setGh3036ActiveTab(tab as 'config' | 'monitor' | 'version' | 'factory');
+          setGh3036ActiveTab(tab as 'config' | 'monitor' | 'version' | 'factory' | 'threshold');
         }
         break;
       }

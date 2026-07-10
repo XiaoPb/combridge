@@ -148,17 +148,15 @@ impl FactoryTestManager {
 
         let mut matches: Vec<PathBuf> = Vec::new();
 
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                if let Some(file_name) = path.file_name() {
-                    let file_name_str = file_name.to_string_lossy().to_lowercase();
-                    if file_name_str.contains(&pattern_lower) {
-                        if let Some(ext) = path.extension() {
-                            let ext_str = ext.to_string_lossy().to_lowercase();
-                            if ext_str.ends_with("config") || ext_str == "ini" {
-                                matches.push(path);
-                            }
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(file_name) = path.file_name() {
+                let file_name_str = file_name.to_string_lossy().to_lowercase();
+                if file_name_str.contains(&pattern_lower) {
+                    if let Some(ext) = path.extension() {
+                        let ext_str = ext.to_string_lossy().to_lowercase();
+                        if ext_str.ends_with("config") || ext_str == "ini" {
+                            matches.push(path);
                         }
                     }
                 }
@@ -364,7 +362,12 @@ impl FactoryTestManager {
                     break;
                 }
 
-                Self::set_state(&status_state, &current_step_state, FactoryTestStatus::Running, *step);
+                Self::set_state(
+                    &status_state,
+                    &current_step_state,
+                    FactoryTestStatus::Running,
+                    *step,
+                );
                 Self::publish_progress_static(
                     &event_bus,
                     *step,
@@ -386,7 +389,12 @@ impl FactoryTestManager {
                         if let Some(step_result) = step_result_opt {
                             if !step_result.success {
                                 test_result.overall_result = "FAIL".to_string();
-                                Self::set_state(&status_state, &current_step_state, FactoryTestStatus::Failed, *step);
+                                Self::set_state(
+                                    &status_state,
+                                    &current_step_state,
+                                    FactoryTestStatus::Failed,
+                                    *step,
+                                );
                                 Self::publish_progress_static(
                                     &event_bus,
                                     *step,
@@ -402,7 +410,12 @@ impl FactoryTestManager {
                     Err(e) => {
                         error!("[FactoryTest] 步骤 {:?} 执行失败: {}", step, e);
                         test_result.overall_result = "FAIL".to_string();
-                        Self::set_state(&status_state, &current_step_state, FactoryTestStatus::Failed, *step);
+                        Self::set_state(
+                            &status_state,
+                            &current_step_state,
+                            FactoryTestStatus::Failed,
+                            *step,
+                        );
                         Self::publish_progress_static(
                             &event_bus,
                             *step,
@@ -749,7 +762,7 @@ impl FactoryTestManager {
             .await
             .map_err(|e| format!("获取产测模式 0x02 结果失败: {}", e))?;
 
-        let uuid: Vec<u8> = result.iter().map(|&b| b as u8).collect();
+        let uuid = result.to_vec();
         test_result.uuid = uuid.clone();
 
         let uuid_str: String = uuid

@@ -40,7 +40,7 @@ const SIDEBAR_MENU_KEYS: SidebarMenuKey[] = [
 const HOME_TAB_KEYS: Record<HomeMenuKey, string[]> = {
   connection: ['serial', 'ble'],
   dashboard: ['dashboard', 'console', 'settings', 'jsonEditor'],
-  gh3036: ['config', 'monitor', 'version', 'factory'],
+  gh3036: ['config', 'monitor', 'version', 'factory', 'threshold'],
   protocol: ['editor', 'bind'],
   waveform: ['realtime', 'csvLoader'],
   system: ['info', 'logs', 'settings'],

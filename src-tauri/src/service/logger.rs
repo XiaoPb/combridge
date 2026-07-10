@@ -232,7 +232,8 @@ impl LoggerService {
     }
 
     fn build_filter(config: &LoggerConfig) -> EnvFilter {
-        let mut filter = EnvFilter::default().add_directive(Self::parse_level_filter(&config.level).into());
+        let mut filter =
+            EnvFilter::default().add_directive(Self::parse_level_filter(&config.level).into());
 
         for module in &config.modules {
             let Some(target) = Self::module_target(&module.name) else {
@@ -294,7 +295,10 @@ mod tests {
     #[test]
     fn test_default_modules_include_rpc_core() {
         let config = LoggerConfig::default();
-        assert!(config.modules.iter().any(|module| module.name == "rpc-core"));
+        assert!(config
+            .modules
+            .iter()
+            .any(|module| module.name == "rpc-core"));
     }
 
     #[test]

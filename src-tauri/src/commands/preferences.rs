@@ -70,6 +70,7 @@ pub async fn update_serial_preferences(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn update_ble_preferences(
     persistence: State<'_, StatePersistenceRef>,
     display_format: String,

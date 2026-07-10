@@ -23,6 +23,7 @@ import {
   CodeOutlined as ConsoleIcon,
   SettingOutlined as SettingsTabIcon,
   FileTextOutlined as JsonEditorIcon,
+  FileProtectOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -260,6 +261,7 @@ const HomePage: React.FC = () => {
         { key: 'monitor', label: t('modules.gh3036.tabs.monitor'), icon: <MonitorIcon /> },
         { key: 'version', label: t('modules.gh3036.tabs.version'), icon: <InfoCircleOutlined /> },
         { key: 'factory', label: t('modules.gh3036.tabs.factory'), icon: <ExperimentOutlined /> },
+        { key: 'threshold', label: t('modules.gh3036.tabs.threshold'), icon: <FileProtectOutlined /> },
       ],
     },
     {
@@ -328,7 +330,7 @@ const HomePage: React.FC = () => {
       case '/gh3036': {
         const tab = getFirstVisibleTab('gh3036');
         if (tab) {
-          setGh3036ActiveTab(tab as 'config' | 'monitor' | 'version' | 'factory');
+          setGh3036ActiveTab(tab as 'config' | 'monitor' | 'version' | 'factory' | 'threshold');
         }
         break;
       }
@@ -362,7 +364,7 @@ const HomePage: React.FC = () => {
         setSystemActiveTab(tabKey as 'info' | 'logs' | 'settings');
         break;
       case '/gh3036':
-        setGh3036ActiveTab(tabKey as 'config' | 'monitor' | 'version' | 'factory');
+        setGh3036ActiveTab(tabKey as 'config' | 'monitor' | 'version' | 'factory' | 'threshold');
         break;
       case '/dashboard':
         setActiveTabs([tabKey as 'dashboard' | 'console' | 'settings' | 'jsonEditor']);

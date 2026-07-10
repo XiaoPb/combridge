@@ -220,10 +220,7 @@ impl GattClient {
                 .read()
                 .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)));
             match device_guard {
-                Ok(guard) => match guard.as_ref() {
-                    Some(d) => Some(d.clone()),
-                    None => None,
-                },
+                Ok(guard) => guard.as_ref().map(|d| d.clone()),
                 Err(_) => None,
             }
         };
@@ -776,7 +773,7 @@ impl GattClient {
     pub async fn set_mtu(&self, mtu: u16) -> Result<u16> {
         info!("MTU协商，请求值: {}", mtu);
 
-        let actual_mtu = mtu.min(517).max(23);
+        let actual_mtu = mtu.clamp(23, 517);
         info!("MTU协商完成，实际值: {}", actual_mtu);
         Ok(actual_mtu)
     }

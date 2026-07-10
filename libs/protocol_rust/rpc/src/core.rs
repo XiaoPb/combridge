@@ -92,18 +92,12 @@ impl InvokeContext {
 
 #[derive(Debug)]
 struct PendingCall {
-    invoke_idx: u8,
-    key: String,
     tx: oneshot::Sender<Result<Vec<u8>, RpcError>>,
-    retry_count: u8,
-    frames: Vec<Vec<u8>>,
-    current_frame_idx: u8,
 }
 
 #[derive(Debug, Clone)]
 struct FrameBuffer {
     invoke_idx: u8,
-    frame_idx: u8,
     data: Vec<u8>,
 }
 
@@ -127,7 +121,6 @@ impl MultiFrameBuffer {
         if frame_idx == self.expected_frame_idx {
             self.frames.push(FrameBuffer {
                 invoke_idx,
-                frame_idx,
                 data,
             });
             self.expected_frame_idx = self.expected_frame_idx.wrapping_add(1);
@@ -352,12 +345,7 @@ impl RpcCore {
         );
 
         let pending = PendingCall {
-            invoke_idx,
-            key: key.to_string(),
             tx,
-            retry_count: 0,
-            frames: frames.clone(),
-            current_frame_idx: 0,
         };
 
         {
@@ -473,12 +461,7 @@ impl RpcCore {
         );
 
         let pending = PendingCall {
-            invoke_idx,
-            key: key.to_string(),
             tx,
-            retry_count: 0,
-            frames: frames.clone(),
-            current_frame_idx: 0,
         };
 
         {
@@ -595,12 +578,7 @@ impl RpcCore {
         );
 
         let pending = PendingCall {
-            invoke_idx,
-            key: key.to_string(),
             tx,
-            retry_count: 0,
-            frames: frames.clone(),
-            current_frame_idx: 0,
         };
 
         {

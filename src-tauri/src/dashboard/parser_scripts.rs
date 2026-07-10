@@ -228,11 +228,9 @@ impl ParserScriptManager {
         let mut output = HashMap::new();
 
         if let Some(result_table) = result.as_table() {
-            for pair in result_table.clone().pairs::<String, Value>() {
-                if let Ok((key, value)) = pair {
-                    if let Some(num) = value_as_f64(&value) {
-                        output.insert(key, num);
-                    }
+            for (key, value) in result_table.clone().pairs::<String, Value>().flatten() {
+                if let Some(num) = value_as_f64(&value) {
+                    output.insert(key, num);
                 }
             }
         }

@@ -179,7 +179,7 @@ impl SerialManager {
                 .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
             ports
                 .get(port_name)
-                .map(|p| Arc::clone(p))
+                .map(Arc::clone)
                 .ok_or_else(|| ComBridgeError::serial(format!("串口 {} 未打开", port_name)))?
         };
 
@@ -262,7 +262,7 @@ impl SerialManager {
                 .map_err(|e| ComBridgeError::serial(format!("锁获取失败: {}", e)))?;
             ports
                 .get(port_name)
-                .map(|p| Arc::clone(p))
+                .map(Arc::clone)
                 .ok_or_else(|| ComBridgeError::serial(format!("串口 {} 未打开", port_name)))?
         };
         let config = port

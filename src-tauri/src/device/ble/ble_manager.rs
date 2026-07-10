@@ -16,16 +16,11 @@ use crate::error::{ComBridgeError, Result};
 use crate::service::event_bus::topics;
 use crate::service::event_bus::{BleConnectionEvent, BleDataEvent, EventBus};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum BleMode {
+    #[default]
     Native,
     At,
-}
-
-impl Default for BleMode {
-    fn default() -> Self {
-        BleMode::Native
-    }
 }
 
 impl std::fmt::Display for BleMode {

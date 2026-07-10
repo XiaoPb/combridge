@@ -277,11 +277,10 @@ impl BleBackend for AtBleBackend {
 
         for line in &responses {
             if line.starts_with("+SCAN:") {
-                if let Ok(response) = parser.parse_response(line) {
-                    if let AtResponse::ScanResult { devices: scanned } = response {
-                        for dev in scanned {
-                            devices.push(Self::scan_device_to_ble_device(&dev));
-                        }
+                if let Ok(AtResponse::ScanResult { devices: scanned }) = parser.parse_response(line)
+                {
+                    for dev in scanned {
+                        devices.push(Self::scan_device_to_ble_device(&dev));
                     }
                 }
             }
@@ -307,39 +306,41 @@ impl BleBackend for AtBleBackend {
         let mut connected_address = address.to_string();
         for line in &responses {
             if line.starts_with("+CONN:") {
-                if let Ok(response) = AtParser::new().parse_response(line) {
-                    if let AtResponse::Connected { address: addr } = response {
-                        connected_address = addr;
-                    }
+                if let Ok(AtResponse::Connected { address: addr }) =
+                    AtParser::new().parse_response(line)
+                {
+                    connected_address = addr;
                 }
             }
         }
 
         Self::parse_ok_response(&responses)?;
 
-        let mut conn_info = AtConnectionInfo::default();
-        conn_info.address = connected_address.clone();
-        conn_info.tx_uuid = self
-            .config
-            .tx_uuid
-            .clone()
-            .unwrap_or_else(|| DEFAULT_TX_UUID.to_string());
-        conn_info.rx_uuid = self
-            .config
-            .rx_uuid
-            .clone()
-            .unwrap_or_else(|| DEFAULT_RX_UUID.to_string());
-        conn_info.srv_uuid = self
-            .config
-            .srv_uuid
-            .clone()
-            .unwrap_or_else(|| DEFAULT_SERVICE_UUID.to_string());
-        conn_info.connected_at = Some(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-        );
+        let conn_info = AtConnectionInfo {
+            address: connected_address.clone(),
+            tx_uuid: self
+                .config
+                .tx_uuid
+                .clone()
+                .unwrap_or_else(|| DEFAULT_TX_UUID.to_string()),
+            rx_uuid: self
+                .config
+                .rx_uuid
+                .clone()
+                .unwrap_or_else(|| DEFAULT_RX_UUID.to_string()),
+            srv_uuid: self
+                .config
+                .srv_uuid
+                .clone()
+                .unwrap_or_else(|| DEFAULT_SERVICE_UUID.to_string()),
+            connected_at: Some(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64,
+            ),
+            ..AtConnectionInfo::default()
+        };
 
         self.connections
             .lock()
@@ -490,10 +491,8 @@ impl BleBackend for AtBleBackend {
 
         for line in &responses {
             if line.starts_with("+RSSI:") {
-                if let Ok(response) = AtParser::new().parse_response(line) {
-                    if let AtResponse::Rssi { rssi } = response {
-                        return Ok(rssi);
-                    }
+                if let Ok(AtResponse::Rssi { rssi }) = AtParser::new().parse_response(line) {
+                    return Ok(rssi);
                 }
             }
         }

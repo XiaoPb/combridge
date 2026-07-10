@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum BaudRate {
     #[serde(rename = "1200")]
     B1200 = 1200,
@@ -18,6 +19,7 @@ pub enum BaudRate {
     #[serde(rename = "57600")]
     B57600 = 57600,
     #[serde(rename = "115200")]
+    #[default]
     B115200 = 115200,
     #[serde(rename = "230400")]
     B230400 = 230400,
@@ -25,12 +27,6 @@ pub enum BaudRate {
     B460800 = 460800,
     #[serde(rename = "921600")]
     B921600 = 921600,
-}
-
-impl Default for BaudRate {
-    fn default() -> Self {
-        BaudRate::B115200
-    }
 }
 
 impl From<BaudRate> for u32 {
@@ -41,58 +37,42 @@ impl From<BaudRate> for u32 {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum DataBits {
     Five = 5,
     Six = 6,
     Seven = 7,
+    #[default]
     Eight = 8,
-}
-
-impl Default for DataBits {
-    fn default() -> Self {
-        DataBits::Eight
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum Parity {
+    #[default]
     None,
     Odd,
     Even,
 }
 
-impl Default for Parity {
-    fn default() -> Self {
-        Parity::None
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum StopBits {
+    #[default]
     One = 1,
     Two = 2,
 }
 
-impl Default for StopBits {
-    fn default() -> Self {
-        StopBits::One
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum FlowControl {
+    #[default]
     None,
     Software,
     Hardware,
-}
-
-impl Default for FlowControl {
-    fn default() -> Self {
-        FlowControl::None
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

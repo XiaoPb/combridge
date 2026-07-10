@@ -45,7 +45,7 @@ fn init_logger() {
 
 fn get_app_data_dir() -> std::path::PathBuf {
     dirs::data_local_dir()
-        .or_else(|| dirs::data_dir())
+        .or_else(dirs::data_dir)
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("combridge")
 }
@@ -340,6 +340,8 @@ pub fn run() {
             commands::gh3036::gh3036_validate_threshold_config,
             commands::gh3036::gh3036_get_threshold_config,
             commands::gh3036::gh3036_get_evaluation_result,
+            commands::gh3036::gh3036_generate_threshold_yaml,
+            commands::gh3036::gh3036_validate_threshold_yaml,
             commands::gh3036::gh3036_set_hr_ref,
             commands::gh3036::gh3036_set_hrv_ref,
             commands::gh3036::gh3036_set_spo2_ref,

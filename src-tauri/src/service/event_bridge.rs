@@ -120,6 +120,7 @@ impl<R: Runtime> EventBridge<R> {
         self.thread_handle = Some(handle);
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn run_loop(
         mut receiver: broadcast::Receiver<Event>,
         app_handle: &AppHandle<R>,
@@ -192,15 +193,17 @@ impl<R: Runtime> EventBridge<R> {
             let now = std::time::Instant::now();
             if now.duration_since(last_heartbeat) >= heartbeat_duration {
                 last_heartbeat = now;
-                let recv = received_count.load(Ordering::Relaxed);
-                let fwd = forwarded_count.load(Ordering::Relaxed);
-                let filt = filtered_count.load(Ordering::Relaxed);
-                let failed = emit_failed_count.load(Ordering::Relaxed);
                 #[cfg(debug_assertions)]
-                tracing::debug!(
-                    "[EventBridge] Heartbeat: alive (received={}, forwarded={}, filtered={}, failed={})",
-                    recv, fwd, filt, failed
-                );
+                {
+                    let recv = received_count.load(Ordering::Relaxed);
+                    let fwd = forwarded_count.load(Ordering::Relaxed);
+                    let filt = filtered_count.load(Ordering::Relaxed);
+                    let failed = emit_failed_count.load(Ordering::Relaxed);
+                    tracing::debug!(
+                        "[EventBridge] Heartbeat: alive (received={}, forwarded={}, filtered={}, failed={})",
+                        recv, fwd, filt, failed
+                    );
+                }
             }
         }
 

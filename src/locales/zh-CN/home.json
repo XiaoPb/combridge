@@ -27,7 +27,8 @@
         "config": "通道配置",
         "monitor": "数据监控",
         "version": "版本信息",
-        "factory": "产测"
+        "factory": "产测",
+        "threshold": "产测配置生成"
       }
     },
     "protocol": {

@@ -280,6 +280,28 @@ pub async fn gh3036_get_evaluation_result(
 }
 
 #[tauri::command]
+pub async fn gh3036_generate_threshold_yaml(
+    config: FactoryThresholdConfig,
+) -> Result<String, ErrorResponse> {
+    config
+        .validate()
+        .map_err(|e| ComBridgeError::config(e).to_error_response())?;
+    serde_yaml::to_string(&config).map_err(|e| {
+        ComBridgeError::config(format!("序列化卡控配置失败: {}", e)).to_error_response()
+    })
+}
+
+#[tauri::command]
+pub async fn gh3036_validate_threshold_yaml(
+    yaml: String,
+) -> Result<ThresholdConfigValidation, ErrorResponse> {
+    match FactoryThresholdConfig::from_yaml(&yaml) {
+        Ok(config) => Ok(ThresholdConfigValidation::from_config(&config, None)),
+        Err(e) => Ok(ThresholdConfigValidation::from_error(e, None)),
+    }
+}
+
+#[tauri::command]
 pub async fn gh3036_set_hr_ref(
     values: Vec<i32>,
     manager: State<'_, Gh3036ManagerRef>,

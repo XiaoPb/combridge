@@ -63,8 +63,7 @@ impl BleBackend for NativeBleBackend {
 
         adapter.start_scan().await?;
 
-        let duration = std::time::Duration::from_millis(duration_ms);
-        tokio::time::sleep(duration).await;
+        adapter.wait_for_scan_finish(duration_ms).await;
 
         adapter.stop_scan().await?;
 

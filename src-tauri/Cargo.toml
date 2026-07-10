@@ -1,6 +1,6 @@
 [package]
 name = "combridge-rust"
-version = "0.5.11"
+version = "0.5.13"
 description = "A Tauri App"
 authors = ["XiaoPb"]
 edition = "2021"

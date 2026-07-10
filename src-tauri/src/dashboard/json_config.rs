@@ -128,13 +128,11 @@ impl JsonConfigManager {
         let entries = fs::read_dir(&self.json_dir)
             .map_err(|e| format!("Failed to read json directory: {}", e))?;
 
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                if path.extension().map(|e| e == "json").unwrap_or(false) {
-                    if let Some(name) = path.file_name() {
-                        files.push(name.to_string_lossy().to_string());
-                    }
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map(|e| e == "json").unwrap_or(false) {
+                if let Some(name) = path.file_name() {
+                    files.push(name.to_string_lossy().to_string());
                 }
             }
         }

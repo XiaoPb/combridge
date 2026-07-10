@@ -225,9 +225,8 @@ impl RefDataManager {
             let hr_ref = self.hr_ref.lock().unwrap();
             let elapsed = hr_ref.last_update.elapsed();
             if elapsed < Duration::from_secs(REF_DATA_TIMEOUT_SECS) && hr_ref.count > 0 {
-                for i in 0..HR_REF_COUNT {
-                    ref_data[HR_REF_START + i] = hr_ref.values[i];
-                }
+                ref_data[HR_REF_START..(HR_REF_COUNT + HR_REF_START)]
+                    .copy_from_slice(&hr_ref.values[..HR_REF_COUNT]);
                 ref_data[HR_REF_NUM_IDX] = hr_ref.count;
                 debug!(
                     "[RefDataManager] HR金标有效: elapsed={:?}s, count={}",
@@ -246,9 +245,8 @@ impl RefDataManager {
             let hrv_ref = self.hrv_ref.lock().unwrap();
             let elapsed = hrv_ref.last_update.elapsed();
             if elapsed < Duration::from_secs(REF_DATA_TIMEOUT_SECS) && hrv_ref.count > 0 {
-                for i in 0..HRV_REF_COUNT {
-                    ref_data[HRV_REF_START + i] = hrv_ref.values[i];
-                }
+                ref_data[HRV_REF_START..(HRV_REF_COUNT + HRV_REF_START)]
+                    .copy_from_slice(&hrv_ref.values[..HRV_REF_COUNT]);
                 ref_data[HRV_REF_NUM_IDX] = hrv_ref.count;
                 debug!(
                     "[RefDataManager] HRV金标有效: elapsed={:?}s, count={}",
@@ -266,9 +264,8 @@ impl RefDataManager {
         {
             let spo2_ref = self.spo2_ref.lock().unwrap();
             if spo2_ref.count > 0 {
-                for i in 0..SPO2_REF_COUNT {
-                    ref_data[SPO2_REF_START + i] = spo2_ref.values[i];
-                }
+                ref_data[SPO2_REF_START..(SPO2_REF_COUNT + SPO2_REF_START)]
+                    .copy_from_slice(&spo2_ref.values[..SPO2_REF_COUNT]);
                 ref_data[SPO2_REF_NUM_IDX] = spo2_ref.count;
                 debug!("[RefDataManager] SpO2金标有效: count={}", spo2_ref.count);
             }

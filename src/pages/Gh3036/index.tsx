@@ -6,6 +6,7 @@ import { usePageTabsStore } from '../../stores/pageTabsStore';
 import ConfigTab from './ConfigTab';
 import FactoryTestTab from './FactoryTestTab';
 import MonitorTab from './MonitorTab';
+import ThresholdConfigTab from './ThresholdConfigTab';
 import VersionTab from './VersionTab';
 
 const Gh3036Page: React.FC = () => {
@@ -65,6 +66,8 @@ const Gh3036Page: React.FC = () => {
         return <ConfigTab />;
       case 'factory':
         return <FactoryTestTab />;
+      case 'threshold':
+        return <ThresholdConfigTab />;
       case 'monitor':
         return <MonitorTab />;
       case 'version':

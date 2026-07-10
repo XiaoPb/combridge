@@ -26,6 +26,7 @@ import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useGh3036Store } from '../../stores/gh3036Store';
 import type { TestEvaluationResult, ChannelEvaluationResult } from '../../api/types';
+import FactoryQuickConnect from './FactoryQuickConnect';
 
 const { Text, Paragraph } = Typography;
 
@@ -288,6 +289,10 @@ const FactoryTestTab: React.FC = () => {
   return (
     <div style={{ height: '100%', overflow: 'auto', padding: '8px 0' }}>
       <Row gutter={[8, 8]}>
+        <Col span={24}>
+          <FactoryQuickConnect />
+        </Col>
+
         <Col span={24}>
           <Card size="small" title={t('factory.configDir')} style={cardStyle}>
             <Space orientation="vertical" style={{ width: '100%' }}>

@@ -29,6 +29,7 @@ export const DEFAULT_MENU_VISIBILITY: MenuVisibilityPreferences = {
         monitor: true,
         version: true,
         factory: true,
+        threshold: true,
       },
     },
     protocol: {

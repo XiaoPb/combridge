@@ -6,6 +6,7 @@ use std::sync::{
 
 use bluest::{Adapter, Device, DeviceId};
 use futures::StreamExt;
+use tokio::sync::Notify;
 use tracing::info;
 
 use super::super::ble_traits::BleDevice;
@@ -14,17 +15,21 @@ use crate::error::{ComBridgeError, LockResultExt, Result};
 use crate::service::event_bus::topics;
 use crate::service::event_bus::{BleConnectionEvent, EventBus};
 
+type ScannedDeviceMap = HashMap<DeviceId, (Arc<Device>, Option<i16>)>;
+type SharedScannedDevices = Arc<RwLock<ScannedDeviceMap>>;
+
 pub struct BleAdapter {
     adapter: Arc<Adapter>,
-    scanned_devices: Arc<RwLock<HashMap<DeviceId, (Arc<Device>, Option<i16>)>>>,
+    scanned_devices: SharedScannedDevices,
     clients: Arc<RwLock<HashMap<String, Arc<GattClient>>>>,
     scan_cancelled: Arc<AtomicBool>,
+    scan_notify: Arc<Notify>,
     event_bus: Option<Arc<EventBus>>,
 }
 
 #[derive(Clone)]
 struct BleAdapterHandles {
-    scanned_devices: Arc<RwLock<HashMap<DeviceId, (Arc<Device>, Option<i16>)>>>,
+    scanned_devices: SharedScannedDevices,
     clients: Arc<RwLock<HashMap<String, Arc<GattClient>>>>,
     event_bus: Option<Arc<EventBus>>,
 }
@@ -68,6 +73,7 @@ impl BleAdapter {
             scanned_devices: Arc::new(RwLock::new(HashMap::new())),
             clients: Arc::new(RwLock::new(HashMap::new())),
             scan_cancelled: Arc::new(AtomicBool::new(false)),
+            scan_notify: Arc::new(Notify::new()),
             event_bus,
         })
     }
@@ -143,9 +149,18 @@ impl BleAdapter {
         Ok(())
     }
 
+    pub async fn wait_for_scan_finish(&self, duration_ms: u64) {
+        let duration = std::time::Duration::from_millis(duration_ms);
+        tokio::select! {
+            _ = tokio::time::sleep(duration) => {}
+            _ = self.scan_notify.notified() => {}
+        }
+    }
+
     pub async fn stop_scan(&self) -> Result<()> {
         info!("停止扫描BLE设备");
         self.scan_cancelled.store(true, Ordering::SeqCst);
+        self.scan_notify.notify_waiters();
         info!("已发送扫描取消信号");
         Ok(())
     }

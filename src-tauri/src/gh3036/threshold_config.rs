@@ -30,15 +30,15 @@ impl ThresholdOperator {
 
     pub fn evaluate(&self, value: u16, threshold: &ThresholdConfig) -> bool {
         match self {
-            Self::Lt => threshold.value.map_or(false, |t| value < t),
-            Self::Le => threshold.value.map_or(false, |t| value <= t),
-            Self::Gt => threshold.value.map_or(false, |t| value > t),
-            Self::Ge => threshold.value.map_or(false, |t| value >= t),
-            Self::Eq => threshold.value.map_or(false, |t| value == t),
-            Self::Ne => threshold.value.map_or(false, |t| value != t),
+            Self::Lt => threshold.value.is_some_and(|t| value < t),
+            Self::Le => threshold.value.is_some_and(|t| value <= t),
+            Self::Gt => threshold.value.is_some_and(|t| value > t),
+            Self::Ge => threshold.value.is_some_and(|t| value >= t),
+            Self::Eq => threshold.value == Some(value),
+            Self::Ne => threshold.value.is_some_and(|t| value != t),
             Self::Range => threshold
                 .range
-                .map_or(false, |r| value >= r[0] && value <= r[1]),
+                .is_some_and(|r| value >= r[0] && value <= r[1]),
         }
     }
 }
@@ -426,21 +426,11 @@ impl FactoryEvaluationResult {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TestStatus {
     pub enabled: bool,
     pub has_global_threshold: bool,
     pub channel_rules_count: usize,
-}
-
-impl Default for TestStatus {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            has_global_threshold: false,
-            channel_rules_count: 0,
-        }
-    }
 }
 
 impl From<Option<&TestItemConfig>> for TestStatus {

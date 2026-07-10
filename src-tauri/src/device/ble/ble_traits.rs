@@ -53,24 +53,13 @@ pub struct BleCharacteristic {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct BleCharacteristicProperties {
     pub read: bool,
     pub write: bool,
     pub write_without_response: bool,
     pub notify: bool,
     pub indicate: bool,
-}
-
-impl Default for BleCharacteristicProperties {
-    fn default() -> Self {
-        Self {
-            read: false,
-            write: false,
-            write_without_response: false,
-            notify: false,
-            indicate: false,
-        }
-    }
 }
 
 impl std::fmt::Display for BleCharacteristicProperties {

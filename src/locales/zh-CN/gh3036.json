@@ -201,6 +201,8 @@
     "valid": "卡控配置校验通过",
     "invalid": "卡控配置校验失败",
     "saved": "YAML 文件已保存",
+    "projectRequired": "请输入项目名称",
+    "projectInvalid": "项目名称仅支持中文、英文、数字、下划线和短横线",
     "operators": {
       "lt": "小于",
       "le": "小于等于",

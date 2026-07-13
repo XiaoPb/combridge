@@ -156,7 +156,7 @@ impl BleBackend for NativeBleBackend {
             .as_ref()
             .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
-        let client = adapter.get_or_create_client(address);
+        let client = adapter.get_ready_client(address)?;
         client.discover_services().await
     }
 
@@ -170,7 +170,7 @@ impl BleBackend for NativeBleBackend {
             .as_ref()
             .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
-        let client = adapter.get_or_create_client(address);
+        let client = adapter.get_ready_client(address)?;
         client.discover_characteristics(service_uuid).await
     }
 
@@ -180,7 +180,7 @@ impl BleBackend for NativeBleBackend {
             .as_ref()
             .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
-        let client = adapter.get_or_create_client(address);
+        let client = adapter.get_ready_client(address)?;
         client.read_characteristic(char_uuid).await
     }
 
@@ -195,7 +195,7 @@ impl BleBackend for NativeBleBackend {
             .as_ref()
             .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
-        let client = adapter.get_or_create_client(address);
+        let client = adapter.get_ready_client(address)?;
         client.write_characteristic(char_uuid, data).await
     }
 
@@ -210,7 +210,7 @@ impl BleBackend for NativeBleBackend {
             .as_ref()
             .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
-        let client = adapter.get_or_create_client(address);
+        let client = adapter.get_ready_client(address)?;
         client.write_without_response(char_uuid, data).await
     }
 
@@ -225,7 +225,7 @@ impl BleBackend for NativeBleBackend {
             .as_ref()
             .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
-        let client = adapter.get_or_create_client(address);
+        let client = adapter.get_ready_client(address)?;
         client.subscribe_notify(char_uuid, callback).await
     }
 
@@ -235,7 +235,7 @@ impl BleBackend for NativeBleBackend {
             .as_ref()
             .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
-        let client = adapter.get_or_create_client(address);
+        let client = adapter.get_ready_client(address)?;
         client.unsubscribe_notify(char_uuid).await
     }
 
@@ -245,7 +245,7 @@ impl BleBackend for NativeBleBackend {
             .as_ref()
             .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
-        let client = adapter.get_or_create_client(address);
+        let client = adapter.get_ready_client(address)?;
         client.get_rssi().await
     }
 
@@ -255,7 +255,7 @@ impl BleBackend for NativeBleBackend {
             .as_ref()
             .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
 
-        let client = adapter.get_or_create_client(address);
+        let client = adapter.get_ready_client(address)?;
         client.set_mtu(mtu).await
     }
 }

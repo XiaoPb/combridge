@@ -201,6 +201,8 @@
     "valid": "Threshold config is valid",
     "invalid": "Threshold config is invalid",
     "saved": "YAML file saved",
+    "projectRequired": "Enter a project name",
+    "projectInvalid": "Project name can only contain Chinese characters, letters, numbers, underscores, and hyphens",
     "operators": {
       "lt": "Less than",
       "le": "Less than or equal",

@@ -155,6 +155,14 @@ impl GattClient {
         Ok(())
     }
 
+    pub fn has_device(&self) -> Result<bool> {
+        let device = self
+            .device
+            .read()
+            .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?;
+        Ok(device.is_some())
+    }
+
     pub fn is_connected(&self) -> Result<bool> {
         let device = self
             .device

@@ -16,9 +16,9 @@ import { LinkOutlined, SearchOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { bleApi } from '../../api/tauri';
 import { gh3036Api } from '../../api/gh3036';
-import type { BleCharacteristic, BleDeviceInfo, BleService } from '../../types';
+import type { BleCharacteristic, BleConnection, BleDeviceInfo, BleService } from '../../types';
 import { preferencesApi } from '../../api/tauri';
-import { formatMacAddress } from '../../stores/bleStore';
+import { formatMacAddress, useBleStore } from '../../stores/bleStore';
 
 const { Text } = Typography;
 
@@ -28,7 +28,11 @@ const DEFAULT_RX_UUID = '00000003-0000-1000-8000-00805f9b34fb';
 const normalizeAddress = (value: string) => value.replace(/[^a-fA-F0-9]/g, '').toLowerCase();
 const normalizeUuid = (value: string) => value.trim().toLowerCase();
 
-const matchesTarget = (device: BleDeviceInfo, targetName: string, targetMac: string) => {
+const matchesTarget = (
+  device: Pick<BleDeviceInfo, 'address' | 'name'>,
+  targetName: string,
+  targetMac: string
+) => {
   const nameHit =
     targetName.trim().length > 0 &&
     (device.name || '').toLowerCase().includes(targetName.trim().toLowerCase());
@@ -50,6 +54,12 @@ const FactoryQuickConnect: React.FC = () => {
   const { t } = useTranslation('gh3036');
   const { token } = theme.useToken();
   const [form] = Form.useForm();
+  const addConnection = useBleStore((state) => state.addConnection);
+  const setCurrentDevice = useBleStore((state) => state.setCurrentDevice);
+  const setServices = useBleStore((state) => state.setServices);
+  const setCharacteristics = useBleStore((state) => state.setCharacteristics);
+  const setDeviceTab = useBleStore((state) => state.setDeviceTab);
+  const existingDeviceTabs = useBleStore((state) => state.deviceTabs);
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState<string>('');
   const [matchedDevice, setMatchedDevice] = useState<BleDeviceInfo | null>(null);
@@ -106,8 +116,77 @@ const FactoryQuickConnect: React.FC = () => {
     const notifyChars = characteristics.filter(
       (char) => char.properties.notify || char.properties.indicate
     );
+    const subscribedUuids: string[] = [];
     for (const char of notifyChars) {
-      await bleApi.subscribeBleNotify(deviceAddress, char.uuid).catch(() => undefined);
+      const subscribed = await bleApi
+        .subscribeBleNotify(deviceAddress, char.uuid)
+        .then(() => true)
+        .catch(() => false);
+      if (subscribed) {
+        subscribedUuids.push(char.uuid);
+      }
+    }
+    return subscribedUuids;
+  };
+
+  const syncBleConnectionState = (
+    connection: BleConnection,
+    services: BleService[],
+    subscribedUuids: string[]
+  ) => {
+    const address = connection.address;
+    const subscribedSet = new Set(subscribedUuids.map(normalizeUuid));
+    const characteristics = flattenCharacteristics(services).map((char) => ({
+      ...char,
+      subscribed: char.subscribed || subscribedSet.has(normalizeUuid(char.uuid)),
+    }));
+    const existingTab = existingDeviceTabs[address];
+
+    addConnection({
+      ...connection,
+      isConnected: true,
+      services,
+    });
+    setCurrentDevice(address);
+    setServices(services);
+    setCharacteristics(characteristics);
+    setDeviceTab(address, {
+      deviceId: address,
+      name: connection.name || formatMacAddress(address),
+      address,
+      services,
+      characteristics,
+      logs: existingTab?.logs || [],
+      selectedCharacteristic: existingTab?.selectedCharacteristic || null,
+      discoveringServices: false,
+      subscribedUuids,
+    });
+  };
+
+  const findExistingConnection = async (targetName: string, targetMac: string) => {
+    const connections = await bleApi.getConnections().catch(() => []);
+    return (
+      connections.find(
+        (conn) =>
+          conn.isConnected &&
+          matchesTarget({ address: conn.address, name: conn.name }, targetName, targetMac)
+      ) || null
+    );
+  };
+
+  const connectOrReuse = async (
+    device: BleDeviceInfo,
+    targetName: string,
+    targetMac: string
+  ): Promise<BleConnection> => {
+    try {
+      return await bleApi.connectBle(device.address);
+    } catch (err) {
+      const existing = await findExistingConnection(targetName, targetMac);
+      if (existing && normalizeAddress(existing.address) === normalizeAddress(device.address)) {
+        return existing;
+      }
+      throw err;
     }
   };
 
@@ -130,7 +209,19 @@ const FactoryQuickConnect: React.FC = () => {
       setStatus(t('factory.quickConnectConfiguring'));
       await bleApi.configureBle('native');
 
-      const device = await scanUntilMatched(targetName, targetMac, scanSeconds * 1000);
+      let connection = await findExistingConnection(targetName, targetMac);
+      let device: BleDeviceInfo | null = connection
+        ? {
+            address: connection.address,
+            name: connection.name,
+            isConnectable: true,
+            discoveredAt: Date.now(),
+          }
+        : null;
+
+      if (!connection) {
+        device = await scanUntilMatched(targetName, targetMac, scanSeconds * 1000);
+      }
       if (!device) {
         setStatus(t('factory.quickConnectNotFound'));
         message.warning(t('factory.quickConnectNotFound'));
@@ -138,14 +229,16 @@ const FactoryQuickConnect: React.FC = () => {
       }
 
       setMatchedDevice(device);
-      setStatus(t('factory.quickConnectConnecting'));
-      await bleApi.connectBle(device.address);
+      if (!connection) {
+        setStatus(t('factory.quickConnectConnecting'));
+        connection = await connectOrReuse(device, targetName, targetMac);
+      }
 
       setStatus(t('factory.quickConnectDiscovering'));
-      const services = await bleApi.discoverBleServices(device.address);
+      const services = await bleApi.discoverBleServices(connection.address);
       const characteristics = flattenCharacteristics(services);
 
-      await subscribeNotify(device.address, characteristics);
+      const subscribedUuids = await subscribeNotify(connection.address, characteristics);
 
       const txChar = findCharacteristic(characteristics, txUuid);
       const rxChar = findCharacteristic(characteristics, rxUuid);
@@ -154,15 +247,16 @@ const FactoryQuickConnect: React.FC = () => {
       }
 
       setStatus(t('factory.quickConnectBinding'));
-      await gh3036Api.configureTxChannel('ble', device.address, txUuid);
-      await gh3036Api.configureRxChannel('ble', device.address, rxUuid);
+      await gh3036Api.configureTxChannel('ble', connection.address, txUuid);
+      await gh3036Api.configureRxChannel('ble', connection.address, rxUuid);
       await preferencesApi.updateGh3036Channel({
         connection_type: 'ble',
         serial_port: '',
-        ble_device: device.address,
+        ble_device: connection.address,
         tx_char: txUuid,
         rx_char: rxUuid,
       });
+      syncBleConnectionState(connection, services, subscribedUuids);
 
       setStatus(t('factory.quickConnectSuccess'));
       message.success(t('factory.quickConnectSuccess'));

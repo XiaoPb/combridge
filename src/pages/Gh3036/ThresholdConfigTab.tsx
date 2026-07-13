@@ -72,6 +72,7 @@ const OPERATOR_SYMBOLS: Record<ThresholdOperator, string> = {
   ne: '!=',
   range: '[]',
 };
+const PROJECT_NAME_PATTERN = /^[\u4e00-\u9fa5A-Za-z0-9_-]+$/;
 
 const DEFAULT_VALUES: ThresholdFormValue = {
   project: 'GH3036',
@@ -179,6 +180,8 @@ const buildConfig = (values: ThresholdFormValue): FactoryThresholdConfig => ({
   },
 });
 
+const buildDefaultFileName = (project: string) => `factory_config_${project.trim()}.yaml`;
+
 const ThresholdConfigTab: React.FC = () => {
   const { t } = useTranslation('gh3036');
   const { token } = theme.useToken();
@@ -229,8 +232,9 @@ const ThresholdConfigTab: React.FC = () => {
         return;
       }
 
+      const values = await form.validateFields(['project']);
       const filePath = await save({
-        defaultPath: 'factory_config_GH3036.yaml',
+        defaultPath: buildDefaultFileName(values.project),
         filters: [{ name: 'YAML', extensions: ['yaml', 'yml'] }],
       });
       if (!filePath) return;
@@ -368,7 +372,17 @@ const ThresholdConfigTab: React.FC = () => {
             <Form form={form} layout="vertical" initialValues={DEFAULT_VALUES}>
               <Row gutter={8}>
                 <Col span={8}>
-                  <Form.Item name="project" label={t('threshold.project')} rules={[{ required: true }]}>
+                  <Form.Item
+                    name="project"
+                    label={t('threshold.project')}
+                    rules={[
+                      { required: true, whitespace: true, message: t('threshold.projectRequired') },
+                      {
+                        pattern: PROJECT_NAME_PATTERN,
+                        message: t('threshold.projectInvalid'),
+                      },
+                    ]}
+                  >
                     <Input />
                   </Form.Item>
                 </Col>

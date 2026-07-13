@@ -204,6 +204,16 @@ impl BleAdapter {
             .clone()
     }
 
+    pub fn get_ready_client(&self, address: &str) -> Result<Arc<GattClient>> {
+        let client = self.get_or_create_client(address);
+        if !client.has_device()? {
+            if let Some(device) = self.get_device(address) {
+                client.set_device(device, self.adapter.clone())?;
+            }
+        }
+        Ok(client)
+    }
+
     pub fn get_client(&self, address: &str) -> Option<Arc<GattClient>> {
         let clients = self.clients.read().unwrap_or_else(|e| e.into_inner());
         clients.get(address).cloned()
@@ -234,6 +244,11 @@ impl BleAdapter {
     pub async fn connect_device(&self, address: &str) -> Result<Arc<GattClient>> {
         if let Some(client) = self.get_client(address) {
             if client.is_connected()? {
+                if !client.has_device()? {
+                    if let Some(device) = self.get_device(address) {
+                        client.set_device(device, self.adapter.clone())?;
+                    }
+                }
                 info!("设备已连接，复用现有连接: {}", address);
                 return Ok(client);
             }

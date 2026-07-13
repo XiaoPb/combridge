@@ -12,7 +12,8 @@ import type {
   ConfigValidationResult,
   FactoryThresholdConfig,
   FactoryEvaluationResult,
-  ThresholdConfigValidation
+  ThresholdConfigValidation,
+  ThresholdYamlFileLoadResult
 } from './types';
 
 export interface LibraryStatus {
@@ -208,6 +209,14 @@ export const factoryTestApi = {
 
   async validateThresholdYaml(yaml: string): Promise<ThresholdConfigValidation> {
     return invoke<ThresholdConfigValidation>('gh3036_validate_threshold_yaml', { yaml });
+  },
+
+  async loadThresholdYamlFile(filePath: string): Promise<ThresholdYamlFileLoadResult> {
+    return invoke<ThresholdYamlFileLoadResult>('gh3036_load_threshold_yaml_file', { filePath });
+  },
+
+  async saveThresholdYamlFile(filePath: string, yaml: string): Promise<ThresholdConfigValidation> {
+    return invoke<ThresholdConfigValidation>('gh3036_save_threshold_yaml_file', { filePath, yaml });
   },
 };
 

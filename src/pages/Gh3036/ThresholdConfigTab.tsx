@@ -15,9 +15,8 @@ import {
   message,
   theme,
 } from 'antd';
-import { DownloadOutlined, FileDoneOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
-import { save } from '@tauri-apps/plugin-dialog';
-import { writeTextFile } from '@tauri-apps/plugin-fs';
+import { DownloadOutlined, FileDoneOutlined, FolderOpenOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { open, save } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
 import { factoryTestApi } from '../../api/gh3036';
 import type {
@@ -147,6 +146,30 @@ const buildThreshold = (value: {
   };
 };
 
+const getThresholdFormValue = (threshold?: ThresholdConfig): Partial<TestFormValue> => {
+  if (!threshold) {
+    return {};
+  }
+  if (threshold.operator === 'range') {
+    return {
+      operator: threshold.operator,
+      min: threshold.range?.[0] ?? 0,
+      max: threshold.range?.[1] ?? 0,
+      description: threshold.description,
+    };
+  }
+  return {
+    operator: threshold.operator,
+    value: threshold.value ?? 0,
+    description: threshold.description,
+  };
+};
+
+const getRuleFormValue = (rule: ChannelRule): RuleFormValue => ({
+  channels: rule.channels.join(','),
+  ...getThresholdFormValue(rule),
+});
+
 const buildTestConfig = (test: TestFormValue): TestItemConfig => {
   const channelRules: ChannelRule[] = (test.rules || [])
     .map((rule) => ({
@@ -182,12 +205,49 @@ const buildConfig = (values: ThresholdFormValue): FactoryThresholdConfig => ({
 
 const buildDefaultFileName = (project: string) => `factory_config_${project.trim()}.yaml`;
 
+const getDefaultTestValues = (testKey: TestKey): TestFormValue => ({
+  ...DEFAULT_VALUES.tests[testKey],
+  rules: [...(DEFAULT_VALUES.tests[testKey].rules || [])],
+});
+
+const getTestFormValue = (testKey: TestKey, test?: TestItemConfig): TestFormValue => {
+  const defaults = getDefaultTestValues(testKey);
+  if (!test) {
+    return defaults;
+  }
+
+  return {
+    ...defaults,
+    enabled: test.enabled ?? defaults.enabled,
+    description: test.description ?? defaults.description,
+    unit: test.unit ?? defaults.unit,
+    ...getThresholdFormValue(test.global_threshold),
+    rules: (test.channel_rules || []).map(getRuleFormValue),
+  };
+};
+
+const getFormValuesFromConfig = (config: FactoryThresholdConfig): ThresholdFormValue => ({
+  project: config.project,
+  version: config.version,
+  description: config.description,
+  failAction: config.global?.fail_action ?? 'stop',
+  tests: {
+    base_noise: getTestFormValue('base_noise', config.tests.base_noise),
+    ppg_noise: getTestFormValue('ppg_noise', config.tests.ppg_noise),
+    lpctr: getTestFormValue('lpctr', config.tests.lpctr),
+    lplctr: getTestFormValue('lplctr', config.tests.lplctr),
+  },
+});
+
+const getFileName = (filePath: string) => filePath.split(/[\\/]/).pop() || filePath;
+
 const ThresholdConfigTab: React.FC = () => {
   const { t } = useTranslation('gh3036');
   const { token } = theme.useToken();
   const [form] = Form.useForm<ThresholdFormValue>();
   const [yamlPreview, setYamlPreview] = useState('');
   const [validating, setValidating] = useState(false);
+  const [loadedFilePath, setLoadedFilePath] = useState<string | null>(null);
 
   const operatorOptions = useMemo(
     () =>
@@ -222,6 +282,34 @@ const ThresholdConfigTab: React.FC = () => {
     }
   };
 
+  const handleLoad = async () => {
+    try {
+      setValidating(true);
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: 'YAML', extensions: ['yaml', 'yml'] }],
+      });
+      if (!selected || Array.isArray(selected)) return;
+
+      const result = await factoryTestApi.loadThresholdYamlFile(selected);
+      if (!result.validation.is_valid) {
+        message.error(result.validation.errors.join('; ') || t('threshold.loadFailed'));
+        return;
+      }
+
+      const formValues = getFormValuesFromConfig(result.config);
+      form.setFieldsValue(formValues);
+      setLoadedFilePath(result.file_path);
+      const yaml = await factoryTestApi.generateThresholdYaml(buildConfig(formValues));
+      setYamlPreview(yaml);
+      message.success(t('threshold.loaded'));
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setValidating(false);
+    }
+  };
+
   const handleSave = async () => {
     try {
       setValidating(true);
@@ -232,13 +320,27 @@ const ThresholdConfigTab: React.FC = () => {
         return;
       }
 
+      if (loadedFilePath) {
+        const saveValidation = await factoryTestApi.saveThresholdYamlFile(loadedFilePath, yaml);
+        if (!saveValidation.is_valid) {
+          message.error(saveValidation.errors.join('; ') || t('threshold.invalid'));
+          return;
+        }
+        message.success(t('threshold.overwriteSaved'));
+        return;
+      }
+
       const values = await form.validateFields(['project']);
       const filePath = await save({
         defaultPath: buildDefaultFileName(values.project),
         filters: [{ name: 'YAML', extensions: ['yaml', 'yml'] }],
       });
       if (!filePath) return;
-      await writeTextFile(filePath, yaml);
+      const saveValidation = await factoryTestApi.saveThresholdYamlFile(filePath, yaml);
+      if (!saveValidation.is_valid) {
+        message.error(saveValidation.errors.join('; ') || t('threshold.invalid'));
+        return;
+      }
       message.success(t('threshold.saved'));
     } catch (err) {
       message.error(err instanceof Error ? err.message : String(err));
@@ -360,15 +462,27 @@ const ThresholdConfigTab: React.FC = () => {
             style={{ background: token.colorBgContainer, borderRadius: token.borderRadius }}
             extra={
               <Space>
+                <Button icon={<FolderOpenOutlined />} loading={validating} onClick={handleLoad}>
+                  {t('threshold.load')}
+                </Button>
                 <Button icon={<FileDoneOutlined />} loading={validating} onClick={handlePreview}>
                   {t('threshold.preview')}
                 </Button>
                 <Button type="primary" icon={<DownloadOutlined />} loading={validating} onClick={handleSave}>
-                  {t('threshold.save')}
+                  {loadedFilePath ? t('threshold.save') : t('threshold.saveAs')}
                 </Button>
               </Space>
             }
           >
+            {loadedFilePath && (
+              <Text
+                type="secondary"
+                ellipsis={{ tooltip: loadedFilePath }}
+                style={{ display: 'block', marginBottom: 8 }}
+              >
+                {t('threshold.currentFile')}: {getFileName(loadedFilePath)}
+              </Text>
+            )}
             <Form form={form} layout="vertical" initialValues={DEFAULT_VALUES}>
               <Row gutter={8}>
                 <Col span={8}>

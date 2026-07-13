@@ -336,3 +336,9 @@ export interface ThresholdConfigValidation {
   warnings: string[];
   tests_status: TestsStatus;
 }
+
+export interface ThresholdYamlFileLoadResult {
+  file_path: string;
+  config: FactoryThresholdConfig;
+  validation: ThresholdConfigValidation;
+}

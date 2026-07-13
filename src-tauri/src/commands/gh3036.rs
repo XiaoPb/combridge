@@ -9,6 +9,13 @@ use crate::gh3036::{
 };
 use crate::state::StatePersistenceRef;
 
+#[derive(Debug, serde::Serialize)]
+pub struct ThresholdYamlFileLoadResult {
+    pub file_path: String,
+    pub config: FactoryThresholdConfig,
+    pub validation: ThresholdConfigValidation,
+}
+
 #[tauri::command]
 pub async fn gh3036_init(
     manager: State<'_, Gh3036ManagerRef>,
@@ -299,6 +306,46 @@ pub async fn gh3036_validate_threshold_yaml(
         Ok(config) => Ok(ThresholdConfigValidation::from_config(&config, None)),
         Err(e) => Ok(ThresholdConfigValidation::from_error(e, None)),
     }
+}
+
+#[tauri::command]
+pub async fn gh3036_load_threshold_yaml_file(
+    file_path: String,
+) -> Result<ThresholdYamlFileLoadResult, ErrorResponse> {
+    let path = std::path::PathBuf::from(&file_path);
+    let content = std::fs::read_to_string(&path).map_err(|e| {
+        ComBridgeError::config(format!("读取卡控配置文件失败: {}", e)).to_error_response()
+    })?;
+    let config = FactoryThresholdConfig::from_yaml(&content)
+        .map_err(|e| ComBridgeError::config(e).to_error_response())?;
+    let validation = ThresholdConfigValidation::from_config(&config, Some(&path));
+
+    Ok(ThresholdYamlFileLoadResult {
+        file_path,
+        config,
+        validation,
+    })
+}
+
+#[tauri::command]
+pub async fn gh3036_save_threshold_yaml_file(
+    file_path: String,
+    yaml: String,
+) -> Result<ThresholdConfigValidation, ErrorResponse> {
+    let path = std::path::PathBuf::from(&file_path);
+    let config = FactoryThresholdConfig::from_yaml(&yaml)
+        .map_err(|e| ComBridgeError::config(e).to_error_response())?;
+    let validation = ThresholdConfigValidation::from_config(&config, Some(&path));
+
+    if !validation.is_valid {
+        return Ok(validation);
+    }
+
+    std::fs::write(&path, yaml).map_err(|e| {
+        ComBridgeError::config(format!("保存卡控配置文件失败: {}", e)).to_error_response()
+    })?;
+
+    Ok(validation)
 }
 
 #[tauri::command]

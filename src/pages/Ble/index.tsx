@@ -19,6 +19,8 @@ import { useConfigStore } from '../../stores/configStore';
 const { Text } = Typography;
 const { TextArea } = Input;
 
+const normalizeUuid = (uuid: string) => uuid.trim().toLowerCase();
+
 const formatTimestamp = (timestamp: number, timezone?: string): string => {
   const date = new Date(timestamp);
   
@@ -636,7 +638,9 @@ const BlePage: React.FC = () => {
   const renderDeviceContent = (tabData: DeviceTabData) => {
     const treeData = buildTreeData(tabData.services);
     const isSubscribed = tabData.selectedCharacteristic 
-      ? tabData.subscribedUuids.includes(tabData.selectedCharacteristic.uuid)
+      ? tabData.subscribedUuids.some(
+          (uuid) => normalizeUuid(uuid) === normalizeUuid(tabData.selectedCharacteristic!.uuid)
+        )
       : false;
 
     return (

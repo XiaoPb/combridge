@@ -12,13 +12,14 @@ import {
   message,
   theme,
 } from 'antd';
-import { LinkOutlined, SearchOutlined } from '@ant-design/icons';
+import { DisconnectOutlined, LinkOutlined, SearchOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { bleApi } from '../../api/tauri';
 import { gh3036Api } from '../../api/gh3036';
 import type { BleCharacteristic, BleConnection, BleDeviceInfo, BleService } from '../../types';
 import { preferencesApi } from '../../api/tauri';
 import { formatMacAddress, useBleStore } from '../../stores/bleStore';
+import { useGh3036Store } from '../../stores/gh3036Store';
 
 const { Text } = Typography;
 
@@ -59,10 +60,23 @@ const FactoryQuickConnect: React.FC = () => {
   const setServices = useBleStore((state) => state.setServices);
   const setCharacteristics = useBleStore((state) => state.setCharacteristics);
   const setDeviceTab = useBleStore((state) => state.setDeviceTab);
+  const clearDisconnectedDevice = useBleStore((state) => state.clearDisconnectedDevice);
   const existingDeviceTabs = useBleStore((state) => state.deviceTabs);
+  const connections = useBleStore((state) => state.connections);
+  const channelConfig = useGh3036Store((state) => state.channelConfig);
+  const updateChannelConfig = useGh3036Store((state) => state.updateChannelConfig);
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState<string>('');
   const [matchedDevice, setMatchedDevice] = useState<BleDeviceInfo | null>(null);
+
+  const connectedDevice = useMemo(() => {
+    if (!matchedDevice) return null;
+    return (
+      connections.find(
+        (conn) => conn.isConnected && conn.address === matchedDevice.address
+      ) || null
+    );
+  }, [connections, matchedDevice]);
 
   useEffect(() => {
     preferencesApi
@@ -84,11 +98,32 @@ const FactoryQuickConnect: React.FC = () => {
       });
   }, [form]);
 
+  useEffect(() => {
+    if (running || channelConfig.connectionType !== 'ble' || !channelConfig.bleDevice) {
+      return;
+    }
+
+    const connection = connections.find(
+      (conn) => conn.isConnected && conn.address === channelConfig.bleDevice
+    );
+    if (!connection) {
+      return;
+    }
+
+    setMatchedDevice({
+      address: connection.address,
+      name: connection.name,
+      isConnectable: true,
+      discoveredAt: connection.connectedAt || Date.now(),
+    });
+    setStatus(t('factory.quickConnectSuccess'));
+  }, [channelConfig.bleDevice, channelConfig.connectionType, connections, running, t]);
+
   const statusTag = useMemo(() => {
     if (running) return <Tag color="processing">{t('factory.quickConnectRunning')}</Tag>;
-    if (matchedDevice) return <Tag color="success">{t('factory.quickConnectReady')}</Tag>;
+    if (connectedDevice) return <Tag color="success">{t('factory.quickConnectReady')}</Tag>;
     return <Tag>{t('factory.quickConnectIdle')}</Tag>;
-  }, [matchedDevice, running, t]);
+  }, [connectedDevice, running, t]);
 
   const scanUntilMatched = async (
     targetName: string,
@@ -256,6 +291,13 @@ const FactoryQuickConnect: React.FC = () => {
         tx_char: txUuid,
         rx_char: rxUuid,
       });
+      await updateChannelConfig({
+        connectionType: 'ble',
+        serialPort: '',
+        bleDevice: connection.address,
+        txChar: txUuid,
+        rxChar: rxUuid,
+      });
       syncBleConnectionState(connection, services, subscribedUuids);
 
       setStatus(t('factory.quickConnectSuccess'));
@@ -266,6 +308,29 @@ const FactoryQuickConnect: React.FC = () => {
       message.error(errorMsg);
     } finally {
       await bleApi.stopBleScan().catch(() => undefined);
+      setRunning(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!connectedDevice) return;
+
+    setRunning(true);
+    try {
+      await bleApi.disconnectBle(connectedDevice.address);
+      clearDisconnectedDevice(connectedDevice.address);
+      await updateChannelConfig({
+        connectionType: 'ble',
+        bleDevice: '',
+      });
+      setMatchedDevice(null);
+      setStatus(t('factory.quickConnectDisconnected'));
+      message.success(t('factory.quickConnectDisconnected'));
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      setStatus(errorMsg);
+      message.error(errorMsg);
+    } finally {
       setRunning(false);
     }
   };
@@ -282,13 +347,14 @@ const FactoryQuickConnect: React.FC = () => {
       style={{ background: token.colorBgContainer, borderRadius: token.borderRadius }}
       extra={
         <Button
-          type="primary"
-          icon={running ? <SearchOutlined /> : <LinkOutlined />}
+          type={connectedDevice ? 'default' : 'primary'}
+          danger={!!connectedDevice}
+          icon={running ? <SearchOutlined /> : connectedDevice ? <DisconnectOutlined /> : <LinkOutlined />}
           loading={running}
-          onClick={handleQuickConnect}
+          onClick={connectedDevice ? handleDisconnect : handleQuickConnect}
           size="small"
         >
-          {t('factory.quickConnectAction')}
+          {connectedDevice ? t('factory.quickDisconnectAction') : t('factory.quickConnectAction')}
         </Button>
       }
     >

@@ -342,6 +342,8 @@ pub fn run() {
             commands::gh3036::gh3036_get_evaluation_result,
             commands::gh3036::gh3036_generate_threshold_yaml,
             commands::gh3036::gh3036_validate_threshold_yaml,
+            commands::gh3036::gh3036_load_threshold_yaml_file,
+            commands::gh3036::gh3036_save_threshold_yaml_file,
             commands::gh3036::gh3036_set_hr_ref,
             commands::gh3036::gh3036_set_hrv_ref,
             commands::gh3036::gh3036_set_spo2_ref,

@@ -59,7 +59,11 @@
     "exportFailed": "导出失败: {{error}}",
     "eachPortTab": "每个串口将创建独立的标签页",
     "selectPortToStart": "选择串口并点击\"打开串口\"开始通信",
-    "selectPortTab": "请选择串口标签页"
+    "selectPortTab": "请选择串口标签页",
+    "scanFailed": "扫描串口失败",
+    "openFailed": "打开串口失败",
+    "closeFailed": "关闭串口失败",
+    "sendFailed": "发送数据失败"
   },
   "tooltip": {
     "autoScrollOn": "自动滚动: 开启",

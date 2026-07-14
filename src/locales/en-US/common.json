@@ -67,7 +67,9 @@
     "networkError": "Network error",
     "unknownError": "Unknown error",
     "pleaseWait": "Please wait...",
-    "processing": "Processing..."
+    "processing": "Processing...",
+    "dispatchFailed": "Failed to perform operation",
+    "formatFailed": "Failed to format data"
   },
   "validation": {
     "required": "This field is required",

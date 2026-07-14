@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
 import { gh3036Api } from '../../api/gh3036';
 import type { Gh3036VersionTypeConfig } from '../../api/types';
+import { formatErrorMessage } from '../../utils/errorMessage';
 
 interface VersionInfo {
   [key: string]: string;
@@ -59,11 +60,11 @@ const VersionTab: React.FC = () => {
       }));
       message.success(`${typeConfig.description}: ${version}`);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '获取失败';
+      const errorMsg = formatErrorMessage(err, t('errors.getVersion'));
       message.error(errorMsg);
       setVersionInfo(prev => ({
         ...prev,
-        [typeConfig.name]: '获取失败',
+        [typeConfig.name]: t('errors.getVersion'),
       }));
     } finally {
       setRefreshingKey(null);
@@ -84,7 +85,7 @@ const VersionTab: React.FC = () => {
         const version = await handleGetVersion(typeConfig);
         newVersionInfo[typeConfig.name] = version;
       } catch {
-        newVersionInfo[typeConfig.name] = '获取失败';
+        newVersionInfo[typeConfig.name] = t('errors.getVersion');
       }
     }
     
@@ -124,7 +125,7 @@ const VersionTab: React.FC = () => {
       key: 'version',
       render: (_: unknown, record: Gh3036VersionTypeConfig) => {
         const version = versionInfo[record.name] || '--';
-        const isSuccess = version !== '--' && version !== '获取失败';
+        const isSuccess = version !== '--' && version !== t('errors.getVersion');
         return (
           <Space>
             {isSuccess ? (

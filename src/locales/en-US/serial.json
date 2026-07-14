@@ -59,7 +59,11 @@
     "exportFailed": "Export failed: {{error}}",
     "eachPortTab": "Each port will create a separate tab",
     "selectPortToStart": "Select a port and click \"Open Port\" to start",
-    "selectPortTab": "Please select a port tab"
+    "selectPortTab": "Please select a port tab",
+    "scanFailed": "Failed to scan serial ports",
+    "openFailed": "Failed to open serial port",
+    "closeFailed": "Failed to close serial port",
+    "sendFailed": "Failed to send data"
   },
   "tooltip": {
     "autoScrollOn": "Auto scroll: On",

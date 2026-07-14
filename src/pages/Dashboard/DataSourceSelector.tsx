@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Select, Space, Input, Button, message } from 'antd';
 import { FolderOpenOutlined, PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { formatErrorMessage } from '../../utils/errorMessage';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import { useConnectedDevices } from '../../hooks/useConnectedDevices';
@@ -87,7 +88,7 @@ const DataSourceSelector: React.FC = () => {
 
       setPlaybackInterval(interval);
     } catch (error) {
-      message.error(t('fileReadError') || 'Failed to read file');
+      message.error(formatErrorMessage(error, t('fileReadError')));
     }
   };
 

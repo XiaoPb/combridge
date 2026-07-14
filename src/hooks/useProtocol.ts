@@ -4,6 +4,8 @@ import { protocolApi } from '../api/tauri';
 import { useProtocolStore } from '../stores/protocolStore';
 import { useLogStore } from '../stores/logStore';
 import type { PluginInfo } from '../api/types';
+import i18n from '../i18n';
+import { formatErrorMessage } from '../utils/errorMessage';
 
 export const useProtocol = () => {
   const {
@@ -32,7 +34,7 @@ export const useProtocol = () => {
       const list = await protocolApi.listProtocols();
       setProtocols(list);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '获取协议列表失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('protocol:message.listFailed'));
       setError(errorMsg);
       addLog('error', 'ProtocolManager', `获取协议列表失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -51,7 +53,7 @@ export const useProtocol = () => {
       message.success(`协议 ${info.name} 加载成功`);
       return info;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '加载协议失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('protocol:message.loadFailed'));
       setError(errorMsg);
       addLog('error', 'ProtocolManager', `加载协议失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -70,7 +72,7 @@ export const useProtocol = () => {
       message.success('协议已卸载');
       return true;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '卸载协议失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('protocol:message.unloadFailed'));
       setError(errorMsg);
       addLog('error', 'ProtocolManager', `卸载协议失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -87,7 +89,7 @@ export const useProtocol = () => {
       message.success('协议已启用');
       return true;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '启用协议失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('protocol:message.enableFailed'));
       setError(errorMsg);
       addLog('error', 'ProtocolManager', `启用协议失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -104,7 +106,7 @@ export const useProtocol = () => {
       message.success('协议已禁用');
       return true;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '禁用协议失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('protocol:message.disableFailed'));
       setError(errorMsg);
       addLog('error', 'ProtocolManager', `禁用协议失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -127,7 +129,7 @@ export const useProtocol = () => {
       message.success('协议绑定成功');
       return true;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '绑定协议失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('protocol:message.bindFailed'));
       setError(errorMsg);
       addLog('error', 'ProtocolManager', `绑定协议失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -150,7 +152,7 @@ export const useProtocol = () => {
       message.success('协议解绑成功');
       return true;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '解绑协议失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('protocol:message.unbindFailed'));
       setError(errorMsg);
       addLog('error', 'ProtocolManager', `解绑协议失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -162,7 +164,7 @@ export const useProtocol = () => {
     try {
       return await protocolApi.getProtocol(pluginId);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '获取协议信息失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('protocol:message.getInfoFailed'));
       setError(errorMsg);
       return null;
     }
@@ -172,7 +174,7 @@ export const useProtocol = () => {
     try {
       return await protocolApi.getBoundProtocols(deviceId);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '获取绑定协议失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('protocol:message.getBindingsFailed'));
       setError(errorMsg);
       return [];
     }

@@ -4,6 +4,7 @@ import { LinkOutlined, SoundOutlined, ReloadOutlined, ClockCircleOutlined } from
 import { useTranslation } from 'react-i18next';
 import { useConfigStore, type AppConfig } from '../../stores/configStore';
 import { systemApi } from '../../api/tauri';
+import { formatErrorMessage } from '../../utils/errorMessage';
 
 const { Text } = Typography;
 
@@ -57,15 +58,15 @@ const SystemSettings: React.FC = () => {
       if (changedValues.timezone) {
         try {
           await systemApi.setTimezone(changedValues.timezone);
-          message.success(t('message.timezoneUpdated', { defaultValue: '时区设置已更新' }));
+          message.success(t('message.timezoneUpdated'));
         } catch (error) {
           console.error('Failed to update timezone:', error);
-          message.error(t('message.timezoneUpdateFailed', { defaultValue: '时区设置更新失败' }));
+          message.error(formatErrorMessage(error, t('message.timezoneUpdateFailed')));
         }
       }
     } catch (err) {
       console.error('Failed to save settings:', err);
-      message.error(t('message.saveFailed'));
+      message.error(formatErrorMessage(err, t('message.saveFailed')));
     }
   };
 

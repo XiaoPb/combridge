@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { bleApi } from '../../../api/tauri';
 import { BLE_SERVICE_UUID } from '../../../types/ble';
 import type { BleConnection } from '../../../types';
+import { formatErrorMessage } from '../../../utils/errorMessage';
 
 const { Text } = Typography;
 
@@ -51,7 +52,7 @@ const HrRefDeviceDialog: React.FC<HrRefDeviceDialogProps> = ({
       const hrDevices = filterHrDevices(connections);
       setDevices(hrDevices);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : t('monitor.hrRefLoadFailed');
+      const errorMsg = formatErrorMessage(err, t('monitor.hrRefLoadFailed'));
       message.error(errorMsg);
     } finally {
       setLoading(false);
@@ -64,7 +65,7 @@ const HrRefDeviceDialog: React.FC<HrRefDeviceDialogProps> = ({
     try {
       await onSelect(device.address);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : t('monitor.hrRefConnectFailed');
+      const errorMsg = formatErrorMessage(err, t('monitor.hrRefConnectFailed'));
       message.error(errorMsg);
       setSelectedDevice(null);
     } finally {

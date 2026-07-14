@@ -4,19 +4,11 @@ import { bleApi } from '../api/tauri';
 import { useBleStore, parseBleData, type BleMode } from '../stores/bleStore';
 import { useLogStore } from '../stores/logStore';
 import type { BleScanOptions, BleConnection } from '../types';
+import i18n from '../i18n';
+import { formatErrorMessage } from '../utils/errorMessage';
 
 const handleBleError = (operation: string, params: Record<string, unknown>, error: unknown): string => {
-  let errorMsg: string;
-  if (error instanceof Error) {
-    errorMsg = error.message;
-  } else if (typeof error === 'string') {
-    errorMsg = error;
-  } else if (error && typeof error === 'object') {
-    const errObj = error as Record<string, unknown>;
-    errorMsg = (errObj.message as string) || (errObj.error as string) || JSON.stringify(error);
-  } else {
-    errorMsg = String(error);
-  }
+  const errorMsg = formatErrorMessage(error, operation);
   if (import.meta.env.DEV) {
     console.error(`[useBle] ${operation} 失败:`, { params, error: errorMsg });
   }
@@ -67,7 +59,7 @@ export const useBle = () => {
       addLog('info', 'BleManager', `BLE模式已配置为 ${newMode}`);
       message.success(`BLE模式已配置为 ${newMode}`);
     } catch (err) {
-      const errorMsg = handleBleError('configure', { newMode, port }, err);
+      const errorMsg = handleBleError(i18n.t('ble:message.configureFailed'), { newMode, port }, err);
       setError(errorMsg);
       addLog('error', 'BleManager', `配置BLE模式失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -131,7 +123,7 @@ export const useBle = () => {
       if (scanRequestIdRef.current !== requestId) {
         return [];
       }
-      const errorMsg = handleBleError('scanDevices', { options }, err);
+      const errorMsg = handleBleError(i18n.t('ble:message.scanFailed'), { options }, err);
       setError(errorMsg);
       addLog('error', 'BleManager', `扫描BLE设备失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -175,7 +167,7 @@ export const useBle = () => {
       message.success(`已连接到 ${connection.name || address}`);
       return connection;
     } catch (err) {
-      const errorMsg = handleBleError('connectDevice', { address }, err);
+      const errorMsg = handleBleError(i18n.t('ble:message.connectFailed'), { address }, err);
       setError(errorMsg);
       addLog('error', 'BleManager', `连接设备 ${address} 失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -194,7 +186,7 @@ export const useBle = () => {
       addLog('info', 'BleManager', `设备 ${deviceId} 已断开`);
       message.success('设备已断开');
     } catch (err) {
-      const errorMsg = handleBleError('disconnectDevice', { deviceId }, err);
+      const errorMsg = handleBleError(i18n.t('ble:message.disconnectFailed'), { deviceId }, err);
       setError(errorMsg);
       addLog('error', 'BleManager', `断开设备 ${deviceId} 失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -217,7 +209,7 @@ export const useBle = () => {
       message.success(`发现 ${serviceList.length} 个服务`);
       return serviceList;
     } catch (err) {
-      const errorMsg = handleBleError('discoverServices', { deviceId: targetDevice }, err);
+      const errorMsg = handleBleError(i18n.t('ble:message.discoverServicesFailed'), { deviceId: targetDevice }, err);
       setError(errorMsg);
       addLog('error', 'BleManager', `发现服务失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -240,7 +232,7 @@ export const useBle = () => {
       message.success(`发现 ${charList.length} 个特征`);
       return charList;
     } catch (err) {
-      const errorMsg = handleBleError('discoverCharacteristics', { deviceId: targetDevice, serviceUuid }, err);
+      const errorMsg = handleBleError(i18n.t('ble:message.discoverCharacteristicsFailed'), { deviceId: targetDevice, serviceUuid }, err);
       setError(errorMsg);
       addLog('error', 'BleManager', `发现特征失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -262,7 +254,7 @@ export const useBle = () => {
       message.success('读取成功');
       return data;
     } catch (err) {
-      const errorMsg = handleBleError('readCharacteristic', { deviceId: targetDevice, characteristicUuid }, err);
+      const errorMsg = handleBleError(i18n.t('ble:message.readFailed'), { deviceId: targetDevice, characteristicUuid }, err);
       setError(errorMsg);
       addLog('error', 'BleManager', `读取特征失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -294,7 +286,7 @@ export const useBle = () => {
       await bleApi.writeBleCharacteristic(targetDevice, characteristicUuid, bytes, withoutResponse);
       message.success('写入成功');
     } catch (err) {
-      const errorMsg = handleBleError('writeCharacteristic', { deviceId: targetDevice, characteristicUuid, data, format, withoutResponse }, err);
+      const errorMsg = handleBleError(i18n.t('ble:message.writeFailed'), { deviceId: targetDevice, characteristicUuid, data, format, withoutResponse }, err);
       setError(errorMsg);
       addLog('error', 'BleManager', `写入特征失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -315,7 +307,7 @@ export const useBle = () => {
       addLog('info', 'BleManager', `已订阅特征 ${characteristicUuid} 的通知`);
       message.success('已订阅通知');
     } catch (err) {
-      const errorMsg = handleBleError('subscribeNotify', { deviceId: targetDevice, characteristicUuid }, err);
+      const errorMsg = handleBleError(i18n.t('ble:message.subscribeFailed'), { deviceId: targetDevice, characteristicUuid }, err);
       setError(errorMsg);
       addLog('error', 'BleManager', `订阅通知失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -336,7 +328,7 @@ export const useBle = () => {
       addLog('info', 'BleManager', `已取消订阅特征 ${characteristicUuid} 的通知`);
       message.success('已取消订阅');
     } catch (err) {
-      const errorMsg = handleBleError('unsubscribeNotify', { deviceId: targetDevice, characteristicUuid }, err);
+      const errorMsg = handleBleError(i18n.t('ble:message.unsubscribeFailed'), { deviceId: targetDevice, characteristicUuid }, err);
       setError(errorMsg);
       addLog('error', 'BleManager', `取消订阅失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -367,7 +359,7 @@ export const useBle = () => {
       }
       return connectionList;
     } catch (err) {
-      const errorMsg = handleBleError('restoreConnections', {}, err);
+      const errorMsg = handleBleError(i18n.t('ble:message.restoreConnectionsFailed'), {}, err);
       if (import.meta.env.DEV) {
         console.error('[useBle] 恢复连接状态失败:', errorMsg);
       }

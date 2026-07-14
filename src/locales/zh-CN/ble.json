@@ -108,7 +108,21 @@
     "discoverFailed": "发现特征失败",
     "saveLogFailed": "保存日志失败",
     "selectProtocolDevice": "请选择协议和设备",
-    "bindingExists": "该绑定已存在"
+    "bindingExists": "该绑定已存在",
+    "configureFailed": "配置 BLE 模式失败",
+    "scanFailed": "扫描 BLE 设备失败",
+    "connectFailed": "连接 BLE 设备失败",
+    "disconnectFailed": "断开 BLE 设备失败",
+    "discoverServicesFailed": "发现 BLE 服务失败",
+    "discoverCharacteristicsFailed": "发现 BLE 特征失败",
+    "readFailed": "读取 BLE 特征失败",
+    "writeFailed": "写入 BLE 特征失败",
+    "subscribeFailed": "订阅 BLE 通知失败",
+    "unsubscribeFailed": "取消订阅 BLE 通知失败",
+    "restoreConnectionsFailed": "恢复 BLE 连接失败",
+    "atSendFailed": "发送 AT 数据失败",
+    "atDisconnectFailed": "断开 AT 连接失败",
+    "atSaveUuidFailed": "保存 AT UUID 配置失败"
   },
   "tooltip": {
     "collapseTree": "折叠服务树",

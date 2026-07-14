@@ -23,6 +23,8 @@ import { getCurrentTimeString } from '../utils/helpers';
 import { useConfigStore } from './configStore';
 import { mergeGh3036Frames } from './gh3036FrameBuffer';
 import { hasFactoryTestResult } from './factoryTestState';
+import i18n from '../i18n';
+import { formatErrorMessage } from '../utils/errorMessage';
 
 const getTs = (): string => {
   const state = useConfigStore.getState();
@@ -212,7 +214,7 @@ interface Gh3036State {
   
   sendData: (data: number[]) => Promise<boolean>;
   
-  executeRpc: (commandKey: string, params: string[]) => Promise<number[]>;
+  executeRpc: (commandKey: string, params: string[]) => Promise<number[] | null>;
   subscribeEvents: () => Promise<void>;
   unsubscribeEvents: () => void;
   loadLibraryStatus: () => Promise<void>;
@@ -600,7 +602,7 @@ export const useGh3036Store = create<Gh3036State>()(
       await gh3036Api.init();
       set({ isInitialized: true });
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '初始化失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('gh3036:errors.initialize'));
       set({ error: errorMsg });
     } finally {
       set({ isLoading: false });
@@ -695,7 +697,7 @@ export const useGh3036Store = create<Gh3036State>()(
       });
       return true;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '配置发送通道失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('gh3036:errors.configureTx'));
       set({ error: errorMsg });
       return false;
     } finally {
@@ -716,7 +718,7 @@ export const useGh3036Store = create<Gh3036State>()(
       });
       return true;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '配置接收通道失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('gh3036:errors.configureRx'));
       set({ error: errorMsg });
       return false;
     } finally {
@@ -736,7 +738,7 @@ export const useGh3036Store = create<Gh3036State>()(
       });
       return true;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '更新CSV配置失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('gh3036:errors.updateCsv'));
       set({ error: errorMsg });
       return false;
     } finally {
@@ -750,7 +752,7 @@ export const useGh3036Store = create<Gh3036State>()(
       await gh3036Api.sendData(data);
       return true;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '发送数据失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('gh3036:errors.sendData'));
       set({ error: errorMsg });
       return false;
     }
@@ -762,9 +764,9 @@ export const useGh3036Store = create<Gh3036State>()(
       const result = await gh3036Api.executeRpc(commandKey, params);
       return result;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '执行RPC指令失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('gh3036:errors.executeRpc'));
       set({ error: errorMsg });
-      return [];
+      return null;
     } finally {
       set({ isLoading: false });
     }
@@ -939,7 +941,7 @@ export const useGh3036Store = create<Gh3036State>()(
       await factoryTestApi.start();
       console.log(`[${getTs()}] [Gh3036Store] factoryTestApi.start() 调用成功`);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '启动产测失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('gh3036:errors.startFactoryTest'));
       console.error(`[${getTs()}] [Gh3036Store] 启动产测失败:`, err);
       set((state) => ({
         factoryTest: {
@@ -964,7 +966,7 @@ export const useGh3036Store = create<Gh3036State>()(
         },
       }));
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '停止产测失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('gh3036:errors.stopFactoryTest'));
       set((state) => ({
         factoryTest: {
           ...state.factoryTest,
@@ -985,7 +987,7 @@ export const useGh3036Store = create<Gh3036State>()(
         },
       }));
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '继续产测失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('gh3036:errors.continueFactoryTest'));
       set((state) => ({
         factoryTest: {
           ...state.factoryTest,
@@ -1008,7 +1010,7 @@ export const useGh3036Store = create<Gh3036State>()(
         },
       }));
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '设置配置目录失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('gh3036:errors.setConfigDir'));
       set((state) => ({
         factoryTest: {
           ...state.factoryTest,
@@ -1025,7 +1027,7 @@ export const useGh3036Store = create<Gh3036State>()(
         factoryTest: { ...state.factoryTest, configValidation: validation },
       }));
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '验证配置失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('gh3036:errors.validateConfig'));
       set((state) => ({
         factoryTest: {
           ...state.factoryTest,
@@ -1196,7 +1198,7 @@ export const useGh3036Store = create<Gh3036State>()(
         factoryTest: { ...state.factoryTest, thresholdValidation: validation },
       }));
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '校验卡控配置失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('gh3036:errors.validateThreshold'));
       set((state) => ({
         factoryTest: {
           ...state.factoryTest,

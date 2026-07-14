@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { CsvParseConfig, CsvParseResult, readCsvFile } from '../utils/csvParser';
 import type { ChartGroupConfig, YAxisConfig } from '../pages/Waveform/MultiLineChart';
+import i18n from '../i18n';
+import { formatErrorMessage } from '../utils/errorMessage';
 
 interface DataZoomState {
   start: number;
@@ -112,7 +114,7 @@ export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
         dataZoomState,
       });
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
+      set({ error: formatErrorMessage(err, i18n.t('waveform:errors.loadCsv')) });
     } finally {
       set({ isLoading: false });
     }

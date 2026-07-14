@@ -21,6 +21,7 @@ import {
   MergeCellsOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { formatErrorMessage } from '../../utils/errorMessage';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import { dashboardApi } from '../../api/dashboard';
 import type { ParserScriptInfo } from '../../types/dashboard';
@@ -68,7 +69,7 @@ const ParserScriptManager: React.FC<ParserScriptManagerProps> = ({ open, onClose
       setEditingScript(name);
       setScriptContent(content);
     } catch (error) {
-      message.error(t('parser.loadError') || 'Failed to load script');
+      message.error(formatErrorMessage(error, t('parser.loadError')));
     }
   };
 
@@ -81,7 +82,7 @@ const ParserScriptManager: React.FC<ParserScriptManagerProps> = ({ open, onClose
       setEditingScript(null);
       loadScripts();
     } catch (error) {
-      message.error(t('parser.saveError') || 'Failed to save script');
+      message.error(formatErrorMessage(error, t('parser.saveError')));
     }
   };
 
@@ -91,7 +92,7 @@ const ParserScriptManager: React.FC<ParserScriptManagerProps> = ({ open, onClose
       message.success(t('parser.deleteSuccess') || 'Script deleted');
       loadScripts();
     } catch (error) {
-      message.error(t('parser.deleteError') || 'Failed to delete script');
+      message.error(formatErrorMessage(error, t('parser.deleteError')));
     }
   };
 
@@ -103,7 +104,7 @@ const ParserScriptManager: React.FC<ParserScriptManagerProps> = ({ open, onClose
       setTestResult(result);
       message.success(t('parser.testSuccess') || 'Test passed');
     } catch (error) {
-      message.error(t('parser.testError') || 'Test failed');
+      message.error(formatErrorMessage(error, t('parser.testError')));
       setTestResult(null);
     }
   };
@@ -146,7 +147,7 @@ return parser
       setShowImport(false);
       loadScripts();
     } catch (error) {
-      message.error(t('parser.importError') || 'Failed to import script');
+      message.error(formatErrorMessage(error, t('parser.importError')));
     }
   };
 
@@ -157,7 +158,7 @@ return parser
       setShowMerge(false);
       loadScripts();
     } catch (error) {
-      message.error(t('parser.mergeError') || 'Failed to merge fields');
+      message.error(formatErrorMessage(error, t('parser.mergeError')));
     }
   };
 

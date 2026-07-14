@@ -5,6 +5,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { AtConnectionTab as AtConnectionTabType, AtDataEntry } from '../../stores/bleStore';
 import { useBleStore, formatBleTimestamp, formatBleData, parseBleData } from '../../stores/bleStore';
+import { useTranslation } from 'react-i18next';
+import { formatErrorMessage } from '../../utils/errorMessage';
 
 const { Text } = Typography;
 const { Panel } = Collapse;
@@ -14,6 +16,7 @@ interface AtConnectionTabProps {
 }
 
 const AtConnectionTab: React.FC<AtConnectionTabProps> = ({ tab }) => {
+  const { t } = useTranslation('ble');
   const { preferences, updatePreferences, clearAtTabData, removeAtTab } = useBleStore();
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -75,11 +78,11 @@ const AtConnectionTab: React.FC<AtConnectionTabProps> = ({ tab }) => {
       useBleStore.getState().addAtSentData(tab.id, entry);
       setInputValue('');
     } catch (err) {
-      message.error(`发送失败: ${err}`);
+      message.error(formatErrorMessage(err, t('message.atSendFailed')));
     } finally {
       setIsSending(false);
     }
-  }, [inputValue, preferences.inputFormat, tab.address, tab.id]);
+  }, [inputValue, preferences.inputFormat, tab.address, tab.id, t]);
 
   const handleClear = useCallback(() => {
     clearAtTabData(tab.id);
@@ -91,9 +94,9 @@ const AtConnectionTab: React.FC<AtConnectionTabProps> = ({ tab }) => {
       removeAtTab(tab.id);
       message.success('已断开连接');
     } catch (err) {
-      message.error(`断开连接失败: ${err}`);
+      message.error(formatErrorMessage(err, t('message.atDisconnectFailed')));
     }
-  }, [tab.address, tab.id, removeAtTab]);
+  }, [tab.address, tab.id, removeAtTab, t]);
 
   const handleUuidSave = useCallback(async () => {
     try {
@@ -104,9 +107,9 @@ const AtConnectionTab: React.FC<AtConnectionTabProps> = ({ tab }) => {
       });
       message.success('UUID配置已保存，下次连接生效');
     } catch (err) {
-      message.error(`保存UUID配置失败: ${err}`);
+      message.error(formatErrorMessage(err, t('message.atSaveUuidFailed')));
     }
-  }, [uuidConfig]);
+  }, [uuidConfig, t]);
 
   const allData = [...tab.receivedData, ...tab.sentData]
     .sort((a, b) => a.timestamp - b.timestamp);

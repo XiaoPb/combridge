@@ -13,6 +13,7 @@ import {
   theme,
 } from 'antd';
 import { useTranslation } from 'react-i18next';
+import { formatErrorMessage } from '../../utils/errorMessage';
 import { dashboardApi } from '../../api/dashboard';
 import type { JsonStructureInfo, JsonFieldInfo } from '../../types/dashboard';
 
@@ -57,7 +58,7 @@ const JsonImportDialog: React.FC<JsonImportDialogProps> = ({
       setSelectedFields(numericFields);
       setStep('select');
     } catch (error) {
-      message.error(t('jsonImport.analyzeError') || 'Failed to analyze JSON');
+      message.error(formatErrorMessage(error, t('jsonImport.analyzeError')));
     } finally {
       setLoading(false);
     }
@@ -79,7 +80,7 @@ const JsonImportDialog: React.FC<JsonImportDialogProps> = ({
       setGeneratedScript(script);
       setStep('preview');
     } catch (error) {
-      message.error(t('jsonImport.generateError') || 'Failed to generate script');
+      message.error(formatErrorMessage(error, t('jsonImport.generateError')));
     } finally {
       setLoading(false);
     }

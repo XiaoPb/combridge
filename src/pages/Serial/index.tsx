@@ -9,6 +9,7 @@ import { message } from 'antd';
 import { DEFAULT_BAUD_RATES, DEFAULT_SERIAL_CONFIG } from '../../types';
 import type { SerialConfig } from '../../types';
 import { useTranslation } from 'react-i18next';
+import { formatErrorMessage } from '../../utils/errorMessage';
 
 const { Sider, Content } = Layout;
 const { Text, Title } = Typography;
@@ -173,8 +174,7 @@ const SerialPage: React.FC = () => {
       );
       message.success(t('message.exportSuccess', { logPath: result.logPath, datPath: result.datPath }));
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : t('message.exportFailed', { error: '' }).split(':')[0];
-      message.error(t('message.exportFailed', { error: errorMsg }));
+      message.error(formatErrorMessage(error, t('message.exportFailed', { error: '' }).replace(/:\s*$/, '')));
     }
   };
 

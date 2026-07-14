@@ -7,6 +7,24 @@
     "factory": "Factory Test",
     "threshold": "Factory Config Generator"
   },
+  "errors": {
+    "initialize": "Failed to initialize GH3036",
+    "configureTx": "Failed to configure TX channel",
+    "configureRx": "Failed to configure RX channel",
+    "updateCsv": "Failed to update CSV configuration",
+    "sendData": "Failed to send GH3036 data",
+    "executeRpc": "Failed to execute RPC command",
+    "startFactoryTest": "Failed to start factory test",
+    "stopFactoryTest": "Failed to stop factory test",
+    "continueFactoryTest": "Failed to continue factory test",
+    "setConfigDir": "Failed to set config directory",
+    "validateConfig": "Failed to validate configuration",
+    "validateThreshold": "Failed to validate threshold configuration",
+    "getVersion": "Failed to get version",
+    "loadVersionTypes": "Failed to load version types",
+    "quickConnect": "Quick connect failed",
+    "quickDisconnect": "Quick disconnect failed"
+  },
   "monitor": {
     "hr": "Heart Rate",
     "spo2": "SpO2",
@@ -208,6 +226,7 @@
     "loaded": "YAML file loaded",
     "loadFailed": "Failed to load YAML",
     "saved": "YAML file saved",
+    "saveFailed": "Failed to save YAML",
     "overwriteSaved": "YAML file overwritten",
     "projectRequired": "Enter a project name",
     "projectInvalid": "Project name can only contain Chinese characters, letters, numbers, underscores, and hyphens",

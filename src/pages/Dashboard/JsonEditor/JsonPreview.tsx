@@ -2,6 +2,7 @@ import React from 'react';
 import { Button, Space, message } from 'antd';
 import { CopyOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { formatErrorMessage } from '../../../utils/errorMessage';
 import { useDashboardStore } from '../../../stores/dashboardStore';
 
 const terminalBg = '#1e1e1e';
@@ -19,7 +20,7 @@ const JsonPreview: React.FC = () => {
       message.success(t('jsonEditor.copySuccess') || '已复制到剪贴板');
     } catch (error) {
       console.error('Failed to copy:', error);
-      message.error(t('jsonEditor.copyError') || '复制失败');
+      message.error(formatErrorMessage(error, t('jsonEditor.copyError')));
     }
   };
 

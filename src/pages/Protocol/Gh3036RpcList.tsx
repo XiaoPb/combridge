@@ -6,6 +6,7 @@ import { useGh3036Store } from '../../stores/gh3036Store';
 import { gh3036Api } from '../../api/gh3036';
 import { open } from '@tauri-apps/plugin-dialog';
 import type { Gh3036ConfigRegisterPreview, Gh3036VersionTypeConfig } from '../../api/types';
+import { formatErrorMessage } from '../../utils/errorMessage';
 
 const { Text } = Typography;
 const { useToken } = theme;
@@ -85,7 +86,8 @@ const Gh3036RpcList: React.FC = () => {
       message.error(t('gh3036.noTxChannel'));
       return false;
     }
-    const success = await executeRpc(commandKey, params);
+    const result = await executeRpc(commandKey, params);
+    const success = result !== null;
     if (success) {
       message.success(t('gh3036.commandSent', { name: commandKey }));
     }
@@ -202,13 +204,13 @@ const Gh3036RpcList: React.FC = () => {
             await gh3036Api.downloadConfigFile(pathStr);
             message.success(`配置下载完成，共 ${preview.registerCount} 个寄存器`);
           } catch (err) {
-            message.error(`配置下载失败: ${String(err)}`);
+            message.error(formatErrorMessage(err, t('gh3036.configDownloadFailed')));
             throw err;
           }
         },
       });
     } catch (err) {
-      message.error(t('gh3036.configParseFailed', { error: String(err) }));
+      message.error(formatErrorMessage(err, t('gh3036.configParseFailed')));
     }
   };
 
@@ -286,18 +288,19 @@ const Gh3036RpcList: React.FC = () => {
     };
     const modeBits = bitMap[rpcConfig.factoryMode] || 0;
     const result = await executeRpc('FG', ['0x' + modeBits.toString(16)]);
-    if (result && result.length >= 2) {
-      const values: string[] = [];
-      for (let i = 0; i < result.length; i += 2) {
-        if (i + 1 < result.length) {
-          const value = (result[i + 1] << 8) | result[i];
-          values.push(`0x${value.toString(16).toUpperCase().padStart(4, '0')}`);
-        }
-      }
-      const displayValue = values.length > 1 ? values.join(', ') : values[0] || '-';
-      setRpcConfig({ factoryResult: displayValue });
-      message.success(t('gh3036.factoryResultSuccess', { value: displayValue }));
+    if (result === null) {
+      return;
     }
+    const values: string[] = [];
+    for (let i = 0; i < result.length; i += 2) {
+      if (i + 1 < result.length) {
+        const value = (result[i + 1] << 8) | result[i];
+        values.push(`0x${value.toString(16).toUpperCase().padStart(4, '0')}`);
+      }
+    }
+    const displayValue = values.length > 1 ? values.join(', ') : values[0] || '-';
+    setRpcConfig({ factoryResult: displayValue });
+    message.success(t('gh3036.factoryResultSuccess', { value: displayValue }));
   };
 
   const rowStyle: React.CSSProperties = {

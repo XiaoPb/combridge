@@ -8,6 +8,7 @@ import {
   FullscreenExitOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { formatErrorMessage } from '../../utils/errorMessage';
 import type { PluginInfo } from '../../api/types';
 
 const { Text } = Typography;
@@ -101,7 +102,7 @@ PROTOCOL_AUTHOR = "${protocol.author || ''}"
       setOriginalContent(content);
       message.success(t('message.saveSuccess'));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : t('message.saveFailed'));
+      message.error(formatErrorMessage(err, t('message.saveFailed')));
     } finally {
       setIsSaving(false);
     }

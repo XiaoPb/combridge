@@ -7,6 +7,7 @@ import zhCN from 'antd/locale/zh_CN';
 import enUS from 'antd/locale/en_US';
 import i18n from 'i18next';
 import { useTranslation } from 'react-i18next';
+import { formatErrorMessage } from '../../utils/errorMessage';
 import { useTheme } from '../../hooks';
 import { gh3036Api } from '../../api/gh3036';
 import '../../styles/global.css';
@@ -81,7 +82,7 @@ const Spo2RefPage: React.FC = () => {
       await emit('spo2-ref-updated', { value });
       message.success(t('monitor.spo2RefSetSuccess'));
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : t('monitor.spo2RefSetFailed');
+      const errorMsg = formatErrorMessage(err, t('monitor.spo2RefSetFailed'));
       message.error(errorMsg);
     } finally {
       setLoading(false);

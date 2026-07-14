@@ -12,6 +12,7 @@ import {
 } from '@ant-design/icons';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
+import { formatErrorMessage } from '../../utils/errorMessage';
 import { systemApi } from '../../api/tauri';
 
 const { Text } = Typography;
@@ -82,7 +83,7 @@ const SystemInfoPage: React.FC = () => {
         setSystemInfo(info);
         setSystemStatus(status);
       } catch (err) {
-        setError(err instanceof Error ? err.message : t('message.loadFailed'));
+        setError(formatErrorMessage(err, t('message.loadFailed')));
       } finally {
         setLoading(false);
       }

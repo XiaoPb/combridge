@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { notification, message } from 'antd';
+import { useTranslation } from 'react-i18next';
 
 type NotificationType = 'success' | 'error' | 'warning' | 'info';
 
@@ -19,39 +20,40 @@ interface UseNotificationReturn {
 }
 
 export const useNotification = (): UseNotificationReturn => {
+  const { t } = useTranslation('common');
   const [api, contextHolder] = notification.useNotification();
 
   const success = useCallback((content: string, options?: NotificationOptions) => {
     api.success({
-      message: options?.title || '成功',
+      message: options?.title || t('common.success'),
       description: content,
       duration: options?.duration || 3,
     });
-  }, [api]);
+  }, [api, t]);
 
   const error = useCallback((content: string, options?: NotificationOptions) => {
     api.error({
-      message: options?.title || '错误',
+      message: options?.title || t('common.error'),
       description: content,
       duration: options?.duration || 5,
     });
-  }, [api]);
+  }, [api, t]);
 
   const warning = useCallback((content: string, options?: NotificationOptions) => {
     api.warning({
-      message: options?.title || '警告',
+      message: options?.title || t('common.warning'),
       description: content,
       duration: options?.duration || 4,
     });
-  }, [api]);
+  }, [api, t]);
 
   const info = useCallback((content: string, options?: NotificationOptions) => {
     api.info({
-      message: options?.title || '信息',
+      message: options?.title || t('common.info'),
       description: content,
       duration: options?.duration || 3,
     });
-  }, [api]);
+  }, [api, t]);
 
   const toast = useCallback((content: string, type: NotificationType = 'info') => {
     message[type](content);

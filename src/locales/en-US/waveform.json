@@ -9,6 +9,17 @@
     "confirm": "Confirm",
     "cancel": "Cancel"
   },
+  "errors": {
+    "createBuffer": "Failed to create waveform buffer",
+    "removeBuffer": "Failed to remove waveform buffer",
+    "configureParser": "Failed to configure waveform parser",
+    "parseData": "Failed to parse waveform data",
+    "readData": "Failed to read waveform data",
+    "getStatus": "Failed to get waveform status",
+    "clearBuffer": "Failed to clear waveform buffer",
+    "listBuffers": "Failed to list waveform buffers",
+    "loadCsv": "Failed to load CSV file"
+  },
   "buffer": {
     "title": "Buffer Configuration",
     "select": "Select Buffer",

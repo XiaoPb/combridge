@@ -7,6 +7,24 @@
     "factory": "产测",
     "threshold": "产测配置生成"
   },
+  "errors": {
+    "initialize": "初始化 GH3036 失败",
+    "configureTx": "配置发送通道失败",
+    "configureRx": "配置接收通道失败",
+    "updateCsv": "更新 CSV 配置失败",
+    "sendData": "发送 GH3036 数据失败",
+    "executeRpc": "执行 RPC 指令失败",
+    "startFactoryTest": "启动产测失败",
+    "stopFactoryTest": "停止产测失败",
+    "continueFactoryTest": "继续产测失败",
+    "setConfigDir": "设置配置目录失败",
+    "validateConfig": "验证配置失败",
+    "validateThreshold": "校验卡控配置失败",
+    "getVersion": "获取版本失败",
+    "loadVersionTypes": "加载版本类型失败",
+    "quickConnect": "快速连接失败",
+    "quickDisconnect": "快速断开失败"
+  },
   "monitor": {
     "hr": "心率",
     "spo2": "血氧",
@@ -208,6 +226,7 @@
     "loaded": "YAML 文件已加载",
     "loadFailed": "加载 YAML 失败",
     "saved": "YAML 文件已保存",
+    "saveFailed": "保存 YAML 失败",
     "overwriteSaved": "YAML 文件已覆盖保存",
     "projectRequired": "请输入项目名称",
     "projectInvalid": "项目名称仅支持中文、英文、数字、下划线和短横线",

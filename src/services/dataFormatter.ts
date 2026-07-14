@@ -1,3 +1,6 @@
+import i18n from '../i18n';
+import { formatErrorMessage } from '../utils/errorMessage';
+
 export type DataFormat = 'hex' | 'text' | 'binary' | 'decimal' | 'json';
 
 export interface FormatOptions {
@@ -59,7 +62,7 @@ class DataFormatter {
         format,
         length: data.length,
         isValid: false,
-        error: err instanceof Error ? err.message : '格式化失败',
+        error: formatErrorMessage(err, i18n.t('common:message.formatFailed')),
       };
     }
   }

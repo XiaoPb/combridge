@@ -535,42 +535,42 @@ impl Gh3036Manager {
         info!("GH3036 初始化 RPC 核心");
 
         let device_manager = Arc::clone(&self.device_manager);
-        let handle = Handle::try_current().map_err(|e| format!("获取 Tokio 运行时失败: {}", e))?;
-        let handle_for_send = handle.clone();
+        let handle =
+            Handle::try_current().map_err(|e| format!("获取 Tokio 运行时失败: {}", e))?;
 
-        let send_fn: SendFunction = Arc::new(move |data: &[u8]| -> Result<(), rpc::RpcError> {
+        let send_fn: SendFunction = Arc::new(move |data: Vec<u8>| {
             debug!("[RPC发送] 发送数据: {:02X?}", data);
 
-            let (channel_type, device_id, char_uuid) = {
+            let channel = {
                 let tx_channel = CALLBACK_CONTEXT.tx_channel.lock();
-                match tx_channel.as_ref() {
-                    Some(channel) => (
+                tx_channel.as_ref().map(|channel| {
+                    (
                         channel.channel_type,
                         channel.device_id.clone(),
                         channel.characteristic_uuid.clone(),
-                    ),
+                    )
+                })
+            };
+
+            let dm = Arc::clone(&device_manager);
+            Box::pin(async move {
+                let (channel_type, device_id, char_uuid) = match channel {
+                    Some(channel) => channel,
                     None => {
                         warn!("[RPC发送] TX 通道未配置");
                         return Err(rpc::RpcError::SendFail);
                     }
-                }
-            };
+                };
 
-            let dm = Arc::clone(&device_manager);
-            let data_vec = data.to_vec();
-            handle_for_send.spawn(async move {
-                let result = dm
+                dm
                     .send_direct(
                         channel_type.into(),
                         &device_id,
                         char_uuid.as_deref(),
-                        &data_vec,
+                        &data,
                     )
-                    .await;
-
-                match result {
-                    Ok(_) => debug!("[RPC发送] 发送成功: {} bytes", data_vec.len()),
-                    Err(e) => {
+                    .await
+                    .map_err(|e| {
                         let error_str = format!("{}", e);
                         if error_str.contains("已关闭")
                             || error_str.contains("closed")
@@ -580,11 +580,11 @@ impl Gh3036Manager {
                         } else {
                             error!("[RPC发送] 发送失败: {}", e);
                         }
-                    }
-                }
-            });
-
-            Ok(())
+                        rpc::RpcError::SendFail
+                    })?;
+                debug!("[RPC发送] 发送成功: {} bytes", data.len());
+                Ok(())
+            })
         });
 
         struct TauriLogger;

@@ -406,9 +406,10 @@ impl FrameBuilder {
         secure: bool,
         invoke_idx: u8,
     ) -> Vec<Vec<u8>> {
-        let max_payload = Self::calculate_max_payload(key, secure, false);
+        let max_payload_intermediate = Self::calculate_max_payload(key, secure, false);
+        let max_payload_final = Self::calculate_max_payload(key, secure, true);
 
-        if data.len() <= max_payload {
+        if data.len() <= max_payload_final {
             let frame = self.build_frame(key, data, secure, true, invoke_idx, 0);
             return vec![frame];
         }
@@ -419,8 +420,12 @@ impl FrameBuilder {
 
         while offset < data.len() {
             let remaining = data.len() - offset;
-            let is_fin = remaining <= max_payload;
-            let chunk_size = if is_fin { remaining } else { max_payload };
+            let is_fin = remaining <= max_payload_final;
+            let chunk_size = if is_fin {
+                remaining
+            } else {
+                remaining.min(max_payload_intermediate)
+            };
 
             let frame = self.build_frame(
                 key,
@@ -752,6 +757,53 @@ mod tests {
                 GHRPC_FRAME_SIZE
             );
         }
+    }
+
+    #[test]
+    fn test_build_frames_uses_final_frame_capacity_for_boundary() {
+        let key = "GH3X_RegsListWriteCmd";
+        let final_capacity = FrameBuilder::calculate_max_payload(key, true, true);
+        let mut builder = FrameBuilder::new();
+
+        assert_eq!(
+            builder
+                .build_frames_with_invoke_idx(key, &vec![0; final_capacity], true, 1)
+                .len(),
+            1
+        );
+        assert_eq!(
+            builder
+                .build_frames_with_invoke_idx(key, &vec![0; final_capacity + 1], true, 1)
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn test_secure_register_list_frames_reassemble_all_366_bytes() {
+        let data: Vec<u8> = (0..366).map(|index| (index & 0xff) as u8).collect();
+        let frames = FrameBuilder::new().build_frames_with_invoke_idx(
+            "GH3X_RegsListWriteCmd",
+            &data,
+            true,
+            0x11,
+        );
+        let mut parser = FrameParser::new();
+        let mut reassembled = Vec::new();
+
+        assert!(frames.len() > 1);
+        for frame in frames {
+            let result = parser
+                .process(&frame)
+                .into_iter()
+                .next()
+                .expect("frame result")
+                .expect("valid frame");
+            assert_eq!(result.invoke_idx, 0x11);
+            reassembled.extend_from_slice(&result.param);
+        }
+
+        assert_eq!(reassembled, data);
     }
 
     #[test]

@@ -11,7 +11,7 @@ use gh_rpc::{
     KEY_GH3X_REGS_READ_CMD, KEY_GH3X_REGS_WRITE_CMD,
 };
 use log::{error, info, warn, LevelFilter};
-use rpc::{InvokeContext, LogCallback, LogLevel, RpcCore, RpcConfig};
+use rpc::{InvokeContext, LogCallback, LogLevel, RpcCore, RpcConfig, SendFunction};
 use serialport::{SerialPort, SerialPortType};
 use tokio::sync::Mutex;
 
@@ -321,21 +321,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     server.register_handlers().await?;
 
-    let send_fn = {
+    let send_fn: SendFunction = {
         let serial_port = server.serial_port.as_ref().map(|p| {
             let port = p.try_clone().expect("Failed to clone serial port");
             Arc::new(Mutex::new(Some(port)))
         });
 
-        Arc::new(move |data: &[u8]| -> Result<(), rpc::RpcError> {
-            if let Some(ref port_mutex) = serial_port {
-                if let Some(ref mut port) = *port_mutex.try_lock().map_err(|_| rpc::RpcError::SendFail)? {
-                    port.write_all(data).map_err(|_| rpc::RpcError::SendFail)?;
-                    port.flush().map_err(|_| rpc::RpcError::SendFail)?;
-                    info!("发送 {} 字节响应数据", data.len());
+        Arc::new(move |data: Vec<u8>| {
+            let serial_port = serial_port.clone();
+            Box::pin(async move {
+                if let Some(ref port_mutex) = serial_port {
+                    if let Some(ref mut port) = *port_mutex.try_lock().map_err(|_| rpc::RpcError::SendFail)? {
+                        port.write_all(&data).map_err(|_| rpc::RpcError::SendFail)?;
+                        port.flush().map_err(|_| rpc::RpcError::SendFail)?;
+                        info!("发送 {} 字节响应数据", data.len());
+                    }
                 }
-            }
-            Ok(())
+                Ok(())
+            })
         })
     };
 

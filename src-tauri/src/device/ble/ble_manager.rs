@@ -91,6 +91,22 @@ enum Backend {
     At(AtBleBackend),
 }
 
+fn apply_subscription_state(
+    connections: &mut [BleConnection],
+    subscriptions: &HashMap<String, HashSet<String>>,
+) {
+    for connection in connections {
+        let subscribed_chars = subscriptions.get(&connection.address);
+        for service in &mut connection.services {
+            for characteristic in &mut service.characteristics {
+                characteristic.subscribed = subscribed_chars
+                    .map(|uuids| uuids.contains(&characteristic.uuid))
+                    .unwrap_or(false);
+            }
+        }
+    }
+}
+
 pub struct BleManager {
     mode: RwLock<BleMode>,
     backend: RwLock<Option<Backend>>,
@@ -334,10 +350,16 @@ impl BleManager {
             .as_ref()
             .ok_or_else(|| ComBridgeError::ble("BLE后端未配置"))?;
 
-        match backend {
-            Backend::Native(b) => b.get_connections().await,
-            Backend::At(b) => b.get_connections().await,
-        }
+        let mut connections = match backend {
+            Backend::Native(b) => b.get_connections().await?,
+            Backend::At(b) => b.get_connections().await?,
+        };
+        drop(backend_guard);
+
+        let subscriptions = self.subscriptions.read().await;
+        apply_subscription_state(&mut connections, &subscriptions);
+
+        Ok(connections)
     }
 
     pub async fn discover_services(&self, address: &str) -> Result<Vec<BleService>> {
@@ -606,6 +628,47 @@ pub type BleManagerRef = Arc<BleManager>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn connection_snapshot_uses_recorded_subscription_state() {
+        let characteristic = |uuid: &str, subscribed: bool| BleCharacteristic {
+            uuid: uuid.to_string(),
+            service_uuid: "service".to_string(),
+            properties: Default::default(),
+            subscribed,
+        };
+        let connection = |address: &str, characteristics: Vec<BleCharacteristic>| BleConnection {
+            address: address.to_string(),
+            name: None,
+            is_connected: true,
+            services: vec![BleService {
+                uuid: "service".to_string(),
+                primary: true,
+                characteristics,
+            }],
+        };
+
+        let mut connections = vec![
+            connection(
+                "device-a",
+                vec![
+                    characteristic("notify-a", false),
+                    characteristic("write-a", true),
+                ],
+            ),
+            connection("device-b", vec![characteristic("notify-a", true)]),
+        ];
+        let subscriptions = HashMap::from([(
+            "device-a".to_string(),
+            HashSet::from(["notify-a".to_string()]),
+        )]);
+
+        apply_subscription_state(&mut connections, &subscriptions);
+
+        assert!(connections[0].services[0].characteristics[0].subscribed);
+        assert!(!connections[0].services[0].characteristics[1].subscribed);
+        assert!(!connections[1].services[0].characteristics[0].subscribed);
+    }
 
     #[tokio::test]
     async fn clear_disconnected_state_removes_subscriptions_and_at_tabs() {

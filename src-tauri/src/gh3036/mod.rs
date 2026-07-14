@@ -33,8 +33,8 @@ pub use manager::{
 };
 pub use ref_data_manager::{RefDataError, RefDataManager, REF_DATA_TIMEOUT_SECS};
 pub use threshold_config::{
-    evaluate_test_data, validate_threshold_config_file, ChannelEvaluationResult,
-    FactoryEvaluationResult, FactoryThresholdConfig, TestEvaluationResult,
+    evaluate_test_data, evaluate_test_item, validate_threshold_config_file,
+    ChannelEvaluationResult, FactoryEvaluationResult, FactoryThresholdConfig, TestEvaluationResult,
     ThresholdConfigValidation, ThresholdOperator,
 };
 pub use types::{

@@ -22,6 +22,7 @@ import type { Gh3036FramePayload, Gh3036FramesPayload, Gh3036RefDataPayload } fr
 import { getCurrentTimeString } from '../utils/helpers';
 import { useConfigStore } from './configStore';
 import { mergeGh3036Frames } from './gh3036FrameBuffer';
+import { hasFactoryTestResult } from './factoryTestState';
 
 const getTs = (): string => {
   const state = useConfigStore.getState();
@@ -1088,7 +1089,7 @@ export const useGh3036Store = create<Gh3036State>()(
               get().addFactoryTestStepResult(progressEvent.step_result);
             }
             
-            if (progressEvent.status === 'completed' || progressEvent.status === 'failed') {
+            if (hasFactoryTestResult(progressEvent.status)) {
               set((state) => ({
                 factoryTest: {
                   ...state.factoryTest,
@@ -1096,18 +1097,23 @@ export const useGh3036Store = create<Gh3036State>()(
                 },
               }));
               
-              if (progressEvent.status === 'completed') {
-                factoryTestApi.getResult().then((result) => {
-                  if (result) {
-                    console.log(`[${getTs()}] [Gh3036Store] 获取产测结果成功: overall=${result.overall_result}`);
-                    set((state) => ({
-                      factoryTest: { ...state.factoryTest, result },
-                    }));
-                  }
-                }).catch((err) => {
-                  console.error(`[${getTs()}] [Gh3036Store] 获取产测结果失败:`, err);
-                });
-              }
+              Promise.all([
+                factoryTestApi.getResult(),
+                factoryTestApi.getEvaluationResult(),
+              ]).then(([result, evaluationResult]) => {
+                console.log(
+                  `[${getTs()}] [Gh3036Store] 获取产测终态结果成功: overall=${result?.overall_result ?? 'N/A'}`
+                );
+                set((state) => ({
+                  factoryTest: {
+                    ...state.factoryTest,
+                    result,
+                    evaluationResult,
+                  },
+                }));
+              }).catch((err) => {
+                console.error(`[${getTs()}] [Gh3036Store] 获取产测终态结果失败:`, err);
+              });
             }
           } catch (err) {
             console.error(`[${recvTs}] [Gh3036Store] 产测进度事件解码失败:`, err, 'raw payload:', event.payload);

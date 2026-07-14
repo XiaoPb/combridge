@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Layout, Card, Tabs, Button, Space, message, Modal, Input, theme } from 'antd';
 import { PlusOutlined, DeleteOutlined, SaveOutlined, FileOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { formatErrorMessage, getErrorDetail } from '../../../utils/errorMessage';
 import { useDashboardStore } from '../../../stores/dashboardStore';
 import { useTheme } from '../../../hooks';
 import { dashboardApi } from '../../../api/dashboard';
@@ -82,10 +83,10 @@ const JsonEditor: React.FC = () => {
       message.success(t('jsonEditor.saveSuccess') || '保存成功');
       loadJsonFiles();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = getErrorDetail(error) ?? t('jsonEditor.saveError');
       console.error('[JsonEditor] Failed to save JSON file:', errorMessage);
       console.error('[JsonEditor] Error details:', error);
-      message.error(`${t('jsonEditor.saveError') || '保存失败'}: ${errorMessage}`);
+      message.error(formatErrorMessage(error, t('jsonEditor.saveError')));
     }
   };
 
@@ -103,7 +104,7 @@ const JsonEditor: React.FC = () => {
           message.success(t('jsonEditor.deleteSuccess') || '删除成功');
         } catch (error) {
           console.error('Failed to delete JSON file:', error);
-          message.error(t('jsonEditor.deleteError') || '删除失败');
+          message.error(formatErrorMessage(error, t('jsonEditor.deleteError')));
         }
       },
     });
@@ -116,7 +117,7 @@ const JsonEditor: React.FC = () => {
       setSelectedFile(fileName);
     } catch (error) {
       console.error('Failed to load JSON file:', error);
-      message.error(t('jsonEditor.loadError') || '加载失败');
+      message.error(formatErrorMessage(error, t('jsonEditor.loadError')));
     }
   };
 

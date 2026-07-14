@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, Select, Button, Divider, message, Space, Empty, theme, Tag } from 'antd';
 import { DownloadOutlined, FileOutlined, PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { formatErrorMessage } from '../../utils/errorMessage';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile } from '@tauri-apps/plugin-fs';
 import { useDashboardStore } from '../../stores/dashboardStore';
@@ -60,7 +61,7 @@ const SettingsPanel: React.FC = () => {
       message.success(t('settings.configLoaded') || `已加载配置: ${fileName}`);
     } catch (error) {
       console.error('Failed to load JSON config:', error);
-      message.error(t('settings.configLoadError') || '加载配置失败');
+      message.error(formatErrorMessage(error, t('settings.configLoadError')));
     } finally {
       setLoading(false);
     }
@@ -86,7 +87,7 @@ const SettingsPanel: React.FC = () => {
       }
     } catch (error) {
       console.error('Export CSV error:', error);
-      message.error(t('settings.exportError') || '导出失败');
+      message.error(formatErrorMessage(error, t('settings.exportError')));
     }
   };
 

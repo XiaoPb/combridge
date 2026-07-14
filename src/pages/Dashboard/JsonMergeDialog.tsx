@@ -13,6 +13,7 @@ import {
   theme,
 } from 'antd';
 import { useTranslation } from 'react-i18next';
+import { formatErrorMessage } from '../../utils/errorMessage';
 import { dashboardApi } from '../../api/dashboard';
 import type { JsonStructureInfo, JsonFieldInfo, ParserScriptInfo } from '../../types/dashboard';
 
@@ -80,7 +81,7 @@ const JsonMergeDialog: React.FC<JsonMergeDialogProps> = ({
 
       setStep('select');
     } catch (error) {
-      message.error(t('jsonMerge.analyzeError') || 'Failed to analyze JSON');
+      message.error(formatErrorMessage(error, t('jsonMerge.analyzeError')));
     } finally {
       setLoading(false);
     }
@@ -114,7 +115,7 @@ const JsonMergeDialog: React.FC<JsonMergeDialogProps> = ({
       setMergedScript(script);
       setStep('preview');
     } catch (error) {
-      message.error(t('jsonMerge.mergeError') || 'Failed to merge fields');
+      message.error(formatErrorMessage(error, t('jsonMerge.mergeError')));
     } finally {
       setLoading(false);
     }

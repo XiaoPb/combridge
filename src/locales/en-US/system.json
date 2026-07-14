@@ -50,7 +50,9 @@
     "settingsSaved": "Settings saved",
     "saveFailed": "Failed to save settings",
     "settingsReset": "Settings reset to defaults",
-    "autoSaveHint": "Settings are saved automatically"
+    "autoSaveHint": "Settings are saved automatically",
+    "timezoneUpdated": "Timezone updated",
+    "timezoneUpdateFailed": "Failed to update timezone"
   },
   "time": {
     "days": "days",

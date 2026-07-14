@@ -80,7 +80,7 @@ const Gh3036Panel: React.FC = () => {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 8, padding: 8 }}>
       {error && (
         <Alert
-          message={t('common:error')}
+          message={t('common:common.error')}
           description={error}
           type="error"
           closable

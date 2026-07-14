@@ -1,6 +1,8 @@
 import { useCallback } from 'react';
 import { dispatchAction } from '../api/stateApi';
 import type { Action, ActionResult } from '../types/state';
+import i18n from '../i18n';
+import { formatErrorMessage } from '../utils/errorMessage';
 
 export function useAppDispatch() {
   const dispatch = useCallback(async (action: Action): Promise<ActionResult> => {
@@ -11,7 +13,7 @@ export function useAppDispatch() {
       console.error('Dispatch action failed:', error);
       return {
         success: false,
-        message: error instanceof Error ? error.message : 'Unknown error',
+        message: formatErrorMessage(error, i18n.t('common:message.dispatchFailed')),
       };
     }
   }, []);

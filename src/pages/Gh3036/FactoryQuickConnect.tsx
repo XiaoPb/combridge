@@ -14,6 +14,7 @@ import {
 } from 'antd';
 import { DisconnectOutlined, LinkOutlined, SearchOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { formatErrorMessage } from '../../utils/errorMessage';
 import { bleApi } from '../../api/tauri';
 import { gh3036Api } from '../../api/gh3036';
 import type { BleCharacteristic, BleConnection, BleDeviceInfo, BleService } from '../../types';
@@ -303,7 +304,7 @@ const FactoryQuickConnect: React.FC = () => {
       setStatus(t('factory.quickConnectSuccess'));
       message.success(t('factory.quickConnectSuccess'));
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
+      const errorMsg = formatErrorMessage(err, t('errors.quickConnect'));
       setStatus(errorMsg);
       message.error(errorMsg);
     } finally {
@@ -327,7 +328,7 @@ const FactoryQuickConnect: React.FC = () => {
       setStatus(t('factory.quickConnectDisconnected'));
       message.success(t('factory.quickConnectDisconnected'));
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
+      const errorMsg = formatErrorMessage(err, t('errors.quickDisconnect'));
       setStatus(errorMsg);
       message.error(errorMsg);
     } finally {

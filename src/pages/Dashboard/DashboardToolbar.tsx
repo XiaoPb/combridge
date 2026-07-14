@@ -18,6 +18,7 @@ import { useDashboardStore } from '../../stores/dashboardStore';
 import DataSourceSelector from './DataSourceSelector';
 import ParserSelector from './ParserSelector';
 import ParserScriptManager from './ParserScriptManager';
+import { formatErrorMessage } from '../../utils/errorMessage';
 import type { DashboardConfig } from '../../types/dashboard';
 
 const DashboardToolbar: React.FC = () => {
@@ -88,7 +89,7 @@ const DashboardToolbar: React.FC = () => {
         const dashboard = JSON.parse(text) as DashboardConfig;
 
         if (!dashboard.id || !dashboard.name || !dashboard.widgets) {
-          message.error(t('invalidDashboard') || 'Invalid dashboard file');
+          message.error(t('invalidDashboard'));
           return;
         }
 
@@ -96,7 +97,7 @@ const DashboardToolbar: React.FC = () => {
         saveDashboard(dashboard);
         message.success(t('dashboardImported') || 'Dashboard imported');
       } catch (error) {
-        message.error(t('importError') || 'Failed to import dashboard');
+        message.error(formatErrorMessage(error, t('importError')));
       }
     }
   };

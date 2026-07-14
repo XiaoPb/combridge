@@ -1228,8 +1228,17 @@ impl Gh3036Manager {
             .await?;
         info!("产测模式结果响应: {:04X?}", param_data);
 
+        Self::decode_factory_mode_response(&param_data)
+    }
+
+    fn decode_factory_mode_response(param_data: &[u8]) -> Result<Vec<u8>, String> {
+        if param_data.is_empty() {
+            info!("产测模式结果为空");
+            return Ok(Vec::new());
+        }
+
         let value =
-            unpack(&param_data, RET_F_GET_MODE).map_err(|e| format!("解包失败: {:?}", e))?;
+            unpack(param_data, RET_F_GET_MODE).map_err(|e| format!("解包失败: {:?}", e))?;
         info!("产测模式结果解包: {:?}", value);
 
         match value {
@@ -1474,5 +1483,27 @@ mod tests {
     #[test]
     fn regs_list_write_uses_call_transport() {
         assert_eq!(Gh3036Manager::regs_list_write_transport(), "send");
+    }
+
+    #[test]
+    fn factory_mode_empty_response_is_successful() {
+        assert_eq!(
+            Gh3036Manager::decode_factory_mode_response(&[]).unwrap(),
+            Vec::<u8>::new()
+        );
+    }
+
+    #[test]
+    fn factory_mode_u16_array_is_returned_as_little_endian_bytes() {
+        let response = [0x64, 0x02, 0x34, 0x12, 0x78, 0x56];
+        assert_eq!(
+            Gh3036Manager::decode_factory_mode_response(&response).unwrap(),
+            vec![0x34, 0x12, 0x78, 0x56]
+        );
+    }
+
+    #[test]
+    fn factory_mode_invalid_non_empty_response_still_fails() {
+        assert!(Gh3036Manager::decode_factory_mode_response(&[0x64]).is_err());
     }
 }

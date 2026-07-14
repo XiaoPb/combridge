@@ -67,7 +67,9 @@
     "networkError": "网络错误",
     "unknownError": "未知错误",
     "pleaseWait": "请稍候...",
-    "processing": "处理中..."
+    "processing": "处理中...",
+    "dispatchFailed": "执行操作失败",
+    "formatFailed": "格式化数据失败"
   },
   "validation": {
     "required": "此项为必填",

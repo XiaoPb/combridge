@@ -6,6 +6,8 @@ import { useLogStore } from '../stores/logStore';
 import { DEFAULT_SERIAL_CONFIG } from '../types';
 import type { SerialConfig } from '../types';
 import type { CacheData } from '../api/types';
+import i18n from '../i18n';
+import { formatErrorMessage } from '../utils/errorMessage';
 
 export const useSerial = () => {
   const {
@@ -42,7 +44,7 @@ export const useSerial = () => {
         message.warning('未找到可用串口');
       }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '扫描串口失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('serial:message.scanFailed'));
       setError(errorMsg);
       addLog('error', 'SerialManager', `扫描串口失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -70,7 +72,7 @@ export const useSerial = () => {
         message.success(`串口 ${portName} 已打开`);
         return existingTab.key;
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : '打开串口失败';
+        const errorMsg = formatErrorMessage(err, i18n.t('serial:message.openFailed'));
         setError(errorMsg);
         addLog('error', 'SerialManager', `打开串口 ${portName} 失败: ${errorMsg}`);
         message.error(errorMsg);
@@ -114,7 +116,7 @@ export const useSerial = () => {
 
       return key;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '打开串口失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('serial:message.openFailed'));
       setError(errorMsg);
       addLog('error', 'SerialManager', `打开串口 ${portName} 失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -132,7 +134,7 @@ export const useSerial = () => {
       addLog('info', 'SerialManager', `串口 ${tab.portName} 已关闭`);
       message.success(`串口 ${tab.portName} 已关闭`);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '关闭串口失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('serial:message.closeFailed'));
       setError(errorMsg);
       addLog('error', 'SerialManager', `关闭串口 ${tab.portName} 失败: ${errorMsg}`);
       message.error(errorMsg);
@@ -172,7 +174,7 @@ export const useSerial = () => {
         format,
       });
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '发送数据失败';
+      const errorMsg = formatErrorMessage(err, i18n.t('serial:message.sendFailed'));
       setError(errorMsg);
       addLog('error', 'SerialManager', `发送数据失败: ${errorMsg}`);
       message.error(errorMsg);

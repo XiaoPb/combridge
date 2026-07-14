@@ -9,6 +9,17 @@
     "confirm": "确认",
     "cancel": "取消"
   },
+  "errors": {
+    "createBuffer": "创建波形缓冲区失败",
+    "removeBuffer": "删除波形缓冲区失败",
+    "configureParser": "配置波形解析器失败",
+    "parseData": "解析波形数据失败",
+    "readData": "读取波形数据失败",
+    "getStatus": "获取波形状态失败",
+    "clearBuffer": "清空波形缓冲区失败",
+    "listBuffers": "获取波形缓冲区列表失败",
+    "loadCsv": "加载 CSV 文件失败"
+  },
   "buffer": {
     "title": "缓冲区配置",
     "select": "选择缓冲区",

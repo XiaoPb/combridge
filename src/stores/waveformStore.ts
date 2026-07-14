@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import type { ParserConfig, WaveformBufferConfig, WaveformData, WaveformStatus } from '../api/waveform';
 import { waveformApi } from '../api/waveform';
 import { preferencesApi, type WaveformPreferences } from '../api/tauri';
+import i18n from '../i18n';
+import { formatErrorMessage } from '../utils/errorMessage';
 
 interface WaveformPreferencesState {
   displayRows: number;
@@ -81,7 +83,7 @@ export const useWaveformStore = create<WaveformStore>((set, get) => ({
       await get().refreshBuffers();
       await waveformApi.configureParser(bufferId, DEFAULT_PARSER_CONFIG);
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
+      set({ error: formatErrorMessage(err, i18n.t('waveform:errors.createBuffer')) });
     } finally {
       set({ isLoading: false });
     }
@@ -96,7 +98,7 @@ export const useWaveformStore = create<WaveformStore>((set, get) => ({
         set({ currentBuffer: null, status: null, data: null });
       }
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
+      set({ error: formatErrorMessage(err, i18n.t('waveform:errors.removeBuffer')) });
     } finally {
       set({ isLoading: false });
     }
@@ -113,7 +115,7 @@ export const useWaveformStore = create<WaveformStore>((set, get) => ({
       await waveformApi.configureParser(bufferId, config);
       await get().getStatus(bufferId);
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
+      set({ error: formatErrorMessage(err, i18n.t('waveform:errors.configureParser')) });
     } finally {
       set({ isLoading: false });
     }
@@ -123,7 +125,7 @@ export const useWaveformStore = create<WaveformStore>((set, get) => ({
     try {
       await waveformApi.parseAndStore(bufferId, data);
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
+      set({ error: formatErrorMessage(err, i18n.t('waveform:errors.parseData')) });
     }
   },
 
@@ -133,7 +135,7 @@ export const useWaveformStore = create<WaveformStore>((set, get) => ({
       const data = await waveformApi.readData(bufferId, rows);
       set({ data });
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
+      set({ error: formatErrorMessage(err, i18n.t('waveform:errors.readData')) });
     }
   },
 
@@ -142,7 +144,7 @@ export const useWaveformStore = create<WaveformStore>((set, get) => ({
       const status = await waveformApi.getStatus(bufferId);
       set({ status });
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
+      set({ error: formatErrorMessage(err, i18n.t('waveform:errors.getStatus')) });
     }
   },
 
@@ -153,7 +155,7 @@ export const useWaveformStore = create<WaveformStore>((set, get) => ({
       set({ data: null });
       await get().getStatus(bufferId);
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
+      set({ error: formatErrorMessage(err, i18n.t('waveform:errors.clearBuffer')) });
     } finally {
       set({ isLoading: false });
     }
@@ -164,7 +166,7 @@ export const useWaveformStore = create<WaveformStore>((set, get) => ({
       const buffers = await waveformApi.listBuffers();
       set({ buffers });
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
+      set({ error: formatErrorMessage(err, i18n.t('waveform:errors.listBuffers')) });
     }
   },
 

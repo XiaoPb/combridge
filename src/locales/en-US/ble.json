@@ -108,7 +108,21 @@
     "discoverFailed": "Failed to discover characteristics",
     "saveLogFailed": "Failed to save log",
     "selectProtocolDevice": "Please select protocol and device",
-    "bindingExists": "Binding already exists"
+    "bindingExists": "Binding already exists",
+    "configureFailed": "Failed to configure BLE mode",
+    "scanFailed": "Failed to scan BLE devices",
+    "connectFailed": "Failed to connect BLE device",
+    "disconnectFailed": "Failed to disconnect BLE device",
+    "discoverServicesFailed": "Failed to discover BLE services",
+    "discoverCharacteristicsFailed": "Failed to discover BLE characteristics",
+    "readFailed": "Failed to read BLE characteristic",
+    "writeFailed": "Failed to write BLE characteristic",
+    "subscribeFailed": "Failed to subscribe to BLE notifications",
+    "unsubscribeFailed": "Failed to unsubscribe from BLE notifications",
+    "restoreConnectionsFailed": "Failed to restore BLE connections",
+    "atSendFailed": "Failed to send AT data",
+    "atDisconnectFailed": "Failed to disconnect AT connection",
+    "atSaveUuidFailed": "Failed to save AT UUID configuration"
   },
   "tooltip": {
     "collapseTree": "Collapse service tree",

@@ -64,7 +64,15 @@
     "saveSuccess": "保存成功",
     "saveFailed": "保存失败",
     "copySuccess": "已复制到剪贴板",
-    "copyFailed": "复制失败"
+    "copyFailed": "复制失败",
+    "listFailed": "获取协议列表失败",
+    "unloadFailed": "卸载协议失败",
+    "enableFailed": "启用协议失败",
+    "disableFailed": "禁用协议失败",
+    "bindFailed": "绑定协议失败",
+    "unbindFailed": "解绑协议失败",
+    "getInfoFailed": "获取协议信息失败",
+    "getBindingsFailed": "获取绑定协议失败"
   },
   "tooltip": {
     "enable": "启用协议",
@@ -225,6 +233,7 @@
     "factoryGet": "获取",
     "factoryResultSuccess": "产测结果: {{value}}",
     "configParsed": "解析到 {{count}} 个寄存器",
-    "configParseFailed": "配置解析失败: {{error}}"
+    "configDownloadFailed": "配置下载失败",
+    "configParseFailed": "配置解析失败"
   }
 }

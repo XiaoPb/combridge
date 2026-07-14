@@ -64,7 +64,15 @@
     "saveSuccess": "Saved successfully",
     "saveFailed": "Failed to save",
     "copySuccess": "Copied to clipboard",
-    "copyFailed": "Failed to copy"
+    "copyFailed": "Failed to copy",
+    "listFailed": "Failed to get protocol list",
+    "unloadFailed": "Failed to unload protocol",
+    "enableFailed": "Failed to enable protocol",
+    "disableFailed": "Failed to disable protocol",
+    "bindFailed": "Failed to bind protocol",
+    "unbindFailed": "Failed to unbind protocol",
+    "getInfoFailed": "Failed to get protocol information",
+    "getBindingsFailed": "Failed to get bound protocols"
   },
   "tooltip": {
     "enable": "Enable protocol",
@@ -225,6 +233,7 @@
     "factoryGet": "Get",
     "factoryResultSuccess": "Factory result: {{value}}",
     "configParsed": "Parsed {{count}} registers",
-    "configParseFailed": "Config parse failed: {{error}}"
+    "configDownloadFailed": "Failed to download config",
+    "configParseFailed": "Failed to parse config"
   }
 }

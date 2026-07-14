@@ -803,7 +803,7 @@ const BlePage: React.FC = () => {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 8 }}>
       {error && (
         <Alert
-          message={t('common:error')}
+          message={t('common:common.error')}
           description={error}
           type="error"
           closable

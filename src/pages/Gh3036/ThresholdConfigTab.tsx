@@ -18,6 +18,7 @@ import {
 import { DownloadOutlined, FileDoneOutlined, FolderOpenOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
+import { formatErrorMessage } from '../../utils/errorMessage';
 import { factoryTestApi } from '../../api/gh3036';
 import type {
   ChannelRule,
@@ -276,7 +277,7 @@ const ThresholdConfigTab: React.FC = () => {
         message.error(validation.errors.join('; ') || t('threshold.invalid'));
       }
     } catch (err) {
-      message.error(err instanceof Error ? err.message : String(err));
+      message.error(formatErrorMessage(err, t('threshold.invalid')));
     } finally {
       setValidating(false);
     }
@@ -304,7 +305,7 @@ const ThresholdConfigTab: React.FC = () => {
       setYamlPreview(yaml);
       message.success(t('threshold.loaded'));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : String(err));
+      message.error(formatErrorMessage(err, t('threshold.loadFailed')));
     } finally {
       setValidating(false);
     }
@@ -343,7 +344,7 @@ const ThresholdConfigTab: React.FC = () => {
       }
       message.success(t('threshold.saved'));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : String(err));
+      message.error(formatErrorMessage(err, t('threshold.saveFailed')));
     } finally {
       setValidating(false);
     }

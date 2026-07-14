@@ -176,10 +176,14 @@ async fn main() {
     setup_server(&server_core, frame_decoder).await.expect("Failed to setup server");
 
     let server_to_client_clone = server_to_client.clone();
-    let server_send_fn: SendFunction = Arc::new(move |data: &[u8]| -> Result<(), RpcError> {
-        server_to_client_clone.send(data.to_vec()).map_err(|_| RpcError::SendFail)?;
-        println!("[Server] 发送响应 {} 字节", data.len());
-        Ok(())
+    let server_send_fn: SendFunction = Arc::new(move |data: Vec<u8>| {
+        let sender = server_to_client_clone.clone();
+        Box::pin(async move {
+            let len = data.len();
+            sender.send(data).map_err(|_| RpcError::SendFail)?;
+            println!("[Server] 发送响应 {} 字节", len);
+            Ok(())
+        })
     });
     server_core.set_send_function(server_send_fn).await;
 
@@ -213,10 +217,14 @@ async fn main() {
     let client_core = Arc::new(RpcCore::new(client_config).with_logger(client_logger));
 
     let client_to_server_clone = client_to_server.clone();
-    let send_fn: SendFunction = Arc::new(move |data: &[u8]| -> Result<(), RpcError> {
-        client_to_server_clone.send(data.to_vec()).map_err(|_| RpcError::SendFail)?;
-        println!("[Client] 发送 {} 字节", data.len());
-        Ok(())
+    let send_fn: SendFunction = Arc::new(move |data: Vec<u8>| {
+        let sender = client_to_server_clone.clone();
+        Box::pin(async move {
+            let len = data.len();
+            sender.send(data).map_err(|_| RpcError::SendFail)?;
+            println!("[Client] 发送 {} 字节", len);
+            Ok(())
+        })
     });
     client_core.set_send_function(send_fn).await;
 
@@ -394,9 +402,12 @@ async fn main() {
         let logger = Arc::new(TestLogger::new("Client-NoServer"));
         let core = RpcCore::new(config).with_logger(logger);
 
-        let send_fn: SendFunction = Arc::new(move |data: &[u8]| -> Result<(), RpcError> {
-            tx.send(data.to_vec()).map_err(|_| RpcError::SendFail)?;
-            Ok(())
+        let send_fn: SendFunction = Arc::new(move |data: Vec<u8>| {
+            let sender = tx.clone();
+            Box::pin(async move {
+                sender.send(data).map_err(|_| RpcError::SendFail)?;
+                Ok(())
+            })
         });
 
         core.set_send_function(send_fn).await;

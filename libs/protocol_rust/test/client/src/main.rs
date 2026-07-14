@@ -498,9 +498,12 @@ async fn main() {
     };
 
     let (tx_send, rx_send) = std::sync::mpsc::channel::<Vec<u8>>();
-    let send_fn: SendFunction = Arc::new(move |data: &[u8]| -> Result<(), rpc::RpcError> {
-        tx_send.send(data.to_vec()).map_err(|_| rpc::RpcError::SendFail)?;
-        Ok(())
+    let send_fn: SendFunction = Arc::new(move |data: Vec<u8>| {
+        let sender = tx_send.clone();
+        Box::pin(async move {
+            sender.send(data).map_err(|_| rpc::RpcError::SendFail)?;
+            Ok(())
+        })
     });
 
     let executor = Arc::new(RwLock::new(

@@ -7,16 +7,18 @@
 //! - 发布/订阅模式
 
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::{Mutex, oneshot, RwLock};
-use tokio::time::timeout;
+use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
+use tokio::time::{timeout, timeout_at, Instant};
 
 use crate::error::RpcError;
-use crate::types::{DEFAULT_TIMEOUT_MS, GHRPC_FRAME_SIZE, MAX_RETRY_COUNT, MAX_SUPPORT_KEY_SIZE};
 use crate::frame::{FrameBuilder, FrameParser, ParseResult};
 use crate::log::{LogCallback, NullLogger};
+use crate::types::{DEFAULT_TIMEOUT_MS, GHRPC_FRAME_SIZE, MAX_RETRY_COUNT, MAX_SUPPORT_KEY_SIZE};
 
 const LAST_FRAME_FIX_INDEX: u8 = 255;
 const HEX_PREVIEW_LIMIT: usize = 512;
@@ -91,8 +93,61 @@ impl InvokeContext {
 }
 
 #[derive(Debug)]
-struct PendingCall {
-    tx: oneshot::Sender<Result<Vec<u8>, RpcError>>,
+enum PendingCall {
+    Call {
+        tx: oneshot::Sender<Result<Vec<u8>, RpcError>>,
+    },
+    Secure {
+        tx: mpsc::UnboundedSender<SecureResponse>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SecureResponse {
+    FrameAck { invoke_idx: u8, frame_idx: u8 },
+    CommandNotFound { invoke_idx: u8 },
+    Return { invoke_idx: u8, data: Vec<u8> },
+    Error { invoke_idx: u8 },
+}
+
+impl SecureResponse {
+    fn decode(data: &[u8]) -> Result<Self, RpcError> {
+        fn read_u8(data: &[u8], offset: &mut usize) -> Result<u8, RpcError> {
+            if *offset + 2 > data.len() || data[*offset] & 0x3f != 0x19 {
+                return Err(RpcError::UnpackageError);
+            }
+            let value = data[*offset + 1];
+            *offset += 2;
+            Ok(value)
+        }
+
+        let mut offset = 0;
+        let response_type = read_u8(data, &mut offset)?;
+        let invoke_idx = read_u8(data, &mut offset)?;
+
+        match response_type {
+            0 => Ok(Self::FrameAck {
+                invoke_idx,
+                frame_idx: read_u8(data, &mut offset)?,
+            }),
+            1 => Ok(Self::CommandNotFound { invoke_idx }),
+            2 => Ok(Self::Return {
+                invoke_idx,
+                data: data[offset..].to_vec(),
+            }),
+            3 => Ok(Self::Error { invoke_idx }),
+            _ => Err(RpcError::UnpackageError),
+        }
+    }
+
+    fn invoke_idx(&self) -> u8 {
+        match self {
+            Self::FrameAck { invoke_idx, .. }
+            | Self::CommandNotFound { invoke_idx }
+            | Self::Return { invoke_idx, .. }
+            | Self::Error { invoke_idx } => *invoke_idx,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -112,17 +167,19 @@ impl MultiFrameBuffer {
         Self::default()
     }
 
-    fn add_frame(&mut self, invoke_idx: u8, frame_idx: u8, data: Vec<u8>) -> Result<bool, RpcError> {
+    fn add_frame(
+        &mut self,
+        invoke_idx: u8,
+        frame_idx: u8,
+        data: Vec<u8>,
+    ) -> Result<bool, RpcError> {
         if !self.frames.is_empty() && self.frames[0].invoke_idx != invoke_idx {
             self.frames.clear();
             self.expected_frame_idx = 0;
         }
 
         if frame_idx == self.expected_frame_idx {
-            self.frames.push(FrameBuffer {
-                invoke_idx,
-                data,
-            });
+            self.frames.push(FrameBuffer { invoke_idx, data });
             self.expected_frame_idx = self.expected_frame_idx.wrapping_add(1);
             Ok(true)
         } else if frame_idx < self.expected_frame_idx {
@@ -150,15 +207,17 @@ impl MultiFrameBuffer {
     }
 }
 
-pub type SendFunction = Arc<dyn Fn(&[u8]) -> Result<(), RpcError> + Send + Sync>;
+pub type SendFuture = Pin<Box<dyn Future<Output = Result<(), RpcError>> + Send>>;
+pub type SendFunction = Arc<dyn Fn(Vec<u8>) -> SendFuture + Send + Sync>;
 
 pub struct RpcCore {
     config: RpcConfig,
     static_nodes: Arc<RwLock<HashMap<String, InvokeNode>>>,
-    dynamic_nodes: Arc<Mutex<HashMap<String, PendingCall>>>,
+    dynamic_nodes: Arc<Mutex<HashMap<(String, u8), PendingCall>>>,
     frame_parser: Mutex<FrameParser>,
     multi_frame_buffer: Mutex<MultiFrameBuffer>,
     send_function: Mutex<Option<SendFunction>>,
+    send_lock: Mutex<()>,
     invoke_index: Mutex<u8>,
     logger: Arc<dyn LogCallback>,
     current_invoke_context: Mutex<Option<InvokeContext>>,
@@ -168,8 +227,14 @@ impl std::fmt::Debug for RpcCore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RpcCore")
             .field("config", &self.config)
-            .field("static_nodes_count", &self.static_nodes.try_read().map(|n| n.len()).unwrap_or(0))
-            .field("dynamic_nodes_count", &self.dynamic_nodes.try_lock().map(|n| n.len()).unwrap_or(0))
+            .field(
+                "static_nodes_count",
+                &self.static_nodes.try_read().map(|n| n.len()).unwrap_or(0),
+            )
+            .field(
+                "dynamic_nodes_count",
+                &self.dynamic_nodes.try_lock().map(|n| n.len()).unwrap_or(0),
+            )
             .finish()
     }
 }
@@ -183,6 +248,7 @@ impl RpcCore {
             frame_parser: Mutex::new(FrameParser::new()),
             multi_frame_buffer: Mutex::new(MultiFrameBuffer::new()),
             send_function: Mutex::new(None),
+            send_lock: Mutex::new(()),
             invoke_index: Mutex::new(1),
             logger: Arc::new(NullLogger),
             current_invoke_context: Mutex::new(None),
@@ -259,14 +325,159 @@ impl RpcCore {
         }
     }
 
+    async fn send_frame(
+        &self,
+        op: &str,
+        key: &str,
+        frame_idx: usize,
+        frame_count: usize,
+        frame: &[u8],
+    ) -> Result<(), RpcError> {
+        let send = self
+            .send_function
+            .lock()
+            .await
+            .clone()
+            .ok_or(RpcError::ChannelClosed)?;
+
+        self.logger.log(
+            crate::types::LogLevel::Info,
+            "RpcCore",
+            &format!(
+                "[{}] TX start key={}, frame={}/{}, len={}",
+                op,
+                key,
+                frame_idx + 1,
+                frame_count,
+                frame.len()
+            ),
+        );
+        send(frame.to_vec()).await?;
+        self.logger.log(
+            crate::types::LogLevel::Info,
+            "RpcCore",
+            &format!(
+                "[{}] TX complete key={}, frame={}/{}",
+                op,
+                key,
+                frame_idx + 1,
+                frame_count
+            ),
+        );
+        Ok(())
+    }
+
+    async fn retry_delay(&self) {
+        if self.config.retry_delay_ms > 0 {
+            tokio::time::sleep(Duration::from_millis(self.config.retry_delay_ms)).await;
+        }
+    }
+
+    async fn wait_secure_ack(
+        &self,
+        key: &str,
+        invoke_idx: u8,
+        expected_frame_idx: u8,
+        rx: &mut mpsc::UnboundedReceiver<SecureResponse>,
+    ) -> Result<(), RpcError> {
+        let deadline = Instant::now() + Duration::from_millis(self.config.timeout_ms);
+        loop {
+            if Instant::now() >= deadline {
+                return Err(RpcError::Timeout);
+            }
+            let response = timeout_at(deadline, rx.recv())
+                .await
+                .map_err(|_| RpcError::Timeout)?
+                .ok_or(RpcError::ChannelClosed)?;
+
+            match response {
+                SecureResponse::FrameAck {
+                    invoke_idx: response_invoke,
+                    frame_idx,
+                } if response_invoke == invoke_idx && frame_idx == expected_frame_idx => {
+                    self.logger.log(
+                        crate::types::LogLevel::Info,
+                        "RpcCore",
+                        &format!(
+                            "[SECURE] RX frame ack key={}, invoke_idx={}, frame_idx={}",
+                            key, invoke_idx, frame_idx
+                        ),
+                    );
+                    return Ok(());
+                }
+                SecureResponse::CommandNotFound { .. } => return Err(RpcError::CommandNotFound),
+                SecureResponse::Error { .. } => return Err(RpcError::RemoteError),
+                unexpected => {
+                    self.logger.log(
+                        crate::types::LogLevel::Warn,
+                        "RpcCore",
+                        &format!(
+                            "[SECURE] Ignoring unexpected response while waiting frame ack: key={}, invoke_idx={}, response={:?}",
+                            key, invoke_idx, unexpected
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
+    async fn wait_secure_return(
+        &self,
+        key: &str,
+        invoke_idx: u8,
+        rx: &mut mpsc::UnboundedReceiver<SecureResponse>,
+    ) -> Result<Vec<u8>, RpcError> {
+        let deadline = Instant::now() + Duration::from_millis(self.config.timeout_ms);
+        loop {
+            if Instant::now() >= deadline {
+                return Err(RpcError::Timeout);
+            }
+            let response = timeout_at(deadline, rx.recv())
+                .await
+                .map_err(|_| RpcError::Timeout)?
+                .ok_or(RpcError::ChannelClosed)?;
+
+            match response {
+                SecureResponse::Return {
+                    invoke_idx: response_invoke,
+                    data,
+                } if response_invoke == invoke_idx => {
+                    self.logger.log(
+                        crate::types::LogLevel::Info,
+                        "RpcCore",
+                        &format!(
+                            "[SECURE] RX final return key={}, invoke_idx={}, len={}",
+                            key,
+                            invoke_idx,
+                            data.len()
+                        ),
+                    );
+                    return Ok(data);
+                }
+                SecureResponse::CommandNotFound { .. } => return Err(RpcError::CommandNotFound),
+                SecureResponse::Error { .. } => return Err(RpcError::RemoteError),
+                unexpected => {
+                    self.logger.log(
+                        crate::types::LogLevel::Warn,
+                        "RpcCore",
+                        &format!(
+                            "[SECURE] Ignoring unexpected response while waiting final return: key={}, invoke_idx={}, response={:?}",
+                            key, invoke_idx, unexpected
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
     pub async fn unregister(&self, key: &str) -> bool {
         let mut nodes = self.static_nodes.write().await;
         nodes.remove(key).is_some()
     }
 
     pub async fn publish(&self, key: &str, format: &str, raw_data: &[u8]) -> Result<(), RpcError> {
-        let packed_data = crate::package::Package::pack(format, raw_data)
-            .map_err(|_| RpcError::FormatError)?;
+        let packed_data =
+            crate::package::Package::pack(format, raw_data).map_err(|_| RpcError::FormatError)?;
         self._publish(key, &packed_data).await
     }
 
@@ -278,7 +489,12 @@ impl RpcCore {
         self.logger.log(
             crate::types::LogLevel::Info,
             "RpcCore",
-            &format!("[PUBLISH] key={}, data_len={}, data={:02X?}", key, data.len(), data),
+            &format!(
+                "[PUBLISH] key={}, data_len={}, data={:02X?}",
+                key,
+                data.len(),
+                data
+            ),
         );
 
         let frames = {
@@ -287,11 +503,10 @@ impl RpcCore {
         };
         self.log_tx_frames("PUBLISH", key, &frames);
 
-        let send_fn = self.send_function.lock().await;
-        if let Some(ref send) = *send_fn {
-            for frame in &frames {
-                send(frame)?;
-            }
+        let _send_guard = self.send_lock.lock().await;
+        for (frame_idx, frame) in frames.iter().enumerate() {
+            self.send_frame("PUBLISH", key, frame_idx, frames.len(), frame)
+                .await?;
         }
 
         self.logger.log(
@@ -304,16 +519,21 @@ impl RpcCore {
     }
 
     pub async fn send(&self, key: &str, format: &str, raw_data: &[u8]) -> Result<(), RpcError> {
-        let packed_data = crate::package::Package::pack(format, raw_data)
-            .map_err(|_| RpcError::FormatError)?;
+        let packed_data =
+            crate::package::Package::pack(format, raw_data).map_err(|_| RpcError::FormatError)?;
         self._send(key, &packed_data).await
     }
 
     async fn _send(&self, key: &str, data: &[u8]) -> Result<(), RpcError> {
+        self._secure_request("SEND", key, data).await.map(|_| ())
+    }
+
+    async fn _secure_request(&self, op: &str, key: &str, data: &[u8]) -> Result<Vec<u8>, RpcError> {
         if key.len() >= MAX_SUPPORT_KEY_SIZE {
             return Err(RpcError::KeyOverMaxSize);
         }
 
+        let _send_guard = self.send_lock.lock().await;
         let invoke_idx = {
             let mut idx = self.invoke_index.lock().await;
             *idx = idx.wrapping_add(1);
@@ -322,106 +542,96 @@ impl RpcCore {
             }
             *idx
         };
-
-        self.logger.log(
-            crate::types::LogLevel::Info,
-            "RpcCore",
-            &format!("[SEND] key={}, invoke_idx={}, data_len={}, data={:02X?}",
-                key, invoke_idx, data.len(), data),
-        );
-
-        let (tx, rx) = oneshot::channel();
-
         let frames = {
             let mut builder = FrameBuilder::new();
             builder.build_frames_with_invoke_idx(key, data, true, invoke_idx)
         };
-        self.log_tx_frames("SEND", key, &frames);
-
+        self.log_tx_frames(op, key, &frames);
         self.logger.log(
-            crate::types::LogLevel::Debug,
+            crate::types::LogLevel::Info,
             "RpcCore",
-            &format!("[SEND] Built {} secure frames for key={}", frames.len(), key),
+            &format!(
+                "[{}] key={}, invoke_idx={}, data_len={}, frame_count={}",
+                op,
+                key,
+                invoke_idx,
+                data.len(),
+                frames.len()
+            ),
         );
 
-        let pending = PendingCall {
-            tx,
-        };
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let pending_key = (key.to_string(), invoke_idx);
+        self.dynamic_nodes
+            .lock()
+            .await
+            .insert(pending_key.clone(), PendingCall::Secure { tx });
 
-        {
-            let mut dynamic = self.dynamic_nodes.lock().await;
-            dynamic.insert(key.to_string(), pending);
-            self.logger.log(
-                crate::types::LogLevel::Debug,
-                "RpcCore",
-                &format!("[SEND] Inserted pending call for key={}", key),
-            );
-        }
+        let result = async {
+            for (frame_idx, frame) in frames.iter().enumerate() {
+                let is_final = frame_idx + 1 == frames.len();
+                let mut frame_confirmed = false;
 
-        let send_fn = self.send_function.lock().await;
-        if let Some(ref send) = *send_fn {
-            for frame in &frames {
-                if let Err(e) = send(frame) {
-                    let mut dynamic = self.dynamic_nodes.lock().await;
-                    dynamic.remove(key);
-                    self.logger.log(
-                        crate::types::LogLevel::Error,
-                        "RpcCore",
-                        &format!("[SEND] Send failed for key={}: {:?}", key, e),
-                    );
-                    return Err(e);
+                for attempt in 0..=self.config.retry_count {
+                    if attempt > 0 {
+                        self.logger.log(
+                            crate::types::LogLevel::Warn,
+                            "RpcCore",
+                            &format!(
+                                "[{}] Retry key={}, invoke_idx={}, frame_idx={}, attempt={}/{}",
+                                op, key, invoke_idx, frame_idx, attempt, self.config.retry_count
+                            ),
+                        );
+                        self.retry_delay().await;
+                    }
+
+                    self.send_frame(op, key, frame_idx, frames.len(), frame)
+                        .await?;
+                    let response = if is_final {
+                        self.wait_secure_return(key, invoke_idx, &mut rx).await
+                    } else {
+                        self.wait_secure_ack(key, invoke_idx, frame_idx as u8, &mut rx)
+                            .await
+                            .map(|_| Vec::new())
+                    };
+
+                    match response {
+                        Ok(data) => {
+                            if is_final {
+                                return Ok(data);
+                            }
+                            frame_confirmed = true;
+                            break;
+                        }
+                        Err(RpcError::Timeout) => {}
+                        Err(error) => return Err(error),
+                    }
+                }
+
+                if !is_final && !frame_confirmed {
+                    return Err(RpcError::MaxRetryExceeded);
+                }
+                if is_final {
+                    return Err(RpcError::MaxRetryExceeded);
                 }
             }
-        }
 
-        let timeout_duration = Duration::from_millis(self.config.timeout_ms);
-        self.logger.log(
-            crate::types::LogLevel::Debug,
-            "RpcCore",
-            &format!("[SEND] Waiting for ack, key={}, timeout={}ms", key, self.config.timeout_ms),
-        );
-
-        match timeout(timeout_duration, rx).await {
-            Ok(Ok(Ok(_))) => {
-                self.logger.log(
-                    crate::types::LogLevel::Info,
-                    "RpcCore",
-                    &format!("[SEND] Ack received for key={}", key),
-                );
-                Ok(())
-            }
-            Ok(Ok(Err(e))) => {
-                self.logger.log(
-                    crate::types::LogLevel::Error,
-                    "RpcCore",
-                    &format!("[SEND] Response error for key={}: {:?}", key, e),
-                );
-                Err(e)
-            }
-            Ok(Err(_)) => {
-                self.logger.log(
-                    crate::types::LogLevel::Error,
-                    "RpcCore",
-                    &format!("[SEND] Channel closed for key={}", key),
-                );
-                Err(RpcError::ChannelClosed)
-            }
-            Err(_) => {
-                let mut dynamic = self.dynamic_nodes.lock().await;
-                dynamic.remove(key);
-                self.logger.log(
-                    crate::types::LogLevel::Error,
-                    "RpcCore",
-                    &format!("[SEND] Timeout waiting for ack, key={}", key),
-                );
-                Err(RpcError::Timeout)
-            }
+            Err(RpcError::SendFail)
         }
+        .await;
+
+        self.dynamic_nodes.lock().await.remove(&pending_key);
+        result
     }
 
-    pub async fn call(&self, key: &str, format: &str, raw_data: &[u8]) -> Result<Vec<u8>, RpcError> {
-        let packed_data = crate::package::Package::pack(format, raw_data)
-            .map_err(|_| RpcError::FormatError)?;
+    pub async fn call(
+        &self,
+        key: &str,
+        format: &str,
+        raw_data: &[u8],
+    ) -> Result<Vec<u8>, RpcError> {
+        let packed_data =
+            crate::package::Package::pack(format, raw_data).map_err(|_| RpcError::FormatError)?;
         self._call(key, &packed_data).await
     }
 
@@ -429,6 +639,7 @@ impl RpcCore {
         if key.len() >= MAX_SUPPORT_KEY_SIZE {
             return Err(RpcError::KeyOverMaxSize);
         }
+        let _send_guard = self.send_lock.lock().await;
 
         let invoke_idx = {
             let mut idx = self.invoke_index.lock().await;
@@ -442,8 +653,13 @@ impl RpcCore {
         self.logger.log(
             crate::types::LogLevel::Info,
             "RpcCore",
-            &format!("[CALL] key={}, invoke_idx={}, data_len={}, data={:02X?}",
-                key, invoke_idx, data.len(), data),
+            &format!(
+                "[CALL] key={}, invoke_idx={}, data_len={}, data={:02X?}",
+                key,
+                invoke_idx,
+                data.len(),
+                data
+            ),
         );
 
         let (tx, rx) = oneshot::channel();
@@ -460,13 +676,11 @@ impl RpcCore {
             &format!("[CALL] Built {} frames for key={}", frames.len(), key),
         );
 
-        let pending = PendingCall {
-            tx,
-        };
+        let pending_key = (key.to_string(), invoke_idx);
 
         {
             let mut dynamic = self.dynamic_nodes.lock().await;
-            dynamic.insert(key.to_string(), pending);
+            dynamic.insert(pending_key.clone(), PendingCall::Call { tx });
             self.logger.log(
                 crate::types::LogLevel::Debug,
                 "RpcCore",
@@ -474,19 +688,13 @@ impl RpcCore {
             );
         }
 
-        let send_fn = self.send_function.lock().await;
-        if let Some(ref send) = *send_fn {
-            for frame in &frames {
-                if let Err(e) = send(frame) {
-                    let mut dynamic = self.dynamic_nodes.lock().await;
-                    dynamic.remove(key);
-                    self.logger.log(
-                        crate::types::LogLevel::Error,
-                        "RpcCore",
-                        &format!("[CALL] Send failed for key={}: {:?}", key, e),
-                    );
-                    return Err(e);
-                }
+        for (frame_idx, frame) in frames.iter().enumerate() {
+            if let Err(error) = self
+                .send_frame("CALL", key, frame_idx, frames.len(), frame)
+                .await
+            {
+                self.dynamic_nodes.lock().await.remove(&pending_key);
+                return Err(error);
             }
         }
 
@@ -494,7 +702,10 @@ impl RpcCore {
         self.logger.log(
             crate::types::LogLevel::Debug,
             "RpcCore",
-            &format!("[CALL] Waiting for response, key={}, timeout={}ms", key, self.config.timeout_ms),
+            &format!(
+                "[CALL] Waiting for response, key={}, timeout={}ms",
+                key, self.config.timeout_ms
+            ),
         );
 
         match timeout(timeout_duration, rx).await {
@@ -502,8 +713,12 @@ impl RpcCore {
                 self.logger.log(
                     crate::types::LogLevel::Info,
                     "RpcCore",
-                    &format!("[CALL] Response received, key={}, len={}, data={:02X?}",
-                        key, result.len(), result),
+                    &format!(
+                        "[CALL] Response received, key={}, len={}, data={:02X?}",
+                        key,
+                        result.len(),
+                        result
+                    ),
                 );
                 Ok(result)
             }
@@ -525,7 +740,7 @@ impl RpcCore {
             }
             Err(_) => {
                 let mut dynamic = self.dynamic_nodes.lock().await;
-                dynamic.remove(key);
+                dynamic.remove(&pending_key);
                 self.logger.log(
                     crate::types::LogLevel::Error,
                     "RpcCore",
@@ -536,121 +751,19 @@ impl RpcCore {
         }
     }
 
-    pub async fn sall(&self, key: &str, format: &str, raw_data: &[u8]) -> Result<Vec<u8>, RpcError> {
-        let packed_data = crate::package::Package::pack(format, raw_data)
-            .map_err(|_| RpcError::FormatError)?;
+    pub async fn sall(
+        &self,
+        key: &str,
+        format: &str,
+        raw_data: &[u8],
+    ) -> Result<Vec<u8>, RpcError> {
+        let packed_data =
+            crate::package::Package::pack(format, raw_data).map_err(|_| RpcError::FormatError)?;
         self._sall(key, &packed_data).await
     }
 
     async fn _sall(&self, key: &str, data: &[u8]) -> Result<Vec<u8>, RpcError> {
-        if key.len() >= MAX_SUPPORT_KEY_SIZE {
-            return Err(RpcError::KeyOverMaxSize);
-        }
-
-        let invoke_idx = {
-            let mut idx = self.invoke_index.lock().await;
-            *idx = idx.wrapping_add(1);
-            if *idx == 0 {
-                *idx = 1;
-            }
-            *idx
-        };
-
-        self.logger.log(
-            crate::types::LogLevel::Info,
-            "RpcCore",
-            &format!("[SALL] key={}, invoke_idx={}, data_len={}, data={:02X?}",
-                key, invoke_idx, data.len(), data),
-        );
-
-        let (tx, rx) = oneshot::channel();
-
-        let frames = {
-            let mut builder = FrameBuilder::new();
-            builder.build_frames_with_invoke_idx(key, data, true, invoke_idx)
-        };
-        self.log_tx_frames("SALL", key, &frames);
-
-        self.logger.log(
-            crate::types::LogLevel::Debug,
-            "RpcCore",
-            &format!("[SALL] Built {} secure frames for key={}", frames.len(), key),
-        );
-
-        let pending = PendingCall {
-            tx,
-        };
-
-        {
-            let mut dynamic = self.dynamic_nodes.lock().await;
-            dynamic.insert(key.to_string(), pending);
-            self.logger.log(
-                crate::types::LogLevel::Debug,
-                "RpcCore",
-                &format!("[SALL] Inserted pending call for key={}", key),
-            );
-        }
-
-        let send_fn = self.send_function.lock().await;
-        if let Some(ref send) = *send_fn {
-            for frame in &frames {
-                if let Err(e) = send(frame) {
-                    let mut dynamic = self.dynamic_nodes.lock().await;
-                    dynamic.remove(key);
-                    self.logger.log(
-                        crate::types::LogLevel::Error,
-                        "RpcCore",
-                        &format!("[SALL] Send failed for key={}: {:?}", key, e),
-                    );
-                    return Err(e);
-                }
-            }
-        }
-
-        let timeout_duration = Duration::from_millis(self.config.timeout_ms);
-        self.logger.log(
-            crate::types::LogLevel::Debug,
-            "RpcCore",
-            &format!("[SALL] Waiting for response, key={}, timeout={}ms", key, self.config.timeout_ms),
-        );
-
-        match timeout(timeout_duration, rx).await {
-            Ok(Ok(Ok(result))) => {
-                self.logger.log(
-                    crate::types::LogLevel::Info,
-                    "RpcCore",
-                    &format!("[SALL] Response received, key={}, len={}, data={:02X?}",
-                        key, result.len(), result),
-                );
-                Ok(result)
-            }
-            Ok(Ok(Err(e))) => {
-                self.logger.log(
-                    crate::types::LogLevel::Error,
-                    "RpcCore",
-                    &format!("[SALL] Response error for key={}: {:?}", key, e),
-                );
-                Err(e)
-            }
-            Ok(Err(_)) => {
-                self.logger.log(
-                    crate::types::LogLevel::Error,
-                    "RpcCore",
-                    &format!("[SALL] Channel closed for key={}", key),
-                );
-                Err(RpcError::ChannelClosed)
-            }
-            Err(_) => {
-                let mut dynamic = self.dynamic_nodes.lock().await;
-                dynamic.remove(key);
-                self.logger.log(
-                    crate::types::LogLevel::Error,
-                    "RpcCore",
-                    &format!("[SALL] Timeout waiting for response, key={}", key),
-                );
-                Err(RpcError::Timeout)
-            }
-        }
+        self._secure_request("SALL", key, data).await
     }
 
     pub async fn process(&self, data: &[u8]) -> Vec<Result<ParseResult, RpcError>> {
@@ -704,9 +817,11 @@ impl RpcCore {
         let frame_idx = result.frame_idx;
 
         if is_secure {
-            self.handle_secure_frame(&key, invoke_idx, frame_idx, is_fin, &result.param).await?;
+            self.handle_secure_frame(&key, invoke_idx, frame_idx, is_fin, &result.param)
+                .await?;
         } else {
-            self.handle_unsecure_frame(&key, frame_idx, is_fin, &result.param).await?;
+            self.handle_unsecure_frame(&key, frame_idx, is_fin, &result.param)
+                .await?;
         }
 
         Ok(())
@@ -738,10 +853,10 @@ impl RpcCore {
                         let mut builder = FrameBuilder::new();
                         builder.build_frames_with_invoke_idx(key, &response_frame, true, invoke_idx)
                     };
-                    let send_fn = self.send_function.lock().await;
-                    if let Some(ref send) = *send_fn {
-                        for frame in &frames {
-                            if let Err(e) = send(frame) {
+                    let send_fn = self.send_function.lock().await.clone();
+                    if let Some(send) = send_fn {
+                        for frame in frames {
+                            if let Err(e) = send(frame).await {
                                 self.logger.log(
                                     crate::types::LogLevel::Error,
                                     "RpcCore",
@@ -753,38 +868,33 @@ impl RpcCore {
                 }
             }
         } else {
-            let mut dynamic = self.dynamic_nodes.lock().await;
-            if let Some(pending) = dynamic.remove(key) {
-                if data.len() >= 2 {
-                    let msg_type = data[0];
-                    match msg_type {
-                        0 => {
-                            let ack_frame_idx = data.get(1).copied().unwrap_or(0);
-                            self.logger.log(
-                                crate::types::LogLevel::Debug,
-                                "RpcCore",
-                                &format!("Received ACK for frame {} on key {}", ack_frame_idx, key),
-                            );
-                        }
-                        1 => {
-                            let response_data = if data.len() > 2 {
-                                data[2..].to_vec()
-                            } else {
-                                Vec::new()
-                            };
-                            let _ = pending.tx.send(Ok(response_data));
-                        }
-                        2 | 3 => {
-                            let _ = pending.tx.send(Err(RpcError::CommandNotFound));
-                        }
-                        _ => {}
-                    }
+            let dynamic = self.dynamic_nodes.lock().await;
+            let pending_key = (key.to_string(), invoke_idx);
+            if let Some(PendingCall::Secure { tx }) = dynamic.get(&pending_key) {
+                if !data.is_empty() {
+                    let response = match data[0] {
+                        0 if data.len() >= 2 => SecureResponse::FrameAck {
+                            invoke_idx,
+                            frame_idx: data[1],
+                        },
+                        1 => SecureResponse::CommandNotFound { invoke_idx },
+                        2 => SecureResponse::Return {
+                            invoke_idx,
+                            data: data[1..].to_vec(),
+                        },
+                        3 => SecureResponse::Error { invoke_idx },
+                        _ => return Ok(()),
+                    };
+                    let _ = tx.send(response);
                 }
             } else {
                 self.logger.log(
                     crate::types::LogLevel::Debug,
                     "RpcCore",
-                    &format!("Command not found: {} (response already consumed or unexpected ACK)", key),
+                    &format!(
+                        "Command not found: {} (response already consumed or unexpected ACK)",
+                        key
+                    ),
                 );
             }
         }
@@ -802,8 +912,13 @@ impl RpcCore {
         self.logger.log(
             crate::types::LogLevel::Debug,
             "RpcCore",
-            &format!("[RECV] Unsecure frame: key={}, frame_idx={}, is_fin={}, data_len={}",
-                key, frame_idx, is_fin, data.len()),
+            &format!(
+                "[RECV] Unsecure frame: key={}, frame_idx={}, is_fin={}, data_len={}",
+                key,
+                frame_idx,
+                is_fin,
+                data.len()
+            ),
         );
 
         let effective_frame_idx = if frame_idx == LAST_FRAME_FIX_INDEX {
@@ -820,7 +935,10 @@ impl RpcCore {
                 self.logger.log(
                     crate::types::LogLevel::Debug,
                     "RpcCore",
-                    &format!("[RECV] Multi-frame not complete, key={}, waiting for more frames", key),
+                    &format!(
+                        "[RECV] Multi-frame not complete, key={}, waiting for more frames",
+                        key
+                    ),
                 );
                 return Ok(());
             }
@@ -836,8 +954,12 @@ impl RpcCore {
         self.logger.log(
             crate::types::LogLevel::Info,
             "RpcCore",
-            &format!("[RECV] Complete frame: key={}, total_len={}, data={:02X?}",
-                key, all_data.len(), all_data),
+            &format!(
+                "[RECV] Complete frame: key={}, total_len={}, data={:02X?}",
+                key,
+                all_data.len(),
+                all_data
+            ),
         );
         self.logger.log(
             crate::types::LogLevel::Debug,
@@ -872,15 +994,55 @@ impl RpcCore {
             }
         } else {
             drop(nodes);
-            
+
             let mut dynamic = self.dynamic_nodes.lock().await;
-            if let Some(pending) = dynamic.remove(key) {
+            if let Ok(response) = SecureResponse::decode(&all_data) {
+                let pending_key = (key.to_string(), response.invoke_idx());
+                if let Some(PendingCall::Secure { tx }) = dynamic.get(&pending_key) {
+                    self.logger.log(
+                        crate::types::LogLevel::Info,
+                        "RpcCore",
+                        &format!(
+                            "[SECURE] RX key={}, invoke_idx={}, response={:?}",
+                            key,
+                            response.invoke_idx(),
+                            response
+                        ),
+                    );
+                    let _ = tx.send(response);
+                } else {
+                    self.logger.log(
+                        crate::types::LogLevel::Warn,
+                        "RpcCore",
+                        &format!(
+                            "[SECURE] Ignoring stale response key={}, invoke_idx={}",
+                            key,
+                            response.invoke_idx()
+                        ),
+                    );
+                }
+                return Ok(());
+            }
+
+            let call_key = dynamic.iter().find_map(|(pending_key, pending)| {
+                if pending_key.0 == key && matches!(pending, PendingCall::Call { .. }) {
+                    Some(pending_key.clone())
+                } else {
+                    None
+                }
+            });
+            if let Some(call_key) = call_key {
                 self.logger.log(
                     crate::types::LogLevel::Info,
                     "RpcCore",
-                    &format!("[RECV] Found pending call for key={}, sending response", key),
+                    &format!(
+                        "[RECV] Found pending call for key={}, sending response",
+                        key
+                    ),
                 );
-                let _ = pending.tx.send(Ok(all_data));
+                if let Some(PendingCall::Call { tx }) = dynamic.remove(&call_key) {
+                    let _ = tx.send(Ok(all_data));
+                }
             } else {
                 self.logger.log(
                     crate::types::LogLevel::Debug,
@@ -943,6 +1105,41 @@ impl Default for RpcCore {
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex as StdMutex;
+
+    fn parse_frame(frame: &[u8]) -> ParseResult {
+        let mut parser = FrameParser::new();
+        parser
+            .process(frame)
+            .into_iter()
+            .next()
+            .expect("frame result")
+            .expect("valid frame")
+    }
+
+    fn secure_control_frame(
+        key: &str,
+        invoke_idx: u8,
+        response_type: u8,
+        frame_idx: Option<u8>,
+    ) -> Vec<u8> {
+        secure_control_frame_with_data(key, invoke_idx, response_type, frame_idx, &[])
+    }
+
+    fn secure_control_frame_with_data(
+        key: &str,
+        invoke_idx: u8,
+        response_type: u8,
+        frame_idx: Option<u8>,
+        response_data: &[u8],
+    ) -> Vec<u8> {
+        let mut data = match frame_idx {
+            Some(frame_idx) => vec![0x19, response_type, 0x19, invoke_idx, 0x59, frame_idx],
+            None => vec![0x19, response_type, 0x19, invoke_idx],
+        };
+        data.extend_from_slice(response_data);
+        FrameBuilder::new().build_frame(key, &data, false, true, 0, 0)
+    }
 
     #[tokio::test]
     async fn test_rpc_core_creation() {
@@ -987,7 +1184,372 @@ mod tests {
     async fn test_publish_without_send_function() {
         let core = RpcCore::default();
         let result = core.publish("test", "<u8*>", &[3, 0, 1, 2, 3]).await;
-        assert!(result.is_ok());
+        assert_eq!(result, Err(RpcError::ChannelClosed));
+    }
+
+    #[test]
+    fn secure_response_decodes_captured_frame_ack() {
+        let response = SecureResponse::decode(&[0x19, 0x00, 0x19, 0x11, 0x59, 0x00]).unwrap();
+        assert_eq!(
+            response,
+            SecureResponse::FrameAck {
+                invoke_idx: 0x11,
+                frame_idx: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn secure_response_decodes_captured_final_return() {
+        let response = SecureResponse::decode(&[0x19, 0x02, 0x19, 0x10]).unwrap();
+        assert_eq!(
+            response,
+            SecureResponse::Return {
+                invoke_idx: 0x10,
+                data: Vec::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn secure_response_decodes_remote_failures() {
+        assert_eq!(
+            SecureResponse::decode(&[0x19, 0x01, 0x19, 0x20]).unwrap(),
+            SecureResponse::CommandNotFound { invoke_idx: 0x20 }
+        );
+        assert_eq!(
+            SecureResponse::decode(&[0x19, 0x03, 0x19, 0x21]).unwrap(),
+            SecureResponse::Error { invoke_idx: 0x21 }
+        );
+    }
+
+    #[tokio::test]
+    async fn secure_multi_frame_waits_for_ack_before_sending_final_frame() {
+        let core = Arc::new(RpcCore::new(RpcConfig {
+            timeout_ms: 200,
+            retry_count: 0,
+            retry_delay_ms: 0,
+            ..RpcConfig::default()
+        }));
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let send_fn: SendFunction = Arc::new(move |data: Vec<u8>| {
+            let tx = tx.clone();
+            Box::pin(async move {
+                tx.send(data).map_err(|_| RpcError::SendFail)?;
+                Ok(())
+            })
+        });
+        core.set_send_function(send_fn).await;
+
+        let values: Vec<u8> = (0..182u16).flat_map(|value| value.to_le_bytes()).collect();
+        let mut params = Vec::with_capacity(values.len() + 2);
+        params.extend_from_slice(&182u16.to_le_bytes());
+        params.extend_from_slice(&values);
+
+        let task_core = Arc::clone(&core);
+        let task = tokio::spawn(async move {
+            task_core
+                .send("GH3X_RegsListWriteCmd", "<u16*>", &params)
+                .await
+        });
+
+        let first_frame = timeout(Duration::from_millis(50), rx.recv())
+            .await
+            .expect("first frame timeout")
+            .expect("first frame");
+        let first = parse_frame(&first_frame);
+        assert!(first.is_secure);
+        assert!(!first.is_fin);
+        assert_eq!(first.frame_idx, 0);
+        assert!(timeout(Duration::from_millis(30), rx.recv()).await.is_err());
+        assert!(!task.is_finished());
+
+        core.process(&secure_control_frame(
+            "GH3X_RegsListWriteCmd",
+            first.invoke_idx,
+            0,
+            Some(0),
+        ))
+        .await;
+
+        let final_frame = timeout(Duration::from_millis(50), rx.recv())
+            .await
+            .expect("final frame timeout")
+            .expect("final frame");
+        let final_parsed = parse_frame(&final_frame);
+        assert!(final_parsed.is_secure);
+        assert!(final_parsed.is_fin);
+        assert_eq!(final_parsed.invoke_idx, first.invoke_idx);
+        assert!(!task.is_finished());
+
+        core.process(&secure_control_frame(
+            "GH3X_RegsListWriteCmd",
+            first.invoke_idx,
+            2,
+            None,
+        ))
+        .await;
+
+        assert_eq!(task.await.unwrap(), Ok(()));
+    }
+
+    #[tokio::test]
+    async fn secure_frame_ack_timeout_fails_the_command() {
+        let core = Arc::new(RpcCore::new(RpcConfig {
+            timeout_ms: 20,
+            retry_count: 1,
+            retry_delay_ms: 0,
+            ..RpcConfig::default()
+        }));
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let send_fn: SendFunction = Arc::new(move |data: Vec<u8>| {
+            let tx = tx.clone();
+            Box::pin(async move {
+                tx.send(data).map_err(|_| RpcError::SendFail)?;
+                Ok(())
+            })
+        });
+        core.set_send_function(send_fn).await;
+
+        let params = vec![0u8; 400];
+        let task_core = Arc::clone(&core);
+        let task =
+            tokio::spawn(async move { task_core._secure_request("SEND", "large", &params).await });
+
+        let first = rx.recv().await.unwrap();
+        let retry = rx.recv().await.unwrap();
+        assert_eq!(first, retry);
+        assert_eq!(task.await.unwrap(), Err(RpcError::MaxRetryExceeded));
+    }
+
+    #[tokio::test]
+    async fn secure_final_return_timeout_fails_the_command() {
+        let core = Arc::new(RpcCore::new(RpcConfig {
+            timeout_ms: 20,
+            retry_count: 0,
+            retry_delay_ms: 0,
+            ..RpcConfig::default()
+        }));
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let send_fn: SendFunction = Arc::new(move |data: Vec<u8>| {
+            let tx = tx.clone();
+            Box::pin(async move {
+                tx.send(data).map_err(|_| RpcError::SendFail)?;
+                Ok(())
+            })
+        });
+        core.set_send_function(send_fn).await;
+
+        let task_core = Arc::clone(&core);
+        let task = tokio::spawn(async move { task_core.send("small", "<u8>", &[1]).await });
+
+        let frame = rx.recv().await.unwrap();
+        assert!(parse_frame(&frame).is_fin);
+        assert_eq!(task.await.unwrap(), Err(RpcError::MaxRetryExceeded));
+    }
+
+    #[tokio::test]
+    async fn secure_mismatched_ack_does_not_advance_or_extend_timeout() {
+        let core = Arc::new(RpcCore::new(RpcConfig {
+            timeout_ms: 40,
+            retry_count: 0,
+            retry_delay_ms: 0,
+            ..RpcConfig::default()
+        }));
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        core.set_send_function(Arc::new(move |data| {
+            let tx = tx.clone();
+            Box::pin(async move {
+                tx.send(data).map_err(|_| RpcError::SendFail)?;
+                Ok(())
+            })
+        }))
+        .await;
+
+        let task_core = Arc::clone(&core);
+        let task = tokio::spawn(async move {
+            task_core
+                ._secure_request("SEND", "large", &[0; 400])
+                .await
+        });
+        let first = parse_frame(&rx.recv().await.unwrap());
+
+        for _ in 0..3 {
+            core.process(&secure_control_frame(
+                "large",
+                first.invoke_idx,
+                0,
+                Some(first.frame_idx.wrapping_add(1)),
+            ))
+            .await;
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        assert!(timeout(Duration::from_millis(20), rx.recv()).await.is_err());
+        assert_eq!(task.await.unwrap(), Err(RpcError::MaxRetryExceeded));
+    }
+
+    #[tokio::test]
+    async fn sall_returns_final_type_two_payload() {
+        let core = Arc::new(RpcCore::new(RpcConfig {
+            timeout_ms: 100,
+            retry_count: 0,
+            retry_delay_ms: 0,
+            ..RpcConfig::default()
+        }));
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        core.set_send_function(Arc::new(move |data| {
+            let tx = tx.clone();
+            Box::pin(async move {
+                tx.send(data).map_err(|_| RpcError::SendFail)?;
+                Ok(())
+            })
+        }))
+        .await;
+
+        let task_core = Arc::clone(&core);
+        let task = tokio::spawn(async move { task_core._sall("query", &[1]).await });
+        let request = parse_frame(&rx.recv().await.unwrap());
+        let payload = [0x59, 0x2A];
+        core.process(&secure_control_frame_with_data(
+            "query",
+            request.invoke_idx,
+            2,
+            None,
+            &payload,
+        ))
+        .await;
+
+        assert_eq!(task.await.unwrap(), Ok(payload.to_vec()));
+    }
+
+    #[tokio::test]
+    async fn secure_remote_failure_types_fail_the_live_request() {
+        for (response_type, expected) in [
+            (1, RpcError::CommandNotFound),
+            (3, RpcError::RemoteError),
+        ] {
+            let core = Arc::new(RpcCore::new(RpcConfig {
+                timeout_ms: 100,
+                retry_count: 0,
+                retry_delay_ms: 0,
+                ..RpcConfig::default()
+            }));
+            let (tx, mut rx) = mpsc::unbounded_channel();
+            core.set_send_function(Arc::new(move |data| {
+                let tx = tx.clone();
+                Box::pin(async move {
+                    tx.send(data).map_err(|_| RpcError::SendFail)?;
+                    Ok(())
+                })
+            }))
+            .await;
+
+            let task_core = Arc::clone(&core);
+            let task = tokio::spawn(async move { task_core._send("failure", &[1]).await });
+            let request = parse_frame(&rx.recv().await.unwrap());
+            core.process(&secure_control_frame(
+                "failure",
+                request.invoke_idx,
+                response_type,
+                None,
+            ))
+            .await;
+
+            assert_eq!(task.await.unwrap(), Err(expected));
+        }
+    }
+
+    #[tokio::test]
+    async fn publish_waits_for_each_transport_write_without_rx() {
+        let core = RpcCore::default();
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+        let writes = Arc::new(AtomicUsize::new(0));
+        let active_for_send = Arc::clone(&active);
+        let max_for_send = Arc::clone(&max_active);
+        let writes_for_send = Arc::clone(&writes);
+        core.set_send_function(Arc::new(move |_data| {
+            let active = Arc::clone(&active_for_send);
+            let max_active = Arc::clone(&max_for_send);
+            let writes = Arc::clone(&writes_for_send);
+            Box::pin(async move {
+                let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                max_active.fetch_max(current, Ordering::SeqCst);
+                tokio::time::sleep(Duration::from_millis(2)).await;
+                active.fetch_sub(1, Ordering::SeqCst);
+                writes.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            })
+        }))
+        .await;
+
+        assert_eq!(core._publish("large", &[0; 500]).await, Ok(()));
+        assert!(writes.load(Ordering::SeqCst) > 1);
+        assert_eq!(max_active.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn call_sends_frames_sequentially_then_times_out_without_rx() {
+        let core = RpcCore::new(RpcConfig {
+            timeout_ms: 20,
+            ..RpcConfig::default()
+        });
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+        let writes = Arc::new(AtomicUsize::new(0));
+        let active_for_send = Arc::clone(&active);
+        let max_for_send = Arc::clone(&max_active);
+        let writes_for_send = Arc::clone(&writes);
+        core.set_send_function(Arc::new(move |_data| {
+            let active = Arc::clone(&active_for_send);
+            let max_active = Arc::clone(&max_for_send);
+            let writes = Arc::clone(&writes_for_send);
+            Box::pin(async move {
+                let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                max_active.fetch_max(current, Ordering::SeqCst);
+                tokio::time::sleep(Duration::from_millis(2)).await;
+                active.fetch_sub(1, Ordering::SeqCst);
+                writes.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            })
+        }))
+        .await;
+
+        assert_eq!(core._call("large", &[0; 500]).await, Err(RpcError::Timeout));
+        assert!(writes.load(Ordering::SeqCst) > 1);
+        assert_eq!(max_active.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn concurrent_commands_do_not_interleave_frame_batches() {
+        let core = Arc::new(RpcCore::default());
+        let sent_keys = Arc::new(StdMutex::new(Vec::new()));
+        let sent_keys_for_send = Arc::clone(&sent_keys);
+        core.set_send_function(Arc::new(move |data| {
+            let sent_keys = Arc::clone(&sent_keys_for_send);
+            Box::pin(async move {
+                sent_keys.lock().unwrap().push(parse_frame(&data).key);
+                tokio::time::sleep(Duration::from_millis(1)).await;
+                Ok(())
+            })
+        }))
+        .await;
+
+        let first_core = Arc::clone(&core);
+        let second_core = Arc::clone(&core);
+        let (first_result, second_result) = tokio::join!(
+            first_core._publish("first", &[0; 500]),
+            second_core._publish("second", &[0; 500]),
+        );
+
+        assert_eq!(first_result, Ok(()));
+        assert_eq!(second_result, Ok(()));
+        let keys = sent_keys.lock().unwrap();
+        let transitions = keys.windows(2).filter(|pair| pair[0] != pair[1]).count();
+        assert!(keys.iter().any(|key| key == "first"));
+        assert!(keys.iter().any(|key| key == "second"));
+        assert_eq!(transitions, 1);
     }
 
     #[tokio::test]
@@ -1033,9 +1595,11 @@ mod tests {
         let call_count = Arc::new(AtomicUsize::new(0));
         let count_clone = call_count.clone();
 
-        let handler = Arc::new(move |_data: &[u8], _size: usize, _ctx: &mut InvokeContext| {
-            count_clone.fetch_add(1, Ordering::SeqCst);
-        });
+        let handler = Arc::new(
+            move |_data: &[u8], _size: usize, _ctx: &mut InvokeContext| {
+                count_clone.fetch_add(1, Ordering::SeqCst);
+            },
+        );
 
         core.register("G", handler).await.unwrap();
 

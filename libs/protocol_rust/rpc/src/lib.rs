@@ -21,4 +21,4 @@ pub use unpacker::{
     unpack_i8_array, unpack_i16_array, unpack_i32_array, unpack_i64_array,
     unpack_string,
 };
-pub use core::{RpcCore, RpcConfig, InvokeNode, RpcHandler, InvokeContext, SendFunction};
+pub use core::{RpcCore, RpcConfig, InvokeNode, RpcHandler, InvokeContext, SendFunction, SendFuture};

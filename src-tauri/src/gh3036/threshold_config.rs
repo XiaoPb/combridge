@@ -156,7 +156,7 @@ impl TestItemConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum FailAction {
     #[default]
@@ -583,6 +583,16 @@ pub fn evaluate_test_data(
     result
 }
 
+pub fn evaluate_test_item(
+    test_name: &str,
+    config: Option<&TestItemConfig>,
+    values: &[u16],
+) -> TestEvaluationResult {
+    let mut result = TestEvaluationResult::new(test_name, config);
+    result.evaluate_channels(values, config);
+    result
+}
+
 pub const ERROR_CODE_CHIP_INIT: &str = "0x1001";
 pub const ERROR_CODE_UUID: &str = "0x2001";
 pub const ERROR_CODE_BASE_NOISE_BASE: u32 = 0x3000;
@@ -641,5 +651,60 @@ pub fn generate_error_codes(
     FactoryErrorResult {
         error_codes,
         has_error,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_config(enabled: bool, maximum: u16) -> TestItemConfig {
+        TestItemConfig {
+            enabled,
+            description: Some("测试项".to_string()),
+            unit: Some("LSB".to_string()),
+            global_threshold: Some(ThresholdConfig {
+                operator: ThresholdOperator::Lt,
+                value: Some(maximum),
+                range: None,
+                description: None,
+            }),
+            channel_rules: None,
+        }
+    }
+
+    #[test]
+    fn evaluate_test_item_passes_enabled_values() {
+        let config = test_config(true, 100);
+
+        let result = evaluate_test_item("base_noise", Some(&config), &[10, 99]);
+
+        assert!(result.enabled);
+        assert!(result.pass);
+        assert_eq!(result.channel_results.len(), 2);
+    }
+
+    #[test]
+    fn evaluate_test_item_reports_failed_channels() {
+        let config = test_config(true, 100);
+
+        let result = evaluate_test_item("base_noise", Some(&config), &[10, 100, 120]);
+
+        assert!(!result.pass);
+        assert!(result.channel_results[0].pass);
+        assert!(!result.channel_results[1].pass);
+        assert!(!result.channel_results[2].pass);
+    }
+
+    #[test]
+    fn evaluate_test_item_marks_disabled_without_channels() {
+        let config = test_config(false, 100);
+
+        let result = evaluate_test_item("base_noise", Some(&config), &[120]);
+
+        assert!(!result.enabled);
+        assert!(result.pass);
+        assert!(result.channel_results.is_empty());
+        assert_eq!(result.message, "Test disabled");
     }
 }

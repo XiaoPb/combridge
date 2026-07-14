@@ -19,8 +19,9 @@ use tracing::{error, info, warn};
 use super::config_loader::ConfigLoader;
 use super::manager::Gh3036Manager;
 use super::threshold_config::{
-    evaluate_test_data, generate_error_codes, validate_threshold_config_file,
-    FactoryEvaluationResult, FactoryThresholdConfig, ThresholdConfigValidation,
+    evaluate_test_item, generate_error_codes, validate_threshold_config_file,
+    FactoryEvaluationResult, FactoryThresholdConfig, FailAction, TestItemConfig,
+    ThresholdConfigValidation,
 };
 use super::types::{
     ConfigValidationResult, FactoryTestProgressEvent, FactoryTestResult, FactoryTestStatus,
@@ -174,6 +175,11 @@ impl FactoryTestManager {
         let config_dir = self.config_dir.lock();
         let dir = config_dir.clone();
         drop(config_dir);
+        let threshold_config = self.threshold_config.lock().clone();
+        let is_enabled = |item: Option<&TestItemConfig>| match item {
+            Some(config) => config.enabled,
+            None => true,
+        };
 
         let mut result = ConfigValidationResult {
             base_noise_config: None,
@@ -184,63 +190,87 @@ impl FactoryTestManager {
             is_valid: true,
         };
 
-        match Self::find_config_file(&dir, "base_noise") {
-            Ok(Some(path)) => {
-                result.base_noise_config = Some(path.to_string_lossy().to_string());
-            }
-            Ok(None) => {
-                result.errors.push("未找到 base_noise 配置文件".to_string());
-                result.is_valid = false;
-            }
-            Err(e) => {
-                result
-                    .errors
-                    .push(format!("查找 base_noise 配置失败: {}", e));
-                result.is_valid = false;
-            }
-        }
-
-        match Self::find_config_file(&dir, "ppg_noise") {
-            Ok(Some(path)) => {
-                result.ppg_noise_config = Some(path.to_string_lossy().to_string());
-            }
-            Ok(None) => {
-                result.errors.push("未找到 ppg_noise 配置文件".to_string());
-                result.is_valid = false;
-            }
-            Err(e) => {
-                result
-                    .errors
-                    .push(format!("查找 ppg_noise 配置失败: {}", e));
-                result.is_valid = false;
+        if is_enabled(
+            threshold_config
+                .as_ref()
+                .and_then(|config| config.tests.base_noise.as_ref()),
+        ) {
+            match Self::find_config_file(&dir, "base_noise") {
+                Ok(Some(path)) => {
+                    result.base_noise_config = Some(path.to_string_lossy().to_string());
+                }
+                Ok(None) => {
+                    result.errors.push("未找到 base_noise 配置文件".to_string());
+                    result.is_valid = false;
+                }
+                Err(e) => {
+                    result
+                        .errors
+                        .push(format!("查找 base_noise 配置失败: {}", e));
+                    result.is_valid = false;
+                }
             }
         }
 
-        match Self::find_config_file(&dir, "lpctr") {
-            Ok(Some(path)) => {
-                result.lpctr_config = Some(path.to_string_lossy().to_string());
-            }
-            Ok(None) => {
-                result.errors.push("未找到 lpctr 配置文件".to_string());
-                result.is_valid = false;
-            }
-            Err(e) => {
-                result.errors.push(format!("查找 lpctr 配置失败: {}", e));
-                result.is_valid = false;
+        if is_enabled(
+            threshold_config
+                .as_ref()
+                .and_then(|config| config.tests.ppg_noise.as_ref()),
+        ) {
+            match Self::find_config_file(&dir, "ppg_noise") {
+                Ok(Some(path)) => {
+                    result.ppg_noise_config = Some(path.to_string_lossy().to_string());
+                }
+                Ok(None) => {
+                    result.errors.push("未找到 ppg_noise 配置文件".to_string());
+                    result.is_valid = false;
+                }
+                Err(e) => {
+                    result
+                        .errors
+                        .push(format!("查找 ppg_noise 配置失败: {}", e));
+                    result.is_valid = false;
+                }
             }
         }
 
-        match Self::find_config_file(&dir, "lplctr") {
-            Ok(Some(path)) => {
-                result.lplctr_config = Some(path.to_string_lossy().to_string());
+        if is_enabled(
+            threshold_config
+                .as_ref()
+                .and_then(|config| config.tests.lpctr.as_ref()),
+        ) {
+            match Self::find_config_file(&dir, "lpctr") {
+                Ok(Some(path)) => {
+                    result.lpctr_config = Some(path.to_string_lossy().to_string());
+                }
+                Ok(None) => {
+                    result.errors.push("未找到 lpctr 配置文件".to_string());
+                    result.is_valid = false;
+                }
+                Err(e) => {
+                    result.errors.push(format!("查找 lpctr 配置失败: {}", e));
+                    result.is_valid = false;
+                }
             }
-            Ok(None) => {
-                result.errors.push("未找到 lplctr 配置文件".to_string());
-                result.is_valid = false;
-            }
-            Err(e) => {
-                result.errors.push(format!("查找 lplctr 配置失败: {}", e));
-                result.is_valid = false;
+        }
+
+        if is_enabled(
+            threshold_config
+                .as_ref()
+                .and_then(|config| config.tests.lplctr.as_ref()),
+        ) {
+            match Self::find_config_file(&dir, "lplctr") {
+                Ok(Some(path)) => {
+                    result.lplctr_config = Some(path.to_string_lossy().to_string());
+                }
+                Ok(None) => {
+                    result.errors.push("未找到 lplctr 配置文件".to_string());
+                    result.is_valid = false;
+                }
+                Err(e) => {
+                    result.errors.push(format!("查找 lplctr 配置失败: {}", e));
+                    result.is_valid = false;
+                }
             }
         }
 
@@ -268,6 +298,24 @@ impl FactoryTestManager {
             }
         }
 
+        let threshold_validation = self.validate_threshold_config();
+        if !threshold_validation.is_valid {
+            error!(
+                "[FactoryTest] 卡控配置校验失败: {:?}",
+                threshold_validation.errors
+            );
+            return Err(format!(
+                "卡控配置校验失败: {}",
+                threshold_validation.errors.join("；")
+            ));
+        }
+        let config_dir = self.config_dir.lock().clone();
+        let config_file = FactoryThresholdConfig::find_config_file(&config_dir)
+            .ok_or_else(|| "未找到唯一的卡控配置文件".to_string())?;
+        let threshold_config = FactoryThresholdConfig::from_file(&config_file)?;
+        threshold_config.validate()?;
+        *self.threshold_config.lock() = Some(threshold_config);
+
         let validation = self.validate_config_dir();
         if !validation.is_valid {
             error!("[FactoryTest] 配置文件校验失败: {:?}", validation.errors);
@@ -288,6 +336,10 @@ impl FactoryTestManager {
         {
             let mut result = self.result.lock();
             *result = None;
+        }
+        {
+            let mut evaluation_result = self.evaluation_result.lock();
+            *evaluation_result = None;
         }
 
         self.publish_progress(
@@ -313,7 +365,22 @@ impl FactoryTestManager {
             let rt = match Runtime::new() {
                 Ok(rt) => rt,
                 Err(e) => {
-                    error!("[FactoryTest] 创建 Tokio runtime 失败: {}", e);
+                    let reason = format!("创建 Tokio runtime 失败: {}", e);
+                    error!("[FactoryTest] {}", reason);
+                    Self::set_state(
+                        &status_state,
+                        &current_step_state,
+                        FactoryTestStatus::Failed,
+                        FactoryTestStep::Prepare,
+                    );
+                    Self::publish_progress_static(
+                        &event_bus,
+                        FactoryTestStep::Prepare,
+                        FactoryTestStatus::Failed,
+                        0.0,
+                        &reason,
+                    );
+                    running.store(false, Ordering::SeqCst);
                     return;
                 }
             };
@@ -343,7 +410,7 @@ impl FactoryTestManager {
                 test_result.project_name = config.project.clone();
             }
 
-            let steps: [(FactoryTestStep, f32, f32); 10] = [
+            let all_steps: [(FactoryTestStep, f32, f32); 8] = [
                 (FactoryTestStep::Prepare, 0.0, 0.05),
                 (FactoryTestStep::ChipInit, 0.05, 0.15),
                 (FactoryTestStep::Uuid, 0.15, 0.25),
@@ -352,11 +419,24 @@ impl FactoryTestManager {
                 (FactoryTestStep::Lpctr, 0.55, 0.70),
                 (FactoryTestStep::EnvironmentSwitch, 0.70, 0.75),
                 (FactoryTestStep::Lplctr, 0.75, 0.90),
-                (FactoryTestStep::Cleanup, 0.90, 0.95),
-                (FactoryTestStep::Completed, 0.95, 1.0),
             ];
 
-            for (step, progress_start, progress_end) in steps.iter() {
+            let steps: Vec<_> = all_steps
+                .into_iter()
+                .filter(|(step, _, _)| Self::should_execute_step(&threshold_config, *step))
+                .collect();
+            let mut evaluation = threshold_config
+                .as_ref()
+                .map(Self::initial_evaluation_result);
+            let fail_action = threshold_config
+                .as_ref()
+                .and_then(|config| config.global.as_ref())
+                .map(|global| global.fail_action)
+                .unwrap_or_default();
+            let mut failure_reason: Option<String> = None;
+            let mut failure_step: Option<FactoryTestStep> = None;
+
+            for (step, progress_start, progress_end) in &steps {
                 if !running.load(Ordering::SeqCst) {
                     info!("[FactoryTest] 产测流程被停止");
                     break;
@@ -386,44 +466,49 @@ impl FactoryTestManager {
 
                 match step_result {
                     Ok(step_result_opt) => {
-                        if let Some(step_result) = step_result_opt {
+                        if let Some(mut step_result) = step_result_opt {
+                            if let (Some(config), Some(evaluation_result)) =
+                                (threshold_config.as_ref(), evaluation.as_mut())
+                            {
+                                if let Some((test_name, item_config, values)) =
+                                    Self::evaluation_input(config, &test_result, *step)
+                                {
+                                    let item_result =
+                                        evaluate_test_item(test_name, item_config, values);
+                                    step_result.success = item_result.pass;
+                                    step_result.message = item_result.message.clone();
+                                    evaluation_result.add_test_result(item_result);
+                                }
+                            }
+
+                            Self::publish_step_result_static(
+                                &event_bus,
+                                FactoryTestStatus::Running,
+                                *progress_end,
+                                step_result.clone(),
+                            );
+
                             if !step_result.success {
                                 test_result.overall_result = "FAIL".to_string();
-                                Self::set_state(
-                                    &status_state,
-                                    &current_step_state,
-                                    FactoryTestStatus::Failed,
-                                    *step,
-                                );
-                                Self::publish_progress_static(
-                                    &event_bus,
-                                    *step,
-                                    FactoryTestStatus::Failed,
-                                    *progress_end,
-                                    &step_result.message,
-                                );
-                                running.store(false, Ordering::SeqCst);
-                                break;
+                                if Self::should_stop_after_threshold_failure(
+                                    fail_action,
+                                    step_result.success,
+                                ) {
+                                    failure_reason = Some(format!(
+                                        "测试项 {:?} 卡控失败: {}",
+                                        step, step_result.message
+                                    ));
+                                    failure_step = Some(*step);
+                                    break;
+                                }
                             }
                         }
                     }
                     Err(e) => {
                         error!("[FactoryTest] 步骤 {:?} 执行失败: {}", step, e);
                         test_result.overall_result = "FAIL".to_string();
-                        Self::set_state(
-                            &status_state,
-                            &current_step_state,
-                            FactoryTestStatus::Failed,
-                            *step,
-                        );
-                        Self::publish_progress_static(
-                            &event_bus,
-                            *step,
-                            FactoryTestStatus::Failed,
-                            *progress_end,
-                            &e,
-                        );
-                        running.store(false, Ordering::SeqCst);
+                        failure_reason = Some(format!("步骤 {:?} 执行失败: {}", step, e));
+                        failure_step = Some(*step);
                         break;
                     }
                 }
@@ -462,24 +547,45 @@ impl FactoryTestManager {
             }
 
             if running.load(Ordering::SeqCst) {
-                if let Some(ref config) = threshold_config {
-                    info!("[FactoryTest] 执行卡控判断...");
-                    let eval_result = evaluate_test_data(
-                        config,
-                        &test_result.base_noise,
-                        &test_result.ppg_noise,
-                        &test_result.lpctr,
-                        &test_result.lplctr,
-                    );
-                    info!(
-                        "[FactoryTest] 卡控判断结果: overall_pass={}",
-                        eval_result.overall_pass
-                    );
+                Self::set_state(
+                    &status_state,
+                    &current_step_state,
+                    FactoryTestStatus::Running,
+                    FactoryTestStep::Cleanup,
+                );
+                Self::publish_progress_static(
+                    &event_bus,
+                    FactoryTestStep::Cleanup,
+                    FactoryTestStatus::Running,
+                    0.90,
+                    "执行清理步骤",
+                );
 
+                match rt.block_on(Self::execute_cleanup_step(&event_bus, &manager)) {
+                    Ok(Some(step_result)) => Self::publish_step_result_static(
+                        &event_bus,
+                        FactoryTestStatus::Running,
+                        0.95,
+                        step_result,
+                    ),
+                    Ok(None) => {}
+                    Err(error) => {
+                        let cleanup_reason = format!("清理步骤执行失败: {}", error);
+                        error!("[FactoryTest] {}", cleanup_reason);
+                        test_result.overall_result = "FAIL".to_string();
+                        failure_reason = Some(match failure_reason {
+                            Some(reason) => format!("{}；{}", reason, cleanup_reason),
+                            None => cleanup_reason,
+                        });
+                        failure_step.get_or_insert(FactoryTestStep::Cleanup);
+                    }
+                }
+
+                if let Some(eval_result) = evaluation.as_ref() {
                     let error_result = generate_error_codes(
                         test_result.chip_init_status,
                         &test_result.uuid,
-                        &eval_result,
+                        eval_result,
                     );
                     test_result.error_code = error_result.error_codes.join(",");
 
@@ -487,19 +593,8 @@ impl FactoryTestManager {
                         test_result.overall_result = "FAIL".to_string();
                     }
 
-                    {
-                        let mut eval = evaluation_result_clone.lock();
-                        *eval = Some(eval_result);
-                    }
+                    *evaluation_result_clone.lock() = Some(eval_result.clone());
                 }
-
-                Self::publish_progress_static(
-                    &event_bus,
-                    FactoryTestStep::Completed,
-                    FactoryTestStatus::Completed,
-                    1.0,
-                    &format!("产测完成，结果: {}", test_result.overall_result),
-                );
 
                 let project_name = if test_result.project_name.is_empty() {
                     "unknown".to_string()
@@ -511,16 +606,33 @@ impl FactoryTestManager {
                     error!("[FactoryTest] 保存结果失败: {}", e);
                 }
 
-                {
-                    Self::set_state(
-                        &status_state,
-                        &current_step_state,
+                *result_state.lock() = Some(test_result.clone());
+
+                let (terminal_status, terminal_step, message) = match failure_reason {
+                    Some(reason) => (
+                        FactoryTestStatus::Failed,
+                        failure_step.unwrap_or(FactoryTestStep::Cleanup),
+                        reason,
+                    ),
+                    None => (
                         FactoryTestStatus::Completed,
                         FactoryTestStep::Completed,
-                    );
-                    let mut result = result_state.lock();
-                    *result = Some(test_result);
-                }
+                        format!("产测完成，结果: {}", test_result.overall_result),
+                    ),
+                };
+                Self::set_state(
+                    &status_state,
+                    &current_step_state,
+                    terminal_status,
+                    terminal_step,
+                );
+                Self::publish_progress_static(
+                    &event_bus,
+                    terminal_step,
+                    terminal_status,
+                    1.0,
+                    &message,
+                );
             }
 
             running.store(false, Ordering::SeqCst);
@@ -618,6 +730,78 @@ impl FactoryTestManager {
             }
             FactoryTestStep::Cleanup => Self::execute_cleanup_step(event_bus, manager).await,
             FactoryTestStep::Idle | FactoryTestStep::Completed => Ok(None),
+        }
+    }
+
+    fn should_execute_step(
+        threshold_config: &Option<FactoryThresholdConfig>,
+        step: FactoryTestStep,
+    ) -> bool {
+        let Some(config) = threshold_config else {
+            return true;
+        };
+
+        match step {
+            FactoryTestStep::BaseNoise => config
+                .tests
+                .base_noise
+                .as_ref()
+                .is_some_and(|item| item.enabled),
+            FactoryTestStep::PpgNoise => config
+                .tests
+                .ppg_noise
+                .as_ref()
+                .is_some_and(|item| item.enabled),
+            FactoryTestStep::Lpctr => config.tests.lpctr.as_ref().is_some_and(|item| item.enabled),
+            FactoryTestStep::EnvironmentSwitch | FactoryTestStep::Lplctr => config
+                .tests
+                .lplctr
+                .as_ref()
+                .is_some_and(|item| item.enabled),
+            _ => true,
+        }
+    }
+
+    fn should_stop_after_threshold_failure(fail_action: FailAction, step_passed: bool) -> bool {
+        !step_passed && fail_action == FailAction::Stop
+    }
+
+    fn initial_evaluation_result(config: &FactoryThresholdConfig) -> FactoryEvaluationResult {
+        let mut result = FactoryEvaluationResult::new(&config.project);
+        for (test_name, item_config) in [
+            ("base_noise", config.tests.base_noise.as_ref()),
+            ("ppg_noise", config.tests.ppg_noise.as_ref()),
+            ("lpctr", config.tests.lpctr.as_ref()),
+            ("lplctr", config.tests.lplctr.as_ref()),
+        ] {
+            if !item_config.is_some_and(|item| item.enabled) {
+                result.add_test_result(evaluate_test_item(test_name, item_config, &[]));
+            }
+        }
+        result
+    }
+
+    fn evaluation_input<'a>(
+        config: &'a FactoryThresholdConfig,
+        result: &'a FactoryTestResult,
+        step: FactoryTestStep,
+    ) -> Option<(&'static str, Option<&'a TestItemConfig>, &'a [u16])> {
+        match step {
+            FactoryTestStep::BaseNoise => Some((
+                "base_noise",
+                config.tests.base_noise.as_ref(),
+                &result.base_noise,
+            )),
+            FactoryTestStep::PpgNoise => Some((
+                "ppg_noise",
+                config.tests.ppg_noise.as_ref(),
+                &result.ppg_noise,
+            )),
+            FactoryTestStep::Lpctr => Some(("lpctr", config.tests.lpctr.as_ref(), &result.lpctr)),
+            FactoryTestStep::Lplctr => {
+                Some(("lplctr", config.tests.lplctr.as_ref(), &result.lplctr))
+            }
+            _ => None,
         }
     }
 
@@ -1545,6 +1729,23 @@ impl FactoryTestManager {
             message
         );
     }
+
+    fn publish_step_result_static(
+        event_bus: &Arc<EventBus>,
+        status: FactoryTestStatus,
+        progress: f32,
+        step_result: FactoryTestStepResult,
+    ) {
+        let event = FactoryTestProgressEvent {
+            current_step: step_result.step,
+            status,
+            message: step_result.message.clone(),
+            step_result: Some(step_result),
+            progress,
+        };
+
+        event_bus.publish_msgpack("gh3036:factory_test_progress", &event);
+    }
 }
 
 impl Drop for FactoryTestManager {
@@ -1555,5 +1756,104 @@ impl Drop for FactoryTestManager {
         if let Some(thread) = handle.take() {
             let _ = thread.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::threshold_config::{GlobalConfig, TestsConfig};
+    use super::*;
+
+    fn item(enabled: bool) -> TestItemConfig {
+        TestItemConfig {
+            enabled,
+            description: None,
+            unit: None,
+            global_threshold: None,
+            channel_rules: None,
+        }
+    }
+
+    fn config(fail_action: FailAction) -> FactoryThresholdConfig {
+        FactoryThresholdConfig {
+            project: "GH3036".to_string(),
+            version: "1.0".to_string(),
+            description: None,
+            global: Some(GlobalConfig {
+                fail_action,
+                ..GlobalConfig::default()
+            }),
+            tests: TestsConfig {
+                base_noise: Some(item(false)),
+                ppg_noise: Some(item(true)),
+                lpctr: Some(item(true)),
+                lplctr: Some(item(false)),
+            },
+        }
+    }
+
+    #[test]
+    fn disabled_steps_and_environment_switch_are_skipped() {
+        let config = Some(config(FailAction::Stop));
+
+        assert!(!FactoryTestManager::should_execute_step(
+            &config,
+            FactoryTestStep::BaseNoise
+        ));
+        assert!(FactoryTestManager::should_execute_step(
+            &config,
+            FactoryTestStep::PpgNoise
+        ));
+        assert!(!FactoryTestManager::should_execute_step(
+            &config,
+            FactoryTestStep::EnvironmentSwitch
+        ));
+        assert!(!FactoryTestManager::should_execute_step(
+            &config,
+            FactoryTestStep::Lplctr
+        ));
+    }
+
+    #[test]
+    fn missing_threshold_config_preserves_all_steps() {
+        assert!(FactoryTestManager::should_execute_step(
+            &None,
+            FactoryTestStep::BaseNoise
+        ));
+        assert!(FactoryTestManager::should_execute_step(
+            &None,
+            FactoryTestStep::EnvironmentSwitch
+        ));
+    }
+
+    #[test]
+    fn disabled_items_are_present_in_initial_evaluation() {
+        let config = config(FailAction::Continue);
+
+        let result = FactoryTestManager::initial_evaluation_result(&config);
+
+        assert_eq!(result.test_results.len(), 2);
+        assert!(result.test_results.iter().all(|item| !item.enabled));
+        assert!(result.overall_pass);
+    }
+
+    #[test]
+    fn stop_policy_stops_only_after_threshold_failure() {
+        assert!(FactoryTestManager::should_stop_after_threshold_failure(
+            FailAction::Stop,
+            false
+        ));
+        assert!(!FactoryTestManager::should_stop_after_threshold_failure(
+            FailAction::Stop,
+            true
+        ));
+    }
+
+    #[test]
+    fn continue_policy_keeps_running_after_threshold_failure() {
+        assert!(!FactoryTestManager::should_stop_after_threshold_failure(
+            FailAction::Continue,
+            false
+        ));
     }
 }

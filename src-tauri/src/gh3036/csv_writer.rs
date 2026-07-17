@@ -77,55 +77,28 @@ impl CsvWriter {
     }
 
     fn write_header(&self, writer: &mut Writer<std::fs::File>) -> std::io::Result<()> {
-        let mut headers: Vec<String> = vec!["TIMESTAMP".to_string(), "FRAME_ID".to_string()];
-
-        let axis_names = ["X", "Y", "Z"];
-        for axis in axis_names {
-            headers.push(format!("ACC_{}", axis));
-        }
-
-        for i in 0..16 {
-            headers.push(format!("CH{}", i));
-        }
-
-        for i in 0..9 {
-            headers.push(format!("FLAG{}", i));
-        }
-
-        for i in 0..REF_DATA_COUNT {
-            headers.push(format!("REF_RESULT_{}", i));
-        }
-
-        for i in 0..9 {
-            headers.push(format!("ALGO_RESULT{}", i));
-        }
-
-        for i in 0..16 {
-            headers.push(format!("AGC_INFO{}", i));
-        }
-
-        for i in 0..16 {
-            headers.push(format!("PHY_VALUE{}", i));
-        }
-
-        for i in 16..32 {
-            headers.push(format!("CH{}", i));
-        }
-
-        for i in 16..32 {
-            headers.push(format!("AGC_INFO{}", i));
-        }
-
-        for i in 16..32 {
-            headers.push(format!("PHY_VALUE{}", i));
-        }
-
-        for axis in axis_names {
-            headers.push(format!("GYRO_{}", axis));
-        }
-
+        let headers = Self::headers();
         writer.write_record(&headers)?;
         Ok(())
+    }
+
+    fn headers() -> Vec<String> {
+        let mut headers = vec![
+            "TimeStamp".to_string(),
+            "FRAME_ID".to_string(),
+            "ACCX".to_string(),
+            "ACCY".to_string(),
+            "ACCZ".to_string(),
+        ];
+        headers.extend((0..32).map(|i| format!("Ipd{}", i)));
+        headers.extend((0..8).map(|i| format!("FLAG{}", i)));
+        headers.extend((0..REF_DATA_COUNT).map(|i| format!("REF_RESULT{}", i)));
+        headers.extend((0..16).map(|i| format!("ALGO_RESULT{}", i)));
+        headers.extend((0..32).map(|i| format!("Rawdata{}", i)));
+        headers.extend((0..32).map(|i| format!("AGC_INFO_CH{}", i)));
+        headers.extend((0..32).map(|i| format!("LED_INFO_CH{}", i)));
+        headers.extend(["GYRO_X", "GYRO_Y", "GYRO_Z"].map(String::from));
+        headers
     }
 
     fn write_row(
@@ -133,6 +106,12 @@ impl CsvWriter {
         writer: &mut Writer<std::fs::File>,
         frame: &Gh3036FrameData,
     ) -> std::io::Result<()> {
+        let row = Self::row_values(frame);
+        writer.write_record(&row)?;
+        Ok(())
+    }
+
+    fn row_values(frame: &Gh3036FrameData) -> Vec<String> {
         let mut row: Vec<String> = Vec::new();
 
         row.push(frame.timestamp.to_string());
@@ -143,12 +122,12 @@ impl CsvWriter {
             row.push(val.to_string());
         }
 
-        for i in 0..16 {
-            let val = frame.rawdata.get(i).copied().unwrap_or(0);
+        for i in 0..32 {
+            let val = frame.phy_value.get(i).copied().unwrap_or(0);
             row.push(val.to_string());
         }
 
-        for i in 0..9 {
+        for i in 0..8 {
             let val = frame.flags.get(i).copied().unwrap_or(0);
             row.push(val.to_string());
         }
@@ -158,33 +137,23 @@ impl CsvWriter {
             row.push(val.to_string());
         }
 
-        for i in 0..9 {
+        for i in 0..16 {
             let val = frame.algo_data.get(i).copied().unwrap_or(0);
             row.push(val.to_string());
         }
 
-        for i in 0..16 {
-            let val = frame.agc_info.get(i).copied().unwrap_or(0);
-            row.push(val.to_string());
-        }
-
-        for i in 0..16 {
-            let val = frame.phy_value.get(i).copied().unwrap_or(0);
-            row.push(val.to_string());
-        }
-
-        for i in 16..32 {
+        for i in 0..32 {
             let val = frame.rawdata.get(i).copied().unwrap_or(0);
             row.push(val.to_string());
         }
 
-        for i in 16..32 {
+        for i in 0..32 {
             let val = frame.agc_info.get(i).copied().unwrap_or(0);
             row.push(val.to_string());
         }
 
-        for i in 16..32 {
-            let val = frame.phy_value.get(i).copied().unwrap_or(0);
+        for i in 0..32 {
+            let val = frame.led_info.get(i).copied().unwrap_or(0);
             row.push(val.to_string());
         }
 
@@ -193,8 +162,73 @@ impl CsvWriter {
             row.push(val.to_string());
         }
 
-        writer.write_record(&row)?;
+        row
+    }
+}
 
-        Ok(())
+#[cfg(test)]
+mod tests {
+    use super::CsvWriter;
+    use crate::gh3036::types::Gh3036FrameData;
+
+    fn expected_headers() -> Vec<String> {
+        let mut headers = vec![
+            "TimeStamp".to_string(),
+            "FRAME_ID".to_string(),
+            "ACCX".to_string(),
+            "ACCY".to_string(),
+            "ACCZ".to_string(),
+        ];
+        headers.extend((0..32).map(|i| format!("Ipd{}", i)));
+        headers.extend((0..8).map(|i| format!("FLAG{}", i)));
+        headers.extend((0..16).map(|i| format!("REF_RESULT{}", i)));
+        headers.extend((0..16).map(|i| format!("ALGO_RESULT{}", i)));
+        headers.extend((0..32).map(|i| format!("Rawdata{}", i)));
+        headers.extend((0..32).map(|i| format!("AGC_INFO_CH{}", i)));
+        headers.extend((0..32).map(|i| format!("LED_INFO_CH{}", i)));
+        headers.extend(["GYRO_X", "GYRO_Y", "GYRO_Z"].map(String::from));
+        headers
+    }
+
+    fn sample_frame() -> Gh3036FrameData {
+        Gh3036FrameData {
+            function_id: 2,
+            function_name: "SPO2".to_string(),
+            frame_id: 7,
+            timestamp: 123,
+            gs_data: vec![1, 2, 3, 4, 5, 6],
+            rawdata: vec![100, 101],
+            flags: vec![7],
+            ref_data: vec![8],
+            algo_data: vec![9],
+            agc_info: vec![10],
+            phy_value: vec![200, 201],
+            led_info: vec![11],
+        }
+    }
+
+    #[test]
+    fn headers_match_gh3036_yaml_contract() {
+        let headers = CsvWriter::headers();
+
+        assert_eq!(headers.len(), 176);
+        assert_eq!(headers, expected_headers());
+    }
+
+    #[test]
+    fn row_maps_phy_to_ipd_and_raw_channels_to_rawdata() {
+        let row = CsvWriter::row_values(&sample_frame());
+
+        assert_eq!(row.len(), 176);
+        assert_eq!(&row[0..5], ["123", "7", "1", "2", "3"]);
+        assert_eq!(&row[5..7], ["200", "201"]);
+        assert_eq!(row[36], "0");
+        assert_eq!(row[37], "7");
+        assert_eq!(row[45], "8");
+        assert_eq!(row[61], "9");
+        assert_eq!(&row[77..79], ["100", "101"]);
+        assert_eq!(row[109], "10");
+        assert_eq!(row[141], "11");
+        assert_eq!(&row[173..176], ["4", "5", "6"]);
     }
 }

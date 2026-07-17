@@ -90,6 +90,35 @@ enum RpcInput {
     Reset,
 }
 
+#[derive(Default)]
+struct AlgorithmResultCache {
+    last_non_zero: HashMap<u8, Vec<i32>>,
+}
+
+impl AlgorithmResultCache {
+    fn normalize(&mut self, frame: &GhFuncFrame) -> GhFuncFrame {
+        let mut normalized = frame.clone();
+        let function_id = frame.id as u8;
+
+        if frame.frame_cnt == 0 {
+            self.last_non_zero.remove(&function_id);
+        }
+
+        if frame.algo_data.is_empty() {
+            return normalized;
+        }
+
+        if frame.algo_data.iter().any(|value| *value != 0) {
+            self.last_non_zero
+                .insert(function_id, frame.algo_data.clone());
+        } else if let Some(previous) = self.last_non_zero.get(&function_id) {
+            normalized.algo_data = previous.clone();
+        }
+
+        normalized
+    }
+}
+
 struct FrameAggregator {
     buffer: HashMap<u8, Gh3036FramesEvent>,
     last_publish_time: std::time::Instant,
@@ -107,7 +136,7 @@ impl FrameAggregator {
         }
     }
 
-    fn add_frame(&mut self, frame: &GhFuncFrame) -> Option<Gh3036FramesEvent> {
+    fn add_frame(&mut self, frame: &GhFuncFrame) -> Vec<Gh3036FramesEvent> {
         let func_id = frame.id as u8;
         let func_name = GhFuncFixIdx::from(func_id).name().to_string();
 
@@ -122,25 +151,22 @@ impl FrameAggregator {
         if now.duration_since(self.last_publish_time) >= self.min_interval {
             self.flush()
         } else {
-            None
+            Vec::new()
         }
     }
 
-    fn flush(&mut self) -> Option<Gh3036FramesEvent> {
+    fn flush(&mut self) -> Vec<Gh3036FramesEvent> {
         if self.buffer.is_empty() {
-            return None;
+            return Vec::new();
         }
 
-        let mut result: Option<Gh3036FramesEvent> = None;
+        let result: Vec<Gh3036FramesEvent> = self
+            .buffer
+            .drain()
+            .filter_map(|(_, event)| (!event.is_empty()).then_some(event))
+            .collect();
 
-        for (_, event) in self.buffer.drain() {
-            if !event.is_empty() {
-                result = Some(event);
-                break;
-            }
-        }
-
-        if result.is_some() {
+        if !result.is_empty() {
             self.last_publish_time = std::time::Instant::now();
         }
         result
@@ -156,6 +182,7 @@ struct GlobalContext {
     runtime_handle: Mutex<Option<Handle>>,
     csv_config: Mutex<CsvConfig>,
     csv_writers: Mutex<HashMap<i32, CsvWriter>>,
+    algorithm_result_cache: Mutex<AlgorithmResultCache>,
     ref_data_manager: Arc<RefDataManager>,
     event_bus: Mutex<Option<Arc<EventBus>>>,
     last_frame_time: Mutex<Option<std::time::Instant>>,
@@ -173,6 +200,7 @@ impl GlobalContext {
             runtime_handle: Mutex::new(None),
             csv_config: Mutex::new(CsvConfig::default()),
             csv_writers: Mutex::new(HashMap::new()),
+            algorithm_result_cache: Mutex::new(AlgorithmResultCache::default()),
             ref_data_manager,
             event_bus: Mutex::new(None),
             last_frame_time: Mutex::new(None),
@@ -235,7 +263,11 @@ impl GlobalContext {
         }
     }
 
-    fn add_frame_to_aggregator(&self, frame: &GhFuncFrame) -> Option<Gh3036FramesEvent> {
+    fn normalize_frame(&self, frame: &GhFuncFrame) -> GhFuncFrame {
+        self.algorithm_result_cache.lock().normalize(frame)
+    }
+
+    fn add_frame_to_aggregator(&self, frame: &GhFuncFrame) -> Vec<Gh3036FramesEvent> {
         {
             let mut last_frame_time = self.last_frame_time.lock();
             *last_frame_time = Some(std::time::Instant::now());
@@ -553,8 +585,7 @@ impl Gh3036Manager {
         info!("GH3036 初始化 RPC 核心");
 
         let device_manager = Arc::clone(&self.device_manager);
-        let handle =
-            Handle::try_current().map_err(|e| format!("获取 Tokio 运行时失败: {}", e))?;
+        let handle = Handle::try_current().map_err(|e| format!("获取 Tokio 运行时失败: {}", e))?;
 
         let send_fn: SendFunction = Arc::new(move |data: Vec<u8>| {
             debug!("[RPC发送] 发送数据: {:02X?}", data);
@@ -580,13 +611,7 @@ impl Gh3036Manager {
                     }
                 };
 
-                dm
-                    .send_direct(
-                        channel_type.into(),
-                        &device_id,
-                        char_uuid.as_deref(),
-                        &data,
-                    )
+                dm.send_direct(channel_type.into(), &device_id, char_uuid.as_deref(), &data)
                     .await
                     .map_err(|e| {
                         let error_str = format!("{}", e);
@@ -650,6 +675,7 @@ impl Gh3036Manager {
 
         let event_bus = self.event_bus.clone();
         let frame_callback: FrameCallback = Arc::new(move |frame: &GhFuncFrame| {
+            let frame = CALLBACK_CONTEXT.normalize_frame(frame);
             let func_id = frame.id as u8;
             let func_name = GhFuncFixIdx::from(func_id).name();
             let acc = &frame.gsensor_data.acc;
@@ -665,9 +691,9 @@ impl Gh3036Manager {
                 );
             }
 
-            CALLBACK_CONTEXT.save_frame_to_csv(frame);
+            CALLBACK_CONTEXT.save_frame_to_csv(&frame);
 
-            if let Some(aggregated) = CALLBACK_CONTEXT.add_frame_to_aggregator(frame) {
+            for aggregated in CALLBACK_CONTEXT.add_frame_to_aggregator(&frame) {
                 info!(
                     "[GH3036] 发布聚合帧事件: function_id={}, frame_count={}, channel_count={}",
                     aggregated.function_id, aggregated.frame_count, aggregated.channel_count
@@ -1258,8 +1284,7 @@ impl Gh3036Manager {
             return Ok(Vec::new());
         }
 
-        let value =
-            unpack(param_data, RET_F_GET_MODE).map_err(|e| format!("解包失败: {:?}", e))?;
+        let value = unpack(param_data, RET_F_GET_MODE).map_err(|e| format!("解包失败: {:?}", e))?;
         info!("产测模式结果解包: {:?}", value);
 
         match value {
@@ -1499,7 +1524,69 @@ impl Drop for Gh3036Manager {
 
 #[cfg(test)]
 mod tests {
-    use super::{ChannelConfig, ChannelType, Gh3036Manager, GlobalContext, RpcInput};
+    use std::collections::HashSet;
+    use std::sync::Arc;
+
+    use super::{
+        AlgorithmResultCache, ChannelConfig, ChannelType, FrameAggregator, Gh3036Manager,
+        GlobalContext, RefDataManager, RpcInput,
+    };
+    use crate::gh3036::types::{GhFuncFixIdx, GhFuncFrame};
+
+    fn make_frame(function_id: GhFuncFixIdx, frame_cnt: u32, algo_data: Vec<i32>) -> GhFuncFrame {
+        GhFuncFrame {
+            id: function_id,
+            frame_cnt,
+            algo_data,
+            ..GhFuncFrame::default()
+        }
+    }
+
+    #[test]
+    fn aggregator_flushes_every_buffered_function() {
+        let ref_data_manager = Arc::new(RefDataManager::new());
+        let mut aggregator = FrameAggregator::new(ref_data_manager);
+        aggregator.add_frame(&make_frame(GhFuncFixIdx::Adt, 1, vec![1]));
+        aggregator.add_frame(&make_frame(GhFuncFixIdx::Spo2, 1, vec![98]));
+
+        let events = aggregator.flush();
+        let function_ids: HashSet<u8> = events.iter().map(|event| event.function_id).collect();
+
+        assert_eq!(events.len(), 2);
+        assert_eq!(
+            function_ids,
+            HashSet::from([GhFuncFixIdx::Adt as u8, GhFuncFixIdx::Spo2 as u8])
+        );
+    }
+
+    #[test]
+    fn algorithm_cache_reuses_only_complete_zero_results_until_frame_reset() {
+        let mut cache = AlgorithmResultCache::default();
+
+        let first = cache.normalize(&make_frame(GhFuncFixIdx::Spo2, 10, vec![98, 12, 3]));
+        let zero = cache.normalize(&make_frame(GhFuncFixIdx::Spo2, 11, vec![0, 0, 0]));
+        let mixed = cache.normalize(&make_frame(GhFuncFixIdx::Spo2, 12, vec![99, 0, 4]));
+        let zero_after_mixed = cache.normalize(&make_frame(GhFuncFixIdx::Spo2, 13, vec![0, 0, 0]));
+        let empty = cache.normalize(&make_frame(GhFuncFixIdx::Spo2, 14, vec![]));
+        let reset = cache.normalize(&make_frame(GhFuncFixIdx::Spo2, 0, vec![0, 0, 0]));
+
+        assert_eq!(first.algo_data, vec![98, 12, 3]);
+        assert_eq!(zero.algo_data, vec![98, 12, 3]);
+        assert_eq!(mixed.algo_data, vec![99, 0, 4]);
+        assert_eq!(zero_after_mixed.algo_data, vec![99, 0, 4]);
+        assert!(empty.algo_data.is_empty());
+        assert_eq!(reset.algo_data, vec![0, 0, 0]);
+    }
+
+    #[test]
+    fn algorithm_cache_is_isolated_by_function() {
+        let mut cache = AlgorithmResultCache::default();
+        cache.normalize(&make_frame(GhFuncFixIdx::Adt, 4, vec![1, 80]));
+
+        let spo2 = cache.normalize(&make_frame(GhFuncFixIdx::Spo2, 4, vec![0, 0]));
+
+        assert_eq!(spo2.algo_data, vec![0, 0]);
+    }
 
     #[test]
     fn rx_channel_change_queues_reset_before_new_data() {

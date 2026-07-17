@@ -349,6 +349,7 @@ mod tests {
 
     #[test]
     fn test_gh_agc_info_roundtrip() {
+        let led_drv_fs = 25;
         let info = GhAgcInfo {
             gain_code: 5,
             bg_cancel_range: 2,
@@ -360,8 +361,8 @@ mod tests {
             tia_gain: 3,
         };
 
-        let bytes = info.to_bytes();
-        let decoded = GhAgcInfo::from_bytes(&bytes).unwrap();
+        let bytes = info.to_bytes(led_drv_fs);
+        let (decoded, decoded_led_drv_fs) = GhAgcInfo::from_bytes(&bytes).unwrap();
 
         assert_eq!(decoded.gain_code, 5);
         assert_eq!(decoded.bg_cancel_range, 2);
@@ -369,8 +370,9 @@ mod tests {
         assert_eq!(decoded.dc_cancel_code, 100);
         assert_eq!(decoded.led_drv0, 50);
         assert_eq!(decoded.led_drv1, 60);
-        assert_eq!(decoded.bg_cancel_code, 200);
-        assert_eq!(decoded.tia_gain, 3);
+        assert_eq!(decoded_led_drv_fs, led_drv_fs);
+        assert_eq!(decoded.bg_cancel_code, 0);
+        assert_eq!(decoded.tia_gain, 0);
     }
 
     #[test]

@@ -85,8 +85,9 @@ impl Default for CsvConfig {
     }
 }
 
-struct RpcDataRequest {
-    data: Vec<u8>,
+enum RpcInput {
+    Data(Vec<u8>),
+    Reset,
 }
 
 struct FrameAggregator {
@@ -150,7 +151,7 @@ struct GlobalContext {
     rx_channel: Mutex<Option<ChannelConfig>>,
     tx_channel: Mutex<Option<ChannelConfig>>,
     device_manager: Mutex<Option<Arc<DeviceManager>>>,
-    rpc_data_sender: Mutex<Option<crossbeam_channel::Sender<RpcDataRequest>>>,
+    rpc_data_sender: Mutex<Option<crossbeam_channel::Sender<RpcInput>>>,
     frame_aggregator: Mutex<FrameAggregator>,
     runtime_handle: Mutex<Option<Handle>>,
     csv_config: Mutex<CsvConfig>,
@@ -183,7 +184,7 @@ impl GlobalContext {
         *bus = Some(event_bus);
     }
 
-    fn setup_rpc_channel(&self) -> crossbeam_channel::Receiver<RpcDataRequest> {
+    fn setup_rpc_channel(&self) -> crossbeam_channel::Receiver<RpcInput> {
         let (rpc_data_sender, rpc_data_receiver) = crossbeam_channel::unbounded();
         *self.rpc_data_sender.lock() = Some(rpc_data_sender);
         rpc_data_receiver
@@ -192,6 +193,11 @@ impl GlobalContext {
     fn set_rx_channel(&self, config: ChannelConfig) {
         let mut rx_channel = self.rx_channel.lock();
         *rx_channel = Some(config);
+        if let Some(ref sender) = *self.rpc_data_sender.lock() {
+            if let Err(error) = sender.send(RpcInput::Reset) {
+                warn!("[GH3036] RX 通道切换时重置 RPC 接收状态失败: {}", error);
+            }
+        }
     }
 
     fn get_rx_channel(&self) -> Option<ChannelConfig> {
@@ -221,16 +227,11 @@ impl GlobalContext {
         *runtime_handle = Some(handle);
     }
 
-    fn send_rpc_data(
-        &self,
-        data: Vec<u8>,
-    ) -> Result<(), crossbeam_channel::SendError<RpcDataRequest>> {
+    fn send_rpc_data(&self, data: Vec<u8>) -> Result<(), crossbeam_channel::SendError<RpcInput>> {
         if let Some(ref sender) = *self.rpc_data_sender.lock() {
-            sender.send(RpcDataRequest { data })
+            sender.send(RpcInput::Data(data))
         } else {
-            Err(crossbeam_channel::SendError(RpcDataRequest {
-                data: vec![],
-            }))
+            Err(crossbeam_channel::SendError(RpcInput::Data(Vec::new())))
         }
     }
 
@@ -522,12 +523,29 @@ impl Gh3036Manager {
     }
 
     fn handle_device_disconnected(device_id: &str) {
-        let mut tx_channel = CALLBACK_CONTEXT.tx_channel.lock();
-        if let Some(channel) = tx_channel.as_ref() {
-            if channel.device_id == device_id {
-                *tx_channel = None;
-                info!("GH3036 TX 通道已清理: 设备 {} 已断开", device_id);
+        {
+            let mut rx_channel = CALLBACK_CONTEXT.rx_channel.lock();
+            if rx_channel
+                .as_ref()
+                .is_some_and(|channel| channel.device_id == device_id)
+            {
+                *rx_channel = None;
+                if let Some(ref sender) = *CALLBACK_CONTEXT.rpc_data_sender.lock() {
+                    if let Err(error) = sender.send(RpcInput::Reset) {
+                        warn!("[GH3036] 设备断开时重置 RPC 接收状态失败: {}", error);
+                    }
+                }
+                info!("GH3036 RX 通道已清理: 设备 {} 已断开", device_id);
             }
+        }
+
+        let mut tx_channel = CALLBACK_CONTEXT.tx_channel.lock();
+        if tx_channel
+            .as_ref()
+            .is_some_and(|channel| channel.device_id == device_id)
+        {
+            *tx_channel = None;
+            info!("GH3036 TX 通道已清理: 设备 {} 已断开", device_id);
         }
     }
 
@@ -704,8 +722,8 @@ impl Gh3036Manager {
             while running_clone.load(std::sync::atomic::Ordering::SeqCst) {
                 crossbeam_channel::select! {
                     recv(rpc_data_receiver) -> result => {
-                        if let Ok(rpc_data) = result {
-                            Self::handle_rpc_data(&executor, rpc_data, &tokio_handle);
+                        if let Ok(input) = result {
+                            Self::handle_rpc_input(&executor, input, &tokio_handle);
                         }
                     }
                     default(std::time::Duration::from_millis(10)) => {
@@ -730,34 +748,37 @@ impl Gh3036Manager {
         Ok(())
     }
 
-    fn handle_rpc_data(
+    fn handle_rpc_input(
         executor: &Option<Arc<tokio::sync::RwLock<CommandExecutor>>>,
-        request: RpcDataRequest,
+        input: RpcInput,
         tokio_handle: &Handle,
     ) {
-        debug!(
-            "GH3036 handle_rpc_data 处理 RPC 数据: {} bytes",
-            request.data.len()
-        );
-
         if let Some(exec) = executor {
             let exec_clone = Arc::clone(exec);
-            let data = request.data;
-            tokio_handle.spawn(async move {
+            tokio_handle.block_on(async move {
                 let executor = exec_clone.read().await;
-                let results = executor.process(&data).await;
-                for result in results {
-                    match result {
-                        Ok(parse_result) => {
-                            debug!(
-                                "GH3036 handle_rpc_data 解析成功: key={}, len={}",
-                                parse_result.key,
-                                parse_result.param.len()
-                            );
+                match input {
+                    RpcInput::Data(data) => {
+                        debug!("GH3036 按序处理 RPC 数据: {} bytes", data.len());
+                        let results = executor.process(&data).await;
+                        for result in results {
+                            match result {
+                                Ok(parse_result) => {
+                                    debug!(
+                                        "GH3036 RPC 解析成功: key={}, len={}",
+                                        parse_result.key,
+                                        parse_result.param.len()
+                                    );
+                                }
+                                Err(error) => {
+                                    debug!("GH3036 RPC 解析失败: {:?}", error);
+                                }
+                            }
                         }
-                        Err(e) => {
-                            debug!("GH3036 handle_rpc_data 解析失败: {:?}", e);
-                        }
+                    }
+                    RpcInput::Reset => {
+                        executor.reset_receive_state().await;
+                        debug!("GH3036 RPC 接收状态已重置");
                     }
                 }
             });
@@ -1478,7 +1499,25 @@ impl Drop for Gh3036Manager {
 
 #[cfg(test)]
 mod tests {
-    use super::Gh3036Manager;
+    use super::{ChannelConfig, ChannelType, Gh3036Manager, GlobalContext, RpcInput};
+
+    #[test]
+    fn rx_channel_change_queues_reset_before_new_data() {
+        let context = GlobalContext::new();
+        let receiver = context.setup_rpc_channel();
+        context.set_rx_channel(ChannelConfig {
+            channel_type: ChannelType::Ble,
+            device_id: "ble-device".to_string(),
+            characteristic_uuid: Some("rx-char".to_string()),
+        });
+        context.send_rpc_data(vec![0xAA, 0x11]).unwrap();
+
+        assert!(matches!(receiver.recv().unwrap(), RpcInput::Reset));
+        assert!(matches!(
+            receiver.recv().unwrap(),
+            RpcInput::Data(data) if data == vec![0xAA, 0x11]
+        ));
+    }
 
     #[test]
     fn regs_list_write_uses_call_transport() {

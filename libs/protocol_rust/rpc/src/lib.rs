@@ -13,7 +13,9 @@ pub mod core;
 pub use error::RpcError;
 pub use types::*;
 pub use log::{LogCallback, DefaultLogger, NullLogger};
-pub use frame::{FrameParser, ParseResult, ParseState, FrameBuilder, calculate_crc};
+pub use frame::{
+    FrameParser, ParseResult, ParseState, FrameBuilder, calculate_crc, RPC_RECEIVE_BUFFER_SIZE,
+};
 pub use package::{Package, Unpackage, TypeHeader, FormatInfo};
 pub use unpacker::{
     DataUnpacker, UnpackError, UnpackValue, unpack,

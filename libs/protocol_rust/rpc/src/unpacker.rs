@@ -97,15 +97,15 @@ impl DataUnpacker {
         if !format.starts_with('<') || !format.ends_with('>') {
             return None;
         }
-        
-        let inner = &format[1..format.len()-1];
+
+        let inner = &format[1..format.len() - 1];
         let is_array = inner.ends_with('*');
         let type_name = if is_array {
-            &inner[..inner.len()-1]
+            &inner[..inner.len() - 1]
         } else {
             inner
         };
-        
+
         Some((type_name.to_lowercase(), is_array))
     }
 
@@ -114,8 +114,8 @@ impl DataUnpacker {
             return Err(UnpackError::InsufficientData);
         }
 
-        let (type_name, is_format_array) = Self::parse_format(format)
-            .ok_or(UnpackError::InvalidFormat)?;
+        let (type_name, is_format_array) =
+            Self::parse_format(format).ok_or(UnpackError::InvalidFormat)?;
 
         let header = data[0];
         let is_data_array = Self::is_array(header);
@@ -182,7 +182,11 @@ impl DataUnpacker {
             "s" | "string" => {
                 let result = self.unpack_u8_array_internal(data, element_size)?;
                 if let UnpackValue::U8Array(arr) = result {
-                    Ok(UnpackValue::String(String::from_utf8_lossy(&arr).trim_matches(char::from(0)).to_string()))
+                    Ok(UnpackValue::String(
+                        String::from_utf8_lossy(&arr)
+                            .trim_matches(char::from(0))
+                            .to_string(),
+                    ))
                 } else {
                     Err(UnpackError::InvalidFormat)
                 }
@@ -200,14 +204,22 @@ impl DataUnpacker {
         Ok((array_len, start))
     }
 
-    fn unpack_u8_internal(&self, data: &[u8], element_size: usize) -> Result<UnpackValue, UnpackError> {
+    fn unpack_u8_internal(
+        &self,
+        data: &[u8],
+        element_size: usize,
+    ) -> Result<UnpackValue, UnpackError> {
         if data.len() < 1 + element_size {
             return Err(UnpackError::InsufficientData);
         }
         Ok(UnpackValue::U8(data[1]))
     }
 
-    fn unpack_u8_array_internal(&self, data: &[u8], element_size: usize) -> Result<UnpackValue, UnpackError> {
+    fn unpack_u8_array_internal(
+        &self,
+        data: &[u8],
+        element_size: usize,
+    ) -> Result<UnpackValue, UnpackError> {
         let header = data[0];
         if !Self::is_array(header) {
             if data.len() < 1 + element_size {
@@ -226,14 +238,22 @@ impl DataUnpacker {
         Ok(UnpackValue::U8Array(data[start..end].to_vec()))
     }
 
-    fn unpack_i8_internal(&self, data: &[u8], element_size: usize) -> Result<UnpackValue, UnpackError> {
+    fn unpack_i8_internal(
+        &self,
+        data: &[u8],
+        element_size: usize,
+    ) -> Result<UnpackValue, UnpackError> {
         if data.len() < 1 + element_size {
             return Err(UnpackError::InsufficientData);
         }
         Ok(UnpackValue::I8(data[1] as i8))
     }
 
-    fn unpack_i8_array_internal(&self, data: &[u8], element_size: usize) -> Result<UnpackValue, UnpackError> {
+    fn unpack_i8_array_internal(
+        &self,
+        data: &[u8],
+        element_size: usize,
+    ) -> Result<UnpackValue, UnpackError> {
         let header = data[0];
         if !Self::is_array(header) {
             if data.len() < 1 + element_size {
@@ -256,20 +276,30 @@ impl DataUnpacker {
         Ok(UnpackValue::I8Array(result))
     }
 
-    fn unpack_u16_internal(&self, data: &[u8], element_size: usize) -> Result<UnpackValue, UnpackError> {
+    fn unpack_u16_internal(
+        &self,
+        data: &[u8],
+        element_size: usize,
+    ) -> Result<UnpackValue, UnpackError> {
         if data.len() < 1 + element_size {
             return Err(UnpackError::InsufficientData);
         }
         Ok(UnpackValue::U16(u16::from_le_bytes([data[1], data[2]])))
     }
 
-    fn unpack_u16_array_internal(&self, data: &[u8], element_size: usize) -> Result<UnpackValue, UnpackError> {
+    fn unpack_u16_array_internal(
+        &self,
+        data: &[u8],
+        element_size: usize,
+    ) -> Result<UnpackValue, UnpackError> {
         let header = data[0];
         if !Self::is_array(header) {
             if data.len() < 1 + element_size {
                 return Err(UnpackError::InsufficientData);
             }
-            return Ok(UnpackValue::U16Array(vec![u16::from_le_bytes([data[1], data[2]])]));
+            return Ok(UnpackValue::U16Array(vec![u16::from_le_bytes([
+                data[1], data[2],
+            ])]));
         }
 
         let (array_len, start) = Self::get_array_len(data)?;
@@ -286,20 +316,30 @@ impl DataUnpacker {
         Ok(UnpackValue::U16Array(result))
     }
 
-    fn unpack_i16_internal(&self, data: &[u8], element_size: usize) -> Result<UnpackValue, UnpackError> {
+    fn unpack_i16_internal(
+        &self,
+        data: &[u8],
+        element_size: usize,
+    ) -> Result<UnpackValue, UnpackError> {
         if data.len() < 1 + element_size {
             return Err(UnpackError::InsufficientData);
         }
         Ok(UnpackValue::I16(i16::from_le_bytes([data[1], data[2]])))
     }
 
-    fn unpack_i16_array_internal(&self, data: &[u8], element_size: usize) -> Result<UnpackValue, UnpackError> {
+    fn unpack_i16_array_internal(
+        &self,
+        data: &[u8],
+        element_size: usize,
+    ) -> Result<UnpackValue, UnpackError> {
         let header = data[0];
         if !Self::is_array(header) {
             if data.len() < 1 + element_size {
                 return Err(UnpackError::InsufficientData);
             }
-            return Ok(UnpackValue::I16Array(vec![i16::from_le_bytes([data[1], data[2]])]));
+            return Ok(UnpackValue::I16Array(vec![i16::from_le_bytes([
+                data[1], data[2],
+            ])]));
         }
 
         let (array_len, start) = Self::get_array_len(data)?;
@@ -316,21 +356,33 @@ impl DataUnpacker {
         Ok(UnpackValue::I16Array(result))
     }
 
-    fn unpack_u32_internal(&self, data: &[u8], element_size: usize) -> Result<UnpackValue, UnpackError> {
+    fn unpack_u32_internal(
+        &self,
+        data: &[u8],
+        element_size: usize,
+    ) -> Result<UnpackValue, UnpackError> {
         if data.len() < 1 + element_size {
             return Err(UnpackError::InsufficientData);
         }
-        let bytes: [u8; 4] = data[1..5].try_into().map_err(|_| UnpackError::InsufficientData)?;
+        let bytes: [u8; 4] = data[1..5]
+            .try_into()
+            .map_err(|_| UnpackError::InsufficientData)?;
         Ok(UnpackValue::U32(u32::from_le_bytes(bytes)))
     }
 
-    fn unpack_u32_array_internal(&self, data: &[u8], element_size: usize) -> Result<UnpackValue, UnpackError> {
+    fn unpack_u32_array_internal(
+        &self,
+        data: &[u8],
+        element_size: usize,
+    ) -> Result<UnpackValue, UnpackError> {
         let header = data[0];
         if !Self::is_array(header) {
             if data.len() < 1 + element_size {
                 return Err(UnpackError::InsufficientData);
             }
-            let bytes: [u8; 4] = data[1..5].try_into().map_err(|_| UnpackError::InsufficientData)?;
+            let bytes: [u8; 4] = data[1..5]
+                .try_into()
+                .map_err(|_| UnpackError::InsufficientData)?;
             return Ok(UnpackValue::U32Array(vec![u32::from_le_bytes(bytes)]));
         }
 
@@ -342,28 +394,42 @@ impl DataUnpacker {
             if offset + 4 > data.len() {
                 break;
             }
-            let bytes: [u8; 4] = data[offset..offset + 4].try_into().map_err(|_| UnpackError::InsufficientData)?;
+            let bytes: [u8; 4] = data[offset..offset + 4]
+                .try_into()
+                .map_err(|_| UnpackError::InsufficientData)?;
             result.push(u32::from_le_bytes(bytes));
         }
 
         Ok(UnpackValue::U32Array(result))
     }
 
-    fn unpack_i32_internal(&self, data: &[u8], element_size: usize) -> Result<UnpackValue, UnpackError> {
+    fn unpack_i32_internal(
+        &self,
+        data: &[u8],
+        element_size: usize,
+    ) -> Result<UnpackValue, UnpackError> {
         if data.len() < 1 + element_size {
             return Err(UnpackError::InsufficientData);
         }
-        let bytes: [u8; 4] = data[1..5].try_into().map_err(|_| UnpackError::InsufficientData)?;
+        let bytes: [u8; 4] = data[1..5]
+            .try_into()
+            .map_err(|_| UnpackError::InsufficientData)?;
         Ok(UnpackValue::I32(i32::from_le_bytes(bytes)))
     }
 
-    fn unpack_i32_array_internal(&self, data: &[u8], element_size: usize) -> Result<UnpackValue, UnpackError> {
+    fn unpack_i32_array_internal(
+        &self,
+        data: &[u8],
+        element_size: usize,
+    ) -> Result<UnpackValue, UnpackError> {
         let header = data[0];
         if !Self::is_array(header) {
             if data.len() < 1 + element_size {
                 return Err(UnpackError::InsufficientData);
             }
-            let bytes: [u8; 4] = data[1..5].try_into().map_err(|_| UnpackError::InsufficientData)?;
+            let bytes: [u8; 4] = data[1..5]
+                .try_into()
+                .map_err(|_| UnpackError::InsufficientData)?;
             return Ok(UnpackValue::I32Array(vec![i32::from_le_bytes(bytes)]));
         }
 
@@ -375,28 +441,42 @@ impl DataUnpacker {
             if offset + 4 > data.len() {
                 break;
             }
-            let bytes: [u8; 4] = data[offset..offset + 4].try_into().map_err(|_| UnpackError::InsufficientData)?;
+            let bytes: [u8; 4] = data[offset..offset + 4]
+                .try_into()
+                .map_err(|_| UnpackError::InsufficientData)?;
             result.push(i32::from_le_bytes(bytes));
         }
 
         Ok(UnpackValue::I32Array(result))
     }
 
-    fn unpack_u64_internal(&self, data: &[u8], element_size: usize) -> Result<UnpackValue, UnpackError> {
+    fn unpack_u64_internal(
+        &self,
+        data: &[u8],
+        element_size: usize,
+    ) -> Result<UnpackValue, UnpackError> {
         if data.len() < 1 + element_size {
             return Err(UnpackError::InsufficientData);
         }
-        let bytes: [u8; 8] = data[1..9].try_into().map_err(|_| UnpackError::InsufficientData)?;
+        let bytes: [u8; 8] = data[1..9]
+            .try_into()
+            .map_err(|_| UnpackError::InsufficientData)?;
         Ok(UnpackValue::U64(u64::from_le_bytes(bytes)))
     }
 
-    fn unpack_u64_array_internal(&self, data: &[u8], element_size: usize) -> Result<UnpackValue, UnpackError> {
+    fn unpack_u64_array_internal(
+        &self,
+        data: &[u8],
+        element_size: usize,
+    ) -> Result<UnpackValue, UnpackError> {
         let header = data[0];
         if !Self::is_array(header) {
             if data.len() < 1 + element_size {
                 return Err(UnpackError::InsufficientData);
             }
-            let bytes: [u8; 8] = data[1..9].try_into().map_err(|_| UnpackError::InsufficientData)?;
+            let bytes: [u8; 8] = data[1..9]
+                .try_into()
+                .map_err(|_| UnpackError::InsufficientData)?;
             return Ok(UnpackValue::U64Array(vec![u64::from_le_bytes(bytes)]));
         }
 
@@ -408,28 +488,42 @@ impl DataUnpacker {
             if offset + 8 > data.len() {
                 break;
             }
-            let bytes: [u8; 8] = data[offset..offset + 8].try_into().map_err(|_| UnpackError::InsufficientData)?;
+            let bytes: [u8; 8] = data[offset..offset + 8]
+                .try_into()
+                .map_err(|_| UnpackError::InsufficientData)?;
             result.push(u64::from_le_bytes(bytes));
         }
 
         Ok(UnpackValue::U64Array(result))
     }
 
-    fn unpack_i64_internal(&self, data: &[u8], element_size: usize) -> Result<UnpackValue, UnpackError> {
+    fn unpack_i64_internal(
+        &self,
+        data: &[u8],
+        element_size: usize,
+    ) -> Result<UnpackValue, UnpackError> {
         if data.len() < 1 + element_size {
             return Err(UnpackError::InsufficientData);
         }
-        let bytes: [u8; 8] = data[1..9].try_into().map_err(|_| UnpackError::InsufficientData)?;
+        let bytes: [u8; 8] = data[1..9]
+            .try_into()
+            .map_err(|_| UnpackError::InsufficientData)?;
         Ok(UnpackValue::I64(i64::from_le_bytes(bytes)))
     }
 
-    fn unpack_i64_array_internal(&self, data: &[u8], element_size: usize) -> Result<UnpackValue, UnpackError> {
+    fn unpack_i64_array_internal(
+        &self,
+        data: &[u8],
+        element_size: usize,
+    ) -> Result<UnpackValue, UnpackError> {
         let header = data[0];
         if !Self::is_array(header) {
             if data.len() < 1 + element_size {
                 return Err(UnpackError::InsufficientData);
             }
-            let bytes: [u8; 8] = data[1..9].try_into().map_err(|_| UnpackError::InsufficientData)?;
+            let bytes: [u8; 8] = data[1..9]
+                .try_into()
+                .map_err(|_| UnpackError::InsufficientData)?;
             return Ok(UnpackValue::I64Array(vec![i64::from_le_bytes(bytes)]));
         }
 
@@ -441,7 +535,9 @@ impl DataUnpacker {
             if offset + 8 > data.len() {
                 break;
             }
-            let bytes: [u8; 8] = data[offset..offset + 8].try_into().map_err(|_| UnpackError::InsufficientData)?;
+            let bytes: [u8; 8] = data[offset..offset + 8]
+                .try_into()
+                .map_err(|_| UnpackError::InsufficientData)?;
             result.push(i64::from_le_bytes(bytes));
         }
 
@@ -621,12 +717,14 @@ mod tests {
     #[test]
     fn test_unpack_u64_array() {
         let data = [
-            0x74, 0x02,
-            0xEF, 0xCD, 0xAB, 0x90, 0x78, 0x56, 0x34, 0x12,
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+            0x74, 0x02, 0xEF, 0xCD, 0xAB, 0x90, 0x78, 0x56, 0x34, 0x12, 0xFF, 0xFF, 0xFF, 0xFF,
+            0xFF, 0xFF, 0xFF, 0xFF,
         ];
         let result = unpack(&data, "<u64*>").unwrap();
-        assert_eq!(result, UnpackValue::U64Array(vec![0x1234567890ABCDEF, 0xFFFFFFFFFFFFFFFF]));
+        assert_eq!(
+            result,
+            UnpackValue::U64Array(vec![0x1234567890ABCDEF, 0xFFFFFFFFFFFFFFFF])
+        );
     }
 
     #[test]
@@ -646,12 +744,14 @@ mod tests {
     #[test]
     fn test_unpack_i64_array() {
         let data = [
-            0x75, 0x02,
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80
+            0x75, 0x02, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x80,
         ];
         let result = unpack(&data, "<i64*>").unwrap();
-        assert_eq!(result, UnpackValue::I64Array(vec![-1, -9223372036854775808]));
+        assert_eq!(
+            result,
+            UnpackValue::I64Array(vec![-1, -9223372036854775808])
+        );
     }
 
     #[test]

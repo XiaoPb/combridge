@@ -1,15 +1,18 @@
 //! Frame Parser
-//! 
+//!
 //! 帧格式：
 //! +----------+--------+---------+----------+-------+----------+--------+-----+
 //! | Header   | Length | TypeKey | KeyData  | ComID | FrameID  | Param  | CRC |
 //! | 2 bytes  | 1 byte | 1 byte  | N bytes  | 1 byte| 1 byte   | N bytes|1byte|
 //! +----------+--------+---------+----------+-------+----------+--------+-----+
 
+use std::collections::VecDeque;
+
 use crate::error::RpcError;
-use crate::types::{FRAME_HEADER, GHRPC_FRAME_SIZE, MAX_SUPPORT_KEY_SIZE, TypeKey, FrameIndex};
+use crate::types::{TypeKey, FRAME_HEADER, GHRPC_FRAME_SIZE, MAX_SUPPORT_KEY_SIZE};
 
 const LAST_FRAME_FIX_INDEX: u8 = 255;
+pub const RPC_RECEIVE_BUFFER_SIZE: usize = 512;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParseState {
@@ -40,23 +43,7 @@ pub struct ParseResult {
 
 #[derive(Debug)]
 pub struct FrameParser {
-    state: ParseState,
-    frame_len: usize,
-    type_key: TypeKey,
-    key_data: Vec<u8>,
-    key_expected_len: usize,
-    frame_index: FrameIndex,
-    param_data: Vec<u8>,
-    crc: u8,
-    header_pos: usize,
-    index_state: IndexState,
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-enum IndexState {
-    #[default]
-    First,
-    Second,
+    receive_buffer: VecDeque<u8>,
 }
 
 impl Default for FrameParser {
@@ -68,224 +55,164 @@ impl Default for FrameParser {
 impl FrameParser {
     pub fn new() -> Self {
         Self {
-            state: ParseState::FrameHeader,
-            frame_len: 0,
-            type_key: TypeKey::default(),
-            key_data: Vec::new(),
-            key_expected_len: 0,
-            frame_index: FrameIndex::default(),
-            param_data: Vec::new(),
-            crc: 0,
-            header_pos: 0,
-            index_state: IndexState::default(),
+            receive_buffer: VecDeque::with_capacity(RPC_RECEIVE_BUFFER_SIZE),
         }
     }
-    
+
     pub fn reset(&mut self) {
-        self.state = ParseState::FrameHeader;
-        self.frame_len = 0;
-        self.type_key = TypeKey::default();
-        self.key_data.clear();
-        self.key_expected_len = 0;
-        self.frame_index = FrameIndex::default();
-        self.param_data.clear();
-        self.crc = 0;
-        self.header_pos = 0;
-        self.index_state = IndexState::default();
+        self.receive_buffer.clear();
     }
-    
+
     pub fn process(&mut self, data: &[u8]) -> Vec<Result<ParseResult, RpcError>> {
         let mut results = Vec::new();
-        
-        for &byte in data {
-            match self.process_byte(byte) {
-                Ok(Some(result)) => results.push(Ok(result)),
-                Ok(None) => {}
-                Err(e) => {
-                    self.reset();
-                    results.push(Err(e));
+
+        let mut offset = 0;
+        while offset < data.len() {
+            if self.receive_buffer.len() == RPC_RECEIVE_BUFFER_SIZE {
+                let previous_len = self.receive_buffer.len();
+                self.parse_available(&mut results);
+                if self.receive_buffer.len() == previous_len {
+                    self.recover_from_invalid_candidate();
                 }
             }
+
+            let available = RPC_RECEIVE_BUFFER_SIZE - self.receive_buffer.len();
+            let chunk_len = available.min(data.len() - offset);
+            self.receive_buffer
+                .extend(&data[offset..offset + chunk_len]);
+            offset += chunk_len;
+            self.parse_available(&mut results);
         }
-        
+
+        self.parse_available(&mut results);
         results
     }
-    
-    fn process_byte(&mut self, byte: u8) -> Result<Option<ParseResult>, RpcError> {
-        match self.state {
-            ParseState::FrameHeader => {
-                self.process_frame_header(byte);
+
+    fn parse_available(&mut self, results: &mut Vec<Result<ParseResult, RpcError>>) {
+        loop {
+            if !self.align_to_frame_header() || self.receive_buffer.len() < 3 {
+                return;
             }
-            ParseState::CheckLength => {
-                self.frame_len = byte as usize;
-                self.state = ParseState::CheckTypeKey;
+
+            let body_len = self.receive_buffer[2] as usize;
+            let frame_len = FRAME_HEADER.len() + 1 + body_len + 1;
+            if self.receive_buffer.len() < frame_len {
+                return;
             }
-            ParseState::CheckTypeKey => {
-                self.type_key = TypeKey::from_byte(byte);
-                self.crc = byte;
-                self.frame_len = self.frame_len.saturating_sub(1);
-                
-                if self.type_key.is_array {
-                    self.key_expected_len = 0;
+
+            let (crc_matches, frame_body) = {
+                let buffer = self.receive_buffer.make_contiguous();
+                let body = &buffer[3..3 + body_len];
+                (calculate_crc(body) == buffer[3 + body_len], body.to_vec())
+            };
+
+            if !crc_matches {
+                results.push(Err(RpcError::CrcMismatch));
+                self.recover_from_invalid_candidate();
+                continue;
+            }
+
+            match Self::parse_frame_body(&frame_body) {
+                Ok(result) => {
+                    self.receive_buffer.drain(..frame_len);
+                    results.push(Ok(result));
+                }
+                Err(error) => {
+                    results.push(Err(error));
+                    self.recover_from_invalid_candidate();
+                }
+            }
+        }
+    }
+
+    fn align_to_frame_header(&mut self) -> bool {
+        let header_pos = self.find_frame_header(0);
+        match header_pos {
+            Some(0) => true,
+            Some(position) => {
+                self.receive_buffer.drain(..position);
+                true
+            }
+            None => {
+                let keep_trailing_header_byte =
+                    self.receive_buffer.back().copied() == Some(FRAME_HEADER[0]);
+                self.receive_buffer.clear();
+                if keep_trailing_header_byte {
+                    self.receive_buffer.push_back(FRAME_HEADER[0]);
+                }
+                false
+            }
+        }
+    }
+
+    fn recover_from_invalid_candidate(&mut self) {
+        if let Some(position) = self.find_frame_header(1) {
+            self.receive_buffer.drain(..position);
+            return;
+        }
+
+        let keep_trailing_header_byte =
+            self.receive_buffer.back().copied() == Some(FRAME_HEADER[0]);
+        self.receive_buffer.clear();
+        if keep_trailing_header_byte {
+            self.receive_buffer.push_back(FRAME_HEADER[0]);
+        }
+    }
+
+    fn find_frame_header(&self, start: usize) -> Option<usize> {
+        if self.receive_buffer.len() < FRAME_HEADER.len() || start >= self.receive_buffer.len() {
+            return None;
+        }
+
+        (start..self.receive_buffer.len() - 1).find(|&index| {
+            self.receive_buffer[index] == FRAME_HEADER[0]
+                && self.receive_buffer[index + 1] == FRAME_HEADER[1]
+        })
+    }
+
+    fn parse_frame_body(body: &[u8]) -> Result<ParseResult, RpcError> {
+        let type_key_byte = *body.first().ok_or(RpcError::FormatError)?;
+        let type_key = TypeKey::from_byte(type_key_byte);
+        let mut offset = 1;
+
+        let key = if type_key.is_array {
+            let key_len = *body.get(offset).ok_or(RpcError::FormatError)? as usize;
+            offset += 1;
+            if key_len > MAX_SUPPORT_KEY_SIZE - 1 || offset + key_len > body.len() {
+                return Err(if key_len > MAX_SUPPORT_KEY_SIZE - 1 {
+                    RpcError::KeyOverMaxSize
                 } else {
-                    self.key_expected_len = 1;
-                }
-                
-                self.state = ParseState::CheckKey;
+                    RpcError::FormatError
+                });
             }
-            ParseState::CheckKey => {
-                self.process_key(byte)?;
-            }
-            ParseState::CheckIndex => {
-                self.process_index(byte)?;
-            }
-            ParseState::CheckParam => {
-                return self.process_param(byte);
-            }
-            ParseState::CheckCrc => {
-                return self.process_crc(byte);
-            }
-        }
-        
-        Ok(None)
-    }
-    
-    fn process_frame_header(&mut self, byte: u8) {
-        if byte == FRAME_HEADER[self.header_pos] {
-            self.header_pos += 1;
-            if self.header_pos >= FRAME_HEADER.len() {
-                self.state = ParseState::CheckLength;
-                self.header_pos = 0;
-            }
+            let key = String::from_utf8_lossy(&body[offset..offset + key_len]).to_string();
+            offset += key_len;
+            key
         } else {
-            self.header_pos = if byte == FRAME_HEADER[0] { 1 } else { 0 };
-        }
-    }
-    
-    fn process_key(&mut self, byte: u8) -> Result<(), RpcError> {
-        self.crc = self.crc.wrapping_add(byte);
-        self.frame_len = self.frame_len.saturating_sub(1);
-        
-        if self.type_key.is_array {
-            if self.key_data.is_empty() {
-                if byte as usize > MAX_SUPPORT_KEY_SIZE - 1 {
-                    return Err(RpcError::KeyOverMaxSize);
-                }
-                self.key_expected_len = byte as usize;
-                self.key_data.push(byte);
-            } else {
-                self.key_data.push(byte);
-                if self.key_data.len() > self.key_expected_len {
-                    self.transition_after_key();
-                }
-            }
-        } else {
-            self.key_data.push(byte);
-            self.transition_after_key();
-        }
-        
-        Ok(())
-    }
-    
-    fn transition_after_key(&mut self) {
-        let check = (self.type_key.secure as u8) << 1 | self.type_key.fin as u8;
-        if check == 1 {
-            self.frame_index.frame_idx = LAST_FRAME_FIX_INDEX;
-            if self.frame_len == 0 {
-                self.state = ParseState::CheckCrc;
-            } else {
-                self.state = ParseState::CheckParam;
-            }
-        } else {
-            self.state = ParseState::CheckIndex;
-        }
-    }
-    
-    fn process_index(&mut self, byte: u8) -> Result<(), RpcError> {
-        let check = (self.type_key.secure as u8) << 1 | self.type_key.fin as u8;
-        
-        match check {
-            0 => {
-                self.frame_index.frame_idx = byte;
-                self.crc = self.crc.wrapping_add(byte);
-                self.frame_len = self.frame_len.saturating_sub(1);
-                self.state = ParseState::CheckParam;
-            }
-            1 => {
-                self.frame_index.frame_idx = LAST_FRAME_FIX_INDEX;
-                self.state = ParseState::CheckParam;
-                return Ok(());
-            }
-            2 => {
-                match self.index_state {
-                    IndexState::First => {
-                        self.frame_index.invoke_idx = byte;
-                        self.crc = self.crc.wrapping_add(byte);
-                        self.frame_len = self.frame_len.saturating_sub(1);
-                        self.index_state = IndexState::Second;
-                        return Ok(());
-                    }
-                    IndexState::Second => {
-                        self.frame_index.frame_idx = byte;
-                        self.crc = self.crc.wrapping_add(byte);
-                        self.frame_len = self.frame_len.saturating_sub(1);
-                        self.state = ParseState::CheckParam;
-                    }
-                }
-            }
-            3 => {
-                self.frame_index.invoke_idx = byte;
-                self.frame_index.frame_idx = LAST_FRAME_FIX_INDEX;
-                self.crc = self.crc.wrapping_add(byte);
-                self.frame_len = self.frame_len.saturating_sub(1);
-                self.state = ParseState::CheckParam;
-            }
-            _ => return Err(RpcError::FormatError),
-        }
-        
-        Ok(())
-    }
-    
-    fn process_param(&mut self, byte: u8) -> Result<Option<ParseResult>, RpcError> {
-        if self.frame_len == 0 {
-            return self.process_crc(byte);
-        }
-        
-        self.param_data.push(byte);
-        self.crc = self.crc.wrapping_add(byte);
-        self.frame_len = self.frame_len.saturating_sub(1);
-        
-        if self.frame_len == 0 {
-            self.state = ParseState::CheckCrc;
-        }
-        
-        Ok(None)
-    }
-    
-    fn process_crc(&mut self, byte: u8) -> Result<Option<ParseResult>, RpcError> {
-        if byte != self.crc {
-            return Err(RpcError::CrcMismatch);
-        }
-        
-        let key = if self.type_key.is_array && self.key_data.len() > 1 {
-            String::from_utf8_lossy(&self.key_data[1..]).to_string()
-        } else if !self.key_data.is_empty() {
-            String::from_utf8_lossy(&self.key_data).to_string()
-        } else {
-            String::new()
+            let key = *body.get(offset).ok_or(RpcError::FormatError)?;
+            offset += 1;
+            String::from_utf8_lossy(&[key]).to_string()
         };
-        
-        let result = ParseResult {
+
+        let mut invoke_idx = 0;
+        let mut frame_idx = LAST_FRAME_FIX_INDEX;
+        if type_key.secure {
+            invoke_idx = *body.get(offset).ok_or(RpcError::FormatError)?;
+            offset += 1;
+        }
+        if !type_key.fin {
+            frame_idx = *body.get(offset).ok_or(RpcError::FormatError)?;
+            offset += 1;
+        }
+
+        Ok(ParseResult {
             key,
-            param: self.param_data.clone(),
-            is_secure: self.type_key.secure,
-            is_fin: self.type_key.fin,
-            invoke_idx: self.frame_index.invoke_idx,
-            frame_idx: self.frame_index.frame_idx,
-        };
-        
-        self.reset();
-        Ok(Some(result))
+            param: body[offset..].to_vec(),
+            is_secure: type_key.secure,
+            is_fin: type_key.fin,
+            invoke_idx,
+            frame_idx,
+        })
     }
 }
 
@@ -390,12 +317,7 @@ impl FrameBuilder {
         GHRPC_FRAME_SIZE.saturating_sub(overhead)
     }
 
-    pub fn build_frames(
-        &mut self,
-        key: &str,
-        data: &[u8],
-        secure: bool,
-    ) -> Vec<Vec<u8>> {
+    pub fn build_frames(&mut self, key: &str, data: &[u8], secure: bool) -> Vec<Vec<u8>> {
         self.build_frames_with_invoke_idx(key, data, secure, 0)
     }
 
@@ -450,140 +372,134 @@ impl FrameBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_crc_calculation() {
         let data = [0x01, 0x02, 0x03];
         let crc = calculate_crc(&data);
         assert_eq!(crc, 0x06);
     }
-    
+
     #[test]
     fn test_frame_parser_single_char_key() {
         let mut parser = FrameParser::new();
-        
+
         let mut frame = vec![0xAA, 0x11];
         let type_key = 0x80u8;
         let key = b'G';
         let length = (1 + 1) as u8;
-        
+
         frame.push(length);
         frame.push(type_key);
         frame.push(key);
-        
+
         let crc = calculate_crc(&[type_key, key]);
         frame.push(crc);
-        
+
         let results = parser.process(&frame);
         assert_eq!(results.len(), 1);
         assert!(results[0].is_ok());
-        
+
         let result = results[0].as_ref().unwrap();
         assert_eq!(result.key, "G");
         assert!(result.is_fin);
         assert!(!result.is_secure);
     }
-    
+
     #[test]
     fn test_frame_parser_multi_char_key() {
         let mut parser = FrameParser::new();
-        
+
         let mut frame = vec![0xAA, 0x11];
         let key_str = "Test";
         let type_key = 0x84u8;
         let length = (1 + 1 + key_str.len()) as u8;
-        
+
         frame.push(length);
         frame.push(type_key);
         frame.push(key_str.len() as u8);
         frame.extend_from_slice(key_str.as_bytes());
-        
+
         let mut crc_data = vec![type_key, key_str.len() as u8];
         crc_data.extend_from_slice(key_str.as_bytes());
         let crc = calculate_crc(&crc_data);
         frame.push(crc);
-        
+
         let results = parser.process(&frame);
         assert_eq!(results.len(), 1);
         assert!(results[0].is_ok());
-        
+
         let result = results[0].as_ref().unwrap();
         assert_eq!(result.key, "Test");
         assert!(result.is_fin);
     }
-    
+
     #[test]
     fn test_frame_parser_with_param() {
         let mut parser = FrameParser::new();
-        
+
         let mut frame = vec![0xAA, 0x11];
         let key = b'G';
         let type_key = 0x80u8;
         let param = [0x01, 0x02, 0x03];
         let length = (1 + 1 + param.len()) as u8;
-        
+
         frame.push(length);
         frame.push(type_key);
         frame.push(key);
         frame.extend_from_slice(&param);
-        
+
         let mut crc_data = vec![type_key, key];
         crc_data.extend_from_slice(&param);
         let crc = calculate_crc(&crc_data);
         frame.push(crc);
-        
+
         let results = parser.process(&frame);
         assert_eq!(results.len(), 1);
         assert!(results[0].is_ok());
-        
+
         let result = results[0].as_ref().unwrap();
         assert_eq!(result.key, "G");
         assert_eq!(result.param, param);
     }
-    
+
     #[test]
     fn test_frame_parser_crc_error() {
         let mut parser = FrameParser::new();
-        
+
         let mut frame = vec![0xAA, 0x11];
         let type_key = 0x80u8;
         let key = b'G';
         let length = (1 + 1) as u8;
-        
+
         frame.push(length);
         frame.push(type_key);
         frame.push(key);
         frame.push(0xFF);
-        
+
         let results = parser.process(&frame);
         assert_eq!(results.len(), 1);
         assert!(results[0].is_err());
     }
-    
+
     #[test]
     fn test_parse_state_default() {
         assert_eq!(ParseState::default(), ParseState::FrameHeader);
     }
-    
+
     #[test]
     fn test_frame_parser_reset() {
         let mut parser = FrameParser::new();
-        parser.state = ParseState::CheckLength;
-        parser.frame_len = 100;
-        parser.crc = 0x55;
+        parser.receive_buffer.extend([0xAA, 0x11, 0x20, 0x55]);
         parser.reset();
-        
-        assert_eq!(parser.state, ParseState::FrameHeader);
-        assert_eq!(parser.frame_len, 0);
-        assert_eq!(parser.crc, 0);
-        assert!(parser.key_data.is_empty());
-        assert!(parser.param_data.is_empty());
+
+        assert!(parser.receive_buffer.is_empty());
     }
-    
+
     #[test]
     fn test_frame_parser_secure_unfin() {
         let mut parser = FrameParser::new();
-        
+
         let mut frame = vec![0xAA, 0x11];
         let key = b'G';
         let type_key = 0x40u8;
@@ -591,23 +507,23 @@ mod tests {
         let frame_idx = 0x0Au8;
         let param = [0x01, 0x02];
         let length = (1 + 1 + 1 + 1 + param.len()) as u8;
-        
+
         frame.push(length);
         frame.push(type_key);
         frame.push(key);
         frame.push(invoke_idx);
         frame.push(frame_idx);
         frame.extend_from_slice(&param);
-        
+
         let mut crc_data = vec![type_key, key, invoke_idx, frame_idx];
         crc_data.extend_from_slice(&param);
         let crc = calculate_crc(&crc_data);
         frame.push(crc);
-        
+
         let results = parser.process(&frame);
         assert_eq!(results.len(), 1);
         assert!(results[0].is_ok());
-        
+
         let result = results[0].as_ref().unwrap();
         assert_eq!(result.key, "G");
         assert!(result.is_secure);
@@ -615,33 +531,33 @@ mod tests {
         assert_eq!(result.invoke_idx, invoke_idx);
         assert_eq!(result.frame_idx, frame_idx);
     }
-    
+
     #[test]
     fn test_frame_parser_secure_fin() {
         let mut parser = FrameParser::new();
-        
+
         let mut frame = vec![0xAA, 0x11];
         let key = b'G';
         let type_key = 0xC0u8;
         let invoke_idx = 0x05u8;
         let param = [0x01, 0x02];
         let length = (1 + 1 + 1 + param.len()) as u8;
-        
+
         frame.push(length);
         frame.push(type_key);
         frame.push(key);
         frame.push(invoke_idx);
         frame.extend_from_slice(&param);
-        
+
         let mut crc_data = vec![type_key, key, invoke_idx];
         crc_data.extend_from_slice(&param);
         let crc = calculate_crc(&crc_data);
         frame.push(crc);
-        
+
         let results = parser.process(&frame);
         assert_eq!(results.len(), 1);
         assert!(results[0].is_ok());
-        
+
         let result = results[0].as_ref().unwrap();
         assert_eq!(result.key, "G");
         assert!(result.is_secure);
@@ -649,33 +565,33 @@ mod tests {
         assert_eq!(result.invoke_idx, invoke_idx);
         assert_eq!(result.frame_idx, LAST_FRAME_FIX_INDEX);
     }
-    
+
     #[test]
     fn test_frame_parser_unsecure_unfin() {
         let mut parser = FrameParser::new();
-        
+
         let mut frame = vec![0xAA, 0x11];
         let key = b'G';
         let type_key = 0x03u8;
         let frame_idx = 0x0Au8;
         let param = [0x01, 0x02];
         let length = (1 + 1 + 1 + param.len()) as u8;
-        
+
         frame.push(length);
         frame.push(type_key);
         frame.push(key);
         frame.push(frame_idx);
         frame.extend_from_slice(&param);
-        
+
         let mut crc_data = vec![type_key, key, frame_idx];
         crc_data.extend_from_slice(&param);
         let crc = calculate_crc(&crc_data);
         frame.push(crc);
-        
+
         let results = parser.process(&frame);
         assert_eq!(results.len(), 1);
         assert!(results[0].is_ok());
-        
+
         let result = results[0].as_ref().unwrap();
         assert_eq!(result.key, "G");
         assert!(!result.is_secure);
@@ -741,12 +657,8 @@ mod tests {
         let mut builder = FrameBuilder::new();
         let data: Vec<u8> = (0..=255u8).cycle().take(302).collect();
 
-        let frames = builder.build_frames_with_invoke_idx(
-            "GH3X_RegsListWriteCmd",
-            &data,
-            true,
-            0x0A,
-        );
+        let frames =
+            builder.build_frames_with_invoke_idx("GH3X_RegsListWriteCmd", &data, true, 0x0A);
 
         assert!(frames.len() > 1);
         for frame in frames {
@@ -822,5 +734,175 @@ mod tests {
         let result = results[0].as_ref().unwrap();
         assert_eq!(result.key, key);
         assert_eq!(result.param, param);
+    }
+
+    #[test]
+    fn test_length_driven_parser_handles_fragmented_frame() {
+        let frame = FrameBuilder::new().build_frame("G", &[0x10, 0x20, 0x30], false, true, 0, 0);
+        let mut parser = FrameParser::new();
+
+        assert!(parser.process(&frame[..1]).is_empty());
+        assert!(parser.process(&frame[1..2]).is_empty());
+        assert!(parser.process(&frame[2..3]).is_empty());
+        assert!(parser.process(&frame[3..frame.len() - 1]).is_empty());
+
+        let results = parser.process(&frame[frame.len() - 1..]);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].as_ref().unwrap().param, vec![0x10, 0x20, 0x30]);
+    }
+
+    #[test]
+    fn test_length_driven_parser_ignores_headers_inside_param() {
+        let param = [0x01, 0xAA, 0x11, 0x02, 0xAA, 0x11, 0x03];
+        let frame = FrameBuilder::new().build_frame("G", &param, false, true, 0, 0);
+        let mut parser = FrameParser::new();
+
+        let results = parser.process(&frame);
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].as_ref().unwrap().param, param);
+    }
+
+    #[test]
+    fn test_length_driven_parser_recovers_header_swallowed_by_bad_length() {
+        let valid = FrameBuilder::new().build_frame("G", &[0x42], false, true, 0, 0);
+        let mut input = vec![0xAA, 0x11, 0x08, 0x80, b'X', 0x01];
+        input.extend_from_slice(&valid);
+        let mut parser = FrameParser::new();
+
+        let results = parser.process(&input);
+
+        assert!(matches!(results.first(), Some(Err(RpcError::CrcMismatch))));
+        assert_eq!(results.len(), 2);
+        let recovered = results[1].as_ref().unwrap();
+        assert_eq!(recovered.key, "G");
+        assert_eq!(recovered.param, vec![0x42]);
+    }
+
+    #[test]
+    fn test_crc_byte_can_be_reused_as_next_header_prefix() {
+        let valid = FrameBuilder::new().build_frame("G", &[0x42], false, true, 0, 0);
+        let mut parser = FrameParser::new();
+        let invalid_ending_in_aa = [0xAA, 0x11, 0x02, 0x80, b'X', 0xAA];
+
+        let invalid_results = parser.process(&invalid_ending_in_aa);
+        let recovered_results = parser.process(&valid[1..]);
+
+        assert!(matches!(
+            invalid_results.first(),
+            Some(Err(RpcError::CrcMismatch))
+        ));
+        assert_eq!(recovered_results.len(), 1);
+        assert_eq!(recovered_results[0].as_ref().unwrap().param, vec![0x42]);
+    }
+
+    #[test]
+    fn test_parser_handles_noise_multiple_frames_and_trailing_fragment() {
+        let first = FrameBuilder::new().build_frame("G", &[0x01], false, true, 0, 0);
+        let second = FrameBuilder::new().build_frame("G", &[0x02], false, true, 0, 0);
+        let third = FrameBuilder::new().build_frame("G", &[0x03], false, true, 0, 0);
+        let mut input = vec![0x55, 0x66, 0x77];
+        input.extend_from_slice(&first);
+        input.extend_from_slice(&second);
+        input.extend_from_slice(&third[..4]);
+        let mut parser = FrameParser::new();
+
+        let initial_results = parser.process(&input);
+        let final_results = parser.process(&third[4..]);
+
+        assert_eq!(initial_results.len(), 2);
+        assert_eq!(initial_results[0].as_ref().unwrap().param, vec![0x01]);
+        assert_eq!(initial_results[1].as_ref().unwrap().param, vec![0x02]);
+        assert_eq!(final_results.len(), 1);
+        assert_eq!(final_results[0].as_ref().unwrap().param, vec![0x03]);
+    }
+
+    #[test]
+    fn test_length_255_frame_is_accepted() {
+        let mut frame_body = vec![0x80, b'G'];
+        frame_body.resize(u8::MAX as usize, 0x5A);
+        let mut frame = vec![0xAA, 0x11, u8::MAX];
+        frame.extend_from_slice(&frame_body);
+        frame.push(calculate_crc(&frame_body));
+        let mut parser = FrameParser::new();
+
+        let results = parser.process(&frame);
+
+        assert_eq!(frame.len(), 259);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].as_ref().unwrap().param.len(), 253);
+    }
+
+    #[test]
+    fn test_short_lengths_use_protocol_boundary_then_fail_semantic_parse() {
+        let mut parser = FrameParser::new();
+        let length_zero = [0xAA, 0x11, 0x00, calculate_crc(&[])];
+        let length_one_body = [0x80];
+        let length_one = [
+            0xAA,
+            0x11,
+            0x01,
+            length_one_body[0],
+            calculate_crc(&length_one_body),
+        ];
+
+        let zero_results = parser.process(&length_zero);
+        let one_results = parser.process(&length_one);
+
+        assert!(matches!(
+            zero_results.first(),
+            Some(Err(RpcError::FormatError))
+        ));
+        assert!(matches!(
+            one_results.first(),
+            Some(Err(RpcError::FormatError))
+        ));
+    }
+
+    #[test]
+    fn test_length_240_frame_is_accepted() {
+        let mut frame_body = vec![0x80, b'G'];
+        frame_body.resize(240, 0x33);
+        let mut frame = vec![0xAA, 0x11, 240];
+        frame.extend_from_slice(&frame_body);
+        frame.push(calculate_crc(&frame_body));
+        let mut parser = FrameParser::new();
+
+        let results = parser.process(&frame);
+
+        assert_eq!(frame.len(), 244);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].as_ref().unwrap().param.len(), 238);
+    }
+
+    #[test]
+    fn test_parser_processes_input_larger_than_receive_buffer() {
+        let first = FrameBuilder::new().build_frame("G", &[0x01], false, true, 0, 0);
+        let second = FrameBuilder::new().build_frame("G", &[0x02], false, true, 0, 0);
+        let mut input = vec![0x55; RPC_RECEIVE_BUFFER_SIZE + 37];
+        input.extend_from_slice(&first);
+        input.extend_from_slice(&second);
+        let mut parser = FrameParser::new();
+
+        let results = parser.process(&input);
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].as_ref().unwrap().param, vec![0x01]);
+        assert_eq!(results[1].as_ref().unwrap().param, vec![0x02]);
+        assert!(parser.receive_buffer.len() <= RPC_RECEIVE_BUFFER_SIZE);
+    }
+
+    #[test]
+    fn test_reset_discards_partial_frame() {
+        let stale = FrameBuilder::new().build_frame("G", &[0x10], false, true, 0, 0);
+        let fresh = FrameBuilder::new().build_frame("G", &[0x20], false, true, 0, 0);
+        let mut parser = FrameParser::new();
+
+        assert!(parser.process(&stale[..4]).is_empty());
+        parser.reset();
+        let results = parser.process(&fresh);
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].as_ref().unwrap().param, vec![0x20]);
     }
 }

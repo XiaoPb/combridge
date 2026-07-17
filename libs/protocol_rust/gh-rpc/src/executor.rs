@@ -115,6 +115,10 @@ impl CommandExecutor {
         self.core.process(data).await
     }
 
+    pub async fn reset_receive_state(&self) {
+        self.core.reset_receive_state().await;
+    }
+
     pub async fn call(&self, key: &str, format: &str, params: &[u8]) -> Result<Vec<u8>, RpcError> {
         self.core.call(key, format, params).await
     }

@@ -222,7 +222,11 @@ impl Package {
         result
     }
 
-    pub fn pack_array_with_header(header: &TypeHeader, data: &[u8], element_width: usize) -> Vec<u8> {
+    pub fn pack_array_with_header(
+        header: &TypeHeader,
+        data: &[u8],
+        element_width: usize,
+    ) -> Vec<u8> {
         let mut result = Vec::new();
         let total_elements = data.len() / element_width;
         let mut remaining = total_elements;
@@ -262,7 +266,8 @@ impl Package {
                 if value_offset + 2 > values.len() {
                     return Err(RpcError::UnpackageError);
                 }
-                let arr_len = u16::from_le_bytes([values[value_offset], values[value_offset + 1]]) as usize;
+                let arr_len =
+                    u16::from_le_bytes([values[value_offset], values[value_offset + 1]]) as usize;
                 value_offset += 2;
 
                 let arr_bytes = arr_len * width_bytes;
@@ -430,7 +435,8 @@ impl Unpackage {
                 return Err(RpcError::UnpackageError);
             }
 
-            let width_bytes = (1 << actual_header.width) as usize;
+            let width_bits = (1 << actual_header.width) as usize;
+            let width_bytes = width_bits / 8;
 
             if actual_header.is_array {
                 let mut total_elements = 0usize;
@@ -517,7 +523,7 @@ mod tests {
         let info = FormatInfo::parse("<u16>").unwrap();
         assert_eq!(info.headers.len(), 1);
         assert_eq!(info.headers[0].pack_type, ProPackType::Unsigned as u8);
-        assert_eq!(info.headers[0].width, 1);
+        assert_eq!(info.headers[0].width, 4);
         assert!(!info.headers[0].is_array);
         assert!(info.headers[0].end);
 
@@ -526,7 +532,7 @@ mod tests {
 
         let info = FormatInfo::parse("<d32>").unwrap();
         assert_eq!(info.headers[0].pack_type, ProPackType::Signed as u8);
-        assert_eq!(info.headers[0].width, 2);
+        assert_eq!(info.headers[0].width, 5);
     }
 
     #[test]
@@ -570,7 +576,7 @@ mod tests {
         let header = TypeHeader {
             pack_type: ProPackType::Unsigned as u8,
             is_array: false,
-            width: 2,
+            width: 5,
             end: true,
             split: false,
         };
@@ -605,7 +611,7 @@ mod tests {
 
     #[test]
     fn test_pack_f64() {
-        let value = 3.14159265358979f64;
+        let value = std::f64::consts::PI;
         let packed = Package::pack_f64(value);
         let unpacked = Unpackage::unpack_f64(&packed).unwrap();
         assert!((value - unpacked).abs() < f64::EPSILON);

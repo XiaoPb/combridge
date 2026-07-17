@@ -333,6 +333,17 @@ pub struct FrameParser { /* ... */ }
 +----------+--------+---------+----------+-------+----------+--------+-----+
 ```
 
+Length 是 1 字节无符号整数，表示从 TypeKey 开始到 Param 结束的帧体字节数，
+不包含 Header、Length 字段和 CRC。完整帧长度为 `Length + 4`，CRC 位于
+`3 + Length`，并通过 `calculate_crc(&frame[3..3 + Length])` 对帧体执行
+`u8::wrapping_add` 累加校验。
+
+Length 最大为 255，因此接收端支持的理论最大完整帧为 259 字节。
+`GHRPC_FRAME_SIZE = 240` 是 FrameBuilder 当前使用的默认发送分片大小，不是
+接收协议上限。FrameParser 使用最大 512 字节的环形接收缓存，以支持前导杂字节、
+跨传输分片的半帧和单次输入中的多个协议帧；帧结束位置始终由 Length 确定，
+帧体中出现 `AA 11` 不会触发提前切帧。
+
 ---
 
 ### `ParseResult`

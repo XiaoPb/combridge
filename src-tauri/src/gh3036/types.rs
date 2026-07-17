@@ -128,6 +128,7 @@ pub struct Gh3036FrameData {
     pub algo_data: Vec<i32>,
     pub agc_info: Vec<i32>,
     pub phy_value: Vec<i32>,
+    pub led_info: Vec<i32>,
 }
 
 impl Gh3036FrameData {
@@ -156,6 +157,16 @@ impl Gh3036FrameData {
                     | ((d.agc_info.led_drv0 as u32) << 16)
                     | ((d.agc_info.led_drv1 as u32) << 24);
                 word0 as i32
+            })
+            .collect();
+
+        let led_info: Vec<i32> = frame
+            .data
+            .iter()
+            .map(|d| {
+                let drv0 = (d.agc_info.led_drv0 as u32) & 0x0FFF;
+                let drv1 = (d.agc_info.led_drv1 as u32) & 0x0FFF;
+                (drv0 | (drv1 << 12)) as i32
             })
             .collect();
 
@@ -205,6 +216,7 @@ impl Gh3036FrameData {
             algo_data: frame.algo_data.clone(),
             agc_info,
             phy_value,
+            led_info,
         }
     }
 }
@@ -867,4 +879,32 @@ pub struct Gh3036RefDataEvent {
     pub spo2_count: i32,
     pub spo2_valid: bool,
     pub timestamp: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Gh3036FrameData, GhAgcInfo, GhFrameData, GhFuncFrame};
+
+    #[test]
+    fn frame_data_packs_led_currents_using_yaml_bit_layout() {
+        let frame = GhFuncFrame {
+            data: vec![GhFrameData {
+                ipd_pa: 200,
+                rawdata: 100,
+                agc_info: GhAgcInfo {
+                    led_drv0: 12,
+                    led_drv1: 34,
+                    ..GhAgcInfo::default()
+                },
+                ..GhFrameData::default()
+            }],
+            ..GhFuncFrame::default()
+        };
+
+        let converted = Gh3036FrameData::from_func_frame(&frame, None);
+
+        assert_eq!(converted.phy_value, vec![200]);
+        assert_eq!(converted.rawdata, vec![100]);
+        assert_eq!(converted.led_info, vec![12 | (34 << 12)]);
+    }
 }

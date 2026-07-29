@@ -159,6 +159,53 @@ impl SerialPortConfig {
         self.pack_timeout_ms = pack_timeout_ms;
         self
     }
+
+    /// 验证串口配置参数的有效性
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(())`: 配置有效
+    /// - `Err(String)`: 配置无效，包含错误描述
+    ///
+    /// # 验证规则
+    ///
+    /// - 波特率必须在 300 - 2000000 范围内
+    /// - 数据位必须是 5-8
+    /// - 停止位必须是 1 或 2
+    /// - 超时时间必须大于 0
+    pub fn validate(&self) -> Result<(), String> {
+        // 验证波特率范围（300 - 2000000 bps）
+        let baud_rate_value = u32::from(self.baud_rate);
+        if !(300..=2_000_000).contains(&baud_rate_value) {
+            return Err(format!(
+                "波特率必须在 300 - 2000000 范围内，当前值: {}",
+                baud_rate_value
+            ));
+        }
+
+        // 验证数据位（虽然枚举已经限制了值，但保留验证以明确业务规则）
+        let data_bits_value = self.data_bits as u8;
+        if ![5, 6, 7, 8].contains(&data_bits_value) {
+            return Err(format!("数据位必须是 5-8，当前值: {}", data_bits_value));
+        }
+
+        // 验证停止位
+        let stop_bits_value = self.stop_bits as u8;
+        if ![1, 2].contains(&stop_bits_value) {
+            return Err(format!("停止位必须是 1 或 2，当前值: {}", stop_bits_value));
+        }
+
+        // 验证超时时间
+        if self.timeout_ms == 0 {
+            return Err("超时时间必须大于 0".to_string());
+        }
+
+        if self.pack_timeout_ms == 0 {
+            return Err("打包超时时间必须大于 0".to_string());
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -213,5 +260,49 @@ mod tests {
 
         assert_eq!(parsed.port_name, "COM3");
         assert_eq!(parsed.baud_rate, BaudRate::B115200);
+    }
+
+    #[test]
+    fn test_serial_port_config_validate_success() {
+        // 测试默认配置（所有值都应该有效）
+        let config = SerialPortConfig::new("COM1");
+        assert!(config.validate().is_ok());
+
+        // 测试边界波特率值
+        let config_low = SerialPortConfig::new("COM1").baud_rate(BaudRate::B1200);
+        assert!(config_low.validate().is_ok());
+
+        let config_high = SerialPortConfig::new("COM1").baud_rate(BaudRate::B921600);
+        assert!(config_high.validate().is_ok());
+
+        // 测试各种数据位
+        for data_bits in [DataBits::Five, DataBits::Six, DataBits::Seven, DataBits::Eight] {
+            let config = SerialPortConfig::new("COM1").data_bits(data_bits);
+            assert!(config.validate().is_ok());
+        }
+
+        // 测试各种停止位
+        for stop_bits in [StopBits::One, StopBits::Two] {
+            let config = SerialPortConfig::new("COM1").stop_bits(stop_bits);
+            assert!(config.validate().is_ok());
+        }
+    }
+
+    #[test]
+    fn test_serial_port_config_validate_timeout_zero() {
+        // 测试超时时间为 0
+        let config = SerialPortConfig::new("COM1").timeout_ms(0);
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("超时时间必须大于 0"));
+    }
+
+    #[test]
+    fn test_serial_port_config_validate_pack_timeout_zero() {
+        // 测试打包超时时间为 0
+        let config = SerialPortConfig::new("COM1").pack_timeout_ms(0);
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("打包超时时间必须大于 0"));
     }
 }

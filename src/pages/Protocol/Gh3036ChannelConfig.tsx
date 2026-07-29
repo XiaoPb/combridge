@@ -248,7 +248,7 @@ const Gh3036ChannelConfig: React.FC = () => {
                   />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Text style={{ fontSize: 12, width: 60 }}>{t('gh3036.rxUuid')}}</Text>
+                  <Text style={{ fontSize: 12, width: 60 }}>{t('gh3036.rxUuid')}</Text>
                   <Input
                     size="small"
                     value={channelConfig.rxChar}

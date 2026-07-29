@@ -108,12 +108,20 @@ export const bleApi = {
     });
   },
 
-  async writeBleCharacteristic(deviceId: string, characteristicUuid: string, data: number[], _withoutResponse?: boolean): Promise<void> {
-    await invoke<void>('write_ble_characteristic', {
-      deviceId,
-      characteristicUuid,
-      data,
-    });
+  async writeBleCharacteristic(deviceId: string, characteristicUuid: string, data: number[], withoutResponse?: boolean): Promise<void> {
+    if (withoutResponse) {
+      await invoke<void>('write_ble_without_response', {
+        deviceId,
+        characteristicUuid,
+        data,
+      });
+    } else {
+      await invoke<void>('write_ble_characteristic', {
+        deviceId,
+        characteristicUuid,
+        data,
+      });
+    }
   },
 
   async writeBleWithoutResponse(deviceId: string, characteristicUuid: string, data: number[]): Promise<void> {

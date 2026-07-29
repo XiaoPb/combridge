@@ -178,6 +178,12 @@ pub async fn open_serial_port(
         }
     };
 
+    // 添加配置验证
+    if let Err(e) = config.validate() {
+        error!("串口配置验证失败: {}", e);
+        return Err(ComBridgeError::config(e));
+    }
+
     let port_name = config.port_name.clone();
 
     match manager.open_port(config, move |name, data| {

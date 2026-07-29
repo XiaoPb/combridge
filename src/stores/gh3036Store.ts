@@ -46,6 +46,8 @@ export type Gh3036ChannelConfigState = {
   bleDevice: string;
   txChar: string;
   rxChar: string;
+  txCharManuallyEdited: boolean;
+  rxCharManuallyEdited: boolean;
 };
 
 interface Gh3036State {
@@ -105,14 +107,14 @@ interface Gh3036State {
     gnadtConfidence: number | null;
   };
   
-  gsensorData: {
+  gsensorData: Map<number, {
     acc_x: number[];
     acc_y: number[];
     acc_z: number[];
     gyro_x: number[];
     gyro_y: number[];
     gyro_z: number[];
-  };
+  }>;
   maxGsensorCount: number;
   
   chartGroups: ChartGroupConfig[];
@@ -207,6 +209,9 @@ interface Gh3036State {
   loadChannelConfig: () => Promise<void>;
   updateChannelConfig: (config: Partial<Gh3036ChannelConfigState>) => Promise<void>;
   
+  setTxCharManuallyEdited: (edited: boolean) => void;
+  setRxCharManuallyEdited: (edited: boolean) => void;
+  
   configureTxChannel: (channelType: 'serial' | 'ble', deviceId: string, characteristicUuid?: string) => Promise<boolean>;
   configureRxChannel: (channelType: 'serial' | 'ble', deviceId: string, characteristicUuid?: string) => Promise<boolean>;
   
@@ -261,6 +266,8 @@ export const useGh3036Store = create<Gh3036State>()(
         bleDevice: '',
         txChar: '00000004-0000-1000-8000-00805f9b34fb',
         rxChar: '00000003-0000-1000-8000-00805f9b34fb',
+        txCharManuallyEdited: false,
+        rxCharManuallyEdited: false,
       },
       
       txChannel: null,
@@ -316,14 +323,7 @@ export const useGh3036Store = create<Gh3036State>()(
     gnadtConfidence: null,
   },
   
-  gsensorData: {
-    acc_x: [],
-    acc_y: [],
-    acc_z: [],
-    gyro_x: [],
-    gyro_y: [],
-    gyro_z: [],
-  },
+  gsensorData: new Map(),
   maxGsensorCount: 500,
   
   chartGroups: [],
@@ -421,14 +421,23 @@ export const useGh3036Store = create<Gh3036State>()(
       mergeGh3036Frames(existing, frames, maxFramesCount)
     );
     
-    const newGsensorData = {
-      acc_x: [...gsensorData.acc_x, ...frames.acc_x].slice(-maxGsensorCount),
-      acc_y: [...gsensorData.acc_y, ...frames.acc_y].slice(-maxGsensorCount),
-      acc_z: [...gsensorData.acc_z, ...frames.acc_z].slice(-maxGsensorCount),
-      gyro_x: [...gsensorData.gyro_x, ...frames.gyro_x].slice(-maxGsensorCount),
-      gyro_y: [...gsensorData.gyro_y, ...frames.gyro_y].slice(-maxGsensorCount),
-      gyro_z: [...gsensorData.gyro_z, ...frames.gyro_z].slice(-maxGsensorCount),
+    const newGsensorData = new Map(gsensorData);
+    const existingGsensor = newGsensorData.get(frames.function_id) || {
+      acc_x: [],
+      acc_y: [],
+      acc_z: [],
+      gyro_x: [],
+      gyro_y: [],
+      gyro_z: [],
     };
+    newGsensorData.set(frames.function_id, {
+      acc_x: [...existingGsensor.acc_x, ...frames.acc_x].slice(-maxGsensorCount),
+      acc_y: [...existingGsensor.acc_y, ...frames.acc_y].slice(-maxGsensorCount),
+      acc_z: [...existingGsensor.acc_z, ...frames.acc_z].slice(-maxGsensorCount),
+      gyro_x: [...existingGsensor.gyro_x, ...frames.gyro_x].slice(-maxGsensorCount),
+      gyro_y: [...existingGsensor.gyro_y, ...frames.gyro_y].slice(-maxGsensorCount),
+      gyro_z: [...existingGsensor.gyro_z, ...frames.gyro_z].slice(-maxGsensorCount),
+    });
     
     let newVitalSigns = { ...vitalSigns };
     if (frames.algo_results.length > 0 && frames.algo_results[0].length > 0) {
@@ -493,18 +502,11 @@ export const useGh3036Store = create<Gh3036State>()(
     });
   },
   
-  clearWaveformData: () => set({ 
-    framesData: new Map(), 
-    chartGroups: [], 
+  clearWaveformData: () => set({
+    framesData: new Map(),
+    chartGroups: [],
     selectedFunctionId: null,
-    gsensorData: {
-      acc_x: [],
-      acc_y: [],
-      acc_z: [],
-      gyro_x: [],
-      gyro_y: [],
-      gyro_z: [],
-    },
+    gsensorData: new Map(),
     vitalSigns: {
       hr: null,
       hrConfidence: null,
@@ -656,6 +658,8 @@ export const useGh3036Store = create<Gh3036State>()(
             bleDevice: gh3036Channel.ble_device || '',
             txChar: gh3036Channel.tx_char || '00000004-0000-1000-8000-00805f9b34fb',
             rxChar: gh3036Channel.rx_char || '00000003-0000-1000-8000-00805f9b34fb',
+            txCharManuallyEdited: false,
+            rxCharManuallyEdited: false,
           },
         });
       }
@@ -683,6 +687,14 @@ export const useGh3036Store = create<Gh3036State>()(
       console.error('保存通道配置失败:', err);
     }
   },
+  
+  setTxCharManuallyEdited: (edited) => set((state) => ({
+    channelConfig: { ...state.channelConfig, txCharManuallyEdited: edited }
+  })),
+  
+  setRxCharManuallyEdited: (edited) => set((state) => ({
+    channelConfig: { ...state.channelConfig, rxCharManuallyEdited: edited }
+  })),
   
   configureTxChannel: async (channelType, deviceId, characteristicUuid) => {
     set({ isLoading: true, error: null });

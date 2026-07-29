@@ -113,30 +113,35 @@ const MonitorTab: React.FC = () => {
     const columns = ['ACC_X', 'ACC_Y', 'ACC_Z'];
     const rows: number[][] = [];
 
+    const currentGsensor = selectedFunctionId ? gsensorData.get(selectedFunctionId) : null;
+    if (!currentGsensor) {
+      return { columns, rows };
+    }
+
     const maxPoints = DISPLAY_DURATION_SECONDS * DEFAULT_SAMPLE_RATE;
     const len = Math.min(
-      gsensorData.acc_x.length,
-      gsensorData.acc_y.length,
-      gsensorData.acc_z.length,
+      currentGsensor.acc_x.length,
+      currentGsensor.acc_y.length,
+      currentGsensor.acc_z.length,
       maxPoints
     );
 
     const startIndex = Math.max(0, Math.min(
-      gsensorData.acc_x.length,
-      gsensorData.acc_y.length,
-      gsensorData.acc_z.length
+      currentGsensor.acc_x.length,
+      currentGsensor.acc_y.length,
+      currentGsensor.acc_z.length
     ) - maxPoints);
 
     for (let i = startIndex; i < startIndex + len; i++) {
       rows.push([
-        gsensorData.acc_x[i],
-        gsensorData.acc_y[i],
-        gsensorData.acc_z[i],
+        currentGsensor.acc_x[i],
+        currentGsensor.acc_y[i],
+        currentGsensor.acc_z[i],
       ]);
     }
 
     return { columns, rows };
-  }, [gsensorData]);
+  }, [gsensorData, selectedFunctionId]);
 
   const ipdPaChartGroups = useMemo(() => {
     if (!currentFrames || currentFrames.channel_count === 0) return [];

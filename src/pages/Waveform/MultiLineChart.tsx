@@ -254,9 +254,11 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
     ];
 
     return {
+      animation: false,  // 全局禁用动画
       animationDuration: 0,
       progressive: 500,
       progressiveThreshold: 3000,
+      lazyUpdate: true,  // 全局启用懒更新
       tooltip: {
         trigger: 'axis',
         axisPointer: {
@@ -422,15 +424,23 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   useEffect(() => {
     if (!initialized) return;
 
-    chartInstances.current.forEach((chart, index) => {
-      if (!chart) return;
+    // 使用防抖优化高频更新
+    const updateTimer = setTimeout(() => {
+      chartInstances.current.forEach((chart, index) => {
+        if (!chart) return;
 
-      const group = chartGroups[index];
-      if (group) {
-        const option = getChartOption(group, colorMap);
-        chart.setOption(option, { notMerge: false });
-      }
-    });
+        const group = chartGroups[index];
+        if (group) {
+          const option = getChartOption(group, colorMap);
+          chart.setOption(option, {
+            notMerge: false,
+            lazyUpdate: true  // 启用懒更新，减少渲染次数
+          });
+        }
+      });
+    }, 16);  // 约60fps的更新频率
+
+    return () => clearTimeout(updateTimer);
   }, [rows, columns, initialized, chartGroups, getChartOption, colorMap, sampleRate]);
 
   useEffect(() => {

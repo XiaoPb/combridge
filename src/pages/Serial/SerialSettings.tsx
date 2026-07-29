@@ -1,7 +1,7 @@
 import React from 'react';
-import { Card, Form, Select, InputNumber, Switch, Divider, Typography, Space } from 'antd';
+import { Card, Form, AutoComplete, Select, InputNumber, Switch, Divider, Typography, Space } from 'antd';
 import type { SerialConfig } from '../../types';
-import { DEFAULT_BAUD_RATES } from '../../types';
+import { DEFAULT_BAUD_RATES, BAUD_RATE_MIN, BAUD_RATE_MAX } from '../../types';
 
 const { Text, Title } = Typography;
 
@@ -22,15 +22,27 @@ const SerialSettings: React.FC<SerialSettingsProps> = ({
         <Title level={5}>基本配置</Title>
         
         <Form.Item label="波特率">
-          <Select
-            value={config.baudRate}
-            onChange={(value) => onUpdateConfig({ baudRate: value })}
+          <AutoComplete
+            value={config.baudRate.toString()}
+            onChange={(value) => {
+              const numValue = parseInt(value, 10);
+              if (!isNaN(numValue)) {
+                onUpdateConfig({ baudRate: numValue });
+              }
+            }}
             disabled={isConnected}
             options={DEFAULT_BAUD_RATES.map((rate) => ({
-              value: rate,
+              value: rate.toString(),
               label: `${rate} bps`,
             }))}
+            placeholder="选择或输入波特率"
+            filterOption={(inputValue, option) =>
+              option!.value.toLowerCase().indexOf(inputValue.toLowerCase()) !== -1
+            }
           />
+          <Text type="secondary" style={{ fontSize: 11, marginTop: 4 }}>
+            支持 {BAUD_RATE_MIN} - {BAUD_RATE_MAX} bps
+          </Text>
         </Form.Item>
 
         <Form.Item label="数据位">

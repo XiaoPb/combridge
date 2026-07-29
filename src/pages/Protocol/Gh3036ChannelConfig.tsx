@@ -21,6 +21,8 @@ const Gh3036ChannelConfig: React.FC = () => {
     configureTxChannel,
     configureRxChannel,
     updateCsvConfig,
+    setTxCharManuallyEdited,
+    setRxCharManuallyEdited,
   } = useGh3036Store();
   const currentBleDevice = useBleStore((state) => state.currentDevice);
   const bleDeviceTabs = useBleStore((state) => state.deviceTabs);
@@ -63,21 +65,33 @@ const Gh3036ChannelConfig: React.FC = () => {
 
     const tab = bleDeviceTabs[currentBleDevice];
     const characteristics = tab?.characteristics ?? [];
-    const txChar = preferCharacteristic(
-      characteristics,
-      '00000004',
-      (char) => char.properties.write || char.properties.writeWithoutResponse
-    );
-    const rxChar = preferCharacteristic(
-      characteristics,
-      '00000003',
-      (char) => char.properties.notify || char.properties.indicate
-    );
+
+    // 只在未手动编辑时自动选择特征
+    let txChar = channelConfig.txChar;
+    let rxChar = channelConfig.rxChar;
+
+    if (!channelConfig.txCharManuallyEdited) {
+      const txCharCandidate = preferCharacteristic(
+        characteristics,
+        '00000004',
+        (char) => char.properties.write || char.properties.writeWithoutResponse
+      );
+      txChar = txCharCandidate?.uuid ?? channelConfig.txChar;
+    }
+
+    if (!channelConfig.rxCharManuallyEdited) {
+      const rxCharCandidate = preferCharacteristic(
+        characteristics,
+        '00000003',
+        (char) => char.properties.notify || char.properties.indicate
+      );
+      rxChar = rxCharCandidate?.uuid ?? channelConfig.rxChar;
+    }
 
     const nextConfig = {
       bleDevice: currentBleDevice,
-      txChar: txChar?.uuid ?? channelConfig.txChar,
-      rxChar: rxChar?.uuid ?? channelConfig.rxChar,
+      txChar,
+      rxChar,
     };
 
     if (
@@ -94,6 +108,8 @@ const Gh3036ChannelConfig: React.FC = () => {
     channelConfig.bleDevice,
     channelConfig.txChar,
     channelConfig.rxChar,
+    channelConfig.txCharManuallyEdited,
+    channelConfig.rxCharManuallyEdited,
     updateChannelConfig,
   ]);
 
@@ -133,6 +149,9 @@ const Gh3036ChannelConfig: React.FC = () => {
     const rxSuccess = await configureRxChannel('ble', channelConfig.bleDevice, channelConfig.rxChar);
     if (rxSuccess) {
       await updateChannelConfig({ connectionType: 'ble' });
+      // 重置手动编辑标记，允许下次自动发现
+      setTxCharManuallyEdited(false);
+      setRxCharManuallyEdited(false);
       message.success(t('gh3036.channelSaved'));
     }
   };
@@ -220,7 +239,10 @@ const Gh3036ChannelConfig: React.FC = () => {
                   <Input
                     size="small"
                     value={channelConfig.txChar}
-                    onChange={(e) => updateChannelConfig({ txChar: e.target.value })}
+                    onChange={(e) => {
+                      updateChannelConfig({ txChar: e.target.value });
+                      setTxCharManuallyEdited(true);
+                    }}
                     placeholder={t('gh3036.charUuidPlaceholder')}
                     style={{ flex: 1 }}
                   />
@@ -230,7 +252,10 @@ const Gh3036ChannelConfig: React.FC = () => {
                   <Input
                     size="small"
                     value={channelConfig.rxChar}
-                    onChange={(e) => updateChannelConfig({ rxChar: e.target.value })}
+                    onChange={(e) => {
+                      updateChannelConfig({ rxChar: e.target.value });
+                      setRxCharManuallyEdited(true);
+                    }}
                     placeholder={t('gh3036.charUuidPlaceholder')}
                     style={{ flex: 1 }}
                   />

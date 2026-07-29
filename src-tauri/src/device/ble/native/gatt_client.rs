@@ -566,7 +566,32 @@ impl GattClient {
             }
         }
 
-        if let Err(e) = char.write(data).await {
+        // 获取特征属性，决定使用哪种写入方式
+        let props = char
+            .properties()
+            .await
+            .map_err(|e| ComBridgeError::ble(format!("获取特征属性失败: {}", e)))?;
+
+        // 根据特征属性选择写入方式
+        let write_result = if props.write_without_response && !props.write {
+            // 特征只支持 write without response
+            tracing::debug!(
+                "[BLE] 使用 write_without_response: device={}, char={}",
+                extract_short_mac(&self.address),
+                extract_short_uuid(char_uuid)
+            );
+            char.write_without_response(data).await
+        } else {
+            // 默认使用 write with response
+            tracing::debug!(
+                "[BLE] 使用 write_with_response: device={}, char={}",
+                extract_short_mac(&self.address),
+                extract_short_uuid(char_uuid)
+            );
+            char.write(data).await
+        };
+
+        if let Err(e) = write_result {
             let error_str = format!("{}", e);
             if error_str.contains("已关闭")
                 || error_str.contains("closed")

@@ -46,6 +46,8 @@ export type Gh3036ChannelConfigState = {
   bleDevice: string;
   txChar: string;
   rxChar: string;
+  txCharManuallyEdited: boolean;
+  rxCharManuallyEdited: boolean;
 };
 
 interface Gh3036State {
@@ -207,6 +209,9 @@ interface Gh3036State {
   loadChannelConfig: () => Promise<void>;
   updateChannelConfig: (config: Partial<Gh3036ChannelConfigState>) => Promise<void>;
   
+  setTxCharManuallyEdited: (edited: boolean) => void;
+  setRxCharManuallyEdited: (edited: boolean) => void;
+  
   configureTxChannel: (channelType: 'serial' | 'ble', deviceId: string, characteristicUuid?: string) => Promise<boolean>;
   configureRxChannel: (channelType: 'serial' | 'ble', deviceId: string, characteristicUuid?: string) => Promise<boolean>;
   
@@ -261,6 +266,8 @@ export const useGh3036Store = create<Gh3036State>()(
         bleDevice: '',
         txChar: '00000004-0000-1000-8000-00805f9b34fb',
         rxChar: '00000003-0000-1000-8000-00805f9b34fb',
+        txCharManuallyEdited: false,
+        rxCharManuallyEdited: false,
       },
       
       txChannel: null,
@@ -656,6 +663,8 @@ export const useGh3036Store = create<Gh3036State>()(
             bleDevice: gh3036Channel.ble_device || '',
             txChar: gh3036Channel.tx_char || '00000004-0000-1000-8000-00805f9b34fb',
             rxChar: gh3036Channel.rx_char || '00000003-0000-1000-8000-00805f9b34fb',
+            txCharManuallyEdited: false,
+            rxCharManuallyEdited: false,
           },
         });
       }
@@ -683,6 +692,14 @@ export const useGh3036Store = create<Gh3036State>()(
       console.error('保存通道配置失败:', err);
     }
   },
+  
+  setTxCharManuallyEdited: (edited) => set((state) => ({
+    channelConfig: { ...state.channelConfig, txCharManuallyEdited: edited }
+  })),
+  
+  setRxCharManuallyEdited: (edited) => set((state) => ({
+    channelConfig: { ...state.channelConfig, rxCharManuallyEdited: edited }
+  })),
   
   configureTxChannel: async (channelType, deviceId, characteristicUuid) => {
     set({ isLoading: true, error: null });

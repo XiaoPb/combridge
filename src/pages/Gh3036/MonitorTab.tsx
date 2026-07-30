@@ -242,64 +242,66 @@ const MonitorTab: React.FC = () => {
       <Card
         size="small"
         title={
-          <Space>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>{t('monitor.dataMonitor')}</span>
-            <Tooltip title={t('monitor.displayDurationTooltip')}>
-              <Space size={4}>
-                <ClockCircleOutlined />
-                <InputNumber
-                  size="small"
-                  min={1}
-                  max={60}
-                  value={displayDurationSeconds}
-                  onChange={handleDisplayDurationChange}
-                  style={{ width: 60 }}
-                  addonAfter="s"
-                  disabled={selectedFunctionId === null}
-                />
-              </Space>
-            </Tooltip>
-            <Tooltip title={t('monitor.sampleRateTooltip')}>
-              <Space size={4}>
-                <SettingOutlined />
-                <InputNumber
-                  size="small"
-                  min={1}
-                  max={1000}
-                  value={sampleRate}
-                  onChange={handleSampleRateChange}
-                  style={{ width: 70 }}
-                  addonAfter="Hz"
-                  disabled={selectedFunctionId === null}
-                />
-              </Space>
-            </Tooltip>
-            <Select
-              size="small"
-              style={{ width: 100 }}
-              value={ipdRawDataType}
-              onChange={setIpdRawDataType}
-              options={[
-                { value: 'ipd', label: t('monitor.ipd') },
-                { value: 'rawdata', label: t('monitor.rawdata') },
-              ]}
-            />
-            <Select
-              size="small"
-              style={{ width: 150 }}
-              value={selectedFunctionId}
-              onChange={setSelectedFunctionId}
-              options={functionOptions}
-              placeholder={t('monitor.selectFunction')}
-            />
-            <Button
-              size="small"
-              icon={<ClearOutlined />}
-              onClick={clearWaveformData}
-            >
-              {t('monitor.clearData')}
-            </Button>
-          </Space>
+            <Space>
+              <Tooltip title={t('monitor.displayDurationTooltip')}>
+                <Space size={4}>
+                  <ClockCircleOutlined />
+                  <InputNumber
+                    size="small"
+                    min={1}
+                    max={60}
+                    value={displayDurationSeconds}
+                    onChange={handleDisplayDurationChange}
+                    style={{ width: 60 }}
+                    addonAfter="s"
+                    disabled={selectedFunctionId === null}
+                  />
+                </Space>
+              </Tooltip>
+              <Tooltip title={t('monitor.sampleRateTooltip')}>
+                <Space size={4}>
+                  <SettingOutlined />
+                  <InputNumber
+                    size="small"
+                    min={1}
+                    max={1000}
+                    value={sampleRate}
+                    onChange={handleSampleRateChange}
+                    style={{ width: 70 }}
+                    addonAfter="Hz"
+                    disabled={selectedFunctionId === null}
+                  />
+                </Space>
+              </Tooltip>
+              <Select
+                size="small"
+                style={{ width: 100 }}
+                value={ipdRawDataType}
+                onChange={setIpdRawDataType}
+                options={[
+                  { value: 'ipd', label: t('monitor.ipd') },
+                  { value: 'rawdata', label: t('monitor.rawdata') },
+                ]}
+              />
+              <Select
+                size="small"
+                style={{ width: 150 }}
+                value={selectedFunctionId}
+                onChange={setSelectedFunctionId}
+                options={functionOptions}
+                placeholder={t('monitor.selectFunction')}
+              />
+              <Button
+                size="small"
+                icon={<ClearOutlined />}
+                onClick={clearWaveformData}
+              >
+                {t('monitor.clearData')}
+              </Button>
+            </Space>
+          </div>
         }
         style={{ flex: '0 0 auto' }}
         styles={{ body: { padding: 8, height: 510 } }}

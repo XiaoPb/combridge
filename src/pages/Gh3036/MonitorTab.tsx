@@ -340,7 +340,7 @@ const MonitorTab: React.FC = () => {
             columns={gsensorChartData.columns}
             rows={gsensorChartData.rows}
             chartGroups={gsensorChartGroups}
-            sampleRate={DEFAULT_SAMPLE_RATE}
+            sampleRate={sampleRate}
             initialDataZoom={sharedDataZoomState}
             onDataZoomChange={setSharedDataZoomState}
           />

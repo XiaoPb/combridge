@@ -154,28 +154,78 @@ const MonitorTab: React.FC = () => {
     return { columns, rows };
   }, [gsensorData, selectedFunctionId]);
 
-  const ipdPaChartGroups = useMemo(() => {
-    if (!currentFrames || currentFrames.channel_count === 0) return [];
-    
+  const allChartData = useMemo(() => {
     const columns: string[] = [];
-    for (let i = 0; i < Math.min(currentFrames.channel_count, 4); i++) {
-      columns.push(`CH${i}`);
-    }
-    
-    return [{
-      name: ipdRawDataType === 'ipd' ? t('monitor.ipdPaChart') : t('monitor.rawdataChart'),
-      columns,
-      height: 250,
-    }];
-  }, [currentFrames, t, ipdRawDataType]);
+    const rows: number[][] = [];
 
-  const gsensorChartGroups = useMemo(() => {
-    return [{
-      name: t('monitor.gsensorChart'),
-      columns: ['ACC_X', 'ACC_Y', 'ACC_Z'],
-      height: 200,
-    }];
-  }, [t]);
+    // 合并 PPG 列
+    if (ipdPaChartData.columns.length > 0) {
+      columns.push(...ipdPaChartData.columns);
+    }
+
+    // 合并 ACC 列
+    if (gsensorChartData.columns.length > 0) {
+      columns.push(...gsensorChartData.columns);
+    }
+
+    // 合并数据行（以较长的数据为准，缺失的数据填充为 0）
+    const maxRows = Math.max(
+      ipdPaChartData.rows.length,
+      gsensorChartData.rows.length
+    );
+
+    for (let i = 0; i < maxRows; i++) {
+      const row: number[] = [];
+
+      // 添加 PPG 数据
+      if (ipdPaChartData.rows[i]) {
+        row.push(...ipdPaChartData.rows[i]);
+      } else {
+        row.push(...Array(ipdPaChartData.columns.length).fill(0));
+      }
+
+      // 添加 ACC 数据
+      if (gsensorChartData.rows[i]) {
+        row.push(...gsensorChartData.rows[i]);
+      } else {
+        row.push(...Array(gsensorChartData.columns.length).fill(0));
+      }
+
+      rows.push(row);
+    }
+
+    return { columns, rows };
+  }, [ipdPaChartData, gsensorChartData]);
+
+  const chartGroups = useMemo(() => {
+    const groups = [];
+
+    // PPG/IPD 数据图表组
+    if (ipdPaChartData.columns.length > 0 && ipdPaChartData.rows.length > 0) {
+      const ppgColumns: string[] = [];
+      for (let i = 0; i < Math.min(currentFrames?.channel_count ?? 0, 4); i++) {
+        ppgColumns.push(`CH${i}`);
+      }
+      if (ppgColumns.length > 0) {
+        groups.push({
+          name: ipdRawDataType === 'ipd' ? t('monitor.ipdPaChart') : t('monitor.rawdataChart'),
+          columns: ppgColumns,
+          height: 250,
+        });
+      }
+    }
+
+    // ACC 数据图表组
+    if (gsensorChartData.columns.length > 0 && gsensorChartData.rows.length > 0) {
+      groups.push({
+        name: t('monitor.gsensorChart'),
+        columns: gsensorChartData.columns,
+        height: 200,
+      });
+    }
+
+    return groups;
+  }, [currentFrames, ipdRawDataType, gsensorChartData, t, ipdPaChartData]);
 
   const initialDataZoomState = useMemo(() => {
     if (!ipdPaChartData.rows.length) {
@@ -319,7 +369,7 @@ const MonitorTab: React.FC = () => {
           <MultiLineChart
             columns={ipdPaChartData.columns}
             rows={ipdPaChartData.rows}
-            chartGroups={ipdPaChartGroups}
+            chartGroups={chartGroups}
             sampleRate={sampleRate}
             initialDataZoom={sharedDataZoomState}
             onDataZoomChange={setSharedDataZoomState}
@@ -339,7 +389,7 @@ const MonitorTab: React.FC = () => {
           <MultiLineChart
             columns={gsensorChartData.columns}
             rows={gsensorChartData.rows}
-            chartGroups={gsensorChartGroups}
+            chartGroups={chartGroups}
             sampleRate={sampleRate}
             initialDataZoom={sharedDataZoomState}
             onDataZoomChange={setSharedDataZoomState}

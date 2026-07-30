@@ -56,6 +56,8 @@
     "snr": "SNR",
     "confidenceLevel": "Confidence Level",
     "sampleRateHint": "Set the data sampling frequency for the current function to calculate the correct time scale",
+    "displayDurationHint": "Set the default display duration in seconds for charts",
+    "seconds": "s",
     "configRef": "Configure Reference",
     "spo2RefConfig": "SpO2 Reference Config",
     "spo2RefHint": "Enter SpO2 reference value (0-100%)",

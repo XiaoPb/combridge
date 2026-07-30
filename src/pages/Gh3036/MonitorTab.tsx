@@ -89,9 +89,12 @@ const MonitorTab: React.FC = () => {
     const currentSampleRate = sampleRate;
     const newMaxCount = Math.ceil((seconds * currentSampleRate) / 10);
 
-    // 同时更新 PPG 和 ACC 的缓存大小，保持一致
+    // 更新 PPG 缓存大小（每帧10个数据点）
     setMaxFramesCount(newMaxCount);
-    setMaxGsensorCount(newMaxCount);
+
+    // 更新 ACC 缓存大小（每帧1个数据点，需要乘以10才能和PPG保持相同的缓存时长）
+    // 因为 ACC 每帧只有1个数据点，而 PPG 每帧有10个数据点
+    setMaxGsensorCount(newMaxCount * 10);
   };
 
   const functionOptions = useMemo(() => {

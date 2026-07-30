@@ -328,7 +328,7 @@ export const useGh3036Store = create<Gh3036State>()(
   },
   
   gsensorData: new Map(),
-  maxGsensorCount: 100,
+  maxGsensorCount: 250, // 默认10秒 × 25Hz = 250，匹配默认displayDurationSeconds
   
   chartGroups: [],
   selectedFunctionId: null,

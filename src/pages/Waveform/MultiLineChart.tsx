@@ -41,6 +41,7 @@ interface MultiLineChartProps {
   chartGroups: ChartGroupConfig[];
   sampleRate?: number;
   initialDataZoom?: { start: number; end: number };
+  onDataZoomChange?: (state: { start: number; end: number }) => void;
 }
 
 const COLORS = [
@@ -109,6 +110,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   chartGroups,
   sampleRate = 25,
   initialDataZoom,
+  onDataZoomChange,
 }) => {
   const containerRefs = useRef<(HTMLDivElement | null)[]>([]);
   const chartInstances = useRef<echarts.ECharts[]>([]);
@@ -499,6 +501,10 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
 
       setDataZoomState({ start, end });
 
+      if (onDataZoomChange) {
+        onDataZoomChange({ start, end });
+      }
+
       chartInstances.current.forEach((chart, idx) => {
         if (chart && idx !== chartIndex) {
           chart.dispatchAction({
@@ -526,7 +532,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
     return () => {
       disposers.forEach((dispose) => dispose());
     };
-  }, [initialized, setDataZoomState]);
+  }, [initialized, setDataZoomState, onDataZoomChange]);
 
   useEffect(() => {
     if (!initialized || chartInstances.current.length === 0) return;

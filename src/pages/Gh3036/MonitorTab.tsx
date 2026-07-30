@@ -103,11 +103,9 @@ const MonitorTab: React.FC = () => {
   const ipdPaChartData = useMemo(() => {
     return buildIpdPaChartData(
       currentFrames,
-      sampleRate,
-      ipdRawDataType,
-      DISPLAY_DURATION_SECONDS
+      ipdRawDataType
     );
-  }, [currentFrames, sampleRate, ipdRawDataType]);
+  }, [currentFrames, ipdRawDataType]);
 
   const gsensorChartData = useMemo(() => {
     const columns = ['ACC_X', 'ACC_Y', 'ACC_Z'];

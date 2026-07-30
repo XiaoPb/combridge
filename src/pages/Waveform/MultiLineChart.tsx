@@ -217,14 +217,6 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
 
     const effectiveDataZoom = initialDataZoom || dataZoomState;
 
-    console.log('[MultiLineChart] 计算有效 dataZoom:', {
-      initialDataZoom,
-      dataZoomState,
-      effectiveDataZoom,
-      rowsLength: rows.length,
-      sampleRate,
-    });
-
     const dataZoomOption = [
       {
         type: 'slider' as const,
@@ -494,7 +486,6 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
     if (isZoomingRef.current) return;
 
     const effectiveDataZoom = initialDataZoom || dataZoomState;
-    console.log('[MultiLineChart] useEffect 监听 dataZoom 变化，更新图表:', effectiveDataZoom);
 
     chartInstances.current.forEach((chart) => {
       if (!chart) return;

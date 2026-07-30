@@ -381,7 +381,7 @@ interface Gh3036State {
 | 事件数据缓冲 | `eventData` 数组，超出 `maxEventCount`(500) 自动淘汰 |
 | 波形数据缓冲 | `framesData` Map，按功能 ID 存储多帧数据，超出 `maxFramesCount`(100) 自动淘汰 |
 | 生命体征 | `vitalSigns` 存储 HR/SpO2/ADT/GNADT 算法结果 |
-| 传感器数据 | `gsensorData` 存储加速度计和陀螺仪数据，超出 `maxGsensorCount`(500) 自动淘汰 |
+| 传感器数据 | `gsensorData` 存储加速度计和陀螺仪数据，超出 `maxGsensorCount`(250) 自动淘汰 |
 | 库状态检查 | `loadLibraryStatus()` 检查库是否链接和初始化 |
 | 产测管理 | `startFactoryTest()`/`stopFactoryTest()`/`continueFactoryTest()` 控制产测流程 |
 | 产测事件 | `subscribeFactoryTestEvents()` 订阅产测进度事件 |

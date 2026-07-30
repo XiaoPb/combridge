@@ -40,6 +40,7 @@ interface MultiLineChartProps {
   rows: number[][];
   chartGroups: ChartGroupConfig[];
   sampleRate?: number;
+  initialDataZoom?: { start: number; end: number };
 }
 
 const COLORS = [
@@ -107,6 +108,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   rows,
   chartGroups,
   sampleRate = 25,
+  initialDataZoom,
 }) => {
   const containerRefs = useRef<(HTMLDivElement | null)[]>([]);
   const chartInstances = useRef<echarts.ECharts[]>([]);
@@ -211,12 +213,14 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
       animation: false,
     }));
 
+    const effectiveDataZoom = initialDataZoom || dataZoomState;
+
     const dataZoomOption = [
       {
         type: 'slider' as const,
         show: true,
-        start: dataZoomState.start,
-        end: dataZoomState.end,
+        start: effectiveDataZoom.start,
+        end: effectiveDataZoom.end,
         zoomLock: false,
         xAxisIndex: [0],
         height: 24,
@@ -326,7 +330,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
       series: seriesOption,
       dataZoom: dataZoomOption,
     };
-  }, [xAxisData, rows, columns, unifiedGridConfig, dataZoomState]);
+  }, [xAxisData, rows, columns, unifiedGridConfig, dataZoomState, initialDataZoom, sampleRate]);
 
   const handleContextMenu = useCallback((chartIndex: number) => (e: React.MouseEvent) => {
     e.preventDefault();

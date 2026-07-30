@@ -123,7 +123,6 @@ interface Gh3036State {
   chartLegendSelected: Record<string, boolean>;
   ipdRawDataType: 'ipd' | 'rawdata';
   displayDurationSeconds: number;
-  sharedDataZoomState: { start: number; end: number };
 
   sampleRateConfig: Record<number, number>;
   
@@ -199,7 +198,6 @@ interface Gh3036State {
   setIpdRawDataType: (type: 'ipd' | 'rawdata') => void;
   setDisplayDurationSeconds: (seconds: number) => void;
   setMaxFramesCount: (count: number) => void;
-  setSharedDataZoomState: (state: { start: number; end: number }) => void;
   setSampleRateConfig: (config: Record<number, number>) => void;
   
   setIsLinked: (value: boolean) => void;
@@ -336,7 +334,6 @@ export const useGh3036Store = create<Gh3036State>()(
   chartLegendSelected: {},
   ipdRawDataType: 'ipd',
   displayDurationSeconds: 10,
-  sharedDataZoomState: { start: 0, end: 100 },
 
   sampleRateConfig: {
     0: 5,
@@ -592,7 +589,6 @@ export const useGh3036Store = create<Gh3036State>()(
   setIpdRawDataType: (type) => set({ ipdRawDataType: type }),
   setDisplayDurationSeconds: (seconds) => set({ displayDurationSeconds: seconds }),
   setMaxFramesCount: (count) => set({ maxFramesCount: count }),
-  setSharedDataZoomState: (state) => set({ sharedDataZoomState: state }),
 
   setSampleRateConfig: (config) => set({ sampleRateConfig: config }),
   

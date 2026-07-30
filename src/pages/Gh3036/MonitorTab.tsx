@@ -46,6 +46,7 @@ const MonitorTab: React.FC = () => {
     setSampleRateConfig,
     displayDurationSeconds,
     setDisplayDurationSeconds,
+    setMaxFramesCount,
     sharedDataZoomState,
     setSharedDataZoomState,
   } = useGh3036Store();
@@ -88,6 +89,23 @@ const MonitorTab: React.FC = () => {
     setSampleRateConfig({
       ...sampleRateConfig,
       [selectedFunctionId]: value,
+    });
+  };
+
+  const handleDisplayDurationChange = (value: number | null) => {
+    const seconds = value ?? 10;
+    setDisplayDurationSeconds(seconds);
+
+    // 计算新的缓存帧数：秒数 × 采样率 ÷ 10
+    // FRAME_CACHE_MULTIPLIER = 10，所以 maxFramesCount = seconds × sampleRate ÷ 10
+    const currentSampleRate = sampleRate;
+    const newMaxFramesCount = Math.ceil((seconds * currentSampleRate) / 10);
+    setMaxFramesCount(newMaxFramesCount);
+
+    console.log('[MonitorTab] 更新显示秒数和缓存大小:', {
+      displayDurationSeconds: seconds,
+      maxFramesCount: newMaxFramesCount,
+      sampleRate: currentSampleRate,
     });
   };
 
@@ -252,7 +270,7 @@ const MonitorTab: React.FC = () => {
                   min={1}
                   max={60}
                   value={displayDurationSeconds}
-                  onChange={(value) => setDisplayDurationSeconds(value ?? 10)}
+                  onChange={handleDisplayDurationChange}
                   style={{ width: 60 }}
                   addonAfter={t('monitor.seconds')}
                 />

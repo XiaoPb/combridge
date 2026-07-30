@@ -217,6 +217,14 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
 
     const effectiveDataZoom = initialDataZoom || dataZoomState;
 
+    console.log('[MultiLineChart] 计算有效 dataZoom:', {
+      initialDataZoom,
+      dataZoomState,
+      effectiveDataZoom,
+      rowsLength: rows.length,
+      sampleRate,
+    });
+
     const dataZoomOption = [
       {
         type: 'slider' as const,

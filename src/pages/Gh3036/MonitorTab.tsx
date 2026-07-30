@@ -173,7 +173,7 @@ const MonitorTab: React.FC = () => {
     }
 
     const endPercent = (displayPoints / totalPoints) * 100;
-    return { start: Math.max(0, 100 - endPercent), end: 100 };
+    return { start: 0, end: endPercent };
   }, [ipdPaChartData.rows.length, sampleRate, displayDurationSeconds]);
 
   useEffect(() => {

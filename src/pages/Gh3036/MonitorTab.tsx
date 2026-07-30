@@ -13,8 +13,6 @@ import { gh3036Api } from '../../api/gh3036';
 import { openSpo2RefWindow } from '../../utils/spo2RefWindow';
 import { buildIpdPaChartData } from './monitorChartData';
 
-const DEFAULT_SAMPLE_RATE = 25;
-
 const DEFAULT_SAMPLE_RATE_CONFIG: Record<number, number> = {
   0: 5,
   1: 25,
@@ -49,7 +47,6 @@ const MonitorTab: React.FC = () => {
 
   useEffect(() => {
     const unlisten = listen<{ value: number }>('spo2-ref-updated', (event) => {
-      console.debug('[MonitorTab] 收到血氧金标更新:', event.payload.value);
       setSpo2RefValue(event.payload.value);
     });
     return () => {
@@ -70,8 +67,8 @@ const MonitorTab: React.FC = () => {
   };
 
   const sampleRate = useMemo(() => {
-    if (selectedFunctionId === null) return DEFAULT_SAMPLE_RATE;
-    return sampleRateConfig[selectedFunctionId] ?? DEFAULT_SAMPLE_RATE_CONFIG[selectedFunctionId] ?? DEFAULT_SAMPLE_RATE;
+    if (selectedFunctionId === null) return 25;
+    return sampleRateConfig[selectedFunctionId] ?? DEFAULT_SAMPLE_RATE_CONFIG[selectedFunctionId] ?? 25;
   }, [selectedFunctionId, sampleRateConfig]);
 
   const handleSampleRateChange = (value: number | null) => {
@@ -91,12 +88,6 @@ const MonitorTab: React.FC = () => {
     const currentSampleRate = sampleRate;
     const newMaxFramesCount = Math.ceil((seconds * currentSampleRate) / 10);
     setMaxFramesCount(newMaxFramesCount);
-
-    console.log('[MonitorTab] 更新显示秒数和缓存大小:', {
-      displayDurationSeconds: seconds,
-      maxFramesCount: newMaxFramesCount,
-      sampleRate: currentSampleRate,
-    });
   };
 
   const functionOptions = useMemo(() => {

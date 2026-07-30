@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, Row, Col, Empty, Select, Space, Button, InputNumber, Tooltip } from 'antd';
-import { ClearOutlined, HeartOutlined, ThunderboltOutlined, SettingOutlined } from '@ant-design/icons';
+import { ClearOutlined, HeartOutlined, ThunderboltOutlined, SettingOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { useGh3036Store } from '../../stores/gh3036Store';
@@ -13,7 +13,6 @@ import { gh3036Api } from '../../api/gh3036';
 import { openSpo2RefWindow } from '../../utils/spo2RefWindow';
 import { buildIpdPaChartData } from './monitorChartData';
 
-const DISPLAY_DURATION_SECONDS = 6;
 const DEFAULT_SAMPLE_RATE = 25;
 
 const FUNCTION_ID_TO_NAME: Record<number, string> = {
@@ -45,6 +44,8 @@ const MonitorTab: React.FC = () => {
     setIpdRawDataType,
     sampleRateConfig,
     setSampleRateConfig,
+    displayDurationSeconds,
+    setDisplayDurationSeconds,
   } = useGh3036Store();
 
   const [hrRefDialogOpen, setHrRefDialogOpen] = useState(false);
@@ -116,21 +117,13 @@ const MonitorTab: React.FC = () => {
       return { columns, rows };
     }
 
-    const maxPoints = DISPLAY_DURATION_SECONDS * DEFAULT_SAMPLE_RATE;
     const len = Math.min(
       currentGsensor.acc_x.length,
       currentGsensor.acc_y.length,
-      currentGsensor.acc_z.length,
-      maxPoints
+      currentGsensor.acc_z.length
     );
 
-    const startIndex = Math.max(0, Math.min(
-      currentGsensor.acc_x.length,
-      currentGsensor.acc_y.length,
-      currentGsensor.acc_z.length
-    ) - maxPoints);
-
-    for (let i = startIndex; i < startIndex + len; i++) {
+    for (let i = 0; i < len; i++) {
       rows.push([
         currentGsensor.acc_x[i],
         currentGsensor.acc_y[i],
@@ -163,6 +156,40 @@ const MonitorTab: React.FC = () => {
       height: 200,
     }];
   }, [t]);
+
+  const ppgDataZoomState = useMemo(() => {
+    if (!ipdPaChartData.rows.length) {
+      return { start: 0, end: 100 };
+    }
+
+    const sampleRateValue = sampleRate;
+    const totalPoints = ipdPaChartData.rows.length;
+    const displayPoints = displayDurationSeconds * sampleRateValue;
+
+    if (totalPoints <= displayPoints) {
+      return { start: 0, end: 100 };
+    }
+
+    const endPercent = (displayPoints / totalPoints) * 100;
+    return { start: Math.max(0, 100 - endPercent), end: 100 };
+  }, [ipdPaChartData.rows.length, sampleRate, displayDurationSeconds]);
+
+  const accDataZoomState = useMemo(() => {
+    if (!gsensorChartData.rows.length) {
+      return { start: 0, end: 100 };
+    }
+
+    const accSampleRate = 25;
+    const totalPoints = gsensorChartData.rows.length;
+    const displayPoints = displayDurationSeconds * accSampleRate;
+
+    if (totalPoints <= displayPoints) {
+      return { start: 0, end: 100 };
+    }
+
+    const endPercent = (displayPoints / totalPoints) * 100;
+    return { start: Math.max(0, 100 - endPercent), end: 100 };
+  }, [gsensorChartData.rows.length, displayDurationSeconds]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 8, overflow: 'auto' }}>
@@ -206,6 +233,20 @@ const MonitorTab: React.FC = () => {
         title={ipdRawDataType === 'ipd' ? t('monitor.ipdPaChart') : t('monitor.rawdataChart')}
         extra={
           <Space>
+            <Tooltip title={t('monitor.displayDurationHint')}>
+              <Space size={4}>
+                <ClockCircleOutlined style={{ color: 'var(--text-secondary)' }} />
+                <InputNumber
+                  size="small"
+                  min={1}
+                  max={60}
+                  value={displayDurationSeconds}
+                  onChange={(value) => setDisplayDurationSeconds(value ?? 10)}
+                  style={{ width: 60 }}
+                  addonAfter={t('monitor.seconds')}
+                />
+              </Space>
+            </Tooltip>
             <Tooltip title={t('monitor.sampleRateHint')}>
               <Space size={4}>
                 <SettingOutlined style={{ color: 'var(--text-secondary)' }} />
@@ -260,6 +301,7 @@ const MonitorTab: React.FC = () => {
             rows={ipdPaChartData.rows}
             chartGroups={ipdPaChartGroups}
             sampleRate={sampleRate}
+            initialDataZoom={ppgDataZoomState}
           />
         ) : (
           <Empty description={t('monitor.noData')} style={{ marginTop: 80 }} />
@@ -278,6 +320,7 @@ const MonitorTab: React.FC = () => {
             rows={gsensorChartData.rows}
             chartGroups={gsensorChartGroups}
             sampleRate={DEFAULT_SAMPLE_RATE}
+            initialDataZoom={accDataZoomState}
           />
         ) : (
           <Empty description={t('monitor.noGsensorData')} style={{ marginTop: 60 }} />

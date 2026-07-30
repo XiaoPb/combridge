@@ -140,17 +140,11 @@ const MonitorTab: React.FC = () => {
 
     // PPG/IPD 数据图表组
     if (ipdPaChartData.columns.length > 0 && ipdPaChartData.rows.length > 0) {
-      const ppgColumns: string[] = [];
-      for (let i = 0; i < Math.min(currentFrames?.channel_count ?? 0, 4); i++) {
-        ppgColumns.push(`CH${i}`);
-      }
-      if (ppgColumns.length > 0) {
-        groups.push({
-          name: ipdRawDataType === 'ipd' ? t('monitor.ipdPaChart') : t('monitor.rawdataChart'),
-          columns: ppgColumns,
-          height: 250,
-        });
-      }
+      groups.push({
+        name: ipdRawDataType === 'ipd' ? t('monitor.ipdPaChart') : t('monitor.rawdataChart'),
+        columns: ipdPaChartData.columns,
+        height: 250,
+      });
     }
 
     // ACC 数据图表组
@@ -163,7 +157,7 @@ const MonitorTab: React.FC = () => {
     }
 
     return groups;
-  }, [currentFrames, ipdRawDataType, gsensorChartData, t, ipdPaChartData]);
+  }, [ipdRawDataType, gsensorChartData, t, ipdPaChartData]);
 
   const allChartData = useMemo(() => {
     const columns: string[] = [];

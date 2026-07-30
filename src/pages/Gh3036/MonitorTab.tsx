@@ -46,6 +46,8 @@ const MonitorTab: React.FC = () => {
     setSampleRateConfig,
     displayDurationSeconds,
     setDisplayDurationSeconds,
+    sharedDataZoomState,
+    setSharedDataZoomState,
   } = useGh3036Store();
 
   const [hrRefDialogOpen, setHrRefDialogOpen] = useState(false);
@@ -157,7 +159,7 @@ const MonitorTab: React.FC = () => {
     }];
   }, [t]);
 
-  const ppgDataZoomState = useMemo(() => {
+  const initialDataZoomState = useMemo(() => {
     if (!ipdPaChartData.rows.length) {
       return { start: 0, end: 100 };
     }
@@ -174,22 +176,11 @@ const MonitorTab: React.FC = () => {
     return { start: Math.max(0, 100 - endPercent), end: 100 };
   }, [ipdPaChartData.rows.length, sampleRate, displayDurationSeconds]);
 
-  const accDataZoomState = useMemo(() => {
-    if (!gsensorChartData.rows.length) {
-      return { start: 0, end: 100 };
+  useEffect(() => {
+    if (ipdPaChartData.rows.length > 0 && sharedDataZoomState.start === 0 && sharedDataZoomState.end === 100) {
+      setSharedDataZoomState(initialDataZoomState);
     }
-
-    const accSampleRate = 25;
-    const totalPoints = gsensorChartData.rows.length;
-    const displayPoints = displayDurationSeconds * accSampleRate;
-
-    if (totalPoints <= displayPoints) {
-      return { start: 0, end: 100 };
-    }
-
-    const endPercent = (displayPoints / totalPoints) * 100;
-    return { start: Math.max(0, 100 - endPercent), end: 100 };
-  }, [gsensorChartData.rows.length, displayDurationSeconds]);
+  }, [ipdPaChartData.rows.length, sharedDataZoomState, initialDataZoomState, setSharedDataZoomState]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 8, overflow: 'auto' }}>
@@ -301,7 +292,8 @@ const MonitorTab: React.FC = () => {
             rows={ipdPaChartData.rows}
             chartGroups={ipdPaChartGroups}
             sampleRate={sampleRate}
-            initialDataZoom={ppgDataZoomState}
+            initialDataZoom={sharedDataZoomState}
+            onDataZoomChange={setSharedDataZoomState}
           />
         ) : (
           <Empty description={t('monitor.noData')} style={{ marginTop: 80 }} />
@@ -320,7 +312,8 @@ const MonitorTab: React.FC = () => {
             rows={gsensorChartData.rows}
             chartGroups={gsensorChartGroups}
             sampleRate={DEFAULT_SAMPLE_RATE}
-            initialDataZoom={accDataZoomState}
+            initialDataZoom={sharedDataZoomState}
+            onDataZoomChange={setSharedDataZoomState}
           />
         ) : (
           <Empty description={t('monitor.noGsensorData')} style={{ marginTop: 60 }} />

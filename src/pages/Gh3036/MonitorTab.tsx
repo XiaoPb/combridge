@@ -168,16 +168,33 @@ const MonitorTab: React.FC = () => {
     const totalPoints = ipdPaChartData.rows.length;
     const displayPoints = displayDurationSeconds * sampleRateValue;
 
+    console.log('[MonitorTab] 计算初始 dataZoom 状态:', {
+      totalPoints,
+      sampleRate: sampleRateValue,
+      displayDurationSeconds,
+      displayPoints,
+    });
+
     if (totalPoints <= displayPoints) {
+      console.log('[MonitorTab] 数据量小于显示量，显示全部数据');
       return { start: 0, end: 100 };
     }
 
     const endPercent = (displayPoints / totalPoints) * 100;
-    return { start: 0, end: endPercent };
+    const result = { start: 0, end: endPercent };
+    console.log('[MonitorTab] 最终 dataZoom 状态:', result);
+    return result;
   }, [ipdPaChartData.rows.length, sampleRate, displayDurationSeconds]);
 
   useEffect(() => {
+    console.log('[MonitorTab] useEffect 触发:', {
+      rowsLength: ipdPaChartData.rows.length,
+      sharedDataZoomState,
+      initialDataZoomState,
+    });
+    
     if (ipdPaChartData.rows.length > 0 && sharedDataZoomState.start === 0 && sharedDataZoomState.end === 100) {
+      console.log('[MonitorTab] 更新 sharedDataZoomState:', initialDataZoomState);
       setSharedDataZoomState(initialDataZoomState);
     }
   }, [ipdPaChartData.rows.length, sharedDataZoomState, initialDataZoomState, setSharedDataZoomState]);

@@ -106,17 +106,7 @@ interface Gh3036State {
     gnadt: number | null;
     gnadtConfidence: number | null;
   };
-  
-  gsensorData: Map<number, {
-    acc_x: number[];
-    acc_y: number[];
-    acc_z: number[];
-    gyro_x: number[];
-    gyro_y: number[];
-    gyro_z: number[];
-  }>;
-  maxGsensorCount: number;
-  
+
   chartGroups: ChartGroupConfig[];
   selectedFunctionId: number | null;
   
@@ -198,7 +188,6 @@ interface Gh3036State {
   setIpdRawDataType: (type: 'ipd' | 'rawdata') => void;
   setDisplayDurationSeconds: (seconds: number) => void;
   setMaxFramesCount: (count: number) => void;
-  setMaxGsensorCount: (count: number) => void;
   setSampleRateConfig: (config: Record<number, number>) => void;
   
   setIsLinked: (value: boolean) => void;
@@ -265,7 +254,7 @@ export const useGh3036Store = create<Gh3036State>()(
       error: null,
       
       channelConfig: {
-        connectionType: 'serial',
+        connectionType: 'ble',
         serialPort: '',
         bleDevice: '',
         txChar: '00000004-0000-1000-8000-00805f9b34fb',
@@ -326,10 +315,7 @@ export const useGh3036Store = create<Gh3036State>()(
     gnadt: null,
     gnadtConfidence: null,
   },
-  
-  gsensorData: new Map(),
-  maxGsensorCount: 250, // 默认10秒 × 25Hz = 250，匹配默认displayDurationSeconds
-  
+
   chartGroups: [],
   selectedFunctionId: null,
   chartLegendSelected: {},
@@ -417,33 +403,15 @@ export const useGh3036Store = create<Gh3036State>()(
   clearEventData: () => set({ eventData: [] }),
   
   addFramesData: (frames) => {
-    const { framesData, maxFramesCount, gsensorData, maxGsensorCount, vitalSigns } = get();
+    const { framesData, maxFramesCount, vitalSigns } = get();
     const newFramesData = new Map(framesData);
-    
+
     const existing = newFramesData.get(frames.function_id);
     newFramesData.set(
       frames.function_id,
       mergeGh3036Frames(existing, frames, maxFramesCount)
     );
-    
-    const newGsensorData = new Map(gsensorData);
-    const existingGsensor = newGsensorData.get(frames.function_id) || {
-      acc_x: [],
-      acc_y: [],
-      acc_z: [],
-      gyro_x: [],
-      gyro_y: [],
-      gyro_z: [],
-    };
-    newGsensorData.set(frames.function_id, {
-      acc_x: [...existingGsensor.acc_x, ...frames.acc_x].slice(-maxGsensorCount),
-      acc_y: [...existingGsensor.acc_y, ...frames.acc_y].slice(-maxGsensorCount),
-      acc_z: [...existingGsensor.acc_z, ...frames.acc_z].slice(-maxGsensorCount),
-      gyro_x: [...existingGsensor.gyro_x, ...frames.gyro_x].slice(-maxGsensorCount),
-      gyro_y: [...existingGsensor.gyro_y, ...frames.gyro_y].slice(-maxGsensorCount),
-      gyro_z: [...existingGsensor.gyro_z, ...frames.gyro_z].slice(-maxGsensorCount),
-    });
-    
+
     let newVitalSigns = { ...vitalSigns };
     if (frames.algo_results.length > 0 && frames.algo_results[0].length > 0) {
       const lastAlgoResult = frames.algo_results[frames.algo_results.length - 1];
@@ -498,12 +466,11 @@ export const useGh3036Store = create<Gh3036State>()(
           break;
       }
     }
-    
-    set({ 
+
+    set({
       framesData: newFramesData,
-      gsensorData: newGsensorData,
       vitalSigns: newVitalSigns,
-      selectedFunctionId: get().selectedFunctionId ?? frames.function_id 
+      selectedFunctionId: get().selectedFunctionId ?? frames.function_id
     });
   },
   
@@ -511,7 +478,6 @@ export const useGh3036Store = create<Gh3036State>()(
     framesData: new Map(),
     chartGroups: [],
     selectedFunctionId: null,
-    gsensorData: new Map(),
     vitalSigns: {
       hr: null,
       hrConfidence: null,
@@ -590,7 +556,6 @@ export const useGh3036Store = create<Gh3036State>()(
   setIpdRawDataType: (type) => set({ ipdRawDataType: type }),
   setDisplayDurationSeconds: (seconds) => set({ displayDurationSeconds: seconds }),
   setMaxFramesCount: (count) => set({ maxFramesCount: count }),
-  setMaxGsensorCount: (count) => set({ maxGsensorCount: count }),
 
   setSampleRateConfig: (config) => set({ sampleRateConfig: config }),
   

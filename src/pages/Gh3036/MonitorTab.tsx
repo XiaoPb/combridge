@@ -182,23 +182,14 @@ const MonitorTab: React.FC = () => {
       return { start: 0, end: 100 };
     }
 
-    const sampleRateValue = sampleRate;
-    const totalPoints = ipdPaChartData.rows.length;
-    const displayPoints = displayDurationSeconds * sampleRateValue;
-
-    console.log('[MonitorTab] 计算初始 dataZoom 状态:', {
-      totalPoints,
-      sampleRate: sampleRateValue,
+    // 始终显示 100% 的数据，displayDurationSeconds 只影响缓存大小
+    console.log('[MonitorTab] 默认显示全部数据:', {
+      totalPoints: ipdPaChartData.rows.length,
+      sampleRate,
       displayDurationSeconds,
-      displayPoints,
     });
 
-    // 计算应该显示的数据比例（不超过 100%）
-    const displayPercent = Math.min(100, (displayPoints / totalPoints) * 100);
-    const result = { start: 0, end: displayPercent };
-
-    console.log('[MonitorTab] 最终 dataZoom 状态:', result);
-    return result;
+    return { start: 0, end: 100 };
   }, [ipdPaChartData.rows.length, sampleRate, displayDurationSeconds]);
 
   // 使用 ref 跟踪是否已初始化，避免重复设置

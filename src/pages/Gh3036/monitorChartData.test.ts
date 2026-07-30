@@ -36,7 +36,7 @@ describe('buildIpdPaChartData', () => {
       [201, 202, 203, 204],
     ]);
 
-    const data = buildIpdPaChartData(frames, 25, 'ipd', 6);
+    const data = buildIpdPaChartData(frames, 'ipd');
 
     expect(data.columns).toEqual(['CH0', 'CH1']);
     expect(data.rows).toEqual([
@@ -53,7 +53,7 @@ describe('buildIpdPaChartData', () => {
       [21, 22],
     ]);
 
-    const data = buildIpdPaChartData(frames, 25, 'rawdata', 6);
+    const data = buildIpdPaChartData(frames, 'rawdata');
 
     expect(data.rows).toEqual([
       [110, 210],

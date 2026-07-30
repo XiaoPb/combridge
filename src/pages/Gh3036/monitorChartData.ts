@@ -9,9 +9,7 @@ export interface ChartTableData {
 
 export function buildIpdPaChartData(
   currentFrames: Gh3036FramesPayload | null,
-  sampleRate: number,
-  ipdRawDataType: IpdRawDataType,
-  displayDurationSeconds: number
+  ipdRawDataType: IpdRawDataType
 ): ChartTableData {
   if (!currentFrames || currentFrames.channel_count === 0) {
     return { columns: [], rows: [] };
@@ -29,7 +27,6 @@ export function buildIpdPaChartData(
     return { columns, rows: [] };
   }
 
-  const maxPoints = Math.max(1, Math.floor(displayDurationSeconds * sampleRate));
   const availablePoints = Math.min(
     currentFrames.frame_count,
     ...source.slice(0, currentFrames.channel_count).map((channel) => channel?.length ?? 0)
@@ -40,10 +37,11 @@ export function buildIpdPaChartData(
     return { columns, rows: [] };
   }
 
-  const startIndex = Math.max(0, availablePoints - maxPoints);
+  const startIndex = 0;
+  const endIndex = availablePoints;
 
   const rows: number[][] = [];
-  for (let frameIdx = startIndex; frameIdx < availablePoints; frameIdx++) {
+  for (let frameIdx = startIndex; frameIdx < endIndex; frameIdx++) {
     const row: number[] = [];
     for (let chIdx = 0; chIdx < currentFrames.channel_count; chIdx++) {
       const value = source[chIdx]?.[frameIdx];

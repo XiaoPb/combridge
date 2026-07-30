@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Card, Row, Col, Empty, Select, Space, Button, InputNumber, Tooltip } from 'antd';
 import { ClearOutlined, HeartOutlined, ThunderboltOutlined, SettingOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -186,18 +186,24 @@ const MonitorTab: React.FC = () => {
     return result;
   }, [ipdPaChartData.rows.length, sampleRate, displayDurationSeconds]);
 
+  // 使用 ref 跟踪是否已初始化，避免重复设置
+  const isDataZoomInitializedRef = useRef(false);
+
   useEffect(() => {
     console.log('[MonitorTab] useEffect 触发:', {
       rowsLength: ipdPaChartData.rows.length,
       sharedDataZoomState,
       initialDataZoomState,
+      isInitialized: isDataZoomInitializedRef.current,
     });
     
-    if (ipdPaChartData.rows.length > 0 && sharedDataZoomState.start === 0 && sharedDataZoomState.end === 100) {
-      console.log('[MonitorTab] 更新 sharedDataZoomState:', initialDataZoomState);
+    // 只在数据首次到达时设置初始状态
+    if (ipdPaChartData.rows.length > 0 && !isDataZoomInitializedRef.current) {
+      console.log('[MonitorTab] 首次初始化 sharedDataZoomState:', initialDataZoomState);
       setSharedDataZoomState(initialDataZoomState);
+      isDataZoomInitializedRef.current = true;
     }
-  }, [ipdPaChartData.rows.length, sharedDataZoomState, initialDataZoomState, setSharedDataZoomState]);
+  }, [ipdPaChartData.rows.length, initialDataZoomState, setSharedDataZoomState]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 8, overflow: 'auto' }}>

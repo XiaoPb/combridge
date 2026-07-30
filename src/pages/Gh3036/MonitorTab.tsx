@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Card, Row, Col, Empty, Select, Space, Button, InputNumber, Tooltip } from 'antd';
 import { ClearOutlined, HeartOutlined, ThunderboltOutlined, SettingOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -47,8 +47,6 @@ const MonitorTab: React.FC = () => {
     displayDurationSeconds,
     setDisplayDurationSeconds,
     setMaxFramesCount,
-    sharedDataZoomState,
-    setSharedDataZoomState,
   } = useGh3036Store();
 
   const [hrRefDialogOpen, setHrRefDialogOpen] = useState(false);
@@ -154,49 +152,6 @@ const MonitorTab: React.FC = () => {
     return { columns, rows };
   }, [gsensorData, selectedFunctionId]);
 
-  const allChartData = useMemo(() => {
-    const columns: string[] = [];
-    const rows: number[][] = [];
-
-    // 合并 PPG 列
-    if (ipdPaChartData.columns.length > 0) {
-      columns.push(...ipdPaChartData.columns);
-    }
-
-    // 合并 ACC 列
-    if (gsensorChartData.columns.length > 0) {
-      columns.push(...gsensorChartData.columns);
-    }
-
-    // 合并数据行（以较长的数据为准，缺失的数据填充为 0）
-    const maxRows = Math.max(
-      ipdPaChartData.rows.length,
-      gsensorChartData.rows.length
-    );
-
-    for (let i = 0; i < maxRows; i++) {
-      const row: number[] = [];
-
-      // 添加 PPG 数据
-      if (ipdPaChartData.rows[i]) {
-        row.push(...ipdPaChartData.rows[i]);
-      } else {
-        row.push(...Array(ipdPaChartData.columns.length).fill(0));
-      }
-
-      // 添加 ACC 数据
-      if (gsensorChartData.rows[i]) {
-        row.push(...gsensorChartData.rows[i]);
-      } else {
-        row.push(...Array(gsensorChartData.columns.length).fill(0));
-      }
-
-      rows.push(row);
-    }
-
-    return { columns, rows };
-  }, [ipdPaChartData, gsensorChartData]);
-
   const chartGroups = useMemo(() => {
     const groups = [];
 
@@ -226,40 +181,6 @@ const MonitorTab: React.FC = () => {
 
     return groups;
   }, [currentFrames, ipdRawDataType, gsensorChartData, t, ipdPaChartData]);
-
-  const initialDataZoomState = useMemo(() => {
-    if (!ipdPaChartData.rows.length) {
-      return { start: 0, end: 100 };
-    }
-
-    // 始终显示 100% 的数据，displayDurationSeconds 只影响缓存大小
-    console.log('[MonitorTab] 默认显示全部数据:', {
-      totalPoints: ipdPaChartData.rows.length,
-      sampleRate,
-      displayDurationSeconds,
-    });
-
-    return { start: 0, end: 100 };
-  }, [ipdPaChartData.rows.length, sampleRate, displayDurationSeconds]);
-
-  // 使用 ref 跟踪是否已初始化，避免重复设置
-  const isDataZoomInitializedRef = useRef(false);
-
-  useEffect(() => {
-    console.log('[MonitorTab] useEffect 触发:', {
-      rowsLength: ipdPaChartData.rows.length,
-      sharedDataZoomState,
-      initialDataZoomState,
-      isInitialized: isDataZoomInitializedRef.current,
-    });
-    
-    // 只在数据首次到达时设置初始状态
-    if (ipdPaChartData.rows.length > 0 && !isDataZoomInitializedRef.current) {
-      console.log('[MonitorTab] 首次初始化 sharedDataZoomState:', initialDataZoomState);
-      setSharedDataZoomState(initialDataZoomState);
-      isDataZoomInitializedRef.current = true;
-    }
-  }, [ipdPaChartData.rows.length, initialDataZoomState, setSharedDataZoomState]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 8, overflow: 'auto' }}>
@@ -371,8 +292,6 @@ const MonitorTab: React.FC = () => {
             rows={ipdPaChartData.rows}
             chartGroups={chartGroups}
             sampleRate={sampleRate}
-            initialDataZoom={sharedDataZoomState}
-            onDataZoomChange={setSharedDataZoomState}
           />
         ) : (
           <Empty description={t('monitor.noData')} style={{ marginTop: 80 }} />
@@ -391,8 +310,6 @@ const MonitorTab: React.FC = () => {
             rows={gsensorChartData.rows}
             chartGroups={chartGroups}
             sampleRate={sampleRate}
-            initialDataZoom={sharedDataZoomState}
-            onDataZoomChange={setSharedDataZoomState}
           />
         ) : (
           <Empty description={t('monitor.noGsensorData')} style={{ marginTop: 60 }} />

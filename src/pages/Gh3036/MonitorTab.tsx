@@ -15,14 +15,6 @@ import { buildIpdPaChartData } from './monitorChartData';
 
 const DEFAULT_SAMPLE_RATE = 25;
 
-const FUNCTION_ID_TO_NAME: Record<number, string> = {
-  0: 'ADT',
-  1: 'HR',
-  2: 'SPO2',
-  3: 'HRV',
-  4: 'GNADT',
-};
-
 const DEFAULT_SAMPLE_RATE_CONFIG: Record<number, number> = {
   0: 5,
   1: 25,
@@ -182,6 +174,49 @@ const MonitorTab: React.FC = () => {
     return groups;
   }, [currentFrames, ipdRawDataType, gsensorChartData, t, ipdPaChartData]);
 
+  const allChartData = useMemo(() => {
+    const columns: string[] = [];
+    const rows: number[][] = [];
+
+    // 合并 PPG 列
+    if (ipdPaChartData.columns.length > 0) {
+      columns.push(...ipdPaChartData.columns);
+    }
+
+    // 合并 ACC 列
+    if (gsensorChartData.columns.length > 0) {
+      columns.push(...gsensorChartData.columns);
+    }
+
+    // 合并数据行（以较长的数据为准，缺失的数据填充为 0）
+    const maxRows = Math.max(
+      ipdPaChartData.rows.length,
+      gsensorChartData.rows.length
+    );
+
+    for (let i = 0; i < maxRows; i++) {
+      const row: number[] = [];
+
+      // 添加 PPG 数据
+      if (ipdPaChartData.rows[i]) {
+        row.push(...ipdPaChartData.rows[i]);
+      } else {
+        row.push(...Array(ipdPaChartData.columns.length).fill(0));
+      }
+
+      // 添加 ACC 数据
+      if (gsensorChartData.rows[i]) {
+        row.push(...gsensorChartData.rows[i]);
+      } else {
+        row.push(...Array(gsensorChartData.columns.length).fill(0));
+      }
+
+      rows.push(row);
+    }
+
+    return { columns, rows };
+  }, [ipdPaChartData, gsensorChartData]);
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 8, overflow: 'auto' }}>
       <Row gutter={8}>
@@ -221,12 +256,12 @@ const MonitorTab: React.FC = () => {
 
       <Card
         size="small"
-        title={ipdRawDataType === 'ipd' ? t('monitor.ipdPaChart') : t('monitor.rawdataChart')}
-        extra={
+        title={
           <Space>
-            <Tooltip title={t('monitor.displayDurationHint')}>
+            <span>{t('monitor.dataMonitor')}</span>
+            <Tooltip title={t('monitor.displayDurationTooltip')}>
               <Space size={4}>
-                <ClockCircleOutlined style={{ color: 'var(--text-secondary)' }} />
+                <ClockCircleOutlined />
                 <InputNumber
                   size="small"
                   min={1}
@@ -234,16 +269,14 @@ const MonitorTab: React.FC = () => {
                   value={displayDurationSeconds}
                   onChange={handleDisplayDurationChange}
                   style={{ width: 60 }}
-                  addonAfter={t('monitor.seconds')}
+                  addonAfter="s"
+                  disabled={selectedFunctionId === null}
                 />
               </Space>
             </Tooltip>
-            <Tooltip title={t('monitor.sampleRateHint')}>
+            <Tooltip title={t('monitor.sampleRateTooltip')}>
               <Space size={4}>
-                <SettingOutlined style={{ color: 'var(--text-secondary)' }} />
-                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                  {selectedFunctionId !== null ? FUNCTION_ID_TO_NAME[selectedFunctionId] : ''}:
-                </span>
+                <SettingOutlined />
                 <InputNumber
                   size="small"
                   min={1}
@@ -284,35 +317,17 @@ const MonitorTab: React.FC = () => {
           </Space>
         }
         style={{ flex: '0 0 auto' }}
-        styles={{ body: { padding: 8, height: 280 } }}
+        styles={{ body: { padding: 8, height: 510 } }}
       >
-        {ipdPaChartData.columns.length > 0 && ipdPaChartData.rows.length > 0 ? (
+        {allChartData.columns.length > 0 && allChartData.rows.length > 0 ? (
           <MultiLineChart
-            columns={ipdPaChartData.columns}
-            rows={ipdPaChartData.rows}
+            columns={allChartData.columns}
+            rows={allChartData.rows}
             chartGroups={chartGroups}
             sampleRate={sampleRate}
           />
         ) : (
-          <Empty description={t('monitor.noData')} style={{ marginTop: 80 }} />
-        )}
-      </Card>
-
-      <Card
-        size="small"
-        title={t('monitor.gsensorChart')}
-        style={{ flex: '0 0 auto' }}
-        styles={{ body: { padding: 8, height: 230 } }}
-      >
-        {gsensorChartData.rows.length > 0 ? (
-          <MultiLineChart
-            columns={gsensorChartData.columns}
-            rows={gsensorChartData.rows}
-            chartGroups={chartGroups}
-            sampleRate={sampleRate}
-          />
-        ) : (
-          <Empty description={t('monitor.noGsensorData')} style={{ marginTop: 60 }} />
+          <Empty description={t('monitor.noData')} style={{ marginTop: 200 }} />
         )}
       </Card>
 

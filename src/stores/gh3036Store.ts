@@ -293,7 +293,7 @@ export const useGh3036Store = create<Gh3036State>()(
   
   framesData: new Map(),
   maxFramesCount: 100,
-  
+
   refData: {
     hrValues: [],
     hrCount: 0,
@@ -328,7 +328,7 @@ export const useGh3036Store = create<Gh3036State>()(
   },
   
   gsensorData: new Map(),
-  maxGsensorCount: 500,
+  maxGsensorCount: 100,
   
   chartGroups: [],
   selectedFunctionId: null,

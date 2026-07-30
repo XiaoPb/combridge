@@ -489,6 +489,26 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   useEffect(() => {
     if (!initialized || chartInstances.current.length === 0) return;
 
+    // 当 initialDataZoom 或 dataZoomState 变化时，更新所有图表的 dataZoom
+    // 使用 isZoomingRef 防止触发 handleDataZoom 导致循环
+    if (isZoomingRef.current) return;
+
+    const effectiveDataZoom = initialDataZoom || dataZoomState;
+    console.log('[MultiLineChart] useEffect 监听 dataZoom 变化，更新图表:', effectiveDataZoom);
+
+    chartInstances.current.forEach((chart) => {
+      if (!chart) return;
+      chart.dispatchAction({
+        type: 'dataZoom',
+        start: effectiveDataZoom.start,
+        end: effectiveDataZoom.end,
+      });
+    });
+  }, [initialized, initialDataZoom, dataZoomState]);
+
+  useEffect(() => {
+    if (!initialized || chartInstances.current.length === 0) return;
+
     const handleDataZoom = (chartIndex: number) => (params: unknown) => {
       if (isZoomingRef.current) return;
       isZoomingRef.current = true;

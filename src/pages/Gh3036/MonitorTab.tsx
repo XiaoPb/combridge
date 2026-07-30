@@ -175,13 +175,10 @@ const MonitorTab: React.FC = () => {
       displayPoints,
     });
 
-    if (totalPoints <= displayPoints) {
-      console.log('[MonitorTab] 数据量小于显示量，显示全部数据');
-      return { start: 0, end: 100 };
-    }
+    // 计算应该显示的数据比例（不超过 100%）
+    const displayPercent = Math.min(100, (displayPoints / totalPoints) * 100);
+    const result = { start: 0, end: displayPercent };
 
-    const endPercent = (displayPoints / totalPoints) * 100;
-    const result = { start: 0, end: endPercent };
     console.log('[MonitorTab] 最终 dataZoom 状态:', result);
     return result;
   }, [ipdPaChartData.rows.length, sampleRate, displayDurationSeconds]);

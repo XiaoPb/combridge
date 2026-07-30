@@ -25,7 +25,6 @@ const MonitorTab: React.FC = () => {
   const { t } = useTranslation('gh3036');
   const {
     framesData,
-    gsensorData,
     vitalSigns,
     selectedFunctionId,
     clearWaveformData,
@@ -37,7 +36,6 @@ const MonitorTab: React.FC = () => {
     displayDurationSeconds,
     setDisplayDurationSeconds,
     setMaxFramesCount,
-    setMaxGsensorCount,
   } = useGh3036Store();
 
   const [hrRefDialogOpen, setHrRefDialogOpen] = useState(false);
@@ -89,12 +87,8 @@ const MonitorTab: React.FC = () => {
     const currentSampleRate = sampleRate;
     const newMaxCount = Math.ceil((seconds * currentSampleRate) / 10);
 
-    // 更新 PPG 缓存大小（每帧10个数据点）
+    // 更新 PPG 和 ACC 缓存大小（统一使用 framesData 缓存）
     setMaxFramesCount(newMaxCount);
-
-    // 更新 ACC 缓存大小（每帧1个数据点，需要乘以10才能和PPG保持相同的缓存时长）
-    // 因为 ACC 每帧只有1个数据点，而 PPG 每帧有10个数据点
-    setMaxGsensorCount(newMaxCount * 10);
   };
 
   const functionOptions = useMemo(() => {
@@ -120,27 +114,26 @@ const MonitorTab: React.FC = () => {
     const columns = ['ACC_X', 'ACC_Y', 'ACC_Z'];
     const rows: number[][] = [];
 
-    const currentGsensor = selectedFunctionId ? gsensorData.get(selectedFunctionId) : null;
-    if (!currentGsensor) {
+    if (!currentFrames) {
       return { columns, rows };
     }
 
     const len = Math.min(
-      currentGsensor.acc_x.length,
-      currentGsensor.acc_y.length,
-      currentGsensor.acc_z.length
+      currentFrames.acc_x.length,
+      currentFrames.acc_y.length,
+      currentFrames.acc_z.length
     );
 
     for (let i = 0; i < len; i++) {
       rows.push([
-        currentGsensor.acc_x[i],
-        currentGsensor.acc_y[i],
-        currentGsensor.acc_z[i],
+        currentFrames.acc_x[i],
+        currentFrames.acc_y[i],
+        currentFrames.acc_z[i],
       ]);
     }
 
     return { columns, rows };
-  }, [gsensorData, selectedFunctionId]);
+  }, [currentFrames]);
 
   const chartGroups = useMemo(() => {
     const groups = [];

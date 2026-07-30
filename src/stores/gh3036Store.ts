@@ -601,7 +601,6 @@ export const useGh3036Store = create<Gh3036State>()(
   initialize: async () => {
     const { isInitialized, isLoading } = get();
     if (isInitialized || isLoading) {
-      console.log('[Gh3036Store] 已初始化或正在初始化，跳过');
       return;
     }
     
@@ -835,12 +834,10 @@ export const useGh3036Store = create<Gh3036State>()(
               
               if (txChannel?.device_id === deviceId) {
                 set({ txChannel: null });
-                console.log('[Gh3036Store] TX 通道已清理: 设备', deviceId, '已断开');
               }
-              
+
               if (rxChannel?.device_id === deviceId) {
                 set({ rxChannel: null });
-                console.log('[Gh3036Store] RX 通道已清理: 设备', deviceId, '已断开');
               }
             }
           } catch (err) {
@@ -924,7 +921,6 @@ export const useGh3036Store = create<Gh3036State>()(
   })),
   
   resetFactoryTest: () => {
-    console.log(`[${getTs()}] [Gh3036Store] resetFactoryTest 被调用`);
     set((state) => ({
       factoryTest: {
         ...state.factoryTest,
@@ -937,12 +933,9 @@ export const useGh3036Store = create<Gh3036State>()(
         isRunning: false,
       },
     }));
-    console.log(`[${getTs()}] [Gh3036Store] resetFactoryTest 完成`);
   },
   
   startFactoryTest: async () => {
-    console.log(`[${getTs()}] [Gh3036Store] startFactoryTest 被调用`);
-    
     set((state) => ({
       factoryTest: {
         ...state.factoryTest,
@@ -953,14 +946,11 @@ export const useGh3036Store = create<Gh3036State>()(
         message: '正在启动产测...',
       },
     }));
-    
+
     try {
-      console.log(`[${getTs()}] [Gh3036Store] 调用 factoryTestApi.start()`);
       await factoryTestApi.start();
-      console.log(`[${getTs()}] [Gh3036Store] factoryTestApi.start() 调用成功`);
     } catch (err) {
       const errorMsg = formatErrorMessage(err, i18n.t('gh3036:errors.startFactoryTest'));
-      console.error(`[${getTs()}] [Gh3036Store] 启动产测失败:`, err);
       set((state) => ({
         factoryTest: {
           ...state.factoryTest,
@@ -1067,33 +1057,23 @@ export const useGh3036Store = create<Gh3036State>()(
     const subscribeId = listenerId ?? get().factoryTestListenerId + 1;
     
     if (eventListeners.factoryTest) {
-      console.log(`[${getTs()}] [Gh3036Store] 产测事件已订阅，跳过重复订阅`);
       return;
     }
-    
+
     if (_factoryTestSubscribing) {
-      console.log(`[${getTs()}] [Gh3036Store] 产测事件正在订阅中，跳过并发订阅`);
       return;
     }
     
     set({ _factoryTestSubscribing: true, factoryTestListenerId: subscribeId });
-    
+
     try {
-      console.log(`[${getTs()}] [Gh3036Store] 开始订阅产测事件...`);
       const factoryTestUnlisten = await listen<EventBusEvent>('event-bus', (event) => {
         const recvTs = getTs();
         const topic = event.payload.topic;
-        const encoding = event.payload.encoding;
-        
+
         if (topic === 'gh3036:factory_test_progress') {
-          console.log(
-            `[${recvTs}] [Gh3036Store] 收到产测进度事件, encoding=${encoding}, payload_len=${event.payload.payload?.length ?? 'N/A'}`
-          );
           try {
             const progressEvent = decodePayload<FactoryTestProgressEvent>(event.payload);
-            console.log(
-              `[${recvTs}] [Gh3036Store] 进度事件解码成功: step=${progressEvent.current_step}, status=${progressEvent.status}, progress=${progressEvent.progress.toFixed(3)}, msg=${progressEvent.message}`
-            );
             
             set((state) => ({
               factoryTest: {
@@ -1121,9 +1101,6 @@ export const useGh3036Store = create<Gh3036State>()(
                 factoryTestApi.getResult(),
                 factoryTestApi.getEvaluationResult(),
               ]).then(([result, evaluationResult]) => {
-                console.log(
-                  `[${getTs()}] [Gh3036Store] 获取产测终态结果成功: overall=${result?.overall_result ?? 'N/A'}`
-                );
                 set((state) => ({
                   factoryTest: {
                     ...state.factoryTest,
@@ -1138,18 +1115,14 @@ export const useGh3036Store = create<Gh3036State>()(
           } catch (err) {
             console.error(`[${recvTs}] [Gh3036Store] 产测进度事件解码失败:`, err, 'raw payload:', event.payload);
           }
-        } else if (topic.startsWith('gh3036:')) {
-          console.log(`[${recvTs}] [Gh3036Store] 收到 gh3036 事件: topic=${topic}`);
         }
       });
       
       if (!get()._factoryTestSubscribing || get().factoryTestListenerId !== subscribeId) {
-        console.log(`[${getTs()}] [Gh3036Store] 订阅期间组件已卸载或已被更新，清理刚完成的订阅`);
         factoryTestUnlisten();
         return;
       }
-      
-      console.log(`[${getTs()}] [Gh3036Store] 产测事件订阅成功, unlisten=${typeof factoryTestUnlisten}`);
+
       set((state) => ({
         eventListeners: {
           ...state.eventListeners,
@@ -1167,14 +1140,12 @@ export const useGh3036Store = create<Gh3036State>()(
     const { eventListeners, factoryTestListenerId } = get();
     
     if (listenerId !== undefined && listenerId !== factoryTestListenerId) {
-      console.log(`[${getTs()}] [Gh3036Store] 跳过过期的产测事件卸载, listenerId=${listenerId}, current=${factoryTestListenerId}`);
       return;
     }
 
     set({ _factoryTestSubscribing: false });
-    
+
     if (eventListeners.factoryTest) {
-      console.log(`[${getTs()}] [Gh3036Store] 取消产测事件订阅`);
       eventListeners.factoryTest();
       set((state) => ({
         eventListeners: {

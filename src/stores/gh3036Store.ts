@@ -122,7 +122,8 @@ interface Gh3036State {
   
   chartLegendSelected: Record<string, boolean>;
   ipdRawDataType: 'ipd' | 'rawdata';
-  
+  displayDurationSeconds: number;
+
   sampleRateConfig: Record<number, number>;
   
   isLinked: boolean;
@@ -195,6 +196,7 @@ interface Gh3036State {
   setSelectedFunctionId: (id: number | null) => void;
   setChartLegendSelected: (selected: Record<string, boolean>) => void;
   setIpdRawDataType: (type: 'ipd' | 'rawdata') => void;
+  setDisplayDurationSeconds: (seconds: number) => void;
   setSampleRateConfig: (config: Record<number, number>) => void;
   
   setIsLinked: (value: boolean) => void;
@@ -330,7 +332,8 @@ export const useGh3036Store = create<Gh3036State>()(
   selectedFunctionId: null,
   chartLegendSelected: {},
   ipdRawDataType: 'ipd',
-  
+  displayDurationSeconds: 10,
+
   sampleRateConfig: {
     0: 5,
     1: 25,
@@ -583,7 +586,8 @@ export const useGh3036Store = create<Gh3036State>()(
   setSelectedFunctionId: (id) => set({ selectedFunctionId: id }),
   setChartLegendSelected: (selected) => set({ chartLegendSelected: selected }),
   setIpdRawDataType: (type) => set({ ipdRawDataType: type }),
-  
+  setDisplayDurationSeconds: (seconds) => set({ displayDurationSeconds: seconds }),
+
   setSampleRateConfig: (config) => set({ sampleRateConfig: config }),
   
   setIsLinked: (value) => set({ isLinked: value }),
@@ -1246,12 +1250,14 @@ export const useGh3036Store = create<Gh3036State>()(
   partialize: (state) => ({
     chartLegendSelected: state.chartLegendSelected ? { ...state.chartLegendSelected } : {},
     ipdRawDataType: state.ipdRawDataType || 'ipd',
+    displayDurationSeconds: state.displayDurationSeconds || 10,
     sampleRateConfig: state.sampleRateConfig || { 0: 5, 1: 25, 2: 25, 3: 25, 4: 25 },
   }),
   merge: (persisted, current) => ({
     ...current,
     chartLegendSelected: (persisted as { chartLegendSelected?: Record<string, boolean> })?.chartLegendSelected || {},
     ipdRawDataType: (persisted as { ipdRawDataType?: 'ipd' | 'rawdata' })?.ipdRawDataType || 'ipd',
+    displayDurationSeconds: (persisted as { displayDurationSeconds?: number })?.displayDurationSeconds || 10,
     sampleRateConfig: (persisted as { sampleRateConfig?: Record<number, number> })?.sampleRateConfig || { 0: 5, 1: 25, 2: 25, 3: 25, 4: 25 },
   }),
 }

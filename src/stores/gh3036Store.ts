@@ -198,6 +198,7 @@ interface Gh3036State {
   setIpdRawDataType: (type: 'ipd' | 'rawdata') => void;
   setDisplayDurationSeconds: (seconds: number) => void;
   setMaxFramesCount: (count: number) => void;
+  setMaxGsensorCount: (count: number) => void;
   setSampleRateConfig: (config: Record<number, number>) => void;
   
   setIsLinked: (value: boolean) => void;
@@ -589,6 +590,7 @@ export const useGh3036Store = create<Gh3036State>()(
   setIpdRawDataType: (type) => set({ ipdRawDataType: type }),
   setDisplayDurationSeconds: (seconds) => set({ displayDurationSeconds: seconds }),
   setMaxFramesCount: (count) => set({ maxFramesCount: count }),
+  setMaxGsensorCount: (count) => set({ maxGsensorCount: count }),
 
   setSampleRateConfig: (config) => set({ sampleRateConfig: config }),
   

@@ -37,6 +37,7 @@ const MonitorTab: React.FC = () => {
     displayDurationSeconds,
     setDisplayDurationSeconds,
     setMaxFramesCount,
+    setMaxGsensorCount,
   } = useGh3036Store();
 
   const [hrRefDialogOpen, setHrRefDialogOpen] = useState(false);
@@ -86,8 +87,11 @@ const MonitorTab: React.FC = () => {
     // 计算新的缓存帧数：秒数 × 采样率 ÷ 10
     // FRAME_CACHE_MULTIPLIER = 10，所以 maxFramesCount = seconds × sampleRate ÷ 10
     const currentSampleRate = sampleRate;
-    const newMaxFramesCount = Math.ceil((seconds * currentSampleRate) / 10);
-    setMaxFramesCount(newMaxFramesCount);
+    const newMaxCount = Math.ceil((seconds * currentSampleRate) / 10);
+
+    // 同时更新 PPG 和 ACC 的缓存大小，保持一致
+    setMaxFramesCount(newMaxCount);
+    setMaxGsensorCount(newMaxCount);
   };
 
   const functionOptions = useMemo(() => {

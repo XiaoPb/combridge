@@ -325,6 +325,27 @@ impl GlobalContext {
         }
     }
 
+    /// 触发所有 CSV writer 创建新文件
+    ///
+    /// 在启动/停止命令执行或设备断开时调用，
+    /// 确保每个功能的 CSV writer 都创建新文件
+    fn trigger_new_csv_file(&self) {
+        let csv_config = self.csv_config.lock();
+        if !csv_config.enabled {
+            return;
+        }
+        drop(csv_config);
+
+        let mut writers = self.csv_writers.lock();
+        for (function_id, writer) in writers.iter_mut() {
+            if let Err(e) = writer.force_new_file() {
+                error!("[GH3036] 功能 {} 强制创建新CSV文件失败: {}", function_id, e);
+            } else {
+                info!("[GH3036] 功能 {} 已标记创建新CSV文件", function_id);
+            }
+        }
+    }
+
     fn publish_ref_data(&self) {
         use super::types::Gh3036RefDataEvent;
         use std::time::Duration;
@@ -1528,8 +1549,8 @@ mod tests {
     use std::sync::Arc;
 
     use super::{
-        AlgorithmResultCache, ChannelConfig, ChannelType, FrameAggregator, Gh3036Manager,
-        GlobalContext, RefDataManager, RpcInput,
+        AlgorithmResultCache, ChannelConfig, ChannelType, CsvConfig, FrameAggregator,
+        Gh3036Manager, GlobalContext, RefDataManager, RpcInput,
     };
     use crate::gh3036::types::{GhFuncFixIdx, GhFuncFrame};
 
@@ -1626,6 +1647,45 @@ mod tests {
             Gh3036Manager::decode_factory_mode_response(&response).unwrap(),
             vec![0x34, 0x12, 0x78, 0x56]
         );
+    }
+
+    #[test]
+    fn trigger_new_csv_file_creates_new_files_for_all_writers() {
+        use tempfile::TempDir;
+
+        let context = GlobalContext::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        context.set_csv_config(CsvConfig {
+            enabled: true,
+            output_dir: temp_dir.path().to_string_lossy().to_string(),
+        });
+
+        // 模拟已有 writer
+        let frame = make_frame(GhFuncFixIdx::Spo2, 1, vec![98]);
+        context.save_frame_to_csv(&frame);
+
+        // 触发新文件创建
+        context.trigger_new_csv_file();
+
+        // 再次写入，应该在新文件中
+        let frame2 = make_frame(GhFuncFixIdx::Spo2, 2, vec![99]);
+        context.save_frame_to_csv(&frame2);
+
+        // 验证：检查输出目录中恰好有两个 CSV 文件
+        let csv_files: Vec<_> = std::fs::read_dir(temp_dir.path().join("SPO2"))
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| {
+                entry
+                    .path()
+                    .extension()
+                    .map(|e| e == "csv")
+                    .unwrap_or(false)
+            })
+            .collect();
+
+        assert_eq!(csv_files.len(), 2, "应该恰好创建两个CSV文件");
     }
 
     #[test]

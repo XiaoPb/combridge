@@ -221,3 +221,11 @@ export const factoryTestApi = {
 };
 
 export type { Gh3036FrameData };
+
+/**
+ * 手动触发创建新的CSV文件
+ * 用于用户在前端主动点击按钮时创建新文件
+ */
+export const gh3036ForceNewCsvFile = async (): Promise<void> => {
+  await invoke<void>('gh3036_force_new_csv_file');
+};

@@ -55,12 +55,37 @@ impl CsvWriter {
         Ok(())
     }
 
+    /// 强制创建新的 CSV 文件
+    ///
+    /// 用于在特定事件（如启动/停止命令、设备断开）发生时，
+    /// 确保后续数据写入新文件
+    pub fn force_new_file(&mut self) -> std::io::Result<()> {
+        // 先刷新当前文件（如果有）
+        {
+            let mut writer_guard = self.writer.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(ref mut writer) = *writer_guard {
+                writer.flush()?;
+            }
+            // 清空 writer，下次写入时会创建新文件
+            *writer_guard = None;
+        }
+
+        self.last_frame_id = -1;
+        self.rows_since_flush = 0;
+
+        info!("[CsvWriter] 强制创建新文件标记已设置");
+        Ok(())
+    }
+
     fn create_new_file(&mut self) -> std::io::Result<()> {
         let function_output_dir = self.output_dir.join(&self.function_name);
         std::fs::create_dir_all(&function_output_dir)?;
 
         let timestamp = Local::now().format("%Y%m%d-%H%M%S");
-        let filename = format!("gh3036_{}_{}.csv", self.function_name, timestamp);
+        let filename = format!(
+            "gh3036_{}_{}_{}.csv",
+            self.function_name, timestamp, self.current_file_index
+        );
         let filepath = function_output_dir.join(&filename);
 
         let mut writer = Writer::from_path(&filepath)?;
@@ -230,5 +255,78 @@ mod tests {
         assert_eq!(row[109], "10");
         assert_eq!(row[141], "11");
         assert_eq!(&row[173..176], ["4", "5", "6"]);
+    }
+
+    #[test]
+    fn force_new_file_creates_separate_files() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let output_dir = temp_dir.path().to_path_buf();
+        let mut writer = CsvWriter::new(output_dir.clone(), 2, "SPO2".to_string());
+
+        // 写入第一帧
+        let frame1 = Gh3036FrameData {
+            function_id: 2,
+            function_name: "SPO2".to_string(),
+            frame_id: 1,
+            timestamp: 100,
+            gs_data: vec![1, 2, 3, 4, 5, 6],
+            rawdata: vec![100],
+            flags: vec![0],
+            ref_data: vec![0],
+            algo_data: vec![98],
+            agc_info: vec![0],
+            phy_value: vec![200],
+            led_info: vec![0],
+        };
+        writer.write_frame(&frame1).unwrap();
+
+        // 强制创建新文件
+        writer.force_new_file().unwrap();
+
+        // 写入第二帧（应该在新文件中）
+        let frame2 = Gh3036FrameData {
+            frame_id: 2,
+            timestamp: 200,
+            ..frame1.clone()
+        };
+        writer.write_frame(&frame2).unwrap();
+
+        // 释放 writer，确保所有缓冲数据落盘
+        drop(writer);
+
+        // 验证：恰好生成两个 CSV 文件，每个文件包含表头和一行数据
+        let csv_files: Vec<_> = std::fs::read_dir(output_dir.join("SPO2"))
+            .unwrap()
+            .collect::<std::io::Result<Vec<_>>>()
+            .unwrap()
+            .into_iter()
+            .filter(|entry| {
+                entry
+                    .path()
+                    .extension()
+                    .map(|e| e == "csv")
+                    .unwrap_or(false)
+            })
+            .collect();
+
+        assert_eq!(csv_files.len(), 2, "应该恰好创建两个CSV文件");
+
+        let mut frame_ids = Vec::new();
+        for entry in &csv_files {
+            let mut reader = csv::Reader::from_path(entry.path()).unwrap();
+            let headers = reader.headers().unwrap().clone();
+            assert_eq!(
+                headers.iter().map(String::from).collect::<Vec<_>>(),
+                CsvWriter::headers(),
+                "文件应包含表头行"
+            );
+            let records: Vec<_> = reader.records().collect::<Result<Vec<_>, _>>().unwrap();
+            assert_eq!(records.len(), 1, "每个文件应恰好包含一行数据");
+            frame_ids.push(records[0].get(1).unwrap().parse::<i32>().unwrap());
+        }
+        frame_ids.sort_unstable();
+        assert_eq!(frame_ids, vec![1, 2], "两个文件应分别包含 frame_id 1 和 2");
     }
 }

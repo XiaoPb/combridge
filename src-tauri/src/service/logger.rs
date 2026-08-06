@@ -303,8 +303,10 @@ mod tests {
 
     #[test]
     fn test_build_filter_accepts_disabled_module() {
-        let mut config = LoggerConfig::default();
-        config.modules = vec![LogModuleConfig::new("rpc-core", false, "trace")];
+        let config = LoggerConfig {
+            modules: vec![LogModuleConfig::new("rpc-core", false, "trace")],
+            ..Default::default()
+        };
         let filter = LoggerService::build_filter(&config);
         let display = filter.to_string();
         assert!(display.contains("rpc_core=off"));

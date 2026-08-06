@@ -617,8 +617,10 @@ mod tests {
 
     #[test]
     fn test_normalize_log_config_rejects_bad_module_level() {
-        let mut config = LogConfig::default();
-        config.modules = vec![LogModuleConfig::new("rpc-core", true, "verbose")];
+        let config = LogConfig {
+            modules: vec![LogModuleConfig::new("rpc-core", true, "verbose")],
+            ..Default::default()
+        };
 
         assert!(normalize_log_config(config).is_err());
     }

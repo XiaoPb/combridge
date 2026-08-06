@@ -276,7 +276,12 @@ mod tests {
         assert!(config_high.validate().is_ok());
 
         // 测试各种数据位
-        for data_bits in [DataBits::Five, DataBits::Six, DataBits::Seven, DataBits::Eight] {
+        for data_bits in [
+            DataBits::Five,
+            DataBits::Six,
+            DataBits::Seven,
+            DataBits::Eight,
+        ] {
             let config = SerialPortConfig::new("COM1").data_bits(data_bits);
             assert!(config.validate().is_ok());
         }

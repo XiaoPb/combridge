@@ -346,6 +346,19 @@ impl GlobalContext {
         }
     }
 
+    /// 软件功能命令执行完成后的处理
+    ///
+    /// 启动（ctrl_type=0）或停止（ctrl_type=1）命令执行后，触发新 CSV 文件创建
+    fn handle_sw_function_command_completed(&self, ctrl_type: u8) {
+        if ctrl_type == 0 || ctrl_type == 1 {
+            self.trigger_new_csv_file();
+            info!(
+                "[GH3036] 软件{}命令执行完成，已触发新CSV文件创建",
+                if ctrl_type == 0 { "启动" } else { "停止" }
+            );
+        }
+    }
+
     fn publish_ref_data(&self) {
         use super::types::Gh3036RefDataEvent;
         use std::time::Duration;
@@ -1180,6 +1193,10 @@ impl Gh3036Manager {
 
         self.send_command(KEY_GH3X_SW_FUNCTION_CMD, FMT_GH3X_SW_FUNCTION_CMD, &data)
             .await?;
+
+        // 启动（ctrl_type=0）或停止（ctrl_type=1）命令执行后，触发新CSV文件创建
+        CALLBACK_CONTEXT.handle_sw_function_command_completed(ctrl_type);
+
         Ok(vec![])
     }
 
@@ -1686,6 +1703,62 @@ mod tests {
             .collect();
 
         assert_eq!(csv_files.len(), 2, "应该恰好创建两个CSV文件");
+    }
+
+    #[test]
+    fn sw_function_start_stop_triggers_new_csv_file() {
+        use tempfile::TempDir;
+
+        // 直接驱动命令完成后的处理逻辑：
+        // 异步 send_command 路径需要真实设备，此处通过 handle_sw_function_command_completed 模拟命令执行完成
+        let run_case = |ctrl_type: u8, expected_files: usize| {
+            let context = GlobalContext::new();
+            let temp_dir = TempDir::new().unwrap();
+
+            context.set_csv_config(CsvConfig {
+                enabled: true,
+                output_dir: temp_dir.path().to_string_lossy().to_string(),
+            });
+
+            // 写入初始帧
+            let frame1 = make_frame(GhFuncFixIdx::Spo2, 1, vec![98]);
+            context.save_frame_to_csv(&frame1);
+
+            // 模拟软件功能命令执行完成
+            context.handle_sw_function_command_completed(ctrl_type);
+
+            // 写入后续帧
+            let frame2 = make_frame(GhFuncFixIdx::Spo2, 2, vec![99]);
+            context.save_frame_to_csv(&frame2);
+
+            // 验证：检查输出目录中的 CSV 文件数量
+            let csv_files: Vec<_> = std::fs::read_dir(temp_dir.path().join("SPO2"))
+                .unwrap()
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| {
+                    entry
+                        .path()
+                        .extension()
+                        .map(|e| e == "csv")
+                        .unwrap_or(false)
+                })
+                .collect();
+
+            assert_eq!(
+                csv_files.len(),
+                expected_files,
+                "ctrl_type={} 应产生 {} 个CSV文件",
+                ctrl_type,
+                expected_files
+            );
+        };
+
+        // 启动命令（ctrl_type=0）触发新文件
+        run_case(0, 2);
+        // 停止命令（ctrl_type=1）触发新文件
+        run_case(1, 2);
+        // 其他控制类型（ctrl_type=2）不触发新文件
+        run_case(2, 1);
     }
 
     #[test]

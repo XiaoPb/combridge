@@ -602,6 +602,10 @@ impl Gh3036Manager {
                     }
                 }
                 info!("GH3036 RX 通道已清理: 设备 {} 已断开", device_id);
+
+                // 设备断开时触发新CSV文件创建
+                CALLBACK_CONTEXT.trigger_new_csv_file();
+                info!("[GH3036] 设备断开，已触发新CSV文件创建");
             }
         }
 
@@ -1567,7 +1571,7 @@ mod tests {
 
     use super::{
         AlgorithmResultCache, ChannelConfig, ChannelType, CsvConfig, FrameAggregator,
-        Gh3036Manager, GlobalContext, RefDataManager, RpcInput,
+        Gh3036Manager, GlobalContext, RefDataManager, RpcInput, CALLBACK_CONTEXT,
     };
     use crate::gh3036::types::{GhFuncFixIdx, GhFuncFrame};
 
@@ -1764,5 +1768,53 @@ mod tests {
     #[test]
     fn factory_mode_invalid_non_empty_response_still_fails() {
         assert!(Gh3036Manager::decode_factory_mode_response(&[0x64]).is_err());
+    }
+
+    #[test]
+    fn device_disconnect_triggers_new_csv_file() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+
+        // handle_device_disconnected 操作的是全局 CALLBACK_CONTEXT，测试需直接配置它
+        CALLBACK_CONTEXT.set_csv_config(CsvConfig {
+            enabled: true,
+            output_dir: temp_dir.path().to_string_lossy().to_string(),
+        });
+        CALLBACK_CONTEXT.set_rx_channel(ChannelConfig {
+            channel_type: ChannelType::Ble,
+            device_id: "test-device".to_string(),
+            characteristic_uuid: Some("test-char".to_string()),
+        });
+
+        let frame1 = make_frame(GhFuncFixIdx::Spo2, 1, vec![98]);
+        CALLBACK_CONTEXT.save_frame_to_csv(&frame1);
+
+        // 模拟设备断开
+        Gh3036Manager::handle_device_disconnected("test-device");
+
+        let frame2 = make_frame(GhFuncFixIdx::Spo2, 2, vec![99]);
+        CALLBACK_CONTEXT.save_frame_to_csv(&frame2);
+
+        // 验证：设备断开后应创建新 CSV 文件（共 2 个）
+        let csv_files: Vec<_> = std::fs::read_dir(temp_dir.path().join("SPO2"))
+            .unwrap()
+            .collect::<std::io::Result<Vec<_>>>()
+            .unwrap()
+            .into_iter()
+            .filter(|entry| {
+                entry
+                    .path()
+                    .extension()
+                    .map(|e| e == "csv")
+                    .unwrap_or(false)
+            })
+            .collect();
+
+        assert_eq!(csv_files.len(), 2, "设备断开后应该创建新CSV文件");
+
+        // 清理全局状态，避免影响其他测试
+        CALLBACK_CONTEXT.set_csv_config(CsvConfig::default());
+        CALLBACK_CONTEXT.rx_channel.lock().take();
     }
 }

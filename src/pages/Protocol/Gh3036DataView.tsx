@@ -1,8 +1,9 @@
 import React, { useMemo, useCallback } from 'react';
-import { Button, Empty, Card, Select, Space, Row, Col } from 'antd';
-import { ClearOutlined } from '@ant-design/icons';
+import { Button, Empty, Card, Select, Space, Row, Col, message } from 'antd';
+import { ClearOutlined, FileAddOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
+import { gh3036ForceNewCsvFile } from '../../api/gh3036';
 import MultiLineChart from '../Waveform/MultiLineChart';
 
 const Gh3036DataView: React.FC = () => {
@@ -59,6 +60,16 @@ const Gh3036DataView: React.FC = () => {
     setChartGroups(newGroups.filter(g => g.columns.length > 0));
   }, [chartGroups, setChartGroups]);
 
+  const handleForceNewCsvFile = useCallback(async () => {
+    try {
+      await gh3036ForceNewCsvFile();
+      message.success(t('gh3036.newCsvFileCreated'));
+    } catch (error) {
+      message.error(t('gh3036.newCsvFileFailed'));
+      console.error('[GH3036] 手动创建新CSV文件失败:', error);
+    }
+  }, [t]);
+
   const chartData = useMemo(() => {
     if (!currentFrames || chartGroups.length === 0) {
       return [];
@@ -108,6 +119,13 @@ const Gh3036DataView: React.FC = () => {
             options={functionOptions}
             placeholder={t('gh3036.selectFunction')}
           />
+          <Button
+            size="small"
+            icon={<FileAddOutlined />}
+            onClick={handleForceNewCsvFile}
+          >
+            {t('gh3036.newCsvFile')}
+          </Button>
           <Button
             size="small"
             icon={<ClearOutlined />}

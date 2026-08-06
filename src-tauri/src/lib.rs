@@ -301,6 +301,7 @@ pub fn run() {
             commands::gh3036::gh3036_send_data,
             commands::gh3036::gh3036_set_csv_config,
             commands::gh3036::gh3036_get_csv_config,
+            commands::gh3036::gh3036_force_new_csv_file,
             commands::gh3036::gh3036_get_rpc_commands,
             commands::gh3036::gh3036_get_version_types,
             commands::gh3036::gh3036_execute_rpc,

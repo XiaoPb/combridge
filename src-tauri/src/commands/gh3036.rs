@@ -438,3 +438,12 @@ pub fn gh3036_get_hr_ref_monitor_status() -> Result<(bool, i32, i32), ErrorRespo
     let collected_count = crate::gh3036::get_hr_ref_monitor_collected_count();
     Ok((is_running, current_hr, collected_count))
 }
+
+#[tauri::command]
+pub async fn gh3036_force_new_csv_file(
+    manager: State<'_, Gh3036ManagerRef>,
+) -> Result<(), ErrorResponse> {
+    manager
+        .force_new_csv_file()
+        .map_err(|e| ComBridgeError::protocol(e).to_error_response())
+}

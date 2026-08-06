@@ -887,6 +887,12 @@ impl Gh3036Manager {
         Ok(())
     }
 
+    pub fn force_new_csv_file(&self) -> Result<(), String> {
+        CALLBACK_CONTEXT.trigger_new_csv_file();
+        info!("[GH3036] 手动触发新CSV文件创建");
+        Ok(())
+    }
+
     pub fn get_csv_config(&self) -> CsvConfig {
         CALLBACK_CONTEXT.get_csv_config()
     }

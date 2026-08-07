@@ -193,6 +193,15 @@ pub fn run() {
                 }
             });
 
+            // 记录应用信息，供 CSV 信息行使用
+            let package_info = app.package_info();
+            gh3036_manager
+                .set_app_info(package_info.name.clone(), package_info.version.to_string());
+            info!(
+                "设置应用信息: {} v{}",
+                package_info.name, package_info.version
+            );
+
             info!("初始化 HR 金标监听器");
             gh3036_manager.init_hr_ref_monitor();
 

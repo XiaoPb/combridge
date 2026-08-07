@@ -1969,5 +1969,9 @@ mod tests {
         assert!(CALLBACK_CONTEXT.current_info_row("SPO2").ble_name.is_some());
         CALLBACK_CONTEXT.clear_last_ble_device("11:22:33:44:55:66");
         assert!(CALLBACK_CONTEXT.current_info_row("SPO2").ble_name.is_none());
+
+        // 清理全局状态，避免影响其他测试
+        CALLBACK_CONTEXT.set_app_info(String::new(), String::new());
+        *CALLBACK_CONTEXT.last_ble_device.lock() = None;
     }
 }

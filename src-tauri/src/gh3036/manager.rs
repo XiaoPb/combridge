@@ -17,7 +17,7 @@ use tokio::runtime::Handle;
 use tracing::{debug, error, info, warn};
 
 use super::config_loader::ConfigLoader;
-use super::csv_writer::CsvWriter;
+use super::csv_writer::{CsvInfoRow, CsvWriter};
 use super::factory_test::FactoryTestManager;
 use super::ref_data_manager::RefDataManager;
 use super::types::{
@@ -173,6 +173,12 @@ impl FrameAggregator {
     }
 }
 
+#[derive(Debug, Clone)]
+struct BleDeviceInfo {
+    address: String,
+    name: Option<String>,
+}
+
 struct GlobalContext {
     rx_channel: Mutex<Option<ChannelConfig>>,
     tx_channel: Mutex<Option<ChannelConfig>>,
@@ -181,6 +187,9 @@ struct GlobalContext {
     frame_aggregator: Mutex<FrameAggregator>,
     runtime_handle: Mutex<Option<Handle>>,
     csv_config: Mutex<CsvConfig>,
+    app_name: Mutex<String>,
+    app_version: Mutex<String>,
+    last_ble_device: Mutex<Option<BleDeviceInfo>>,
     csv_writers: Mutex<HashMap<i32, CsvWriter>>,
     algorithm_result_cache: Mutex<AlgorithmResultCache>,
     ref_data_manager: Arc<RefDataManager>,
@@ -199,6 +208,9 @@ impl GlobalContext {
             frame_aggregator: Mutex::new(FrameAggregator::new(Arc::clone(&ref_data_manager))),
             runtime_handle: Mutex::new(None),
             csv_config: Mutex::new(CsvConfig::default()),
+            app_name: Mutex::new(String::new()),
+            app_version: Mutex::new(String::new()),
+            last_ble_device: Mutex::new(None),
             csv_writers: Mutex::new(HashMap::new()),
             algorithm_result_cache: Mutex::new(AlgorithmResultCache::default()),
             ref_data_manager,
@@ -253,6 +265,29 @@ impl GlobalContext {
     fn set_runtime_handle(&self, handle: Handle) {
         let mut runtime_handle = self.runtime_handle.lock();
         *runtime_handle = Some(handle);
+    }
+
+    fn set_app_info(&self, app_name: String, app_version: String) {
+        *self.app_name.lock() = app_name;
+        *self.app_version.lock() = app_version;
+    }
+
+    fn set_last_ble_device(&self, address: String, name: Option<String>) {
+        *self.last_ble_device.lock() = Some(BleDeviceInfo { address, name });
+    }
+
+    /// 生成 CSV 信息行（应用名、版本、测试功能、蓝牙名称/地址）
+    fn current_info_row(&self, function_name: &str) -> CsvInfoRow {
+        let app_name = self.app_name.lock().clone();
+        let app_version = self.app_version.lock().clone();
+        let ble = self.last_ble_device.lock().clone();
+        CsvInfoRow {
+            app: app_name,
+            version: app_version,
+            function: function_name.to_string(),
+            ble_name: ble.as_ref().and_then(|info| info.name.clone()),
+            ble_address: ble.as_ref().map(|info| info.address.clone()),
+        }
     }
 
     fn send_rpc_data(&self, data: Vec<u8>) -> Result<(), crossbeam_channel::SendError<RpcInput>> {
@@ -313,12 +348,19 @@ impl GlobalContext {
         let function_name = frame_data.function_name.clone();
 
         let writer = writers.entry(function_id).or_insert_with(|| {
-            CsvWriter::new(
+            let mut writer = CsvWriter::new(
                 PathBuf::from(&csv_config.output_dir),
                 function_id,
-                function_name,
-            )
+                function_name.clone(),
+            );
+            writer.set_info_row(CALLBACK_CONTEXT.current_info_row(&function_name));
+            writer
         });
+
+        // 新文件边界（frame_id==0）时刷新设备信息，保证信息行与实际采集设备一致
+        if frame_data.frame_id == 0 {
+            writer.set_info_row(CALLBACK_CONTEXT.current_info_row(&function_name));
+        }
 
         if let Err(e) = writer.write_frame(&frame_data) {
             error!("CSV 写入失败: {}", e);
@@ -580,6 +622,17 @@ impl Gh3036Manager {
             move |_topic, event| {
                 info!("[GH3036] 收到 BLE 断开事件: {}", event.address);
                 Self::handle_device_disconnected(&event.address);
+            },
+        );
+
+        self.event_bus.subscribe_json::<BleConnectionEvent, _>(
+            topics::BLE_CONNECTED,
+            move |_topic, event| {
+                info!(
+                    "[GH3036] 收到 BLE 连接事件: address={}, name={:?}",
+                    event.address, event.name
+                );
+                CALLBACK_CONTEXT.set_last_ble_device(event.address.clone(), event.name.clone());
             },
         );
 
@@ -895,6 +948,11 @@ impl Gh3036Manager {
 
     pub fn get_csv_config(&self) -> CsvConfig {
         CALLBACK_CONTEXT.get_csv_config()
+    }
+
+    pub fn set_app_info(&self, app_name: String, app_version: String) {
+        info!("[GH3036] 设置应用信息: {} v{}", app_name, app_version);
+        CALLBACK_CONTEXT.set_app_info(app_name, app_version);
     }
 
     pub async fn send_data(&self, data: &[u8]) -> Result<(), String> {

@@ -276,6 +276,13 @@ impl GlobalContext {
         *self.last_ble_device.lock() = Some(BleDeviceInfo { address, name });
     }
 
+    fn clear_last_ble_device(&self, address: &str) {
+        let mut ble = self.last_ble_device.lock();
+        if ble.as_ref().map(|info| info.address.as_str()) == Some(address) {
+            *ble = None;
+        }
+    }
+
     /// 生成 CSV 信息行（应用名、版本、测试功能、蓝牙名称/地址）
     fn current_info_row(&self, function_name: &str) -> CsvInfoRow {
         let app_name = self.app_name.lock().clone();
@@ -357,8 +364,9 @@ impl GlobalContext {
             writer
         });
 
-        // 新文件边界（frame_id==0）时刷新设备信息，保证信息行与实际采集设备一致
-        if frame_data.frame_id == 0 {
+        // 新文件边界（frame_id==0 或文件尚未创建）时刷新设备信息，
+        // 保证强制分文件后新建文件的信息行与实际采集设备一致
+        if frame_data.frame_id == 0 || !writer.is_open() {
             writer.set_info_row(CALLBACK_CONTEXT.current_info_row(&function_name));
         }
 
@@ -622,6 +630,7 @@ impl Gh3036Manager {
             move |_topic, event| {
                 info!("[GH3036] 收到 BLE 断开事件: {}", event.address);
                 Self::handle_device_disconnected(&event.address);
+                CALLBACK_CONTEXT.clear_last_ble_device(&event.address);
             },
         );
 
@@ -1648,6 +1657,17 @@ mod tests {
         }
     }
 
+    /// 读取 CSV 文件首行信息行 JSON
+    fn read_info_row(filepath: &std::path::Path) -> serde_json::Value {
+        let mut reader = csv::ReaderBuilder::new()
+            .flexible(true)
+            .has_headers(false)
+            .from_path(filepath)
+            .unwrap();
+        let record = reader.records().next().unwrap().unwrap();
+        serde_json::from_str(&record[0]).unwrap()
+    }
+
     #[test]
     fn aggregator_flushes_every_buffered_function() {
         let ref_data_manager = Arc::new(RefDataManager::new());
@@ -1880,5 +1900,74 @@ mod tests {
         // 清理全局状态，避免影响其他测试
         CALLBACK_CONTEXT.set_csv_config(CsvConfig::default());
         CALLBACK_CONTEXT.rx_channel.lock().take();
+    }
+
+    #[test]
+    fn force_new_file_refreshes_info_row_even_when_frame_id_nonzero() {
+        use tempfile::TempDir;
+
+        let context = GlobalContext::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        context.set_csv_config(CsvConfig {
+            enabled: true,
+            output_dir: temp_dir.path().to_string_lossy().to_string(),
+        });
+
+        // save_frame_to_csv 的信息行取自全局 CALLBACK_CONTEXT
+        CALLBACK_CONTEXT.set_app_info("ComBridge".to_string(), "0.5.24".to_string());
+        CALLBACK_CONTEXT
+            .set_last_ble_device("AA:BB:CC:DD:EE:FF".to_string(), Some("DEV-A".to_string()));
+
+        // 首次写入：frame_cnt=1（非新文件边界），创建第一个文件
+        let frame1 = make_frame(GhFuncFixIdx::Spo2, 1, vec![98]);
+        context.save_frame_to_csv(&frame1);
+
+        // 切换应用信息与蓝牙设备后强制分文件
+        CALLBACK_CONTEXT.set_app_info("ComBridge2".to_string(), "0.5.24".to_string());
+        CALLBACK_CONTEXT
+            .set_last_ble_device("11:22:33:44:55:66".to_string(), Some("DEV-B".to_string()));
+        context.trigger_new_csv_file();
+
+        // 再次写入：frame_cnt=2（非新文件边界），writer 已关闭时应刷新信息行
+        let frame2 = make_frame(GhFuncFixIdx::Spo2, 2, vec![99]);
+        context.save_frame_to_csv(&frame2);
+
+        // 刷新第二个文件内容（flush）后再读取
+        context.trigger_new_csv_file();
+
+        let mut csv_files: Vec<_> = std::fs::read_dir(temp_dir.path().join("SPO2"))
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| {
+                entry
+                    .path()
+                    .extension()
+                    .map(|e| e == "csv")
+                    .unwrap_or(false)
+            })
+            .map(|entry| entry.path())
+            .collect();
+        csv_files.sort();
+
+        assert_eq!(csv_files.len(), 2, "应恰好创建两个CSV文件");
+
+        // 第一个文件：使用首次设置的应用信息与蓝牙设备
+        let first = read_info_row(&csv_files[0]);
+        assert_eq!(first["app"].as_str(), Some("ComBridge"));
+        assert_eq!(first["bleName"].as_str(), Some("DEV-A"));
+        assert_eq!(first["bleAddress"].as_str(), Some("AA:BB:CC:DD:EE:FF"));
+
+        // 第二个文件：强制分文件后刷新为新信息行
+        let second = read_info_row(&csv_files[1]);
+        assert_eq!(second["app"].as_str(), Some("ComBridge2"));
+        assert_eq!(second["bleName"].as_str(), Some("DEV-B"));
+        assert_eq!(second["bleAddress"].as_str(), Some("11:22:33:44:55:66"));
+
+        // 蓝牙缓存按地址清理：不匹配地址不清除，匹配地址清除
+        CALLBACK_CONTEXT.clear_last_ble_device("99:99:99:99:99:99");
+        assert!(CALLBACK_CONTEXT.current_info_row("SPO2").ble_name.is_some());
+        CALLBACK_CONTEXT.clear_last_ble_device("11:22:33:44:55:66");
+        assert!(CALLBACK_CONTEXT.current_info_row("SPO2").ble_name.is_none());
     }
 }

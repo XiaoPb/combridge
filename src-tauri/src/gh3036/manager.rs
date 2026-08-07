@@ -625,7 +625,7 @@ impl Gh3036Manager {
                 },
             );
 
-        self.event_bus.subscribe_msgpack::<BleConnectionEvent, _>(
+        self.event_bus.subscribe_json::<BleConnectionEvent, _>(
             topics::BLE_DISCONNECTED,
             move |_topic, event| {
                 info!("[GH3036] 收到 BLE 断开事件: {}", event.address);
@@ -1972,6 +1972,52 @@ mod tests {
 
         // 清理全局状态，避免影响其他测试
         CALLBACK_CONTEXT.set_app_info(String::new(), String::new());
+        *CALLBACK_CONTEXT.last_ble_device.lock() = None;
+    }
+
+    #[test]
+    fn ble_disconnect_event_clears_cached_device_via_event_bus() {
+        use crate::service::{topics, BleConnectionEvent, EventBus};
+
+        let event_bus = Arc::new(EventBus::new(1024));
+
+        // 先缓存一个蓝牙设备
+        CALLBACK_CONTEXT
+            .set_last_ble_device("AA:BB:CC:DD:EE:FF".to_string(), Some("DEV-A".to_string()));
+
+        // 注册与生产代码相同的 JSON 订阅
+        let bus = event_bus.clone();
+        bus.subscribe_json::<BleConnectionEvent, _>(
+            topics::BLE_DISCONNECTED,
+            move |_topic, event| {
+                CALLBACK_CONTEXT.clear_last_ble_device(&event.address);
+            },
+        );
+
+        // msgpack 订阅不应收到 JSON 事件（旧 bug 的根因）
+        let msgpack_fired = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = msgpack_fired.clone();
+        let bus2 = event_bus.clone();
+        bus2.subscribe_msgpack::<BleConnectionEvent, _>(
+            topics::BLE_DISCONNECTED,
+            move |_topic, _event| {
+                flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            },
+        );
+
+        // 发布类型化事件（JSON 编码）
+        let event = BleConnectionEvent::new("AA:BB:CC:DD:EE:FF", None);
+        event_bus.publish_typed(topics::BLE_DISCONNECTED, &event);
+
+        // 缓存应被清除
+        let row = CALLBACK_CONTEXT.current_info_row("SPO2");
+        assert!(row.ble_address.is_none(), "断开后缓存应被清除");
+        assert!(
+            !msgpack_fired.load(std::sync::atomic::Ordering::SeqCst),
+            "msgpack 订阅不应收到 JSON 事件"
+        );
+
+        // 清理全局状态
         *CALLBACK_CONTEXT.last_ble_device.lock() = None;
     }
 }

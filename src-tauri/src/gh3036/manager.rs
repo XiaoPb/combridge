@@ -1648,6 +1648,9 @@ mod tests {
     };
     use crate::gh3036::types::{GhFuncFixIdx, GhFuncFrame};
 
+    /// 串行化访问全局 CALLBACK_CONTEXT 的测试，避免并行执行时互相干扰
+    static TEST_GLOBAL_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+
     fn make_frame(function_id: GhFuncFixIdx, frame_cnt: u32, algo_data: Vec<i32>) -> GhFuncFrame {
         GhFuncFrame {
             id: function_id,
@@ -1758,6 +1761,8 @@ mod tests {
     fn trigger_new_csv_file_creates_new_files_for_all_writers() {
         use tempfile::TempDir;
 
+        let _guard = TEST_GLOBAL_LOCK.lock();
+
         let context = GlobalContext::new();
         let temp_dir = TempDir::new().unwrap();
 
@@ -1796,6 +1801,8 @@ mod tests {
     #[test]
     fn sw_function_start_stop_triggers_new_csv_file() {
         use tempfile::TempDir;
+
+        let _guard = TEST_GLOBAL_LOCK.lock();
 
         // 直接驱动命令完成后的处理逻辑：
         // 异步 send_command 路径需要真实设备，此处通过 handle_sw_function_command_completed 模拟命令执行完成
@@ -1858,6 +1865,8 @@ mod tests {
     fn device_disconnect_triggers_new_csv_file() {
         use tempfile::TempDir;
 
+        let _guard = TEST_GLOBAL_LOCK.lock();
+
         let temp_dir = TempDir::new().unwrap();
 
         // handle_device_disconnected 操作的是全局 CALLBACK_CONTEXT，测试需直接配置它
@@ -1905,6 +1914,8 @@ mod tests {
     #[test]
     fn force_new_file_refreshes_info_row_even_when_frame_id_nonzero() {
         use tempfile::TempDir;
+
+        let _guard = TEST_GLOBAL_LOCK.lock();
 
         let context = GlobalContext::new();
         let temp_dir = TempDir::new().unwrap();
@@ -1978,6 +1989,8 @@ mod tests {
     #[test]
     fn ble_disconnect_event_clears_cached_device_via_event_bus() {
         use crate::service::{topics, BleConnectionEvent, EventBus};
+
+        let _guard = TEST_GLOBAL_LOCK.lock();
 
         let event_bus = Arc::new(EventBus::new(1024));
 

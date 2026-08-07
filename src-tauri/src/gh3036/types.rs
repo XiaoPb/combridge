@@ -131,6 +131,13 @@ pub struct Gh3036FrameData {
     pub led_info: Vec<i32>,
 }
 
+/// LED 电流换算（单位 0.1mA），整数先乘后除保证精度
+///
+/// led_drv*_ma = 10 * led_drv* * led_drv_fs / 255
+fn led_current_ma(drv: u8, led_drv_fs: u8) -> u32 {
+    (10u32 * drv as u32 * led_drv_fs as u32) / 255
+}
+
 impl Gh3036FrameData {
     pub fn from_func_frame(frame: &GhFuncFrame, ref_data: Option<&[i32]>) -> Self {
         let func_id = GhFuncFixIdx::from(frame.id as u8);
@@ -146,17 +153,21 @@ impl Gh3036FrameData {
         let rawdata: Vec<i32> = frame.data.iter().map(|d| d.rawdata).collect();
         let phy_value: Vec<i32> = frame.data.iter().map(|d| d.ipd_pa).collect();
 
+        // 帧级 LED 满量程（解码器保证两通道共享同一 fs）
+        let led_drv_fs = frame.led_drv_fs.first().copied().unwrap_or(0);
+
         let agc_info: Vec<i32> = frame
             .data
             .iter()
             .map(|d| {
-                let word0 = (d.agc_info.gain_code as u32)
-                    | ((d.agc_info.bg_cancel_range as u32) << 4)
-                    | ((d.agc_info.dc_cancel_range as u32) << 6)
-                    | ((d.agc_info.dc_cancel_code as u32) << 8)
-                    | ((d.agc_info.led_drv0 as u32) << 16)
-                    | ((d.agc_info.led_drv1 as u32) << 24);
-                word0 as i32
+                let drv0_ma = led_current_ma(d.agc_info.led_drv0, led_drv_fs);
+                let drv1_ma = led_current_ma(d.agc_info.led_drv1, led_drv_fs);
+                let word = (d.agc_info.gain_code as u32 & 0x0F)
+                    | ((d.agc_info.bg_cancel_range as u32 & 0x03) << 4)
+                    | ((d.agc_info.dc_cancel_range as u32 & 0x03) << 6)
+                    | ((d.agc_info.dc_cancel_code as u32 & 0xFF) << 8)
+                    | (((drv0_ma + drv1_ma) & 0x3FFF) << 16);
+                word as i32
             })
             .collect();
 
@@ -164,9 +175,10 @@ impl Gh3036FrameData {
             .data
             .iter()
             .map(|d| {
-                let drv0 = (d.agc_info.led_drv0 as u32) & 0x0FFF;
-                let drv1 = (d.agc_info.led_drv1 as u32) & 0x0FFF;
-                (drv0 | (drv1 << 12)) as i32
+                let drv0_ma = led_current_ma(d.agc_info.led_drv0, led_drv_fs);
+                let drv1_ma = led_current_ma(d.agc_info.led_drv1, led_drv_fs);
+                let word = (drv0_ma & 0x0FFF) | ((drv1_ma & 0x0FFF) << 12);
+                word as i32
             })
             .collect();
 
@@ -888,10 +900,15 @@ mod tests {
     #[test]
     fn frame_data_packs_led_currents_using_yaml_bit_layout() {
         let frame = GhFuncFrame {
+            led_drv_fs: [255, 255],
             data: vec![GhFrameData {
                 ipd_pa: 200,
                 rawdata: 100,
                 agc_info: GhAgcInfo {
+                    gain_code: 3,
+                    bg_cancel_range: 1,
+                    dc_cancel_range: 2,
+                    dc_cancel_code: 200,
                     led_drv0: 12,
                     led_drv1: 34,
                     ..GhAgcInfo::default()
@@ -905,6 +922,43 @@ mod tests {
 
         assert_eq!(converted.phy_value, vec![200]);
         assert_eq!(converted.rawdata, vec![100]);
-        assert_eq!(converted.led_info, vec![12 | (34 << 12)]);
+
+        // led_drv0_ma = 10*12*255/255 = 120，led_drv1_ma = 10*34*255/255 = 340（0.1mA）
+        let drv0_ma = 120u32;
+        let drv1_ma = 340u32;
+
+        // LED_INFO_CH：低 12 位 drv0，[23:12] drv1
+        assert_eq!(converted.led_info, vec![(drv0_ma | (drv1_ma << 12)) as i32]);
+
+        // AGC_INFO_CH：gain[3:0]=3，bg[5:4]=1，dc[7:6]=2，code[15:8]=200，sum[29:16]=460
+        let expected_agc =
+            3u32 | (1u32 << 4) | (2u32 << 6) | (200u32 << 8) | ((drv0_ma + drv1_ma) << 16);
+        assert_eq!(converted.agc_info, vec![expected_agc as i32]);
+    }
+
+    #[test]
+    fn led_current_values_stay_within_bit_field_capacity() {
+        let frame = GhFuncFrame {
+            led_drv_fs: [255, 255],
+            data: vec![GhFrameData {
+                agc_info: GhAgcInfo {
+                    led_drv0: 255,
+                    led_drv1: 255,
+                    ..GhAgcInfo::default()
+                },
+                ..GhFrameData::default()
+            }],
+            ..GhFuncFrame::default()
+        };
+
+        let converted = Gh3036FrameData::from_func_frame(&frame, None);
+        let agc = converted.agc_info[0] as u32;
+        let led = converted.led_info[0] as u32;
+
+        // 最大电流：drv0_ma = drv1_ma = 10*255*255/255 = 2550（0.1mA）
+        // led_current_sum = 5100 ≤ 14 位上限 16383
+        assert_eq!((agc >> 16) & 0x3FFF, 5100, "sum 应落在 [29:16] 14 位内");
+        assert_eq!(led & 0x0FFF, 2550, "drv0 应落在低 12 位");
+        assert_eq!((led >> 12) & 0x0FFF, 2550, "drv1 应落在 [23:12]");
     }
 }

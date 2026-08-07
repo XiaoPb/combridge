@@ -55,6 +55,14 @@ impl CsvWriter {
         self.info_row = info_row;
     }
 
+    /// 当前是否已打开输出文件
+    pub fn is_open(&self) -> bool {
+        self.writer
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
+    }
+
     pub fn write_frame(&mut self, frame: &Gh3036FrameData) -> std::io::Result<()> {
         let should_create_new_file = frame.frame_id == 0
             || self

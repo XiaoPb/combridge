@@ -2,15 +2,28 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use chrono::Local;
-use csv::Writer;
+use csv::{Writer, WriterBuilder};
+use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use super::types::{Gh3036FrameData, REF_DATA_COUNT};
+
+/// CSV 第一行信息（精简 JSON，对应 gh3036.yaml info_row）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CsvInfoRow {
+    pub app: String,
+    pub version: String,
+    pub function: String,
+    pub ble_name: Option<String>,
+    pub ble_address: Option<String>,
+}
 
 pub struct CsvWriter {
     writer: Mutex<Option<Writer<std::fs::File>>>,
     output_dir: PathBuf,
     function_name: String,
+    info_row: CsvInfoRow,
     current_file_index: u32,
     last_frame_id: i32,
     rows_since_flush: u32,
@@ -21,11 +34,25 @@ impl CsvWriter {
         Self {
             writer: Mutex::new(None),
             output_dir,
+            info_row: CsvInfoRow {
+                app: String::new(),
+                version: String::new(),
+                function: function_name.clone(),
+                ble_name: None,
+                ble_address: None,
+            },
             function_name,
             current_file_index: 0,
             last_frame_id: -1,
             rows_since_flush: 0,
         }
+    }
+
+    /// 更新 CSV 信息行内容（应用名、版本、测试功能、蓝牙名称/地址）
+    ///
+    /// 在创建新文件前由管理器刷新，保证信息行与当前采集设备一致
+    pub fn set_info_row(&mut self, info_row: CsvInfoRow) {
+        self.info_row = info_row;
     }
 
     pub fn write_frame(&mut self, frame: &Gh3036FrameData) -> std::io::Result<()> {
@@ -88,8 +115,13 @@ impl CsvWriter {
         );
         let filepath = function_output_dir.join(&filename);
 
-        let mut writer = Writer::from_path(&filepath)?;
+        let mut writer = WriterBuilder::new().flexible(true).from_path(&filepath)?;
 
+        // 第 1 行：精简 JSON 信息行（应用名、版本、测试功能、蓝牙名称、蓝牙地址）
+        let info_json = serde_json::to_string(&self.info_row).map_err(std::io::Error::other)?;
+        writer.write_record([info_json.as_str()])?;
+
+        // 第 2 行：列名
         self.write_header(&mut writer)?;
 
         info!("创建新的 CSV 文件: {:?}", filepath);
@@ -193,7 +225,7 @@ impl CsvWriter {
 
 #[cfg(test)]
 mod tests {
-    use super::CsvWriter;
+    use super::{CsvInfoRow, CsvWriter};
     use crate::gh3036::types::Gh3036FrameData;
 
     fn expected_headers() -> Vec<String> {
@@ -296,7 +328,7 @@ mod tests {
         // 释放 writer，确保所有缓冲数据落盘
         drop(writer);
 
-        // 验证：恰好生成两个 CSV 文件，每个文件包含表头和一行数据
+        // 验证：恰好生成两个 CSV 文件，每个文件包含 信息行+表头+一行数据
         let csv_files: Vec<_> = std::fs::read_dir(output_dir.join("SPO2"))
             .unwrap()
             .collect::<std::io::Result<Vec<_>>>()
@@ -315,18 +347,82 @@ mod tests {
 
         let mut frame_ids = Vec::new();
         for entry in &csv_files {
-            let mut reader = csv::Reader::from_path(entry.path()).unwrap();
-            let headers = reader.headers().unwrap().clone();
-            assert_eq!(
-                headers.iter().map(String::from).collect::<Vec<_>>(),
-                CsvWriter::headers(),
-                "文件应包含表头行"
+            let mut reader = csv::ReaderBuilder::new()
+                .has_headers(false)
+                .flexible(true)
+                .from_path(entry.path())
+                .unwrap();
+            let records: Vec<_> = reader.records().collect::<Result<_, _>>().unwrap();
+            assert_eq!(records.len(), 3, "每个文件应包含信息行、表头和数据行");
+
+            // 第 1 行：精简 JSON 信息行
+            let info_json = records[0].get(0).unwrap();
+            let info: serde_json::Value =
+                serde_json::from_str(info_json).expect("信息行应为合法 JSON");
+            assert!(info.get("app").is_some(), "信息行应包含 app 字段");
+            assert!(info.get("version").is_some(), "信息行应包含 version 字段");
+            assert!(info.get("function").is_some(), "信息行应包含 function 字段");
+            assert!(info.get("bleName").is_some(), "信息行应包含 bleName 字段");
+            assert!(
+                info.get("bleAddress").is_some(),
+                "信息行应包含 bleAddress 字段"
             );
-            let records: Vec<_> = reader.records().collect::<Result<Vec<_>, _>>().unwrap();
-            assert_eq!(records.len(), 1, "每个文件应恰好包含一行数据");
-            frame_ids.push(records[0].get(1).unwrap().parse::<i32>().unwrap());
+
+            // 第 2 行：表头
+            let header: Vec<String> = records[1].iter().map(String::from).collect();
+            assert_eq!(header, CsvWriter::headers(), "文件应包含表头行");
+
+            // 第 3 行：数据
+            frame_ids.push(records[2].get(1).unwrap().parse::<i32>().unwrap());
         }
         frame_ids.sort_unstable();
         assert_eq!(frame_ids, vec![1, 2], "两个文件应分别包含 frame_id 1 和 2");
+    }
+
+    #[test]
+    fn info_row_contains_app_and_ble_metadata_before_header() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let mut writer = CsvWriter::new(temp_dir.path().to_path_buf(), 2, "SPO2".to_string());
+        writer.set_info_row(CsvInfoRow {
+            app: "ComBridge".to_string(),
+            version: "0.5.24".to_string(),
+            function: "SPO2".to_string(),
+            ble_name: Some("GH3036-DEV".to_string()),
+            ble_address: Some("AA:BB:CC:DD:EE:FF".to_string()),
+        });
+        writer.write_frame(&sample_frame()).unwrap();
+        drop(writer);
+
+        let file = std::fs::read_dir(temp_dir.path().join("SPO2"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        let mut reader = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .flexible(true)
+            .from_path(file)
+            .unwrap();
+        let records: Vec<_> = reader.records().collect::<Result<_, _>>().unwrap();
+
+        assert_eq!(records.len(), 3, "信息行 + 表头 + 一行数据");
+
+        let info: serde_json::Value =
+            serde_json::from_str(records[0].get(0).unwrap()).expect("第一行应为合法 JSON");
+        assert_eq!(info["app"], "ComBridge");
+        assert_eq!(info["version"], "0.5.24");
+        assert_eq!(info["function"], "SPO2");
+        assert_eq!(info["bleName"], "GH3036-DEV");
+        assert_eq!(info["bleAddress"], "AA:BB:CC:DD:EE:FF");
+
+        let header: Vec<String> = records[1].iter().map(String::from).collect();
+        assert_eq!(header, CsvWriter::headers());
+
+        let data = &records[2];
+        assert_eq!(data.get(0), Some("123"));
+        assert_eq!(data.get(1), Some("7"));
     }
 }

@@ -50,13 +50,8 @@ const CsvLoaderTab: React.FC = () => {
   }, [filePath, loadCsvFile]);
 
   const handleAddChartGroup = useCallback(() => {
-    const newIndex = chartGroups.length + 1;
-    addChartGroup({
-      name: `图表${newIndex}`,
-      columns: [],
-      height: 300,
-    });
-  }, [chartGroups.length, addChartGroup]);
+    addChartGroup();
+  }, [addChartGroup]);
 
   const columns = csvData?.columns ?? [];
   const rows = csvData?.rows ?? [];
@@ -159,14 +154,14 @@ const CsvLoaderTab: React.FC = () => {
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-color)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   {chartGroups.map((group) => (
-                    <Space key={group.name} style={{ background: 'var(--bg-secondary)', padding: '4px 8px', borderRadius: 4 }}>
+                    <Space key={group.id} style={{ background: 'var(--bg-secondary)', padding: '4px 8px', borderRadius: 4 }}>
                       <Text strong style={{ fontSize: 12 }}>{group.name}</Text>
                       <Select
                         mode="multiple"
                         allowClear
                         placeholder={t('sidebar.selectColumns')}
                         value={group.columns}
-                        onChange={(cols) => updateChartGroup(group.name, { columns: cols })}
+                        onChange={(cols) => updateChartGroup(group.id, { columns: cols })}
                         options={columns.map(col => ({ label: col, value: col }))}
                         maxTagCount="responsive"
                         size="small"
@@ -176,7 +171,7 @@ const CsvLoaderTab: React.FC = () => {
                         min={150}
                         max={600}
                         value={group.height}
-                        onChange={(v) => updateChartGroup(group.name, { height: v || 300 })}
+                        onChange={(v) => updateChartGroup(group.id, { height: v || 300 })}
                         style={{ width: 60 }}
                         size="small"
                         addonAfter="px"
@@ -185,7 +180,7 @@ const CsvLoaderTab: React.FC = () => {
                         <Button
                           type="text"
                           icon={<DeleteOutlined />}
-                          onClick={() => removeChartGroup(group.name)}
+                          onClick={() => removeChartGroup(group.id)}
                           size="small"
                           danger
                         />

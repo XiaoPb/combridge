@@ -78,6 +78,32 @@ export function dispatchDataZoomSilently(
   );
 }
 
+export function handleDataZoomEvent(
+  chartKey: string,
+  params: unknown,
+  chartInstances: ReadonlyMap<
+    string,
+    Pick<echarts.ECharts, 'dispatchAction'>
+  >,
+  setLocalDataZoom: (state: DataZoomState) => void,
+  onDataZoomChange?: (state: DataZoomState) => void,
+): void {
+  const p = params as {
+    start?: number;
+    end?: number;
+    batch?: Array<{ start: number; end: number }>;
+  };
+  const zoom = p.batch?.[0] ?? p;
+  if (zoom.start === undefined || zoom.end === undefined) return;
+
+  const state = { start: zoom.start, end: zoom.end };
+  setLocalDataZoom(state);
+  onDataZoomChange?.(state);
+  chartInstances.forEach((sibling, siblingKey) => {
+    if (siblingKey !== chartKey) dispatchDataZoomSilently(sibling, state);
+  });
+}
+
 const formatScientific = (value: number): string => {
   if (value === 0) return '0';
   const absValue = Math.abs(value);
@@ -123,8 +149,6 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
     initialDataZoom ?? { start: 0, end: 100 },
   );
   const updateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const zoomResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isZoomingRef = useRef(false);
   const legendSelectedRef = useRef(legendSelected);
   const localLegendSelectedRef = useRef(localLegendSelected);
   const onLegendSelectedChangeRef = useRef(onLegendSelectedChange);
@@ -441,33 +465,14 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
       const key = getChartGroupKey(group, index);
       const chart = chartInstances.current.get(key);
       if (!chart) return;
-      const handler = (params: unknown) => {
-        const p = params as {
-          start?: number;
-          end?: number;
-          batch?: Array<{ start: number; end: number }>;
-        };
-        const zoom = p.batch?.[0] ?? p;
-        if (
-          zoom.start === undefined ||
-          zoom.end === undefined ||
-          isZoomingRef.current
-        )
-          return;
-        const state = { start: zoom.start, end: zoom.end };
-        isZoomingRef.current = true;
-        setLocalDataZoom(state);
-        onDataZoomChangeRef.current?.(state);
-        chartInstances.current.forEach((sibling, siblingKey) => {
-          if (siblingKey !== key)
-            dispatchDataZoomSilently(sibling, state);
-        });
-        if (zoomResetTimer.current) clearTimeout(zoomResetTimer.current);
-        zoomResetTimer.current = setTimeout(() => {
-          isZoomingRef.current = false;
-          zoomResetTimer.current = null;
-        }, 50);
-      };
+      const handler = (params: unknown) =>
+        handleDataZoomEvent(
+          key,
+          params,
+          chartInstances.current,
+          setLocalDataZoom,
+          onDataZoomChangeRef.current,
+        );
       chart.on('datazoom', handler);
       disposers.push(() => chart.off('datazoom', handler));
     });
@@ -543,7 +548,6 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   useEffect(
     () => () => {
       if (updateTimer.current) clearTimeout(updateTimer.current);
-      if (zoomResetTimer.current) clearTimeout(zoomResetTimer.current);
       chartInstances.current.forEach((chart) => chart.dispose());
       chartInstances.current.clear();
       structureSignatures.current.clear();

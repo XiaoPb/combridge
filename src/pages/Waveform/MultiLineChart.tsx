@@ -23,7 +23,10 @@ import {
   resolveChartLegendSelection,
 } from './chartGroup';
 import { buildChartSeries } from './multiLineChartModel';
-import { normalizeSvgExportDataUrl } from './multiLineChartExport';
+import {
+  ensureWhiteSvgBackground,
+  resolveCssVariablesInValue,
+} from './multiLineChartExport';
 export type { ChartGroupConfig } from './chartGroup';
 
 echarts.use([
@@ -703,6 +706,16 @@ function exportSvgChart(chart: echarts.ECharts): string {
   const liveDom = chart.getDom();
   const width = Math.max(1, chart.getWidth(), liveDom.clientWidth);
   const height = Math.max(1, chart.getHeight(), liveDom.clientHeight);
+  const liveStyle = window.getComputedStyle(liveDom);
+  const rootStyle = document.documentElement
+    ? window.getComputedStyle(document.documentElement)
+    : null;
+  const resolveCssVariable = (name: string): string | undefined => {
+    const liveValue = liveStyle.getPropertyValue(name).trim();
+    if (liveValue) return liveValue;
+    const rootValue = rootStyle?.getPropertyValue(name).trim();
+    return rootValue || undefined;
+  };
   const container = document.createElement('div');
   container.style.position = 'absolute';
   container.style.left = '-10000px';
@@ -718,9 +731,16 @@ function exportSvgChart(chart: echarts.ECharts): string {
       width,
       height,
     });
-    temporaryChart.setOption(chart.getOption());
-    return normalizeSvgExportDataUrl(
-      temporaryChart.getDataURL({ type: 'svg', backgroundColor: '#fff' }),
+    const resolvedOption = resolveCssVariablesInValue(
+      chart.getOption(),
+      resolveCssVariable,
+    ) as Record<string, unknown>;
+    const exportOption = { ...resolvedOption, backgroundColor: '#fff' };
+    temporaryChart.setOption(exportOption);
+    return ensureWhiteSvgBackground(
+      temporaryChart.getDataURL({ type: 'svg' }),
+      width,
+      height,
     );
   } finally {
     temporaryChart?.dispose();

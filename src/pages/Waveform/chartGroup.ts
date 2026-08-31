@@ -36,8 +36,8 @@ export function getChartGroupKey(group: ChartGroupConfig, index: number): string
   return group.id || `legacy:${index}:${group.name}`;
 }
 
-export function getNextChartGroupName(existingNames: readonly string[]): string {
-  const existing = new Set(existingNames);
+export function getNextChartGroupName(groups: readonly ChartGroupConfig[]): string {
+  const existing = new Set(groups.map((group) => group.name));
   let index = 1;
   while (existing.has(`图表${index}`)) {
     index += 1;

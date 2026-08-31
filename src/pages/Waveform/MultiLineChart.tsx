@@ -19,6 +19,7 @@ import type { ChartGroupConfig } from './chartGroup';
 import {
   getChartGroupKey,
   getChartLegendKey,
+  migrateLegacyChartLegendSelections,
   resolveChartLegendSelection,
 } from './chartGroup';
 import { buildChartSeries } from './multiLineChartModel';
@@ -121,6 +122,17 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   useEffect(() => {
     setLocalDataZoom(initialDataZoom ?? { start: 0, end: 100 });
   }, [initialDataZoom?.start, initialDataZoom?.end]);
+
+  useEffect(() => {
+    if (legendSelected === undefined) return;
+    const migrated = migrateLegacyChartLegendSelections(
+      legendScope,
+      legendSelected,
+      chartGroups,
+    );
+    if (migrated !== legendSelected)
+      onLegendSelectedChangeRef.current?.(migrated);
+  }, [legendSelected, chartGroups, legendScope]);
 
   const xAxisData = useMemo(
     () => rows.map((_, index) => index / sampleRate),

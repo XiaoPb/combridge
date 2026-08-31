@@ -5,6 +5,7 @@ import {
   getChartGroupKey,
   getChartLegendKey,
   getNextChartGroupName,
+  migrateLegacyChartLegendSelections,
   resolveChartLegendSelection,
 } from './chartGroup';
 
@@ -80,7 +81,7 @@ describe('chart group identity', () => {
     );
   });
 
-  it('prefers scoped ID selection and falls back to legacy display-name selection', () => {
+  it('only resolves scoped selection keys', () => {
     const group = { id: 'stable', name: '同名', columns: ['CH0'] };
     const scopedKey = getChartLegendKey('gh3036', group, 0, 'CH0');
 
@@ -101,6 +102,90 @@ describe('chart group identity', () => {
         0,
         'CH0',
       ),
+    ).toBeUndefined();
+  });
+
+  it('migrates one legacy value to distinct scoped keys for same-name groups', () => {
+    const first = { id: 'first', name: '同名', columns: ['CH0'] };
+    const second = { id: 'second', name: '同名', columns: ['CH0'] };
+    const selected = { 同名_CH0: false };
+
+    const migrated = migrateLegacyChartLegendSelections('monitor', selected, [
+      first,
+      second,
+    ]);
+
+    expect(migrated).not.toBe(selected);
+    expect(migrated).toMatchObject({
+      同名_CH0: false,
+      [getChartLegendKey('monitor', first, 0, 'CH0')]: false,
+      [getChartLegendKey('monitor', second, 1, 'CH0')]: false,
+    });
+    expect(
+      resolveChartLegendSelection(
+        'monitor',
+        { ...migrated, [getChartLegendKey('monitor', first, 0, 'CH0')]: true },
+        second,
+        1,
+        'CH0',
+      ),
+    ).toBe(false);
+  });
+
+  it('keeps legacy migrations independent across scopes', () => {
+    const group = { id: 'stable', name: '同名', columns: ['CH0'] };
+    const selected = { 同名_CH0: false };
+
+    const migrated = migrateLegacyChartLegendSelections('monitor', selected, [
+      group,
+    ]);
+    const dataViewMigrated = migrateLegacyChartLegendSelections(
+      'dataView',
+      selected,
+      [group],
+    );
+
+    expect(migrated[getChartLegendKey('monitor', group, 0, 'CH0')]).toBe(false);
+    expect(dataViewMigrated[getChartLegendKey('dataView', group, 0, 'CH0')]).toBe(
+      false,
+    );
+    expect(getChartLegendKey('monitor', group, 0, 'CH0')).not.toBe(
+      getChartLegendKey('dataView', group, 0, 'CH0'),
+    );
+  });
+
+  it('preserves existing scoped values and returns the same object on no-op', () => {
+    const group = { id: 'stable', name: '同名', columns: ['CH0'] };
+    const scopedKey = getChartLegendKey('monitor', group, 0, 'CH0');
+    const selected = { 同名_CH0: false, [scopedKey]: true };
+
+    const migrated = migrateLegacyChartLegendSelections('monitor', selected, [
+      group,
+    ]);
+
+    expect(migrated).toBe(selected);
+    expect(migrated[scopedKey]).toBe(true);
+    const empty = {};
+    expect(migrateLegacyChartLegendSelections('monitor', empty, [group])).toBe(
+      empty,
+    );
+  });
+
+  it('uses own-property checks safely for legacy keys', () => {
+    const group = {
+      id: 'safe',
+      name: 'chart',
+      columns: ['hasOwnProperty'],
+    };
+    const selected = Object.create(null) as Record<string, boolean>;
+    selected.chart_hasOwnProperty = false;
+
+    const migrated = migrateLegacyChartLegendSelections('monitor', selected, [
+      group,
+    ]);
+
+    expect(
+      migrated[getChartLegendKey('monitor', group, 0, 'hasOwnProperty')],
     ).toBe(false);
   });
 

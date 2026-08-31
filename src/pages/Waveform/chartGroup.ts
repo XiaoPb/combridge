@@ -59,11 +59,33 @@ export function resolveChartLegendSelection(
   const scopedKey = getChartLegendKey(scope, group, index, column);
   if (Object.prototype.hasOwnProperty.call(selected, scopedKey))
     return selected[scopedKey];
-
-  const legacyKey = `${group.name}_${column}`;
-  if (Object.prototype.hasOwnProperty.call(selected, legacyKey))
-    return selected[legacyKey];
   return undefined;
+}
+
+export function migrateLegacyChartLegendSelections(
+  scope: string,
+  selected: Record<string, boolean>,
+  chartGroups: readonly ChartGroupConfig[],
+): Record<string, boolean> {
+  let migrated: Record<string, boolean> | undefined;
+
+  chartGroups.forEach((group, index) => {
+    group.columns.forEach((column) => {
+      const scopedKey = getChartLegendKey(scope, group, index, column);
+      const legacyKey = `${group.name}_${column}`;
+      if (
+        Object.prototype.hasOwnProperty.call(selected, scopedKey) ||
+        !Object.prototype.hasOwnProperty.call(selected, legacyKey)
+      ) {
+        return;
+      }
+
+      migrated ??= { ...selected };
+      migrated[scopedKey] = selected[legacyKey];
+    });
+  });
+
+  return migrated ?? selected;
 }
 
 export function getNextChartGroupName(

@@ -12,6 +12,7 @@ import { CanvasRenderer } from 'echarts/renderers';
 import { useCsvChartStore } from '../../stores/csvChartStore';
 import { useGh3036Store } from '../../stores/gh3036Store';
 import type { ChartGroupConfig } from './chartGroup';
+import { buildChartSeries } from './multiLineChartModel';
 export type { ChartGroupConfig } from './chartGroup';
 
 echarts.use([
@@ -39,29 +40,6 @@ interface MultiLineChartProps {
   initialDataZoom?: { start: number; end: number };
   onDataZoomChange?: (state: { start: number; end: number }) => void;
 }
-
-const COLORS = [
-  '#165DFF',
-  '#F53F3F',
-  '#00B42A',
-  '#FF7D00',
-  '#722ED1',
-  '#14C9C9',
-  '#EB0AA4',
-  '#FFC107',
-  '#40A9FF'
-];
-
-const colorCache = new Map<string, string>();
-
-const getStableColor = (col: string, index: number): string => {
-  if (colorCache.has(col)) {
-    return colorCache.get(col)!;
-  }
-  const color = COLORS[index % COLORS.length];
-  colorCache.set(col, color);
-  return color;
-};
 
 const Y_AXIS_WIDTH = 50;
 const MAX_LINES_PER_CHART = 4;
@@ -122,14 +100,6 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
     return rows.map((_, index) => index * interval);
   }, [rows, sampleRate]);
 
-  const colorMap = useMemo(() => {
-    const map = new Map<string, string>();
-    columns.forEach((col, index) => {
-      map.set(col, getStableColor(col, index));
-    });
-    return map;
-  }, [columns]);
-
   const unifiedGridConfig = useMemo(() => {
     const leftWidth = Y_AXIS_WIDTH * 2;
     const rightWidth = Y_AXIS_WIDTH * 2;
@@ -142,11 +112,8 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
     };
   }, []);
 
-  const getChartOption = useCallback((
-    group: ChartGroupConfig,
-    groupColorMap: Map<string, string>
-  ) => {
-    const limitedColumns = group.columns.slice(0, MAX_LINES_PER_CHART);
+  const getChartOption = useCallback((group: ChartGroupConfig) => {
+    const seriesData = buildChartSeries(columns, rows, group.columns, MAX_LINES_PER_CHART);
 
     const yAxisPositions: Array<{ position: 'left' | 'right'; offset: number }> = [
       { position: 'left', offset: 0 },
@@ -156,8 +123,9 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
     ];
 
     const yAxisOption = yAxisPositions.map((pos, idx) => {
-      const col = limitedColumns[idx];
-      const color = col ? (groupColorMap.get(col) || COLORS[idx]) : 'transparent';
+      const series = seriesData[idx];
+      const col = series?.name;
+      const color = series?.color || 'transparent';
       const hasData = !!col;
 
       return {
@@ -184,15 +152,6 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
         },
       };
     });
-
-    const seriesData = limitedColumns.map((col) => ({
-      name: col,
-      data: rows.map((row) => {
-        const colIndex = columns.indexOf(col);
-        return colIndex >= 0 && colIndex < row.length ? row[colIndex] : 0;
-      }),
-      color: groupColorMap.get(col) || COLORS[columns.indexOf(col) % COLORS.length],
-    }));
 
     const seriesOption = seriesData.map((s, idx) => ({
       name: s.name,
@@ -403,7 +362,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
 
       const group = chartGroups[index];
       if (group) {
-        const option = getChartOption(group, colorMap);
+        const option = getChartOption(group);
         chart.setOption(option);
       }
     });
@@ -421,7 +380,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
       chartInstances.current = [];
       setInitialized(false);
     };
-  }, [chartGroups, getChartOption, colorMap]);
+  }, [chartGroups, getChartOption]);
 
   useEffect(() => {
     if (!initialized) return;
@@ -433,7 +392,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
 
         const group = chartGroups[index];
         if (group) {
-          const option = getChartOption(group, colorMap);
+          const option = getChartOption(group);
           chart.setOption(option, {
             notMerge: false,
             lazyUpdate: true  // 启用懒更新，减少渲染次数
@@ -443,7 +402,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
     }, 16);  // 约60fps的更新频率
 
     return () => clearTimeout(updateTimer);
-  }, [rows, columns, initialized, chartGroups, getChartOption, colorMap, sampleRate]);
+  }, [rows, columns, initialized, chartGroups, getChartOption, sampleRate]);
 
   useEffect(() => {
     if (!initialized || chartInstances.current.length === 0) return;

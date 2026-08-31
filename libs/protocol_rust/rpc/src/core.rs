@@ -160,7 +160,6 @@ struct FrameBuffer {
 struct MultiFrameBuffer {
     frames: Vec<FrameBuffer>,
     expected_frame_idx: u8,
-    key: Option<String>,
 }
 
 impl MultiFrameBuffer {
@@ -170,17 +169,11 @@ impl MultiFrameBuffer {
 
     fn add_frame(
         &mut self,
-        key: &str,
         invoke_idx: u8,
         frame_idx: u8,
         data: Vec<u8>,
     ) -> Result<bool, RpcError> {
-        let sequence_changed = self.key.as_deref().is_some_and(|current| current != key)
-            || self
-                .frames
-                .first()
-                .is_some_and(|frame| frame.invoke_idx != invoke_idx);
-        if sequence_changed || (frame_idx == 0 && self.expected_frame_idx != 0) {
+        if frame_idx == 0 && self.expected_frame_idx != 0 {
             self.clear();
         }
 
@@ -188,7 +181,6 @@ impl MultiFrameBuffer {
             self.clear();
             Err(RpcError::LoseFrame)
         } else {
-            self.key.get_or_insert_with(|| key.to_string());
             self.frames.push(FrameBuffer { invoke_idx, data });
             self.expected_frame_idx = self.expected_frame_idx.wrapping_add(1);
             Ok(true)
@@ -210,7 +202,6 @@ impl MultiFrameBuffer {
     fn clear(&mut self) {
         self.frames.clear();
         self.expected_frame_idx = 0;
-        self.key = None;
     }
 }
 
@@ -222,7 +213,7 @@ pub struct RpcCore {
     static_nodes: Arc<RwLock<HashMap<String, InvokeNode>>>,
     dynamic_nodes: Arc<Mutex<HashMap<(String, u8), PendingCall>>>,
     frame_parser: Mutex<FrameParser>,
-    multi_frame_buffer: Mutex<MultiFrameBuffer>,
+    multi_frame_buffer: Mutex<HashMap<String, MultiFrameBuffer>>,
     send_function: Mutex<Option<SendFunction>>,
     send_lock: Mutex<()>,
     invoke_index: Mutex<u8>,
@@ -253,7 +244,7 @@ impl RpcCore {
             static_nodes: Arc::new(RwLock::new(HashMap::new())),
             dynamic_nodes: Arc::new(Mutex::new(HashMap::new())),
             frame_parser: Mutex::new(FrameParser::new()),
-            multi_frame_buffer: Mutex::new(MultiFrameBuffer::new()),
+            multi_frame_buffer: Mutex::new(HashMap::new()),
             send_function: Mutex::new(None),
             send_lock: Mutex::new(()),
             invoke_index: Mutex::new(1),
@@ -806,7 +797,10 @@ impl RpcCore {
                         ),
                     );
                     if let Err(e) = self.handle_parse_result(parse_result.clone()).await {
-                        self.multi_frame_buffer.lock().await.clear();
+                        self.multi_frame_buffer
+                            .lock()
+                            .await
+                            .remove(&parse_result.key);
                         self.logger.log(
                             crate::types::LogLevel::Error,
                             "RpcCore",
@@ -949,13 +943,16 @@ impl RpcCore {
         );
 
         {
-            let mut buffer = self.multi_frame_buffer.lock().await;
+            let mut buffers = self.multi_frame_buffer.lock().await;
+            let buffer = buffers
+                .entry(key.to_string())
+                .or_insert_with(MultiFrameBuffer::new);
             let effective_frame_idx = if frame_idx == LAST_FRAME_FIX_INDEX {
                 buffer.expected_frame_idx
             } else {
                 frame_idx
             };
-            buffer.add_frame(key, 0, effective_frame_idx, data.to_vec())?;
+            buffer.add_frame(0, effective_frame_idx, data.to_vec())?;
 
             if !buffer.is_complete(is_fin) {
                 self.logger.log(
@@ -971,10 +968,11 @@ impl RpcCore {
         }
 
         let all_data = {
-            let mut buffer = self.multi_frame_buffer.lock().await;
-            let data = buffer.get_all_data();
-            buffer.clear();
-            data
+            let mut buffers = self.multi_frame_buffer.lock().await;
+            buffers
+                .remove(key)
+                .map(|buffer| buffer.get_all_data())
+                .unwrap_or_default()
         };
 
         self.logger.log(
@@ -1593,13 +1591,13 @@ mod tests {
     async fn test_multi_frame_buffer() {
         let mut buffer = MultiFrameBuffer::new();
 
-        buffer.add_frame("G", 0, 0, vec![1, 2, 3]).unwrap();
+        buffer.add_frame(0, 0, vec![1, 2, 3]).unwrap();
         assert!(!buffer.is_complete(false));
 
-        buffer.add_frame("G", 0, 1, vec![4, 5, 6]).unwrap();
+        buffer.add_frame(0, 1, vec![4, 5, 6]).unwrap();
         assert!(!buffer.is_complete(false));
 
-        buffer.add_frame("G", 0, 2, vec![7, 8, 9]).unwrap();
+        buffer.add_frame(0, 2, vec![7, 8, 9]).unwrap();
         assert!(buffer.is_complete(true));
 
         let data = buffer.get_all_data();
@@ -1610,13 +1608,13 @@ mod tests {
     async fn test_multi_frame_buffer_lose_frame() {
         let mut buffer = MultiFrameBuffer::new();
 
-        buffer.add_frame("G", 0, 0, vec![1, 2, 3]).unwrap();
-        let result = buffer.add_frame("G", 0, 2, vec![4, 5, 6]);
+        buffer.add_frame(0, 0, vec![1, 2, 3]).unwrap();
+        let result = buffer.add_frame(0, 2, vec![4, 5, 6]);
         assert!(matches!(result, Err(RpcError::LoseFrame)));
         assert!(buffer.frames.is_empty());
         assert_eq!(buffer.expected_frame_idx, 0);
 
-        buffer.add_frame("G", 0, 0, vec![7, 8, 9]).unwrap();
+        buffer.add_frame(0, 0, vec![7, 8, 9]).unwrap();
         assert_eq!(buffer.get_all_data(), vec![7, 8, 9]);
     }
 
@@ -1642,11 +1640,11 @@ mod tests {
         *invalid.last_mut().unwrap() ^= 0xFF;
 
         core.process(&first).await;
-        assert_eq!(core.multi_frame_buffer.lock().await.frames.len(), 1);
+        assert_eq!(core.multi_frame_buffer.lock().await["G"].frames.len(), 1);
         let results = core.process(&invalid).await;
 
         assert!(matches!(results.first(), Some(Err(RpcError::CrcMismatch))));
-        assert!(core.multi_frame_buffer.lock().await.frames.is_empty());
+        assert!(core.multi_frame_buffer.lock().await.is_empty());
     }
 
     #[tokio::test]

@@ -11,6 +11,8 @@ import { UniversalTransition } from 'echarts/features';
 import { CanvasRenderer } from 'echarts/renderers';
 import { useCsvChartStore } from '../../stores/csvChartStore';
 import { useGh3036Store } from '../../stores/gh3036Store';
+import type { ChartGroupConfig } from './chartGroup';
+export type { ChartGroupConfig } from './chartGroup';
 
 echarts.use([
   LineChart,
@@ -21,12 +23,6 @@ echarts.use([
   CanvasRenderer,
   UniversalTransition,
 ]);
-
-export interface ChartGroupConfig {
-  name: string;
-  columns: string[];
-  height?: number;
-}
 
 export interface YAxisConfig {
   column: string;

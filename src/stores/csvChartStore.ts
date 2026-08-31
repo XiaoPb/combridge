@@ -1,20 +1,15 @@
 import { create } from 'zustand';
 import { CsvParseConfig, CsvParseResult, readCsvFile } from '../utils/csvParser';
-import type { ChartGroupConfig, YAxisConfig } from '../pages/Waveform/MultiLineChart';
+import type { IdentifiedChartGroupConfig } from '../pages/Waveform/chartGroup';
+import { createChartGroup, getNextChartGroupName } from '../pages/Waveform/chartGroup';
 import i18n from '../i18n';
 import { formatErrorMessage } from '../utils/errorMessage';
 
-interface DataZoomState {
-  start: number;
-  end: number;
-}
-
+interface DataZoomState { start: number; end: number; }
 interface CsvChartState {
   csvData: CsvParseResult | null;
   filePath: string | null;
-  chartGroups: ChartGroupConfig[];
-  yAxisConfigs: Record<string, YAxisConfig[]>;
-  hiddenLines: string[];
+  chartGroups: IdentifiedChartGroupConfig[];
   isLoading: boolean;
   error: string | null;
   parseConfig: CsvParseConfig;
@@ -22,15 +17,12 @@ interface CsvChartState {
   sampleRate: number;
   dataZoomState: DataZoomState;
 }
-
 interface CsvChartActions {
   loadCsvFile: (filePath: string) => Promise<void>;
-  setChartGroups: (groups: ChartGroupConfig[]) => void;
-  addChartGroup: (group: ChartGroupConfig) => void;
-  removeChartGroup: (name: string) => void;
-  updateChartGroup: (name: string, group: Partial<ChartGroupConfig>) => void;
-  setYAxisConfigs: (groupName: string, configs: YAxisConfig[]) => void;
-  toggleLineVisibility: (columnName: string) => void;
+  setChartGroups: (groups: IdentifiedChartGroupConfig[]) => void;
+  addChartGroup: () => void;
+  removeChartGroup: (id: string) => void;
+  updateChartGroup: (id: string, patch: Partial<IdentifiedChartGroupConfig>) => void;
   setParseConfig: (config: Partial<CsvParseConfig>) => void;
   setVisiblePoints: (points: number) => void;
   setSampleRate: (rate: number) => void;
@@ -38,157 +30,73 @@ interface CsvChartActions {
   clearData: () => void;
   clearError: () => void;
 }
-
 export type CsvChartStore = CsvChartState & CsvChartActions;
 
-const DEFAULT_PARSE_CONFIG: CsvParseConfig = {
-  skipInfoRows: 1,
-  noHeader: false,
-};
+const DEFAULT_PARSE_CONFIG: CsvParseConfig = { skipInfoRows: 1, noHeader: false };
+const DEFAULT_DATA_ZOOM_STATE: DataZoomState = { start: 0, end: 100 };
 
-const DEFAULT_CHART_GROUPS: ChartGroupConfig[] = [
-  { name: '图表1', columns: [], height: 300 },
-  { name: '图表2', columns: [], height: 300 },
-];
+export function createDefaultChartGroups(): IdentifiedChartGroupConfig[] {
+  return [createChartGroup('图表1'), createChartGroup('图表2')];
+}
 
-const DEFAULT_DATA_ZOOM_STATE: DataZoomState = {
-  start: 0,
-  end: 100,
-};
-
-function autoAssignChartGroups(columns: string[]): ChartGroupConfig[] {
+function autoAssignChartGroups(columns: string[]): IdentifiedChartGroupConfig[] {
   const accColumns: string[] = [];
   const chColumns: string[] = [];
-
   columns.forEach((col) => {
-    if (/^ACC_?[XYZ]$/i.test(col)) {
-      accColumns.push(col);
-    } else if ((/^CH[0-3](\(.*\))?$/i.test(col)) ||
-               (/^Ipd[0-3](\(.*\))?$/i.test(col))) {
-      chColumns.push(col);
-    }
+    if (/^ACC_?[XYZ]$/i.test(col)) accColumns.push(col);
+    else if ((/^CH[0-3](\(.*\))?$/i.test(col)) || (/^Ipd[0-3](\(.*\))?$/i.test(col))) chColumns.push(col);
   });
-
-  const groups: ChartGroupConfig[] = [
-    { name: '图表1', columns: chColumns, height: 300 },
-    { name: '图表2', columns: accColumns, height: 300 },
-  ];
-
-  return groups;
+  return [createChartGroup('图表1', chColumns), createChartGroup('图表2', accColumns)];
 }
+
+let loadGeneration = 0;
 
 export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
   csvData: null,
   filePath: null,
-  chartGroups: DEFAULT_CHART_GROUPS,
-  yAxisConfigs: {},
-  hiddenLines: [],
+  chartGroups: createDefaultChartGroups(),
   isLoading: false,
   error: null,
-  parseConfig: DEFAULT_PARSE_CONFIG,
+  parseConfig: { ...DEFAULT_PARSE_CONFIG },
   visiblePoints: 1000,
   sampleRate: 25,
-  dataZoomState: DEFAULT_DATA_ZOOM_STATE,
-
-  loadCsvFile: async (filePath: string) => {
+  dataZoomState: { ...DEFAULT_DATA_ZOOM_STATE },
+  loadCsvFile: async (filePath) => {
+    const generation = ++loadGeneration;
     set({ isLoading: true, error: null });
     try {
-      const config = get().parseConfig;
-      const csvData = await readCsvFile(filePath, config);
-      const autoGroups = autoAssignChartGroups(csvData.columns);
-      const sampleRate = get().sampleRate;
+      const csvData = await readCsvFile(filePath, get().parseConfig);
+      if (generation !== loadGeneration) return;
       const dataLength = csvData.rows.length;
-      const tenSecondsPoints = sampleRate * 10;
-
-      let dataZoomState = DEFAULT_DATA_ZOOM_STATE;
-      if (dataLength > tenSecondsPoints) {
-        const endPercent = (tenSecondsPoints / dataLength) * 100;
-        dataZoomState = { start: 0, end: endPercent };
-      }
-
-      set({
-        csvData,
-        filePath,
-        chartGroups: autoGroups,
-        hiddenLines: [],
-        dataZoomState,
-      });
+      const tenSecondsPoints = get().sampleRate * 10;
+      const dataZoomState = dataLength > tenSecondsPoints
+        ? { start: 0, end: (tenSecondsPoints / dataLength) * 100 }
+        : { ...DEFAULT_DATA_ZOOM_STATE };
+      set({ csvData, filePath, chartGroups: autoAssignChartGroups(csvData.columns), dataZoomState, isLoading: false });
     } catch (err) {
-      set({ error: formatErrorMessage(err, i18n.t('waveform:errors.loadCsv')) });
-    } finally {
-      set({ isLoading: false });
+      if (generation !== loadGeneration) return;
+      set({ error: formatErrorMessage(err, i18n.t('waveform:errors.loadCsv')), isLoading: false });
     }
   },
-
-  setChartGroups: (groups: ChartGroupConfig[]) => {
-    set({ chartGroups: groups });
+  setChartGroups: (groups) => set({ chartGroups: groups }),
+  addChartGroup: () => {
+    const groups = get().chartGroups;
+    set({ chartGroups: [...groups, createChartGroup(getNextChartGroupName(groups))] });
   },
-
-  addChartGroup: (group: ChartGroupConfig) => {
-    set({ chartGroups: [...get().chartGroups, group] });
+  removeChartGroup: (id) => set({ chartGroups: get().chartGroups.filter(group => group.id !== id) }),
+  updateChartGroup: (id, patch) => {
+    const { id: _ignoredId, ...safePatch } = patch;
+    set({ chartGroups: get().chartGroups.map(group => group.id === id ? { ...group, ...safePatch } : group) });
   },
-
-  removeChartGroup: (name: string) => {
-    const newGroups = get().chartGroups.filter(g => g.name !== name);
-    const newYAxisConfigs = { ...get().yAxisConfigs };
-    delete newYAxisConfigs[name];
-    set({ chartGroups: newGroups, yAxisConfigs: newYAxisConfigs });
-  },
-
-  updateChartGroup: (name: string, group: Partial<ChartGroupConfig>) => {
-    set({
-      chartGroups: get().chartGroups.map(g => 
-        g.name === name ? { ...g, ...group } : g
-      ),
-    });
-  },
-
-  setYAxisConfigs: (groupName: string, configs: YAxisConfig[]) => {
-    set({
-      yAxisConfigs: { ...get().yAxisConfigs, [groupName]: configs },
-    });
-  },
-
-  toggleLineVisibility: (columnName: string) => {
-    const hiddenLines = get().hiddenLines;
-    if (hiddenLines.includes(columnName)) {
-      set({ hiddenLines: hiddenLines.filter(name => name !== columnName) });
-    } else {
-      set({ hiddenLines: [...hiddenLines, columnName] });
-    }
-  },
-
-  setParseConfig: (config: Partial<CsvParseConfig>) => {
-    set({ parseConfig: { ...get().parseConfig, ...config } });
-  },
-
-  setVisiblePoints: (points: number) => {
-    set({ visiblePoints: points });
-  },
-
-  setSampleRate: (rate: number) => {
-    set({ sampleRate: rate });
-  },
-
-  setDataZoomState: (state: DataZoomState) => {
-    set({ dataZoomState: state });
-  },
-
+  setParseConfig: (config) => set({ parseConfig: { ...get().parseConfig, ...config } }),
+  setVisiblePoints: (points) => set({ visiblePoints: points }),
+  setSampleRate: (rate) => set({ sampleRate: rate }),
+  setDataZoomState: (state) => set({ dataZoomState: state }),
   clearData: () => {
-    set({
-      csvData: null,
-      filePath: null,
-      chartGroups: DEFAULT_CHART_GROUPS,
-      yAxisConfigs: {},
-      hiddenLines: [],
-      error: null,
-      dataZoomState: DEFAULT_DATA_ZOOM_STATE,
-    });
+    ++loadGeneration;
+    set({ csvData: null, filePath: null, chartGroups: createDefaultChartGroups(), isLoading: false, error: null, dataZoomState: { ...DEFAULT_DATA_ZOOM_STATE } });
   },
-
-  clearError: () => {
-    set({ error: null });
-  },
+  clearError: () => set({ error: null }),
 }));
 
-export { DEFAULT_PARSE_CONFIG, DEFAULT_CHART_GROUPS, DEFAULT_DATA_ZOOM_STATE };
+export { DEFAULT_PARSE_CONFIG, DEFAULT_DATA_ZOOM_STATE };

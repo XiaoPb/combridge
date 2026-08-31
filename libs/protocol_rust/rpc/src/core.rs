@@ -1769,6 +1769,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn semantic_error_clears_only_the_failed_key_buffer() {
+        let core = RpcCore::default();
+        core.register("a", Arc::new(|_, _, _| {})).await.unwrap();
+        core.register("b", Arc::new(|_, _, _| {})).await.unwrap();
+        let mut builder = FrameBuilder::new();
+        let a_start = builder.build_frame("a", &[0xA0], false, false, 0, 0);
+        let b_start = builder.build_frame("b", &[0xB0], false, false, 0, 0);
+        let a_lost = builder.build_frame("a", &[0xA2], false, false, 0, 2);
+
+        core.process(&a_start).await;
+        core.process(&b_start).await;
+        core.process(&a_lost).await;
+
+        let buffers = core.multi_frame_buffer.lock().await;
+        assert!(!buffers.contains_key("a"));
+        assert_eq!(buffers["b"].get_all_data(), vec![0xB0]);
+    }
+
+    #[tokio::test]
     async fn unsecure_final_frame_is_appended_to_multi_frame_sequence() {
         let core = RpcCore::default();
         let received = Arc::new(StdMutex::new(Vec::new()));

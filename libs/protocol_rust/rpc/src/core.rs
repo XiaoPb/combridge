@@ -159,6 +159,7 @@ struct FrameBuffer {
 struct MultiFrameBuffer {
     frames: Vec<FrameBuffer>,
     expected_frame_idx: u8,
+    total_bytes: usize,
 }
 
 impl MultiFrameBuffer {
@@ -170,6 +171,7 @@ impl MultiFrameBuffer {
         &mut self,
         frame_idx: u8,
         data: Vec<u8>,
+        max_bytes: usize,
     ) -> Result<bool, RpcError> {
         if frame_idx == 0 && self.expected_frame_idx != 0 {
             self.clear();
@@ -178,8 +180,12 @@ impl MultiFrameBuffer {
         if frame_idx != self.expected_frame_idx {
             self.clear();
             Err(RpcError::LoseFrame)
+        } else if self.total_bytes.saturating_add(data.len()) > max_bytes {
+            self.clear();
+            Err(RpcError::ParamTooMuch)
         } else {
             self.frames.push(FrameBuffer { data });
+            self.total_bytes += self.frames.last().map_or(0, |frame| frame.data.len());
             self.expected_frame_idx = self.expected_frame_idx.wrapping_add(1);
             Ok(true)
         }
@@ -200,6 +206,7 @@ impl MultiFrameBuffer {
     fn clear(&mut self) {
         self.frames.clear();
         self.expected_frame_idx = 0;
+        self.total_bytes = 0;
     }
 }
 
@@ -237,6 +244,12 @@ impl std::fmt::Debug for RpcCore {
 }
 
 impl RpcCore {
+    fn max_receive_bytes(key: &str) -> usize {
+        let intermediate = FrameBuilder::calculate_max_payload(key, false, false);
+        let final_payload = FrameBuilder::calculate_max_payload(key, false, true);
+        intermediate * LAST_FRAME_FIX_INDEX as usize + final_payload
+    }
+
     pub fn new(config: RpcConfig) -> Self {
         Self {
             config,
@@ -692,6 +705,7 @@ impl RpcCore {
                 .await
             {
                 self.dynamic_nodes.lock().await.remove(&pending_key);
+                self.clear_receive_buffer(key).await;
                 return Err(error);
             }
         }
@@ -706,7 +720,7 @@ impl RpcCore {
             ),
         );
 
-        match timeout(timeout_duration, rx).await {
+        let result = match timeout(timeout_duration, rx).await {
             Ok(Ok(Ok(result))) => {
                 self.logger.log(
                     crate::types::LogLevel::Info,
@@ -746,7 +760,9 @@ impl RpcCore {
                 );
                 Err(RpcError::Timeout)
             }
-        }
+        };
+        self.clear_receive_buffer(key).await;
+        result
     }
 
     pub async fn sall(
@@ -833,6 +849,10 @@ impl RpcCore {
     pub async fn reset_receive_state(&self) {
         self.frame_parser.lock().await.reset();
         self.multi_frame_buffer.lock().await.clear();
+    }
+
+    async fn clear_receive_buffer(&self, key: &str) {
+        self.multi_frame_buffer.lock().await.remove(key);
     }
 
     async fn handle_parse_result(&self, result: ParseResult) -> Result<(), RpcError> {
@@ -963,6 +983,10 @@ impl RpcCore {
             return Ok(());
         }
 
+        if !is_fin && frame_idx == LAST_FRAME_FIX_INDEX {
+            return Err(RpcError::LoseFrame);
+        }
+
         {
             let mut buffers = self.multi_frame_buffer.lock().await;
             let buffer = buffers
@@ -973,7 +997,11 @@ impl RpcCore {
             } else {
                 frame_idx
             };
-            buffer.add_frame(effective_frame_idx, data.to_vec())?;
+            buffer.add_frame(
+                effective_frame_idx,
+                data.to_vec(),
+                Self::max_receive_bytes(key),
+            )?;
 
             if !buffer.is_complete(is_fin) {
                 self.logger.log(
@@ -1612,13 +1640,13 @@ mod tests {
     async fn test_multi_frame_buffer() {
         let mut buffer = MultiFrameBuffer::new();
 
-        buffer.add_frame(0, vec![1, 2, 3]).unwrap();
+        buffer.add_frame(0, vec![1, 2, 3], usize::MAX).unwrap();
         assert!(!buffer.is_complete(false));
 
-        buffer.add_frame(1, vec![4, 5, 6]).unwrap();
+        buffer.add_frame(1, vec![4, 5, 6], usize::MAX).unwrap();
         assert!(!buffer.is_complete(false));
 
-        buffer.add_frame(2, vec![7, 8, 9]).unwrap();
+        buffer.add_frame(2, vec![7, 8, 9], usize::MAX).unwrap();
         assert!(buffer.is_complete(true));
 
         let data = buffer.get_all_data();
@@ -1629,13 +1657,13 @@ mod tests {
     async fn test_multi_frame_buffer_lose_frame() {
         let mut buffer = MultiFrameBuffer::new();
 
-        buffer.add_frame(0, vec![1, 2, 3]).unwrap();
-        let result = buffer.add_frame(2, vec![4, 5, 6]);
+        buffer.add_frame(0, vec![1, 2, 3], usize::MAX).unwrap();
+        let result = buffer.add_frame(2, vec![4, 5, 6], usize::MAX);
         assert!(matches!(result, Err(RpcError::LoseFrame)));
         assert!(buffer.frames.is_empty());
         assert_eq!(buffer.expected_frame_idx, 0);
 
-        buffer.add_frame(0, vec![7, 8, 9]).unwrap();
+        buffer.add_frame(0, vec![7, 8, 9], usize::MAX).unwrap();
         assert_eq!(buffer.get_all_data(), vec![7, 8, 9]);
     }
 
@@ -1675,6 +1703,68 @@ mod tests {
         let frame = FrameBuilder::new().build_frame("unknown", &[0x01], false, false, 0, 0);
 
         assert!(core.process(&frame).await.iter().all(Result::is_ok));
+        assert!(core.multi_frame_buffer.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn unsecure_frame_index_sentinel_is_rejected_for_non_final_frames() {
+        let core = RpcCore::default();
+        core.register("G", Arc::new(|_, _, _| {})).await.unwrap();
+        let frame = FrameBuilder::new().build_frame("G", &[0x01], false, false, 0, 255);
+
+        let results = core.process(&frame).await;
+
+        assert!(results.iter().all(Result::is_ok));
+        assert!(core.multi_frame_buffer.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn multi_frame_receive_rejects_payload_beyond_protocol_limit() {
+        let core = RpcCore::new(RpcConfig {
+            timeout_ms: 20,
+            ..RpcConfig::default()
+        });
+        core.register("G", Arc::new(|_, _, _| {})).await.unwrap();
+        let mut builder = FrameBuilder::new();
+        let intermediate = vec![0x01; FrameBuilder::calculate_max_payload("G", false, false)];
+        for frame_idx in 0..255u8 {
+            let frame = builder.build_frame("G", &intermediate, false, false, 0, frame_idx);
+            assert!(core.process(&frame).await.iter().all(Result::is_ok));
+        }
+        let oversized_final = builder.build_frame(
+            "G",
+            &vec![0x02; FrameBuilder::calculate_max_payload("G", false, true) + 1],
+            false,
+            true,
+            0,
+            0,
+        );
+
+        let results = core.process(&oversized_final).await;
+
+        assert!(results.iter().all(Result::is_ok));
+        assert!(core.multi_frame_buffer.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn call_timeout_clears_partial_receive_buffer_for_key() {
+        let core = RpcCore::new(RpcConfig {
+            timeout_ms: 10,
+            retry_count: 0,
+            ..RpcConfig::default()
+        });
+        core.multi_frame_buffer.lock().await.insert(
+            "call".to_string(),
+            MultiFrameBuffer {
+                frames: vec![FrameBuffer { data: vec![0x01] }],
+                expected_frame_idx: 1,
+                total_bytes: 1,
+            },
+        );
+        core.set_send_function(Arc::new(|_| Box::pin(async { Ok(()) })))
+            .await;
+
+        assert_eq!(core._call("call", &[0x02]).await, Err(RpcError::Timeout));
         assert!(core.multi_frame_buffer.lock().await.is_empty());
     }
 

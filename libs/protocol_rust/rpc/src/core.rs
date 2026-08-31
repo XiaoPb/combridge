@@ -152,7 +152,6 @@ impl SecureResponse {
 
 #[derive(Debug, Clone)]
 struct FrameBuffer {
-    invoke_idx: u8,
     data: Vec<u8>,
 }
 
@@ -169,7 +168,6 @@ impl MultiFrameBuffer {
 
     fn add_frame(
         &mut self,
-        invoke_idx: u8,
         frame_idx: u8,
         data: Vec<u8>,
     ) -> Result<bool, RpcError> {
@@ -181,7 +179,7 @@ impl MultiFrameBuffer {
             self.clear();
             Err(RpcError::LoseFrame)
         } else {
-            self.frames.push(FrameBuffer { invoke_idx, data });
+            self.frames.push(FrameBuffer { data });
             self.expected_frame_idx = self.expected_frame_idx.wrapping_add(1);
             Ok(true)
         }
@@ -214,6 +212,7 @@ pub struct RpcCore {
     dynamic_nodes: Arc<Mutex<HashMap<(String, u8), PendingCall>>>,
     frame_parser: Mutex<FrameParser>,
     multi_frame_buffer: Mutex<HashMap<String, MultiFrameBuffer>>,
+    receive_lock: Mutex<()>,
     send_function: Mutex<Option<SendFunction>>,
     send_lock: Mutex<()>,
     invoke_index: Mutex<u8>,
@@ -245,6 +244,7 @@ impl RpcCore {
             dynamic_nodes: Arc::new(Mutex::new(HashMap::new())),
             frame_parser: Mutex::new(FrameParser::new()),
             multi_frame_buffer: Mutex::new(HashMap::new()),
+            receive_lock: Mutex::new(()),
             send_function: Mutex::new(None),
             send_lock: Mutex::new(()),
             invoke_index: Mutex::new(1),
@@ -765,6 +765,9 @@ impl RpcCore {
     }
 
     pub async fn process(&self, data: &[u8]) -> Vec<Result<ParseResult, RpcError>> {
+        // Keep parsing and dispatch in arrival order. The parser lock alone is
+        // insufficient because dispatch awaits after the parser is released.
+        let _receive_guard = self.receive_lock.lock().await;
         self.logger.log(
             crate::types::LogLevel::Debug,
             "rpc_core",
@@ -809,6 +812,8 @@ impl RpcCore {
                     }
                 }
                 Err(error) => {
+                    // Parse errors cannot be reliably attributed to a key, so
+                    // resynchronize all partial sequences together.
                     self.multi_frame_buffer.lock().await.clear();
                     self.logger.log(
                         crate::types::LogLevel::Warn,
@@ -942,6 +947,22 @@ impl RpcCore {
             ),
         );
 
+        let is_routable = self.static_nodes.read().await.contains_key(key)
+            || self
+                .dynamic_nodes
+                .lock()
+                .await
+                .keys()
+                .any(|(pending_key, _)| pending_key == key);
+        if !is_routable {
+            self.logger.log(
+                crate::types::LogLevel::Debug,
+                "RpcCore",
+                &format!("[RECV] Ignoring unroutable unsecure frame: key={}", key),
+            );
+            return Ok(());
+        }
+
         {
             let mut buffers = self.multi_frame_buffer.lock().await;
             let buffer = buffers
@@ -952,7 +973,7 @@ impl RpcCore {
             } else {
                 frame_idx
             };
-            buffer.add_frame(0, effective_frame_idx, data.to_vec())?;
+            buffer.add_frame(effective_frame_idx, data.to_vec())?;
 
             if !buffer.is_complete(is_fin) {
                 self.logger.log(
@@ -1591,13 +1612,13 @@ mod tests {
     async fn test_multi_frame_buffer() {
         let mut buffer = MultiFrameBuffer::new();
 
-        buffer.add_frame(0, 0, vec![1, 2, 3]).unwrap();
+        buffer.add_frame(0, vec![1, 2, 3]).unwrap();
         assert!(!buffer.is_complete(false));
 
-        buffer.add_frame(0, 1, vec![4, 5, 6]).unwrap();
+        buffer.add_frame(1, vec![4, 5, 6]).unwrap();
         assert!(!buffer.is_complete(false));
 
-        buffer.add_frame(0, 2, vec![7, 8, 9]).unwrap();
+        buffer.add_frame(2, vec![7, 8, 9]).unwrap();
         assert!(buffer.is_complete(true));
 
         let data = buffer.get_all_data();
@@ -1608,13 +1629,13 @@ mod tests {
     async fn test_multi_frame_buffer_lose_frame() {
         let mut buffer = MultiFrameBuffer::new();
 
-        buffer.add_frame(0, 0, vec![1, 2, 3]).unwrap();
-        let result = buffer.add_frame(0, 2, vec![4, 5, 6]);
+        buffer.add_frame(0, vec![1, 2, 3]).unwrap();
+        let result = buffer.add_frame(2, vec![4, 5, 6]);
         assert!(matches!(result, Err(RpcError::LoseFrame)));
         assert!(buffer.frames.is_empty());
         assert_eq!(buffer.expected_frame_idx, 0);
 
-        buffer.add_frame(0, 0, vec![7, 8, 9]).unwrap();
+        buffer.add_frame(0, vec![7, 8, 9]).unwrap();
         assert_eq!(buffer.get_all_data(), vec![7, 8, 9]);
     }
 
@@ -1635,6 +1656,7 @@ mod tests {
     #[tokio::test]
     async fn parser_error_clears_multi_frame_buffer() {
         let core = RpcCore::default();
+        core.register("G", Arc::new(|_, _, _| {})).await.unwrap();
         let first = FrameBuilder::new().build_frame("G", &[0x01], false, false, 0, 0);
         let mut invalid = FrameBuilder::new().build_frame("G", &[0x02], false, true, 0, 0);
         *invalid.last_mut().unwrap() ^= 0xFF;
@@ -1644,6 +1666,15 @@ mod tests {
         let results = core.process(&invalid).await;
 
         assert!(matches!(results.first(), Some(Err(RpcError::CrcMismatch))));
+        assert!(core.multi_frame_buffer.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn unroutable_unsecure_frames_do_not_create_receive_buffers() {
+        let core = RpcCore::default();
+        let frame = FrameBuilder::new().build_frame("unknown", &[0x01], false, false, 0, 0);
+
+        assert!(core.process(&frame).await.iter().all(Result::is_ok));
         assert!(core.multi_frame_buffer.lock().await.is_empty());
     }
 
@@ -1709,6 +1740,61 @@ mod tests {
 
         assert_eq!(*first_received.lock().unwrap(), vec![0xA0, 0xA1]);
         assert_eq!(*second_received.lock().unwrap(), vec![0xB0, 0xB1]);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_processes_preserve_frame_order_for_one_key() {
+        struct BlockingLogger {
+            blocked: std::sync::atomic::AtomicBool,
+            release: std::sync::atomic::AtomicBool,
+        }
+
+        impl LogCallback for BlockingLogger {
+            fn log(&self, _level: crate::types::LogLevel, _context: &str, message: &str) {
+                if message.contains("[RpcCore][RX_FRAME] key=race")
+                    && !self.blocked.swap(true, Ordering::SeqCst)
+                {
+                    while !self.release.load(Ordering::SeqCst) {
+                        std::thread::yield_now();
+                    }
+                }
+            }
+        }
+
+        let logger = Arc::new(BlockingLogger {
+            blocked: std::sync::atomic::AtomicBool::new(false),
+            release: std::sync::atomic::AtomicBool::new(false),
+        });
+        let core = Arc::new(RpcCore::default().with_logger(logger.clone()));
+        let received = Arc::new(StdMutex::new(Vec::new()));
+        let received_for_handler = Arc::clone(&received);
+        core.register(
+            "race",
+            Arc::new(move |data: &[u8], _size: usize, _ctx: &mut InvokeContext| {
+                *received_for_handler.lock().unwrap() = data.to_vec();
+            }),
+        )
+        .await
+        .unwrap();
+
+        let mut builder = FrameBuilder::new();
+        let first = builder.build_frame("race", &[0xA0], false, false, 0, 0);
+        let second = builder.build_frame("race", &[0xA1], false, true, 0, 0);
+
+        let first_core = Arc::clone(&core);
+        let first_task = tokio::spawn(async move { first_core.process(&first).await });
+        while !logger.blocked.load(Ordering::SeqCst) {
+            tokio::task::yield_now().await;
+        }
+
+        let second_core = Arc::clone(&core);
+        let second_task = tokio::spawn(async move { second_core.process(&second).await });
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        logger.release.store(true, Ordering::SeqCst);
+
+        first_task.await.unwrap();
+        second_task.await.unwrap();
+        assert_eq!(*received.lock().unwrap(), vec![0xA0, 0xA1]);
     }
 
     #[tokio::test]

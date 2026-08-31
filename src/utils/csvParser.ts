@@ -13,6 +13,26 @@ const DEFAULT_CONFIG: CsvParseConfig = {
   noHeader: false,
 };
 
+export function makeUniqueColumnNames(columns: string[]): string[] {
+  const counts = new Map<string, number>();
+  const usedNames = new Set<string>();
+
+  return columns.map(column => {
+    const baseName = column.trim() || '未命名列';
+    let count = (counts.get(baseName) || 0) + 1;
+    let displayName = count === 1 ? baseName : `${baseName} (${count})`;
+
+    while (usedNames.has(displayName)) {
+      count += 1;
+      displayName = `${baseName} (${count})`;
+    }
+
+    counts.set(baseName, count);
+    usedNames.add(displayName);
+    return displayName;
+  });
+}
+
 export function parseCsv(csvContent: string, config: Partial<CsvParseConfig> = {}): CsvParseResult {
   const cfg: CsvParseConfig = { ...DEFAULT_CONFIG, ...config };
   const lines = csvContent.split(/\r?\n/).filter(line => line.trim().length > 0);
@@ -56,7 +76,7 @@ export function parseCsv(csvContent: string, config: Partial<CsvParseConfig> = {
   }
 
   return {
-    columns: rawColumns,
+    columns: makeUniqueColumnNames(rawColumns),
     rows: rawData,
   };
 }

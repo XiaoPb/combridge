@@ -14,7 +14,7 @@ import {
   TooltipComponent,
 } from 'echarts/components';
 import { UniversalTransition } from 'echarts/features';
-import { CanvasRenderer } from 'echarts/renderers';
+import { CanvasRenderer, SVGRenderer } from 'echarts/renderers';
 import type { ChartGroupConfig } from './chartGroup';
 import {
   getChartGroupKey,
@@ -23,6 +23,7 @@ import {
   resolveChartLegendSelection,
 } from './chartGroup';
 import { buildChartSeries } from './multiLineChartModel';
+import { normalizeSvgExportDataUrl } from './multiLineChartExport';
 export type { ChartGroupConfig } from './chartGroup';
 
 echarts.use([
@@ -32,6 +33,7 @@ echarts.use([
   DataZoomComponent,
   TooltipComponent,
   CanvasRenderer,
+  SVGRenderer,
   UniversalTransition,
 ]);
 
@@ -321,11 +323,13 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
           column,
         );
         if (selected === undefined) return;
-        chart.dispatchAction({
-          type: selected ? 'legendSelect' : 'legendUnSelect',
-          name: column,
-          silent: true,
-        });
+        chart.dispatchAction(
+          {
+            type: selected ? 'legendSelect' : 'legendUnSelect',
+            name: column,
+          },
+          { silent: true },
+        );
       });
     },
     [effectiveLegendSelected, legendScope],
@@ -492,6 +496,33 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   }, []);
 
   useEffect(() => {
+    if (!initialized || typeof ResizeObserver === 'undefined') return;
+
+    const containerKeys = new Map<Element, string>();
+    chartGroups.forEach((group, index) => {
+      const key = getChartGroupKey(group, index);
+      const container = containerRefs.current.get(key);
+      if (container) containerKeys.set(container, key);
+    });
+
+    const observer = new ResizeObserver((entries) => {
+      entries.forEach(({ target }) => {
+        const key = containerKeys.get(target);
+        if (!key) return;
+        chartInstances.current.get(key)?.resize();
+      });
+    });
+    containerKeys.forEach((_, container) => observer.observe(container));
+
+    return () => observer.disconnect();
+  }, [
+    initialized,
+    instanceRevision,
+    chartGroupKeySignature,
+    chartGeometrySignature,
+  ]);
+
+  useEffect(() => {
     if (!initialized) return;
     chartInstances.current.forEach((chart) => chart.resize());
   }, [initialized, instanceRevision, chartGeometrySignature]);
@@ -527,18 +558,26 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
         setContextMenu(null);
         return;
       }
-      const url = chart.getDataURL({
-        type,
-        ...(type === 'png' ? { pixelRatio: 2 } : {}),
-        backgroundColor: '#fff',
-      });
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `waveform_${group?.name || 'chart'}_${Date.now()}.${type}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setContextMenu(null);
+      let link: HTMLAnchorElement | null = null;
+      try {
+        const url = type === 'svg'
+          ? exportSvgChart(chart)
+          : chart.getDataURL({
+              type,
+              pixelRatio: 2,
+              backgroundColor: '#fff',
+            });
+        link = document.createElement('a');
+        link.href = url;
+        link.download = `waveform_${group.name || 'chart'}_${Date.now()}.${type}`;
+        document.body.appendChild(link);
+        link.click();
+      } catch {
+        // Ensure failed exports cannot leave the menu open.
+      } finally {
+        link?.remove();
+        setContextMenu(null);
+      }
     },
     [contextMenu, chartGroups],
   );
@@ -659,4 +698,34 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
 function t(key: string): string {
   return ({ 'chart.time': '时间' } as Record<string, string>)[key] || key;
 }
+
+function exportSvgChart(chart: echarts.ECharts): string {
+  const liveDom = chart.getDom();
+  const width = Math.max(1, chart.getWidth(), liveDom.clientWidth);
+  const height = Math.max(1, chart.getHeight(), liveDom.clientHeight);
+  const container = document.createElement('div');
+  container.style.position = 'absolute';
+  container.style.left = '-10000px';
+  container.style.top = '-10000px';
+  container.style.width = `${width}px`;
+  container.style.height = `${height}px`;
+
+  let temporaryChart: echarts.ECharts | null = null;
+  try {
+    document.body.appendChild(container);
+    temporaryChart = echarts.init(container, undefined, {
+      renderer: 'svg',
+      width,
+      height,
+    });
+    temporaryChart.setOption(chart.getOption());
+    return normalizeSvgExportDataUrl(
+      temporaryChart.getDataURL({ type: 'svg', backgroundColor: '#fff' }),
+    );
+  } finally {
+    temporaryChart?.dispose();
+    container.remove();
+  }
+}
+
 export default React.memo(MultiLineChart);

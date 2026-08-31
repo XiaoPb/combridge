@@ -1,4 +1,10 @@
-import React, { useMemo, useRef, useEffect, useCallback, useState } from 'react';
+import React, {
+  useMemo,
+  useRef,
+  useEffect,
+  useCallback,
+  useState,
+} from 'react';
 import * as echarts from 'echarts/core';
 import { LineChart } from 'echarts/charts';
 import {
@@ -9,9 +15,12 @@ import {
 } from 'echarts/components';
 import { UniversalTransition } from 'echarts/features';
 import { CanvasRenderer } from 'echarts/renderers';
-import { useCsvChartStore } from '../../stores/csvChartStore';
-import { useGh3036Store } from '../../stores/gh3036Store';
 import type { ChartGroupConfig } from './chartGroup';
+import {
+  getChartGroupKey,
+  getChartLegendKey,
+  resolveChartLegendSelection,
+} from './chartGroup';
 import { buildChartSeries } from './multiLineChartModel';
 export type { ChartGroupConfig } from './chartGroup';
 
@@ -32,50 +41,42 @@ export interface YAxisConfig {
   color: string;
 }
 
-interface MultiLineChartProps {
+export interface MultiLineChartProps {
   columns: string[];
   rows: number[][];
   chartGroups: ChartGroupConfig[];
   sampleRate?: number;
   initialDataZoom?: { start: number; end: number };
   onDataZoomChange?: (state: { start: number; end: number }) => void;
+  legendScope?: string;
+  legendSelected?: Record<string, boolean>;
+  onLegendSelectedChange?: (selected: Record<string, boolean>) => void;
 }
 
 const Y_AXIS_WIDTH = 50;
 const MAX_LINES_PER_CHART = 4;
+type DataZoomState = { start: number; end: number };
 
 const formatScientific = (value: number): string => {
   if (value === 0) return '0';
   const absValue = Math.abs(value);
-  if (absValue >= 10000 || absValue < 0.001) {
-    return value.toExponential(1);
-  }
-  if (absValue >= 100) {
-    return value.toFixed(0);
-  }
-  if (absValue >= 1) {
-    return value.toFixed(2);
-  }
+  if (absValue >= 10000 || absValue < 0.001) return value.toExponential(1);
+  if (absValue >= 100) return value.toFixed(0);
+  if (absValue >= 1) return value.toFixed(2);
   return value.toFixed(4);
 };
 
 const formatTime = (seconds: number | undefined): string => {
   if (seconds === undefined || isNaN(seconds)) return '0ms';
-  if (seconds < 1) {
-    return `${(seconds * 1000).toFixed(0)}ms`;
-  }
-  if (seconds < 60) {
-    return `${seconds.toFixed(2)}s`;
-  }
-  const minutes = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${minutes}m ${secs.toFixed(1)}s`;
+  if (seconds < 1) return `${(seconds * 1000).toFixed(0)}ms`;
+  if (seconds < 60) return `${seconds.toFixed(2)}s`;
+  return `${Math.floor(seconds / 60)}m ${(seconds % 60).toFixed(1)}s`;
 };
 
 interface ContextMenuPosition {
   x: number;
   y: number;
-  chartIndex: number;
+  groupKey: string;
 }
 
 const MultiLineChart: React.FC<MultiLineChartProps> = ({
@@ -85,473 +86,473 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   sampleRate = 25,
   initialDataZoom,
   onDataZoomChange,
+  legendScope = 'chart',
+  legendSelected,
+  onLegendSelectedChange,
 }) => {
-  const containerRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const chartInstances = useRef<echarts.ECharts[]>([]);
+  const containerRefs = useRef(new Map<string, HTMLDivElement>());
+  const chartInstances = useRef(new Map<string, echarts.ECharts>());
+  const structureSignatures = useRef(new Map<string, string>());
   const [initialized, setInitialized] = useState(false);
+  const [instanceRevision, setInstanceRevision] = useState(0);
+  const [localLegendSelected, setLocalLegendSelected] = useState<
+    Record<string, boolean>
+  >({});
+  const [localDataZoom, setLocalDataZoom] = useState<DataZoomState>(
+    initialDataZoom ?? { start: 0, end: 100 },
+  );
+  const updateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const zoomResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isZoomingRef = useRef(false);
-  const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
+  const legendSelectedRef = useRef(legendSelected);
+  const localLegendSelectedRef = useRef(localLegendSelected);
+  const onLegendSelectedChangeRef = useRef(onLegendSelectedChange);
+  const onDataZoomChangeRef = useRef(onDataZoomChange);
+  const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(
+    null,
+  );
 
-  const { dataZoomState, setDataZoomState } = useCsvChartStore();
-  const { chartLegendSelected, setChartLegendSelected } = useGh3036Store();
+  legendSelectedRef.current = legendSelected;
+  localLegendSelectedRef.current = localLegendSelected;
+  onLegendSelectedChangeRef.current = onLegendSelectedChange;
+  onDataZoomChangeRef.current = onDataZoomChange;
+  const effectiveLegendSelected = legendSelected ?? localLegendSelected;
 
-  const xAxisData = useMemo(() => {
-    const interval = 1 / sampleRate;
-    return rows.map((_, index) => index * interval);
-  }, [rows, sampleRate]);
+  useEffect(() => {
+    setLocalDataZoom(initialDataZoom ?? { start: 0, end: 100 });
+  }, [initialDataZoom?.start, initialDataZoom?.end]);
 
-  const unifiedGridConfig = useMemo(() => {
-    const leftWidth = Y_AXIS_WIDTH * 2;
-    const rightWidth = Y_AXIS_WIDTH * 2;
-
-    return {
+  const xAxisData = useMemo(
+    () => rows.map((_, index) => index / sampleRate),
+    [rows, sampleRate],
+  );
+  const unifiedGridConfig = useMemo(
+    () => ({
       top: 40,
-      left: leftWidth,
-      right: rightWidth,
+      left: Y_AXIS_WIDTH * 2,
+      right: Y_AXIS_WIDTH * 2,
       bottom: 50,
-    };
-  }, []);
+    }),
+    [],
+  );
+  const chartGeometrySignature = useMemo(
+    () =>
+      chartGroups
+        .map(
+          (group, index) =>
+            `${getChartGroupKey(group, index)}:${group.height || 300}`,
+        )
+        .join('|'),
+    [chartGroups],
+  );
+  const chartGroupKeySignature = useMemo(
+    () =>
+      chartGroups
+        .map((group, index) => getChartGroupKey(group, index))
+        .join('\u0001'),
+    [chartGroups],
+  );
 
-  const getChartOption = useCallback((group: ChartGroupConfig) => {
-    const seriesData = buildChartSeries(columns, rows, group.columns, MAX_LINES_PER_CHART);
-
-    const yAxisPositions: Array<{ position: 'left' | 'right'; offset: number }> = [
-      { position: 'left', offset: 0 },
-      { position: 'right', offset: 0 },
-      { position: 'left', offset: Y_AXIS_WIDTH },
-      { position: 'right', offset: Y_AXIS_WIDTH },
-    ];
-
-    const yAxisOption = yAxisPositions.map((pos, idx) => {
-      const series = seriesData[idx];
-      const col = series?.name;
-      const color = series?.color || 'transparent';
-      const hasData = !!col;
-
+  const getChartOption = useCallback(
+    (group: ChartGroupConfig) => {
+      const seriesData = buildChartSeries(
+        columns,
+        rows,
+        group.columns,
+        MAX_LINES_PER_CHART,
+      );
+      const yAxisPositions: Array<{
+        position: 'left' | 'right';
+        offset: number;
+      }> = [
+        { position: 'left', offset: 0 },
+        { position: 'right', offset: 0 },
+        { position: 'left', offset: Y_AXIS_WIDTH },
+        { position: 'right', offset: Y_AXIS_WIDTH },
+      ];
+      const yAxis = yAxisPositions.map((pos, idx) => {
+        const series = seriesData[idx];
+        const col = series?.name;
+        const color = series?.color || 'transparent';
+        const hasData = !!col;
+        return {
+          name: col || '',
+          type: 'value' as const,
+          position: pos.position,
+          offset: pos.offset,
+          scale: true,
+          axisLine: { show: hasData, lineStyle: { color } },
+          axisLabel: {
+            color: hasData ? color : 'transparent',
+            formatter: (value: number) => formatScientific(value),
+          },
+          nameTextStyle: { color: hasData ? color : 'transparent' },
+          splitLine: { show: idx === 0 },
+        };
+      });
+      const series = seriesData.map((s, idx) => ({
+        name: s.name,
+        type: 'line' as const,
+        data: s.data,
+        smooth: false,
+        yAxisIndex: idx,
+        lineStyle: { color: s.color, width: 1.5 },
+        itemStyle: { color: s.color },
+        symbol: 'none',
+        animation: false,
+      }));
       return {
-        name: col || '',
-        type: 'value' as const,
-        position: pos.position,
-        offset: pos.offset,
-        scale: true,
-        axisLine: {
-          show: hasData,
-          lineStyle: {
-            color: color,
+        animation: false,
+        animationDuration: 0,
+        progressive: 500,
+        progressiveThreshold: 3000,
+        lazyUpdate: true,
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: {
+            type: 'cross',
+            lineStyle: { color: 'var(--border-color)' },
+            crossStyle: { color: 'var(--border-color)' },
           },
-        },
-        axisLabel: {
-          color: hasData ? color : 'transparent',
-          formatter: (value: number) => formatScientific(value),
-        },
-        nameTextStyle: {
-          color: hasData ? color : 'transparent',
-        },
-        splitLine: {
-          show: idx === 0,
-        },
-      };
-    });
-
-    const seriesOption = seriesData.map((s, idx) => ({
-      name: s.name,
-      type: 'line' as const,
-      data: s.data,
-      smooth: false,
-      yAxisIndex: idx,
-      lineStyle: {
-        color: s.color,
-        width: 1.5,
-      },
-      itemStyle: {
-        color: s.color,
-      },
-      symbol: 'none',
-      animation: false,
-    }));
-
-    const effectiveDataZoom = initialDataZoom || dataZoomState;
-
-    const dataZoomOption = [
-      {
-        type: 'slider' as const,
-        show: true,
-        start: effectiveDataZoom.start,
-        end: effectiveDataZoom.end,
-        zoomLock: false,
-        xAxisIndex: [0],
-        height: 24,
-        bottom: 8,
-        handleStyle: {
-          color: '#1890ff',
-          borderColor: '#1890ff',
-        },
-        trackStyle: {
           backgroundColor: 'var(--bg-secondary)',
-        },
-        selectedDataBackground: {
-          lineStyle: {
-            color: '#1890ff',
-          },
-          areaStyle: {
-            color: 'rgba(24, 144, 255, 0.2)',
-          },
-        },
-        fillerColor: 'rgba(24, 144, 255, 0.15)',
-        borderColor: 'var(--border-color)',
-        textStyle: {
-          color: 'var(--text-secondary)',
-        },
-        labelFormatter: (value: number) => {
-          if (rows.length === 0) return '0ms';
-          const interval = 1 / sampleRate;
-          const totalPoints = rows.length;
-          const index = Math.round(value * (totalPoints - 1) / 100);
-          const clampedIndex = Math.max(0, Math.min(index, totalPoints - 1));
-          const timeValue = clampedIndex * interval;
-          return formatTime(timeValue);
-        },
-      },
-    ];
-
-    return {
-      animation: false,  // 全局禁用动画
-      animationDuration: 0,
-      progressive: 500,
-      progressiveThreshold: 3000,
-      lazyUpdate: true,  // 全局启用懒更新
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: {
-          type: 'cross',
-          lineStyle: {
-            color: 'var(--border-color)',
-          },
-          crossStyle: {
-            color: 'var(--border-color)',
+          borderColor: 'var(--border-color)',
+          textStyle: { color: 'var(--text-primary)' },
+          formatter: (params: unknown) => {
+            const items = params as Array<{
+              seriesName: string;
+              value: number | number[];
+              color: string;
+              dataIndex?: number;
+            }>;
+            if (!Array.isArray(items)) return '';
+            const timeValue = xAxisData[items[0]?.dataIndex ?? 0];
+            let html = `<div style="font-weight: bold; margin-bottom: 4px;">${t('chart.time')}: ${formatTime(timeValue)}</div>`;
+            items.forEach((item) => {
+              const val = Array.isArray(item.value)
+                ? item.value[1]
+                : item.value;
+              html += `<div style="display: flex; align-items: center; gap: 8px;"><span style="display: inline-block; width: 10px; height: 10px; background: ${item.color}; border-radius: 50%;"></span><span>${item.seriesName}: ${formatScientific(val)}</span></div>`;
+            });
+            return html;
           },
         },
-        backgroundColor: 'var(--bg-secondary)',
-        borderColor: 'var(--border-color)',
-        textStyle: {
-          color: 'var(--text-primary)',
+        legend: {
+          top: 4,
+          left: 'center',
+          orient: 'horizontal',
+          data: seriesData.map((s) => s.name),
+          textStyle: { color: 'var(--text-primary)' },
         },
-        formatter: (params: unknown) => {
-          const items = params as Array<{ seriesName: string; value: number | number[]; color: string; dataIndex?: number }>;
-          if (!Array.isArray(items)) return '';
-          const dataIndex = items[0]?.dataIndex ?? 0;
-          const timeValue = xAxisData[dataIndex];
-          let html = `<div style="font-weight: bold; margin-bottom: 4px;">${t('chart.time')}: ${formatTime(timeValue)}</div>`;
-          items.forEach((item) => {
-            const val = Array.isArray(item.value) ? item.value[1] : item.value;
-            html += `<div style="display: flex; align-items: center; gap: 8px;">
-              <span style="display: inline-block; width: 10px; height: 10px; background: ${item.color}; border-radius: 50%;"></span>
-              <span>${item.seriesName}: ${formatScientific(val)}</span>
-            </div>`;
-          });
-          return html;
-        },
-      },
-      legend: {
-        top: 4,
-        left: 'center',
-        orient: 'horizontal',
-        data: seriesData.map((s) => s.name),
-        textStyle: {
-          color: 'var(--text-primary)',
-        },
-      },
-      grid: unifiedGridConfig,
-      xAxis: {
-        type: 'category',
-        data: xAxisData,
-        boundaryGap: false,
-        splitNumber: 10,
-        axisLine: {
-          lineStyle: {
-            color: 'var(--border-color)',
+        grid: unifiedGridConfig,
+        xAxis: {
+          type: 'category',
+          data: xAxisData,
+          boundaryGap: false,
+          splitNumber: 10,
+          axisLine: { lineStyle: { color: 'var(--border-color)' } },
+          axisLabel: {
+            color: 'var(--text-secondary)',
+            formatter: (value: string | number) => {
+              const num = typeof value === 'number' ? value : parseFloat(value);
+              return !isNaN(num) ? formatTime(num) : value;
+            },
           },
         },
-        axisLabel: {
-          color: 'var(--text-secondary)',
-          formatter: (value: string | number) => {
-            const num = typeof value === 'number' ? value : parseFloat(value);
-            if (!isNaN(num)) {
-              return formatTime(num);
-            }
-            return value;
+        yAxis,
+        series,
+        dataZoom: [
+          {
+            type: 'slider' as const,
+            show: true,
+            start: localDataZoom.start,
+            end: localDataZoom.end,
+            zoomLock: false,
+            xAxisIndex: [0],
+            height: 24,
+            bottom: 8,
+            handleStyle: { color: '#1890ff', borderColor: '#1890ff' },
+            trackStyle: { backgroundColor: 'var(--bg-secondary)' },
+            selectedDataBackground: {
+              lineStyle: { color: '#1890ff' },
+              areaStyle: { color: 'rgba(24, 144, 255, 0.2)' },
+            },
+            fillerColor: 'rgba(24, 144, 255, 0.15)',
+            borderColor: 'var(--border-color)',
+            textStyle: { color: 'var(--text-secondary)' },
+            labelFormatter: (value: number) =>
+              rows.length === 0
+                ? '0ms'
+                : formatTime(
+                    Math.max(
+                      0,
+                      Math.min(
+                        Math.round((value * (rows.length - 1)) / 100),
+                        rows.length - 1,
+                      ),
+                    ) / sampleRate,
+                  ),
           },
-        },
-      },
-      yAxis: yAxisOption,
-      series: seriesOption,
-      dataZoom: dataZoomOption,
-    };
-  }, [xAxisData, rows, columns, unifiedGridConfig, dataZoomState, initialDataZoom, sampleRate]);
-
-  const handleContextMenu = useCallback((chartIndex: number) => (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, chartIndex });
-  }, []);
-
-  const handleSaveAsPNG = useCallback(() => {
-    if (!contextMenu) return;
-    const chart = chartInstances.current[contextMenu.chartIndex];
-    if (!chart) return;
-
-    const url = chart.getDataURL({
-      type: 'png',
-      pixelRatio: 2,
-      backgroundColor: '#fff',
-    });
-
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `waveform_${chartGroups[contextMenu.chartIndex]?.name || 'chart'}_${Date.now()}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    setContextMenu(null);
-  }, [contextMenu, chartGroups]);
-
-  const handleSaveAsSVG = useCallback(() => {
-    if (!contextMenu) return;
-    const chart = chartInstances.current[contextMenu.chartIndex];
-    if (!chart) return;
-
-    const url = chart.getDataURL({
-      type: 'svg',
-      backgroundColor: '#fff',
-    });
-
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `waveform_${chartGroups[contextMenu.chartIndex]?.name || 'chart'}_${Date.now()}.svg`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    setContextMenu(null);
-  }, [contextMenu, chartGroups]);
-
-  useEffect(() => {
-    const handleClickOutside = () => {
-      setContextMenu(null);
-    };
-    if (contextMenu) {
-      document.addEventListener('click', handleClickOutside);
-      return () => {
-        document.removeEventListener('click', handleClickOutside);
+        ],
       };
-    }
-  }, [contextMenu]);
+    },
+    [columns, rows, sampleRate, xAxisData, unifiedGridConfig, localDataZoom],
+  );
+
+  const replayLegendSelection = useCallback(
+    (group: ChartGroupConfig, groupIndex: number, chart: echarts.ECharts) => {
+      group.columns.slice(0, MAX_LINES_PER_CHART).forEach((column) => {
+        const selected = resolveChartLegendSelection(
+          legendScope,
+          effectiveLegendSelected,
+          group,
+          groupIndex,
+          column,
+        );
+        if (selected === undefined) return;
+        chart.dispatchAction({
+          type: selected ? 'legendSelect' : 'legendUnSelect',
+          name: column,
+          silent: true,
+        });
+      });
+    },
+    [effectiveLegendSelected, legendScope],
+  );
 
   useEffect(() => {
-    chartInstances.current.forEach((chart) => {
-      chart?.dispose();
-    });
-    chartInstances.current = [];
-
-    containerRefs.current.forEach((container, index) => {
-      if (!container) return;
-
-      const chart = echarts.init(container);
-      chartInstances.current[index] = chart;
-
-      const group = chartGroups[index];
-      if (group) {
-        const option = getChartOption(group);
-        chart.setOption(option);
+    const liveKeys = new Set(
+      chartGroups.map((group, index) => getChartGroupKey(group, index)),
+    );
+    let membershipChanged = false;
+    chartInstances.current.forEach((chart, key) => {
+      const container = containerRefs.current.get(key);
+      if (!liveKeys.has(key) || !container || chart.getDom() !== container) {
+        chart.dispose();
+        chartInstances.current.delete(key);
+        structureSignatures.current.delete(key);
+        membershipChanged = true;
       }
     });
-
-    if (chartInstances.current.filter(Boolean).length > 1) {
-      echarts.connect(chartInstances.current.filter(Boolean));
-    }
-
+    chartGroups.forEach((group, index) => {
+      const key = getChartGroupKey(group, index);
+      const container = containerRefs.current.get(key);
+      if (container && !chartInstances.current.has(key)) {
+        chartInstances.current.set(key, echarts.init(container));
+        membershipChanged = true;
+      }
+    });
+    if (membershipChanged) setInstanceRevision((revision) => revision + 1);
     setInitialized(true);
-
-    return () => {
-      chartInstances.current.forEach((chart) => {
-        chart?.dispose();
-      });
-      chartInstances.current = [];
-      setInitialized(false);
-    };
-  }, [chartGroups, getChartOption]);
+  }, [chartGroups, columns.length, rows.length]);
 
   useEffect(() => {
     if (!initialized) return;
-
-    // 使用防抖优化高频更新
-    const updateTimer = setTimeout(() => {
-      chartInstances.current.forEach((chart, index) => {
-        if (!chart) return;
-
-        const group = chartGroups[index];
-        if (group) {
-          const option = getChartOption(group);
-          chart.setOption(option, {
-            notMerge: false,
-            lazyUpdate: true  // 启用懒更新，减少渲染次数
-          });
+    if (updateTimer.current) clearTimeout(updateTimer.current);
+    updateTimer.current = setTimeout(() => {
+      chartGroups.forEach((group, index) => {
+        const groupKey = getChartGroupKey(group, index);
+        const chart = chartInstances.current.get(groupKey);
+        if (chart) {
+          const selectedColumns = group.columns.slice(0, MAX_LINES_PER_CHART);
+          const seriesStructure = buildChartSeries(
+            columns,
+            [],
+            selectedColumns,
+            MAX_LINES_PER_CHART,
+          ).map((series) => series.name);
+          const structureSignature = `${groupKey}:${selectedColumns.join('\u0000')}:${seriesStructure.join('\u0000')}`;
+          const structureChanged =
+            structureSignatures.current.get(groupKey) !== structureSignature;
+          chart.setOption(
+            getChartOption(group),
+            structureChanged
+              ? { notMerge: true, lazyUpdate: true }
+              : { replaceMerge: ['series'], lazyUpdate: true },
+          );
+          structureSignatures.current.set(groupKey, structureSignature);
+          replayLegendSelection(group, index, chart);
         }
       });
-    }, 16);  // 约60fps的更新频率
-
-    return () => clearTimeout(updateTimer);
-  }, [rows, columns, initialized, chartGroups, getChartOption, sampleRate]);
-
-  useEffect(() => {
-    if (!initialized || chartInstances.current.length === 0) return;
-
-    chartInstances.current.forEach((chart, chartIndex) => {
-      if (!chart) return;
-      const group = chartGroups[chartIndex];
-      if (!group) return;
-
-      const limitedColumns = group.columns.slice(0, MAX_LINES_PER_CHART);
-      limitedColumns.forEach((col) => {
-        const key = `${group.name}_${col}`;
-        const selectedState = chartLegendSelected || {};
-        const isSelected = selectedState[key];
-        
-        if (isSelected === false) {
-          chart.dispatchAction({
-            type: 'legendUnSelect',
-            name: col,
-          });
-        } else if (isSelected === true) {
-          chart.dispatchAction({
-            type: 'legendSelect',
-            name: col,
-          });
-        }
-      });
-    });
-  }, [initialized, chartGroups, chartLegendSelected]);
-
-  useEffect(() => {
-    if (!initialized || chartInstances.current.length === 0) return;
-
-    // 当 initialDataZoom 或 dataZoomState 变化时，更新所有图表的 dataZoom
-    // 使用 isZoomingRef 防止触发 handleDataZoom 导致循环
-    if (isZoomingRef.current) return;
-
-    const effectiveDataZoom = initialDataZoom || dataZoomState;
-
-    chartInstances.current.forEach((chart) => {
-      if (!chart) return;
-      chart.dispatchAction({
-        type: 'dataZoom',
-        start: effectiveDataZoom.start,
-        end: effectiveDataZoom.end,
-      });
-    });
-  }, [initialized, initialDataZoom, dataZoomState]);
-
-  useEffect(() => {
-    if (!initialized || chartInstances.current.length === 0) return;
-
-    const handleDataZoom = (chartIndex: number) => (params: unknown) => {
-      if (isZoomingRef.current) return;
-      isZoomingRef.current = true;
-
-      const p = params as { start?: number; end?: number; batch?: Array<{ start: number; end: number }> };
-      let start: number, end: number;
-
-      if (p.batch) {
-        start = p.batch[0].start;
-        end = p.batch[0].end;
-      } else if (p.start !== undefined && p.end !== undefined) {
-        start = p.start;
-        end = p.end;
-      } else {
-        isZoomingRef.current = false;
-        return;
-      }
-
-      setDataZoomState({ start, end });
-
-      if (onDataZoomChange) {
-        onDataZoomChange({ start, end });
-      }
-
-      chartInstances.current.forEach((chart, idx) => {
-        if (chart && idx !== chartIndex) {
-          chart.dispatchAction({
-            type: 'dataZoom',
-            start,
-            end,
-          });
-        }
-      });
-
-      setTimeout(() => {
-        isZoomingRef.current = false;
-      }, 50);
+      updateTimer.current = null;
+    }, 16);
+    return () => {
+      if (updateTimer.current) clearTimeout(updateTimer.current);
+      updateTimer.current = null;
     };
+  }, [
+    initialized,
+    chartGroups,
+    getChartOption,
+    replayLegendSelection,
+    instanceRevision,
+  ]);
 
-    const disposers: Array<() => void> = [];
-
-    chartInstances.current.forEach((chart, index) => {
+  useEffect(() => {
+    if (!initialized) return;
+    chartGroups.forEach((group, index) => {
+      const chart = chartInstances.current.get(getChartGroupKey(group, index));
       if (!chart) return;
-      const handler = handleDataZoom(index);
+      replayLegendSelection(group, index, chart);
+    });
+  }, [
+    initialized,
+    chartGroupKeySignature,
+    replayLegendSelection,
+    instanceRevision,
+  ]);
+
+  useEffect(() => {
+    if (!initialized) return;
+    const disposers: Array<() => void> = [];
+    chartGroups.forEach((group, index) => {
+      const key = getChartGroupKey(group, index);
+      const chart = chartInstances.current.get(key);
+      if (!chart) return;
+      const handler = (params: unknown) => {
+        const p = params as {
+          start?: number;
+          end?: number;
+          batch?: Array<{ start: number; end: number }>;
+        };
+        const zoom = p.batch?.[0] ?? p;
+        if (
+          zoom.start === undefined ||
+          zoom.end === undefined ||
+          isZoomingRef.current
+        )
+          return;
+        const state = { start: zoom.start, end: zoom.end };
+        isZoomingRef.current = true;
+        setLocalDataZoom(state);
+        onDataZoomChangeRef.current?.(state);
+        chartInstances.current.forEach((sibling, siblingKey) => {
+          if (siblingKey !== key)
+            sibling.dispatchAction({
+              type: 'dataZoom',
+              start: state.start,
+              end: state.end,
+            });
+        });
+        if (zoomResetTimer.current) clearTimeout(zoomResetTimer.current);
+        zoomResetTimer.current = setTimeout(() => {
+          isZoomingRef.current = false;
+          zoomResetTimer.current = null;
+        }, 50);
+      };
       chart.on('datazoom', handler);
       disposers.push(() => chart.off('datazoom', handler));
     });
-
-    return () => {
-      disposers.forEach((dispose) => dispose());
-    };
-  }, [initialized, setDataZoomState, onDataZoomChange]);
+    return () => disposers.forEach((dispose) => dispose());
+  }, [initialized, chartGroupKeySignature, instanceRevision]);
 
   useEffect(() => {
-    if (!initialized || chartInstances.current.length === 0) return;
-
-    const handleLegendSelectChanged = (chartIndex: number) => (params: unknown) => {
-      const p = params as { name: string; selected: Record<string, boolean> };
-      const group = chartGroups[chartIndex];
-      if (!group) return;
-
-      const newSelected = { ...chartLegendSelected };
-      Object.entries(p.selected).forEach(([name, selected]) => {
-        const key = `${group.name}_${name}`;
-        newSelected[key] = selected;
-      });
-      setChartLegendSelected(newSelected);
-    };
-
+    if (!initialized) return;
     const disposers: Array<() => void> = [];
-
-    chartInstances.current.forEach((chart, index) => {
+    chartGroups.forEach((group, index) => {
+      const key = getChartGroupKey(group, index);
+      const chart = chartInstances.current.get(key);
       if (!chart) return;
-      const handler = handleLegendSelectChanged(index);
+      const handler = (params: unknown) => {
+        const selected = (params as { selected?: Record<string, boolean> })
+          .selected;
+        if (!selected) return;
+        const next = {
+          ...(legendSelectedRef.current ?? localLegendSelectedRef.current),
+        };
+        Object.entries(selected).forEach(([name, value]) => {
+          next[getChartLegendKey(legendScope, group, index, name)] = value;
+        });
+        if (legendSelectedRef.current === undefined)
+          setLocalLegendSelected(next);
+        onLegendSelectedChangeRef.current?.(next);
+      };
       chart.on('legendselectchanged', handler);
       disposers.push(() => chart.off('legendselectchanged', handler));
     });
-
-    return () => {
-      disposers.forEach((dispose) => dispose());
-    };
-  }, [initialized, chartGroups, chartLegendSelected, setChartLegendSelected]);
+    return () => disposers.forEach((dispose) => dispose());
+  }, [initialized, chartGroupKeySignature, legendScope, instanceRevision]);
 
   useEffect(() => {
-    const handleResize = () => {
-      chartInstances.current.forEach((chart) => {
-        chart?.resize();
-      });
-    };
-
+    const handleResize = () =>
+      chartInstances.current.forEach((chart) => chart.resize());
     window.addEventListener('resize', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  if (columns.length === 0 || rows.length === 0) {
+  useEffect(() => {
+    if (!initialized) return;
+    chartInstances.current.forEach((chart) => chart.resize());
+  }, [initialized, instanceRevision, chartGeometrySignature]);
+
+  useEffect(
+    () => () => {
+      if (updateTimer.current) clearTimeout(updateTimer.current);
+      if (zoomResetTimer.current) clearTimeout(zoomResetTimer.current);
+      chartInstances.current.forEach((chart) => chart.dispose());
+      chartInstances.current.clear();
+      structureSignatures.current.clear();
+      containerRefs.current.clear();
+    },
+    [],
+  );
+
+  const handleContextMenu = useCallback(
+    (groupKey: string) => (event: React.MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setContextMenu({ x: event.clientX, y: event.clientY, groupKey });
+    },
+    [],
+  );
+  const saveChart = useCallback(
+    (type: 'png' | 'svg') => {
+      if (!contextMenu) return;
+      const chart = chartInstances.current.get(contextMenu.groupKey);
+      const group = chartGroups.find(
+        (item, index) => getChartGroupKey(item, index) === contextMenu.groupKey,
+      );
+      if (!chart || !group) {
+        setContextMenu(null);
+        return;
+      }
+      const url = chart.getDataURL({
+        type,
+        ...(type === 'png' ? { pixelRatio: 2 } : {}),
+        backgroundColor: '#fff',
+      });
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `waveform_${group?.name || 'chart'}_${Date.now()}.${type}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setContextMenu(null);
+    },
+    [contextMenu, chartGroups],
+  );
+  useEffect(() => {
+    if (!contextMenu) return;
+    const groupIsLive = chartGroups.some(
+      (group, index) => getChartGroupKey(group, index) === contextMenu.groupKey,
+    );
+    if (!groupIsLive || !chartInstances.current.has(contextMenu.groupKey))
+      setContextMenu(null);
+  }, [
+    contextMenu,
+    chartGroupKeySignature,
+    initialized,
+    columns.length,
+    rows.length,
+    instanceRevision,
+  ]);
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [contextMenu]);
+
+  if (columns.length === 0 || rows.length === 0)
     return (
       <div
         style={{
@@ -565,9 +566,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
         暂无数据
       </div>
     );
-  }
-
-  if (chartGroups.length === 0) {
+  if (chartGroups.length === 0)
     return (
       <div
         style={{
@@ -581,49 +580,60 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
         请配置图表分组
       </div>
     );
-  }
-
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
-      {chartGroups.map((group, index) => (
-        <div
-          key={group.name}
-          ref={(el) => { containerRefs.current[index] = el; }}
-          className="chart-container"
-          style={{
-            width: '100%',
-            height: group.height || 300,
-            minHeight: 150,
-            flexShrink: 0,
-            borderBottom: index < chartGroups.length - 1 ? '1px solid var(--border-color)' : 'none',
-          }}
-          onContextMenu={handleContextMenu(index)}
-        />
-      ))}
-
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'auto',
+      }}
+    >
+      {chartGroups.map((group, index) => {
+        const key = getChartGroupKey(group, index);
+        return (
+          <div
+            key={key}
+            ref={(element) => {
+              if (element) containerRefs.current.set(key, element);
+              else containerRefs.current.delete(key);
+            }}
+            className="chart-container"
+            style={{
+              width: '100%',
+              height: group.height || 300,
+              minHeight: 150,
+              flexShrink: 0,
+              borderBottom:
+                index < chartGroups.length - 1
+                  ? '1px solid var(--border-color)'
+                  : 'none',
+            }}
+            onContextMenu={handleContextMenu(key)}
+          />
+        );
+      })}
       {contextMenu && (
         <div
           className="chart-context-menu"
-          style={{
-            left: contextMenu.x,
-            top: contextMenu.y,
-          }}
-          onClick={(e) => e.stopPropagation()}
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(event) => event.stopPropagation()}
         >
           <div
             className="chart-context-menu-item"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleSaveAsPNG();
+            onClick={(event) => {
+              event.stopPropagation();
+              saveChart('png');
             }}
           >
             保存为 PNG
           </div>
           <div
             className="chart-context-menu-item"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleSaveAsSVG();
+            onClick={(event) => {
+              event.stopPropagation();
+              saveChart('svg');
             }}
           >
             保存为 SVG
@@ -635,10 +645,6 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
 };
 
 function t(key: string): string {
-  const translations: Record<string, string> = {
-    'chart.time': '时间',
-  };
-  return translations[key] || key;
+  return ({ 'chart.time': '时间' } as Record<string, string>)[key] || key;
 }
-
 export default React.memo(MultiLineChart);

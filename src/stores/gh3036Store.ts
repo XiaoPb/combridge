@@ -25,6 +25,7 @@ import { mergeGh3036Frames } from './gh3036FrameBuffer';
 import { hasFactoryTestResult } from './factoryTestState';
 import i18n from '../i18n';
 import { formatErrorMessage } from '../utils/errorMessage';
+import type { ChartGroupConfig } from '../pages/Waveform/chartGroup';
 
 const getTs = (): string => {
   const state = useConfigStore.getState();
@@ -238,12 +239,6 @@ interface Gh3036State {
   loadThresholdConfig: () => Promise<void>;
   validateThresholdConfig: () => Promise<void>;
   loadEvaluationResult: () => Promise<void>;
-}
-
-interface ChartGroupConfig {
-  name: string;
-  columns: string[];
-  height?: number;
 }
 
 export const useGh3036Store = create<Gh3036State>()(

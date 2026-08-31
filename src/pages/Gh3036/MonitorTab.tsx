@@ -36,6 +36,8 @@ const MonitorTab: React.FC = () => {
     displayDurationSeconds,
     setDisplayDurationSeconds,
     setMaxFramesCount,
+    chartLegendSelected,
+    setChartLegendSelected,
   } = useGh3036Store();
 
   const [hrRefDialogOpen, setHrRefDialogOpen] = useState(false);
@@ -141,6 +143,7 @@ const MonitorTab: React.FC = () => {
     // PPG/IPD 数据图表组
     if (ipdPaChartData.columns.length > 0 && ipdPaChartData.rows.length > 0) {
       groups.push({
+        id: 'gh3036-ipd',
         name: ipdRawDataType === 'ipd' ? t('monitor.ipdPaChart') : t('monitor.rawdataChart'),
         columns: ipdPaChartData.columns,
         height: 250,
@@ -150,6 +153,7 @@ const MonitorTab: React.FC = () => {
     // ACC 数据图表组
     if (gsensorChartData.columns.length > 0 && gsensorChartData.rows.length > 0) {
       groups.push({
+        id: 'gh3036-acc',
         name: t('monitor.gsensorChart'),
         columns: gsensorChartData.columns,
         height: 200,
@@ -312,6 +316,9 @@ const MonitorTab: React.FC = () => {
             rows={allChartData.rows}
             chartGroups={chartGroups}
             sampleRate={sampleRate}
+            legendScope="gh3036"
+            legendSelected={chartLegendSelected}
+            onLegendSelectedChange={setChartLegendSelected}
           />
         ) : (
           <Empty description={t('monitor.noData')} style={{ marginTop: 200 }} />

@@ -494,10 +494,13 @@ impl FactoryTestManager {
                                     fail_action,
                                     step_result.success,
                                 ) {
-                                    failure_reason = Some(format!(
-                                        "测试项 {:?} 卡控失败: {}",
-                                        step, step_result.message
-                                    ));
+                                    Self::append_failure_reason(
+                                        &mut failure_reason,
+                                        format!(
+                                            "测试项 {:?} 卡控失败: {}",
+                                            step, step_result.message
+                                        ),
+                                    );
                                     failure_step = Some(*step);
                                     break;
                                 }
@@ -507,7 +510,10 @@ impl FactoryTestManager {
                     Err(e) => {
                         error!("[FactoryTest] 步骤 {:?} 执行失败: {}", step, e);
                         test_result.overall_result = "FAIL".to_string();
-                        failure_reason = Some(format!("步骤 {:?} 执行失败: {}", step, e));
+                        Self::append_failure_reason(
+                            &mut failure_reason,
+                            format!("步骤 {:?} 执行失败: {}", step, e),
+                        );
                         failure_step = Some(*step);
                         break;
                     }
@@ -573,10 +579,7 @@ impl FactoryTestManager {
                         let cleanup_reason = format!("清理步骤执行失败: {}", error);
                         error!("[FactoryTest] {}", cleanup_reason);
                         test_result.overall_result = "FAIL".to_string();
-                        failure_reason = Some(match failure_reason {
-                            Some(reason) => format!("{}；{}", reason, cleanup_reason),
-                            None => cleanup_reason,
-                        });
+                        Self::append_failure_reason(&mut failure_reason, cleanup_reason);
                         failure_step.get_or_insert(FactoryTestStep::Cleanup);
                     }
                 }
@@ -764,6 +767,17 @@ impl FactoryTestManager {
 
     fn should_stop_after_threshold_failure(fail_action: FailAction, step_passed: bool) -> bool {
         !step_passed && fail_action == FailAction::Stop
+    }
+
+    fn append_failure_reason(failure_reason: &mut Option<String>, reason: impl Into<String>) {
+        let reason = reason.into();
+        match failure_reason {
+            Some(existing) => {
+                existing.push('；');
+                existing.push_str(&reason);
+            }
+            None => *failure_reason = Some(reason),
+        }
     }
 
     fn initial_evaluation_result(config: &FactoryThresholdConfig) -> FactoryEvaluationResult {
@@ -1855,5 +1869,17 @@ mod tests {
             FailAction::Continue,
             false
         ));
+    }
+
+    #[test]
+    fn append_failure_reason_preserves_first_reason_and_appends_later_reason() {
+        let mut failure_reason = Some("首个失败原因".to_string());
+
+        FactoryTestManager::append_failure_reason(&mut failure_reason, "后续失败原因");
+
+        assert_eq!(
+            failure_reason.as_deref(),
+            Some("首个失败原因；后续失败原因")
+        );
     }
 }

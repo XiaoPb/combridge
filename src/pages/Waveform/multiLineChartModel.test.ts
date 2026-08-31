@@ -25,6 +25,13 @@ describe('buildChartSeries', () => {
     expect(series.map(({ data }) => data)).toEqual([[5], [0]]);
   });
 
+  it('uses zero for an in-range sparse cell', () => {
+    const sparseRows = [[5, undefined] as unknown as number[]];
+    const series = buildChartSeries(['A', 'B'], sparseRows, ['A', 'B']);
+
+    expect(series.map(({ data }) => data)).toEqual([[5], [0]]);
+  });
+
   it('limits to four lines by default while preserving group order', () => {
     const series = buildChartSeries(['A', 'B', 'C', 'D', 'E'], [[1, 2, 3, 4, 5]], ['D', 'B', 'E', 'A', 'C']);
 

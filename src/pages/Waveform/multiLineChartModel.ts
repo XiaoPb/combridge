@@ -30,7 +30,7 @@ export function buildChartSeries(
     const columnIndex = columns.indexOf(name);
     return {
       name,
-      data: rows.map((row) => columnIndex >= 0 && columnIndex < row.length ? row[columnIndex] : 0),
+      data: rows.map((row) => columnIndex >= 0 && columnIndex < row.length ? row[columnIndex] ?? 0 : 0),
       color: LINE_COLORS[lineIndex % LINE_COLORS.length],
     };
   });

@@ -1,5 +1,71 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeSvgExportDataUrl } from './multiLineChartExport';
+import {
+  ensureWhiteSvgBackground,
+  normalizeSvgExportDataUrl,
+  resolveCssVariablesInValue,
+} from './multiLineChartExport';
+
+describe('resolveCssVariablesInValue', () => {
+  it('resolves CSS variables in nested objects and arrays without mutating input', () => {
+    const formatter = () => 'preserved';
+    const input = {
+      axis: {
+        lineStyle: { color: 'var(--border-color)' },
+        label: ['var(--text-primary)', 3, formatter, null],
+      },
+      unchanged: 'plain text',
+    };
+    const resolved = resolveCssVariablesInValue(input, (name) => ({
+      '--border-color': '#d9d9d9',
+      '--text-primary': '#141414',
+    })[name]);
+
+    expect(resolved).toEqual({
+      axis: {
+        lineStyle: { color: '#d9d9d9' },
+        label: ['#141414', 3, formatter, null],
+      },
+      unchanged: 'plain text',
+    });
+    expect(resolved).not.toBe(input);
+    expect(resolved.axis).not.toBe(input.axis);
+    expect(input.axis.lineStyle.color).toBe('var(--border-color)');
+  });
+
+  it('resolves multiple variables and uses a fallback when a variable is unavailable', () => {
+    const resolved = resolveCssVariablesInValue(
+      'border: var(--border-color); text: var(--missing, #fff);',
+      (name) => (name === '--border-color' ? '#d9d9d9' : undefined),
+    );
+
+    expect(resolved).toBe('border: #d9d9d9; text: #fff;');
+  });
+
+  it('keeps unresolved variables without fallbacks and non-var strings unchanged', () => {
+    const value = 'var(--missing) and url(var(--also-missing))';
+
+    expect(resolveCssVariablesInValue(value, () => undefined)).toBe(value);
+    expect(resolveCssVariablesInValue('not a var()', () => '#fff')).toBe(
+      'not a var()',
+    );
+  });
+
+  it('preserves repeated and cyclic object references while cloning plain objects', () => {
+    const shared = { color: 'var(--border-color)' };
+    const input: { first: typeof shared; second: typeof shared; self?: unknown } = {
+      first: shared,
+      second: shared,
+    };
+    input.self = input;
+
+    const resolved = resolveCssVariablesInValue(input, () => '#d9d9d9');
+
+    expect(resolved.first).toBe(resolved.second);
+    expect(resolved.self).toBe(resolved);
+    expect(resolved.first.color).toBe('#d9d9d9');
+    expect(input.first.color).toBe('var(--border-color)');
+  });
+});
 
 describe('normalizeSvgExportDataUrl', () => {
   it('keeps a true SVG data URL unchanged', () => {
@@ -23,6 +89,24 @@ describe('normalizeSvgExportDataUrl', () => {
   it('rejects XML without an SVG root element', () => {
     expect(() => normalizeSvgExportDataUrl('<?xml version="1.0"?><document />')).toThrow(
       'ECharts returned a non-SVG export',
+    );
+  });
+});
+
+describe('ensureWhiteSvgBackground', () => {
+  it('adds a white background element when an SVG has no serialized background', () => {
+    const svg = ensureWhiteSvgBackground('<svg viewBox="0 0 10 20"></svg>', 10, 20);
+
+    expect(decodeURIComponent(svg.split(',')[1])).toContain(
+      '<rect x="0" y="0" width="10" height="20" fill="#fff"/>',
+    );
+  });
+
+  it('does not duplicate an existing white background element', () => {
+    const input = '<svg><rect x="0" y="0" width="10" height="20" fill="#fff"/></svg>';
+
+    expect(ensureWhiteSvgBackground(input, 10, 20)).toBe(
+      normalizeSvgExportDataUrl(input),
     );
   });
 });

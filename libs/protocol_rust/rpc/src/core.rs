@@ -1674,6 +1674,145 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn interleaved_unsecure_keys_are_reassembled_independently() {
+        let core = RpcCore::default();
+        let first_received = Arc::new(StdMutex::new(Vec::new()));
+        let second_received = Arc::new(StdMutex::new(Vec::new()));
+
+        let first_for_handler = Arc::clone(&first_received);
+        core.register(
+            "telemetry_a",
+            Arc::new(move |data: &[u8], _size: usize, _ctx: &mut InvokeContext| {
+                *first_for_handler.lock().unwrap() = data.to_vec();
+            }),
+        )
+        .await
+        .unwrap();
+        let second_for_handler = Arc::clone(&second_received);
+        core.register(
+            "telemetry_b",
+            Arc::new(move |data: &[u8], _size: usize, _ctx: &mut InvokeContext| {
+                *second_for_handler.lock().unwrap() = data.to_vec();
+            }),
+        )
+        .await
+        .unwrap();
+
+        let mut builder = FrameBuilder::new();
+        let first_start = builder.build_frame("telemetry_a", &[0xA0], false, false, 0, 0);
+        let second_start = builder.build_frame("telemetry_b", &[0xB0], false, false, 0, 0);
+        let first_end = builder.build_frame("telemetry_a", &[0xA1], false, true, 0, 0);
+        let second_end = builder.build_frame("telemetry_b", &[0xB1], false, true, 0, 0);
+
+        for frame in [first_start, second_start, first_end, second_end] {
+            let results = core.process(&frame).await;
+            assert!(results.iter().all(Result::is_ok));
+        }
+
+        assert_eq!(*first_received.lock().unwrap(), vec![0xA0, 0xA1]);
+        assert_eq!(*second_received.lock().unwrap(), vec![0xB0, 0xB1]);
+    }
+
+    #[tokio::test]
+    async fn telemetry_does_not_drop_an_interleaved_call_response() {
+        let core = Arc::new(RpcCore::new(RpcConfig {
+            timeout_ms: 100,
+            retry_count: 0,
+            retry_delay_ms: 0,
+            ..RpcConfig::default()
+        }));
+        let telemetry_received = Arc::new(StdMutex::new(Vec::new()));
+        let telemetry_for_handler = Arc::clone(&telemetry_received);
+        core.register(
+            "telemetry",
+            Arc::new(move |data: &[u8], _size: usize, _ctx: &mut InvokeContext| {
+                *telemetry_for_handler.lock().unwrap() = data.to_vec();
+            }),
+        )
+        .await
+        .unwrap();
+
+        let (response_tx, response_rx) = oneshot::channel();
+        core.dynamic_nodes.lock().await.insert(
+            (String::from("call"), 7),
+            PendingCall::Call { tx: response_tx },
+        );
+
+        let mut builder = FrameBuilder::new();
+        let telemetry_start = builder.build_frame("telemetry", &[0x10], false, false, 0, 0);
+        let call_response = builder.build_frame("call", &[0xCC], false, true, 0, 0);
+        let telemetry_end = builder.build_frame("telemetry", &[0x11], false, true, 0, 0);
+
+        core.process(&telemetry_start).await;
+        let call_results = core.process(&call_response).await;
+        assert_eq!(call_results[0].as_ref().unwrap().key, "call");
+        core.process(&telemetry_end).await;
+
+        assert_eq!(
+            timeout(Duration::from_millis(20), response_rx)
+                .await
+                .expect("call response timeout")
+                .unwrap(),
+            Ok(vec![0xCC])
+        );
+        assert_eq!(*telemetry_received.lock().unwrap(), vec![0x10, 0x11]);
+    }
+
+    #[tokio::test]
+    async fn telemetry_does_not_drop_an_interleaved_secure_return() {
+        let core = Arc::new(RpcCore::new(RpcConfig {
+            timeout_ms: 100,
+            retry_count: 0,
+            retry_delay_ms: 0,
+            ..RpcConfig::default()
+        }));
+        let telemetry_received = Arc::new(StdMutex::new(Vec::new()));
+        let telemetry_for_handler = Arc::clone(&telemetry_received);
+        core.register(
+            "telemetry",
+            Arc::new(move |data: &[u8], _size: usize, _ctx: &mut InvokeContext| {
+                *telemetry_for_handler.lock().unwrap() = data.to_vec();
+            }),
+        )
+        .await
+        .unwrap();
+
+        let invoke_idx = 7;
+        let (response_tx, mut response_rx) = mpsc::unbounded_channel();
+        core.dynamic_nodes.lock().await.insert(
+            (String::from("secure"), invoke_idx),
+            PendingCall::Secure { tx: response_tx },
+        );
+
+        let mut builder = FrameBuilder::new();
+        let telemetry_start = builder.build_frame("telemetry", &[0x20], false, false, 0, 0);
+        let secure_return = secure_control_frame_with_data(
+            "secure",
+            invoke_idx,
+            2,
+            None,
+            &[0x59, 0x2A],
+        );
+        let telemetry_end = builder.build_frame("telemetry", &[0x21], false, true, 0, 0);
+
+        core.process(&telemetry_start).await;
+        let secure_results = core.process(&secure_return).await;
+        assert_eq!(secure_results[0].as_ref().unwrap().key, "secure");
+        core.process(&telemetry_end).await;
+
+        assert_eq!(
+            timeout(Duration::from_millis(20), response_rx.recv())
+                .await
+                .expect("secure response timeout"),
+            Some(SecureResponse::Return {
+                invoke_idx,
+                data: vec![0x59, 0x2A],
+            })
+        );
+        assert_eq!(*telemetry_received.lock().unwrap(), vec![0x20, 0x21]);
+    }
+
+    #[tokio::test]
     async fn test_process_frame() {
         let core = RpcCore::default();
         let call_count = Arc::new(AtomicUsize::new(0));

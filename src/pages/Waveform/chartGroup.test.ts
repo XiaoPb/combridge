@@ -4,6 +4,7 @@ import {
   createChartGroup,
   getChartGroupKey,
   getChartLegendKey,
+  getLegendAction,
   getNextChartGroupName,
   migrateLegacyChartLegendSelections,
   resolveChartLegendSelection,
@@ -202,5 +203,11 @@ describe('chart group identity', () => {
         'hasOwnProperty',
       ),
     ).toBe(false);
+  });
+
+  it('maps missing legend selections to the ECharts selected action', () => {
+    expect(getLegendAction(undefined)).toBe('legendSelect');
+    expect(getLegendAction(true)).toBe('legendSelect');
+    expect(getLegendAction(false)).toBe('legendUnSelect');
   });
 });

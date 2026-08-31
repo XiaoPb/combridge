@@ -109,4 +109,29 @@ describe('ensureWhiteSvgBackground', () => {
       normalizeSvgExportDataUrl(input),
     );
   });
+
+  it('decodes base64 SVG data URLs before adding a white background', () => {
+    const input = `data:image/svg+xml;base64,${btoa('<svg viewBox="0 0 10 20"></svg>')}`;
+
+    const output = ensureWhiteSvgBackground(input, 10, 20);
+
+    expect(output).toMatch(/^data:image\/svg\+xml;charset=UTF-8,/);
+    expect(decodeURIComponent(output.split(',')[1])).toContain(
+      '<rect x="0" y="0" width="10" height="20" fill="#fff"/>',
+    );
+  });
+
+  it('expands a self-closing SVG root before inserting the background', () => {
+    const output = ensureWhiteSvgBackground(
+      '<svg viewBox="0 0 10 20"/>',
+      10,
+      20,
+    );
+    const decoded = decodeURIComponent(output.split(',')[1]);
+
+    expect(decoded).toBe(
+      '<svg viewBox="0 0 10 20"><rect x="0" y="0" width="10" height="20" fill="#fff"/></svg>',
+    );
+    expect(decoded).toMatch(/^<svg\b[^>]*>.*<\/svg>$/);
+  });
 });

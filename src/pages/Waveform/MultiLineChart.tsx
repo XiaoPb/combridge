@@ -19,6 +19,7 @@ import type { ChartGroupConfig } from './chartGroup';
 import {
   getChartGroupKey,
   getChartLegendKey,
+  getLegendAction,
   migrateLegacyChartLegendSelections,
   resolveChartLegendSelection,
 } from './chartGroup';
@@ -325,10 +326,9 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
           groupIndex,
           column,
         );
-        if (selected === undefined) return;
         chart.dispatchAction(
           {
-            type: selected ? 'legendSelect' : 'legendUnSelect',
+            type: getLegendAction(selected),
             name: column,
           },
           { silent: true },

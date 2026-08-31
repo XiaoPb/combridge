@@ -48,6 +48,12 @@ export function getChartLegendKey(
   return `${scope}:${getChartGroupKey(group, index)}:${column}`;
 }
 
+export type LegendAction = 'legendSelect' | 'legendUnSelect';
+
+export function getLegendAction(selected: boolean | undefined): LegendAction {
+  return selected === false ? 'legendUnSelect' : 'legendSelect';
+}
+
 export function resolveChartLegendSelection(
   scope: string,
   selected: Record<string, boolean> | undefined,

@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createChartGroup,
   getChartGroupKey,
+  getChartLegendKey,
   getNextChartGroupName,
+  resolveChartLegendSelection,
 } from './chartGroup';
 
 describe('chart group identity', () => {
@@ -47,10 +49,73 @@ describe('chart group identity', () => {
   });
 
   it('returns the smallest unused chart group name', () => {
-    expect(getNextChartGroupName([createChartGroup('图表1'), createChartGroup('图表3')])).toBe('图表2');
+    expect(
+      getNextChartGroupName([
+        createChartGroup('图表1'),
+        createChartGroup('图表3'),
+      ]),
+    ).toBe('图表2');
   });
 
   it('uses the legacy key format for groups without an ID', () => {
-    expect(getChartGroupKey({ name: 'PPG', columns: ['CH0'] }, 2)).toBe('legacy:2:PPG');
+    expect(getChartGroupKey({ name: 'PPG', columns: ['CH0'] }, 2)).toBe(
+      'legacy:2:PPG',
+    );
+  });
+
+  it('isolates the same column across stable chart group IDs', () => {
+    const first = { id: 'first', name: '同名', columns: ['CH0'] };
+    const second = { id: 'second', name: '同名', columns: ['CH0'] };
+
+    expect(getChartLegendKey('csv', first, 0, 'CH0')).not.toBe(
+      getChartLegendKey('csv', second, 1, 'CH0'),
+    );
+  });
+
+  it('keeps identical display names isolated by scope and group identity', () => {
+    const group = { id: 'stable', name: '同名', columns: ['CH0'] };
+
+    expect(getChartLegendKey('csv', group, 0, 'CH0')).not.toBe(
+      getChartLegendKey('gh3036', group, 0, 'CH0'),
+    );
+  });
+
+  it('prefers scoped ID selection and falls back to legacy display-name selection', () => {
+    const group = { id: 'stable', name: '同名', columns: ['CH0'] };
+    const scopedKey = getChartLegendKey('gh3036', group, 0, 'CH0');
+
+    expect(
+      resolveChartLegendSelection(
+        'gh3036',
+        { [scopedKey]: true, 同名_CH0: false },
+        group,
+        0,
+        'CH0',
+      ),
+    ).toBe(true);
+    expect(
+      resolveChartLegendSelection(
+        'gh3036',
+        { 同名_CH0: false },
+        group,
+        0,
+        'CH0',
+      ),
+    ).toBe(false);
+  });
+
+  it('treats hasOwnProperty as an ordinary legend field', () => {
+    const group = { id: 'safe', name: 'chart', columns: ['hasOwnProperty'] };
+    const key = getChartLegendKey('gh3036', group, 0, 'hasOwnProperty');
+
+    expect(
+      resolveChartLegendSelection(
+        'gh3036',
+        { [key]: false },
+        group,
+        0,
+        'hasOwnProperty',
+      ),
+    ).toBe(false);
   });
 });

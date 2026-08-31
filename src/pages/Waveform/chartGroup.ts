@@ -32,11 +32,43 @@ export function createChartGroup(
   };
 }
 
-export function getChartGroupKey(group: ChartGroupConfig, index: number): string {
+export function getChartGroupKey(
+  group: ChartGroupConfig,
+  index: number,
+): string {
   return group.id || `legacy:${index}:${group.name}`;
 }
 
-export function getNextChartGroupName(groups: readonly ChartGroupConfig[]): string {
+export function getChartLegendKey(
+  scope: string,
+  group: ChartGroupConfig,
+  index: number,
+  column: string,
+): string {
+  return `${scope}:${getChartGroupKey(group, index)}:${column}`;
+}
+
+export function resolveChartLegendSelection(
+  scope: string,
+  selected: Record<string, boolean> | undefined,
+  group: ChartGroupConfig,
+  index: number,
+  column: string,
+): boolean | undefined {
+  if (!selected) return undefined;
+  const scopedKey = getChartLegendKey(scope, group, index, column);
+  if (Object.prototype.hasOwnProperty.call(selected, scopedKey))
+    return selected[scopedKey];
+
+  const legacyKey = `${group.name}_${column}`;
+  if (Object.prototype.hasOwnProperty.call(selected, legacyKey))
+    return selected[legacyKey];
+  return undefined;
+}
+
+export function getNextChartGroupName(
+  groups: readonly ChartGroupConfig[],
+): string {
   const existing = new Set(groups.map((group) => group.name));
   let index = 1;
   while (existing.has(`图表${index}`)) {

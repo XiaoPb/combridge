@@ -17,11 +17,13 @@ const CsvLoaderTab: React.FC = () => {
     parseConfig,
     chartGroups,
     sampleRate,
+    dataZoomState,
     isLoading,
     error,
     loadCsvFile,
     setParseConfig,
     setSampleRate,
+    setDataZoomState,
     clearError,
     addChartGroup,
     removeChartGroup,
@@ -225,6 +227,9 @@ const CsvLoaderTab: React.FC = () => {
             rows={rows}
             chartGroups={chartGroups}
             sampleRate={sampleRate}
+            initialDataZoom={dataZoomState}
+            onDataZoomChange={setDataZoomState}
+            legendScope="csv"
           />
         ) : (
           <div

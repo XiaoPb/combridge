@@ -157,6 +157,28 @@ export function normalizeSvgExportDataUrl(value: string): string {
   throw new Error('ECharts returned a non-SVG export');
 }
 
+function decodeSvgDataUrlPayload(normalized: string): string | null {
+  const separator = normalized.indexOf(',');
+  if (separator < 0) return null;
+
+  const metadata = normalized.slice(0, separator);
+  const payload = normalized.slice(separator + 1);
+  const isBase64 = metadata
+    .slice(SVG_DATA_URL_PREFIX.length)
+    .split(';')
+    .some((token) => token.trim().toLowerCase() === 'base64');
+
+  try {
+    if (!isBase64) return decodeURIComponent(payload);
+
+    const binary = atob(decodeURIComponent(payload));
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Ensures an SVG export has a serialized white background element. ECharts
  * normally emits one for an option-level backgroundColor, so this is only a
@@ -168,16 +190,8 @@ export function ensureWhiteSvgBackground(
   height: number,
 ): string {
   const normalized = normalizeSvgExportDataUrl(value);
-  const separator = normalized.indexOf(',');
-  if (separator < 0) return normalized;
-
-  const payload = normalized.slice(separator + 1);
-  let svg: string;
-  try {
-    svg = decodeURIComponent(payload);
-  } catch {
-    return normalized;
-  }
+  const svg = decodeSvgDataUrlPayload(normalized);
+  if (svg === null) return normalized;
 
   if (
     /<rect\b[^>]*\bfill\s*=\s*["']#(?:fff|ffffff)["']/i.test(svg) ||
@@ -186,6 +200,13 @@ export function ensureWhiteSvgBackground(
     return normalized;
 
   const background = `<rect x="0" y="0" width="${width}" height="${height}" fill="#fff"/>`;
+  const expandedSelfClosingRoot = svg.replace(
+    /<svg\b([^>]*)\/>/i,
+    `<svg$1>${background}</svg>`,
+  );
+  if (expandedSelfClosingRoot !== svg)
+    return `${SVG_DATA_URL_PREFIX};charset=UTF-8,${encodeURIComponent(expandedSelfClosingRoot)}`;
+
   const withBackground = svg.replace(
     /(<svg\b[^>]*>)/i,
     `$1${background}`,

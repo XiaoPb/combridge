@@ -4,14 +4,26 @@ import type {
 } from '../Waveform/chartGroup';
 
 const ID_PREFIX = 'gh3036-data-';
+let nextGeneratedId = 0;
+
+function reserveExistingIds(ids: Iterable<string>): void {
+  for (const id of ids) {
+    const match = id.match(/^gh3036-data-(\d+)$/);
+    if (!match) continue;
+    const index = Number(match[1]);
+    if (Number.isSafeInteger(index)) {
+      nextGeneratedId = Math.max(nextGeneratedId, index + 1);
+    }
+  }
+}
 
 function allocateId(usedIds: Set<string>): string {
-  let index = 0;
-  let id = `${ID_PREFIX}${index}`;
+  let id = `${ID_PREFIX}${nextGeneratedId}`;
   while (usedIds.has(id)) {
-    index += 1;
-    id = `${ID_PREFIX}${index}`;
+    nextGeneratedId += 1;
+    id = `${ID_PREFIX}${nextGeneratedId}`;
   }
+  nextGeneratedId += 1;
   usedIds.add(id);
   return id;
 }
@@ -22,6 +34,7 @@ export function normalizeGh3036ChartGroups(
   const usedIds = new Set(
     groups.flatMap((group) => (group.id ? [group.id] : [])),
   );
+  reserveExistingIds(usedIds);
   const assignedIds = new Set<string>();
 
   return groups.map((group) => {

@@ -64,6 +64,20 @@ const Y_AXIS_WIDTH = 50;
 const MAX_LINES_PER_CHART = 4;
 type DataZoomState = { start: number; end: number };
 
+export function dispatchDataZoomSilently(
+  chart: Pick<echarts.ECharts, 'dispatchAction'>,
+  state: DataZoomState,
+): void {
+  chart.dispatchAction(
+    {
+      type: 'dataZoom',
+      start: state.start,
+      end: state.end,
+    },
+    { silent: true },
+  );
+}
+
 const formatScientific = (value: number): string => {
   if (value === 0) return '0';
   const absValue = Math.abs(value);
@@ -446,11 +460,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
         onDataZoomChangeRef.current?.(state);
         chartInstances.current.forEach((sibling, siblingKey) => {
           if (siblingKey !== key)
-            sibling.dispatchAction({
-              type: 'dataZoom',
-              start: state.start,
-              end: state.end,
-            });
+            dispatchDataZoomSilently(sibling, state);
         });
         if (zoomResetTimer.current) clearTimeout(zoomResetTimer.current);
         zoomResetTimer.current = setTimeout(() => {

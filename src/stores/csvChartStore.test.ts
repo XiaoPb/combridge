@@ -93,4 +93,23 @@ describe('CSV chart store isolation and load ordering', () => {
     expect(useCsvChartStore.getState().error).toBeTruthy();
     expect(useCsvChartStore.getState().isLoading).toBe(false);
   });
+
+  it('auto-assigns generated duplicate headers without matching unrelated columns', async () => {
+    readCsvFile.mockResolvedValue(result([
+      'CH0',
+      'CH0 (2)',
+      'ACC_X',
+      'ACC_X (2)',
+      'CH0 (other)',
+      'ACC_X (other)',
+      'OTHER (2)',
+    ]));
+
+    await useCsvChartStore.getState().loadCsvFile('headers.csv');
+
+    const [channelGroup, accelerometerGroup] =
+      useCsvChartStore.getState().chartGroups;
+    expect(channelGroup.columns).toEqual(['CH0', 'CH0 (2)']);
+    expect(accelerometerGroup.columns).toEqual(['ACC_X', 'ACC_X (2)']);
+  });
 });

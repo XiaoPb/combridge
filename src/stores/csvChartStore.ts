@@ -43,8 +43,9 @@ function autoAssignChartGroups(columns: string[]): IdentifiedChartGroupConfig[] 
   const accColumns: string[] = [];
   const chColumns: string[] = [];
   columns.forEach((col) => {
-    if (/^ACC_?[XYZ]$/i.test(col)) accColumns.push(col);
-    else if ((/^CH[0-3](\(.*\))?$/i.test(col)) || (/^Ipd[0-3](\(.*\))?$/i.test(col))) chColumns.push(col);
+    const baseColumn = col.replace(/ \(\d+\)$/, '');
+    if (/^ACC_?[XYZ]$/i.test(baseColumn)) accColumns.push(col);
+    else if (/^(?:CH|Ipd)[0-3]$/i.test(baseColumn)) chColumns.push(col);
   });
   return [createChartGroup('图表1', chColumns), createChartGroup('图表2', accColumns)];
 }

@@ -1396,7 +1396,7 @@ impl Gh3036Manager {
     fn decode_factory_mode_response(param_data: &[u8]) -> Result<Vec<u8>, String> {
         if param_data.is_empty() {
             info!("产测模式结果为空");
-            return Ok(Vec::new());
+            return Err("产测模式结果为空".into());
         }
 
         let value = unpack(param_data, RET_F_GET_MODE).map_err(|e| format!("解包失败: {:?}", e))?;
@@ -1741,10 +1741,10 @@ mod tests {
     }
 
     #[test]
-    fn factory_mode_empty_response_is_successful() {
+    fn factory_mode_empty_response_is_rejected() {
         assert_eq!(
-            Gh3036Manager::decode_factory_mode_response(&[]).unwrap(),
-            Vec::<u8>::new()
+            Gh3036Manager::decode_factory_mode_response(&[]).unwrap_err(),
+            "产测模式结果为空"
         );
     }
 

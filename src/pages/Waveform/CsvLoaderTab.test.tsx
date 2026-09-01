@@ -135,6 +135,23 @@ describe('CsvLoaderTab PNG export entry', () => {
     });
   });
 
+  it('disables export while CSV data is loading', async () => {
+    setCsvData();
+    useCsvChartStore.setState({ isLoading: true });
+
+    render(<CsvLoaderTab />);
+    const button = screen.getByRole('button', { name: /导出全部 PNG/ });
+
+    expect(button).toHaveProperty('disabled', true);
+    fireEvent.click(button);
+    expect(exportAllPng).not.toHaveBeenCalled();
+
+    await act(async () => {
+      useCsvChartStore.setState({ isLoading: false });
+    });
+    await waitFor(() => expect(button).toHaveProperty('disabled', false));
+  });
+
   it('shows a page error and restores the button when export rejects', async () => {
     exportAllPng.mockRejectedValueOnce(new Error('PNG export failed'));
     setCsvData();

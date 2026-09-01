@@ -5,8 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n';
 import { useCsvChartStore } from '../../stores/csvChartStore';
 
-const { exportAllPng } = vi.hoisted(() => ({
+const { exportAllPng, openFileDialog } = vi.hoisted(() => ({
   exportAllPng: vi.fn(),
+  openFileDialog: vi.fn(),
+}));
+
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  open: openFileDialog,
 }));
 
 vi.mock('./MultiLineChart', async () => {
@@ -63,6 +68,7 @@ describe('CsvLoaderTab PNG export entry', () => {
     useCsvChartStore.getState().clearData();
     exportAllPng.mockReset();
     exportAllPng.mockResolvedValue(undefined);
+    openFileDialog.mockReset();
   });
 
   it('hides the export button when CSV data or columns are unavailable', () => {
@@ -150,6 +156,38 @@ describe('CsvLoaderTab PNG export entry', () => {
       useCsvChartStore.setState({ isLoading: false });
     });
     await waitFor(() => expect(button).toHaveProperty('disabled', false));
+  });
+
+  it('does not start file selection or reload while CSV data is loading', async () => {
+    setCsvData();
+    const loadCsvFile = vi.fn<
+      (filePath: string, options?: { resetZoom?: boolean }) => Promise<void>
+    >(async () => undefined);
+    openFileDialog.mockResolvedValue('new-data.csv');
+    useCsvChartStore.setState({
+      filePath: 'old-data.csv',
+      isLoading: true,
+      loadCsvFile,
+    });
+
+    render(<CsvLoaderTab />);
+    const selectButton = screen.getByRole('button', { name: /选择文件/ });
+    const reloadButton = screen.getByRole('button', { name: /重新加载/ });
+
+    expect(selectButton).toHaveProperty('disabled', true);
+    expect(reloadButton).toHaveProperty('disabled', true);
+
+    // Simulate a programmatic event bypassing the DOM disabled property.
+    selectButton.removeAttribute('disabled');
+    reloadButton.removeAttribute('disabled');
+    fireEvent.click(selectButton);
+    fireEvent.click(reloadButton);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(openFileDialog).not.toHaveBeenCalled();
+    expect(loadCsvFile).not.toHaveBeenCalled();
   });
 
   it('shows a page error and restores the button when export rejects', async () => {

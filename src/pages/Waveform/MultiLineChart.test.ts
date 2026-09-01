@@ -1,10 +1,12 @@
 import React, { createRef } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { MultiLineChartHandle, MultiLineChartProps } from './MultiLineChart';
+import type { ChartGroupConfig } from './chartGroup';
+import { getChartGroupKey } from './chartGroup';
 
 const columns = ['heart_rate'];
 const rows = [[72]];
-const groups = [{ name: 'Heart rate', columns, height: 300 }];
+const groups: ChartGroupConfig[] = [{ name: 'Heart rate', columns, height: 300 }];
 
 describe('MultiLineChart data zoom synchronization', () => {
   it('dispatches sibling zoom updates silently', async () => {
@@ -131,5 +133,147 @@ describe('MultiLineChart export API', () => {
       exportChart(chart, 'png', 'chart.png', onExportError),
     ).rejects.toThrow('chart export failed');
     expect(onExportError).toHaveBeenCalledWith(expect.any(Error));
+  });
+
+  it.each([
+    ['missing chart', undefined, groups[0]],
+    ['missing group', { getDataURL: vi.fn() }, undefined],
+  ])('reports %s instead of silently returning', async (_label, chart, group) => {
+    const chartModule = await import('./MultiLineChart');
+    const exportSingleChart = (chartModule as Record<string, unknown>)
+      .exportSingleChart as (
+      chart: { getDataURL: () => string } | undefined,
+      group: typeof groups[number] | undefined,
+      type: 'png' | 'svg',
+      filename: string,
+      onExportError?: (error: Error) => void,
+    ) => Promise<void>;
+    const onExportError = vi.fn();
+
+    await expect(
+      exportSingleChart(chart, group, 'png', 'chart.png', onExportError),
+    ).rejects.toThrow('Cannot export chart: chart or group is unavailable');
+    expect(onExportError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Cannot export chart: chart or group is unavailable',
+      }),
+    );
+  });
+
+  it('exports all charts in chartGroups order with fixed PNG options and filename', async () => {
+    const chartModule = await import('./MultiLineChart');
+    const exportAllChartsPng = (chartModule as Record<string, unknown>)
+      .exportAllChartsPng as (
+      chartGroups: readonly ChartGroupConfig[],
+      chartInstances: ReadonlyMap<string, {
+        resize: () => void;
+        getWidth: () => number;
+        getHeight: () => number;
+        getDataURL: (options: {
+          type: 'png';
+          pixelRatio: number;
+          backgroundColor: string;
+        }) => string;
+      }>,
+      dependencies: {
+        composeChartPng: (dataUrls: readonly string[], options: {
+          gap: number;
+          pixelRatio: number;
+        }) => Promise<{ blob: Blob }>;
+        downloadBlob: (blob: Blob, filename: string) => void;
+        waitForRender: () => Promise<void>;
+        now: () => number;
+      },
+    ) => Promise<void>;
+    const calls: string[] = [];
+    const first = {
+      resize: vi.fn(() => calls.push('first.resize')),
+      getWidth: vi.fn(() => 320),
+      getHeight: vi.fn(() => 180),
+      getDataURL: vi.fn(() => {
+        calls.push('first.getDataURL');
+        return 'first-png';
+      }),
+    };
+    const second = {
+      resize: vi.fn(() => calls.push('second.resize')),
+      getWidth: vi.fn(() => 320),
+      getHeight: vi.fn(() => 240),
+      getDataURL: vi.fn(() => {
+        calls.push('second.getDataURL');
+        return 'second-png';
+      }),
+    };
+    const chartGroups: ChartGroupConfig[] = [
+      { name: 'First', columns: ['a'], id: 'first' },
+      { name: 'Second', columns: ['b'], id: 'second' },
+    ];
+    const chartInstances = new Map([
+      [getChartGroupKey(chartGroups[0], 0), first],
+      [getChartGroupKey(chartGroups[1], 1), second],
+    ]);
+    const composeChartPng = vi.fn(async (dataUrls, options) => {
+      expect(dataUrls).toEqual(['first-png', 'second-png']);
+      expect(options).toEqual({ gap: 8, pixelRatio: 2 });
+      return { blob: new Blob(['all'], { type: 'image/png' }) };
+    });
+    const downloadBlob = vi.fn();
+    const timestamp = 1700000000000;
+
+    await exportAllChartsPng(chartGroups, chartInstances, {
+      composeChartPng,
+      downloadBlob,
+      waitForRender: vi.fn(async () => undefined),
+      now: () => timestamp,
+    });
+
+    expect(calls).toEqual([
+      'first.resize',
+      'first.getDataURL',
+      'second.resize',
+      'second.getDataURL',
+    ]);
+    expect(first.getDataURL).toHaveBeenCalledWith({
+      type: 'png',
+      pixelRatio: 2,
+      backgroundColor: '#fff',
+    });
+    expect(second.getDataURL).toHaveBeenCalledWith({
+      type: 'png',
+      pixelRatio: 2,
+      backgroundColor: '#fff',
+    });
+    expect(composeChartPng).toHaveBeenCalledWith(
+      ['first-png', 'second-png'],
+      { gap: 8, pixelRatio: 2 },
+    );
+    expect(downloadBlob).toHaveBeenCalledWith(
+      expect.any(Blob),
+      `waveform_all_${timestamp}.png`,
+    );
+  });
+
+  it('rejects all-chart export when there are no valid instances or dimensions', async () => {
+    const chartModule = await import('./MultiLineChart');
+    const exportAllChartsPng = (chartModule as Record<string, unknown>)
+      .exportAllChartsPng as (groups: readonly ChartGroupConfig[], instances: ReadonlyMap<string, unknown>) => Promise<void>;
+    const emptyGroups: ChartGroupConfig[] = [{ name: 'Only', columns: ['a'], id: 'only' }];
+
+    await expect(exportAllChartsPng(emptyGroups, new Map())).rejects.toThrow(
+      'Cannot export all charts: no valid chart instances',
+    );
+    await expect(
+      exportAllChartsPng(
+        emptyGroups,
+        new Map([
+          [getChartGroupKey(emptyGroups[0], 0), {
+            resize: vi.fn(),
+            getWidth: () => 0,
+            getHeight: () => 100,
+            getDataURL: vi.fn(),
+          }],
+        ]),
+      ),
+    ).rejects.toThrow('Cannot export chart PNG: chart dimensions are invalid');
   });
 });

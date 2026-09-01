@@ -178,11 +178,11 @@ describe('MultiLineChart export API', () => {
       dependencies: {
         composeChartPng: (dataUrls: readonly string[], options: {
           gap: number;
-          pixelRatio: number;
         }) => Promise<{ blob: Blob }>;
         downloadBlob: (blob: Blob, filename: string) => void;
         waitForRender: () => Promise<void>;
         now: () => number;
+        onExportError?: (error: Error) => void;
       },
     ) => Promise<void>;
     const calls: string[] = [];
@@ -214,7 +214,7 @@ describe('MultiLineChart export API', () => {
     ]);
     const composeChartPng = vi.fn(async (dataUrls, options) => {
       expect(dataUrls).toEqual(['first-png', 'second-png']);
-      expect(options).toEqual({ gap: 8, pixelRatio: 2 });
+      expect(options).toEqual({ gap: 8 });
       return { blob: new Blob(['all'], { type: 'image/png' }) };
     });
     const downloadBlob = vi.fn();
@@ -245,7 +245,7 @@ describe('MultiLineChart export API', () => {
     });
     expect(composeChartPng).toHaveBeenCalledWith(
       ['first-png', 'second-png'],
-      { gap: 8, pixelRatio: 2 },
+      { gap: 8 },
     );
     expect(downloadBlob).toHaveBeenCalledWith(
       expect.any(Blob),
@@ -256,12 +256,55 @@ describe('MultiLineChart export API', () => {
   it('rejects all-chart export when there are no valid instances or dimensions', async () => {
     const chartModule = await import('./MultiLineChart');
     const exportAllChartsPng = (chartModule as Record<string, unknown>)
-      .exportAllChartsPng as (groups: readonly ChartGroupConfig[], instances: ReadonlyMap<string, unknown>) => Promise<void>;
+      .exportAllChartsPng as (
+      groups: readonly ChartGroupConfig[],
+      instances: ReadonlyMap<string, unknown>,
+      dependencies?: { waitForRender?: () => Promise<void>; onExportError?: (error: Error) => void },
+    ) => Promise<void>;
     const emptyGroups: ChartGroupConfig[] = [{ name: 'Only', columns: ['a'], id: 'only' }];
+    const onExportError = vi.fn();
+    const dependencies = {
+      waitForRender: vi.fn(async () => undefined),
+      onExportError,
+    };
 
-    await expect(exportAllChartsPng(emptyGroups, new Map())).rejects.toThrow(
-      'Cannot export all charts: no valid chart instances',
+    await expect(exportAllChartsPng(emptyGroups, new Map(), dependencies)).rejects.toThrow(
+      'Cannot export chart PNG: missing chart instance for group "Only"',
     );
+    expect(onExportError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Cannot export chart PNG: missing chart instance for group "Only"',
+      }),
+    );
+
+    const first = {
+      resize: vi.fn(),
+      getWidth: () => 320,
+      getHeight: () => 180,
+      getDataURL: vi.fn(),
+    };
+    const partialGroups: ChartGroupConfig[] = [
+      { name: 'First', columns: ['a'], id: 'first' },
+      { name: 'Second', columns: ['b'], id: 'second' },
+    ];
+    const partialError = vi.fn();
+    await expect(
+      exportAllChartsPng(
+        partialGroups,
+        new Map([
+          [getChartGroupKey(partialGroups[0], 0), first],
+        ]),
+        { waitForRender: vi.fn(async () => undefined), onExportError: partialError },
+      ),
+    ).rejects.toThrow('Cannot export chart PNG: missing chart instance for group "Second"');
+    expect(partialError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Cannot export chart PNG: missing chart instance for group "Second"',
+      }),
+    );
+    expect(first.resize).not.toHaveBeenCalled();
+
+    const invalidError = vi.fn();
     await expect(
       exportAllChartsPng(
         emptyGroups,
@@ -273,7 +316,13 @@ describe('MultiLineChart export API', () => {
             getDataURL: vi.fn(),
           }],
         ]),
+        { waitForRender: vi.fn(async () => undefined), onExportError: invalidError },
       ),
     ).rejects.toThrow('Cannot export chart PNG: chart dimensions are invalid');
+    expect(invalidError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Cannot export chart PNG: chart dimensions are invalid for group "Only"',
+      }),
+    );
   });
 });

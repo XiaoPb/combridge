@@ -1,9 +1,183 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  composeChartPng,
+  dataUrlToBlob,
+  downloadBlob,
   ensureWhiteSvgBackground,
   normalizeSvgExportDataUrl,
   resolveCssVariablesInValue,
 } from './multiLineChartExport';
+
+const PNG_ONE = 'data:image/png;base64,AAECAwQ=';
+const PNG_TWO = 'data:image/png;base64,BQYHCAk=';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+describe('dataUrlToBlob', () => {
+  it('decodes a base64 PNG data URL into a PNG Blob', async () => {
+    const blob = dataUrlToBlob(PNG_ONE);
+
+    expect(blob).toBeInstanceOf(Blob);
+    expect(blob.type).toBe('image/png');
+    expect([...new Uint8Array(await blob.arrayBuffer())]).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('decodes an encoded SVG data URL into an SVG Blob', async () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" />';
+    const blob = dataUrlToBlob(
+      `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+    );
+
+    expect(blob.type).toBe('image/svg+xml');
+    expect(await blob.text()).toBe(svg);
+  });
+
+  it('rejects data URLs with an unsupported MIME type', () => {
+    expect(() => dataUrlToBlob('data:image/jpeg;base64,AAAA')).toThrow(
+      'Expected a PNG or SVG data URL',
+    );
+  });
+});
+
+describe('downloadBlob', () => {
+  it('downloads through an object URL and always cleans up the link', () => {
+    const link = {
+      href: '',
+      download: '',
+      click: vi.fn(),
+      remove: vi.fn(),
+    };
+    const appendChild = vi.fn();
+    vi.stubGlobal('document', {
+      createElement: vi.fn(() => link),
+      body: { appendChild },
+    });
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => 'blob:chart'),
+      revokeObjectURL: vi.fn(),
+    });
+
+    downloadBlob(new Blob(['chart'], { type: 'image/png' }), 'charts.png');
+
+    expect(URL.createObjectURL).toHaveBeenCalledOnce();
+    expect(link.href).toBe('blob:chart');
+    expect(link.download).toBe('charts.png');
+    expect(appendChild).toHaveBeenCalledWith(link);
+    expect(link.click).toHaveBeenCalledOnce();
+    expect(link.remove).toHaveBeenCalledOnce();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:chart');
+  });
+
+  it('cleans up when clicking the download link fails', () => {
+    const link = {
+      href: '',
+      download: '',
+      click: vi.fn(() => {
+        throw new Error('click failed');
+      }),
+      remove: vi.fn(),
+    };
+    vi.stubGlobal('document', {
+      createElement: vi.fn(() => link),
+      body: { appendChild: vi.fn() },
+    });
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => 'blob:chart'),
+      revokeObjectURL: vi.fn(),
+    });
+
+    expect(() => downloadBlob(new Blob(['chart']), 'charts.png')).toThrow(
+      'click failed',
+    );
+    expect(link.remove).toHaveBeenCalledOnce();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:chart');
+  });
+});
+
+describe('composeChartPng', () => {
+  function createAdapters(options: {
+    images?: Array<{ width: number; height: number; label: string }>;
+    toBlob?: (callback: BlobCallback, type?: string) => void;
+  }) {
+    const drawImage = vi.fn();
+    const fillRect = vi.fn();
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({
+        fillStyle: '',
+        fillRect,
+        drawImage,
+      })),
+      toBlob: options.toBlob ?? ((callback) => callback(new Blob(['png'], { type: 'image/png' }))),
+    };
+    const createCanvas = vi.fn(() => canvas);
+    const loadImage = vi.fn(async (dataUrl: string) => {
+      const image = options.images?.[dataUrl === PNG_ONE ? 0 : 1];
+      if (!image) throw new Error('image load failed');
+      return {
+        width: image.width,
+        height: image.height,
+        draw: (context: CanvasRenderingContext2D, x: number, y: number) =>
+          context.drawImage(image.label as unknown as CanvasImageSource, x, y),
+      };
+    });
+    return { loadImage, createCanvas, canvas, fillRect, drawImage };
+  }
+
+  it('composes PNGs vertically on a white canvas with a fixed gap', async () => {
+    const adapters = createAdapters({
+      images: [
+        { width: 100, height: 20, label: 'first' },
+        { width: 80, height: 30, label: 'second' },
+      ],
+    });
+
+    const result = await composeChartPng([PNG_ONE, PNG_TWO], adapters);
+
+    expect(result.width).toBe(100);
+    expect(result.height).toBe(66);
+    expect(adapters.createCanvas).toHaveBeenCalledWith(100, 66);
+    expect(adapters.fillRect).toHaveBeenCalledWith(0, 0, 100, 66);
+    expect(adapters.drawImage).toHaveBeenNthCalledWith(1, 'first', 0, 0);
+    expect(adapters.drawImage).toHaveBeenNthCalledWith(2, 'second', 0, 36);
+    expect(result.blob.type).toBe('image/png');
+  });
+
+  it('rejects an empty list of chart images', async () => {
+    await expect(composeChartPng([], createAdapters({}))).rejects.toThrow(
+      'Cannot compose chart PNG: no images provided',
+    );
+  });
+
+  it('rejects a non-PNG chart data URL', async () => {
+    await expect(
+      composeChartPng(['data:image/svg+xml,%3Csvg%2F%3E'], createAdapters({})),
+    ).rejects.toThrow('composeChartPng expects PNG data URLs');
+  });
+
+  it('reports image loading failures clearly', async () => {
+    const adapters = createAdapters({ images: [] });
+
+    await expect(composeChartPng([PNG_ONE], adapters)).rejects.toThrow(
+      'Failed to load chart image',
+    );
+  });
+
+  it('rejects when canvas.toBlob returns null', async () => {
+    const adapters = createAdapters({
+      images: [{ width: 10, height: 10, label: 'only' }],
+      toBlob: (callback) => callback(null),
+    });
+
+    await expect(composeChartPng([PNG_ONE], adapters)).rejects.toThrow(
+      'Canvas toBlob returned null',
+    );
+  });
+});
 
 describe('resolveCssVariablesInValue', () => {
   it('resolves CSS variables in nested objects and arrays without mutating input', () => {

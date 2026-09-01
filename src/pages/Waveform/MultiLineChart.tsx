@@ -84,11 +84,12 @@ interface ChartExportInstance {
 interface ChartExportDependencies {
   composeChartPng: (
     dataUrls: readonly string[],
-    options: { gap: number; pixelRatio: number },
+    options: { gap: number },
   ) => Promise<{ blob: Blob }>;
   downloadBlob: (blob: Blob, filename: string) => void;
   waitForRender: () => Promise<void>;
   now: () => number;
+  onExportError?: (error: Error) => void;
 }
 
 const Y_AXIS_WIDTH = 50;
@@ -623,11 +624,11 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
 
   const exportAllPng = useCallback(async (): Promise<void> => {
     try {
-      await exportAllChartsPng(chartGroups, chartInstances.current);
+      await exportAllChartsPng(chartGroups, chartInstances.current, {
+        onExportError: onExportErrorRef.current,
+      });
     } catch (error) {
-      const exportError = toExportError(error);
-      onExportErrorRef.current?.(exportError);
-      throw exportError;
+      throw toExportError(error);
     }
   }, [chartGroups]);
 
@@ -801,15 +802,23 @@ export async function exportAllChartsPng(
     downloadBlob: download = downloadBlob,
     waitForRender = waitForChartRender,
     now = Date.now,
+    onExportError,
   } = dependencies;
 
-  await waitForRender();
-  const dataUrls = chartGroups
-    .map((group, index) =>
-      chartInstances.get(getChartGroupKey(group, index)),
-    )
-    .filter((chart): chart is ChartExportInstance => chart !== undefined)
-    .map((chart) => {
+  try {
+    await waitForRender();
+    if (chartGroups.length === 0)
+      throw new Error('Cannot export all charts: no valid chart instances');
+
+    const charts = chartGroups.map((group, index) => {
+      const chart = chartInstances.get(getChartGroupKey(group, index));
+      if (!chart)
+        throw new Error(
+          `Cannot export chart PNG: missing chart instance for group "${group.name || index + 1}"`,
+        );
+      return { group, chart };
+    });
+    const dataUrls = charts.map(({ group, chart }) => {
       chart.resize();
       const width = chart.getWidth();
       const height = chart.getHeight();
@@ -819,7 +828,9 @@ export async function exportAllChartsPng(
         width <= 0 ||
         height <= 0
       )
-        throw new Error('Cannot export chart PNG: chart dimensions are invalid');
+        throw new Error(
+          `Cannot export chart PNG: chart dimensions are invalid for group "${group.name || 'chart'}"`,
+        );
       return chart.getDataURL({
         type: 'png',
         pixelRatio: 2,
@@ -827,11 +838,13 @@ export async function exportAllChartsPng(
       });
     });
 
-  if (dataUrls.length === 0)
-    throw new Error('Cannot export all charts: no valid chart instances');
-
-  const output = await compose(dataUrls, { gap: 8, pixelRatio: 2 });
-  download(output.blob, `waveform_all_${now()}.png`);
+    const output = await compose(dataUrls, { gap: 8 });
+    download(output.blob, `waveform_all_${now()}.png`);
+  } catch (error) {
+    const exportError = toExportError(error);
+    onExportError?.(exportError);
+    throw exportError;
+  }
 }
 
 function exportSvgChart(chart: echarts.ECharts): string {

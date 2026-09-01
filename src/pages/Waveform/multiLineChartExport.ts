@@ -25,7 +25,6 @@ export interface ChartPngImage {
 
 export interface ChartPngAdapters {
   gap?: number;
-  pixelRatio?: number;
   loadImage?: (dataUrl: string) => Promise<ChartPngImage>;
   createCanvas?: (width: number, height: number) => ChartPngCanvas;
 }
@@ -118,11 +117,8 @@ export async function composeChartPng(
     throw new Error('Cannot compose chart PNG: no images provided');
 
   const gap = adapters.gap ?? CHART_PNG_GAP;
-  const pixelRatio = adapters.pixelRatio ?? 1;
   if (!Number.isFinite(gap) || gap < 0)
     throw new Error('Chart PNG gap must be a non-negative number');
-  if (!Number.isFinite(pixelRatio) || pixelRatio <= 0)
-    throw new Error('Chart PNG pixel ratio must be positive');
 
   const loader = adapters.loadImage ?? loadImage;
   const images = await Promise.all(

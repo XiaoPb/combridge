@@ -35,6 +35,7 @@ const CsvLoaderTab: React.FC = () => {
   } = useCsvChartStore();
 
   const handleSelectFile = useCallback(async () => {
+    if (isExporting) return;
     setExportError(null);
     try {
       const { open } = await import('@tauri-apps/plugin-dialog');
@@ -48,14 +49,14 @@ const CsvLoaderTab: React.FC = () => {
     } catch (err) {
       console.error('Failed to open file dialog:', err);
     }
-  }, [loadCsvFile]);
+  }, [isExporting, loadCsvFile]);
 
   const handleReloadFile = useCallback(async () => {
-    if (filePath) {
+    if (filePath && !isExporting) {
       setExportError(null);
       await loadCsvFile(filePath, { resetZoom: true });
     }
-  }, [filePath, loadCsvFile]);
+  }, [filePath, isExporting, loadCsvFile]);
 
   const handleAddChartGroup = useCallback(() => {
     addChartGroup();
@@ -100,7 +101,7 @@ const CsvLoaderTab: React.FC = () => {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden' }}>
       {visibleError && (
         <Alert
-          message={t('common.error')}
+          message={exportError ? t('csvLoader.exportFailed') : t('common.error')}
           description={visibleError}
           type="error"
           closable
@@ -126,6 +127,7 @@ const CsvLoaderTab: React.FC = () => {
               icon={<FolderOpenOutlined />}
               onClick={handleSelectFile}
               loading={isLoading}
+              disabled={isExporting}
               size="small"
             >
               {t('csvLoader.selectFile')}
@@ -136,7 +138,7 @@ const CsvLoaderTab: React.FC = () => {
                   icon={<FileOutlined />}
                   onClick={handleReloadFile}
                   loading={isLoading}
-                  disabled={!filePath}
+                  disabled={!filePath || isExporting}
                   size="small"
                 >
                   {t('csvLoader.reloadFile')}

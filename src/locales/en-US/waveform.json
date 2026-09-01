@@ -81,6 +81,7 @@
     "selectFile": "Select File",
     "reloadFile": "Reload",
     "exportAllPng": "Export All PNG",
+    "exportFailed": "Export failed",
     "exportAllPngError": "Failed to export all PNGs",
     "sampleRate": "Sample Rate",
     "skipInfoRows": "Skip Info Rows",

@@ -72,7 +72,7 @@ const CsvLoaderTab: React.FC = () => {
   }, [clearError]);
 
   const handleExportAllPng = useCallback(async () => {
-    if (!chartRef.current || isExporting) return;
+    if (!chartRef.current || isExporting || isLoading) return;
 
     setIsExporting(true);
     setExportError(null);
@@ -87,7 +87,7 @@ const CsvLoaderTab: React.FC = () => {
     } finally {
       setIsExporting(false);
     }
-  }, [isExporting, t]);
+  }, [isExporting, isLoading, t]);
 
   const columns = csvData?.columns ?? [];
   const rows = csvData?.rows ?? [];
@@ -153,7 +153,7 @@ const CsvLoaderTab: React.FC = () => {
                 icon={<DownloadOutlined />}
                 onClick={handleExportAllPng}
                 loading={isExporting}
-                disabled={isExporting}
+                disabled={isExporting || isLoading}
                 size="small"
               >
                 {t('csvLoader.exportAllPng')}

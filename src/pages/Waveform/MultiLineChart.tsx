@@ -7,6 +7,7 @@ import React, {
   useState,
   useImperativeHandle,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 import * as echarts from 'echarts/core';
 import { LineChart } from 'echarts/charts';
 import {
@@ -170,6 +171,7 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
   onLegendSelectedChange,
   onExportError,
 }, ref) => {
+  const { t: translate } = useTranslation('waveform');
   const containerRefs = useRef(new Map<string, HTMLDivElement>());
   const chartInstances = useRef(new Map<string, echarts.ECharts>());
   const structureSignatures = useRef(new Map<string, string>());
@@ -730,7 +732,7 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
               saveChart('png');
             }}
           >
-            保存为 PNG
+            {getChartExportMenuLabel('png', translate)}
           </div>
           <div
             className="chart-context-menu-item"
@@ -739,7 +741,7 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
               saveChart('svg');
             }}
           >
-            保存为 SVG
+            {getChartExportMenuLabel('svg', translate)}
           </div>
         </div>
       )}
@@ -749,6 +751,13 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
 
 function t(key: string): string {
   return ({ 'chart.time': '时间' } as Record<string, string>)[key] || key;
+}
+
+export function getChartExportMenuLabel(
+  type: 'png' | 'svg',
+  translate: (key: string) => string,
+): string {
+  return translate(type === 'png' ? 'chart.saveAsPng' : 'chart.saveAsSvg');
 }
 
 export async function exportChart(
@@ -818,8 +827,7 @@ export async function exportAllChartsPng(
         );
       return { group, chart };
     });
-    const dataUrls = charts.map(({ group, chart }) => {
-      chart.resize();
+    const validatedCharts = charts.map(({ group, chart }) => {
       const width = chart.getWidth();
       const height = chart.getHeight();
       if (
@@ -831,6 +839,10 @@ export async function exportAllChartsPng(
         throw new Error(
           `Cannot export chart PNG: chart dimensions are invalid for group "${group.name || 'chart'}"`,
         );
+      return { chart, width, height };
+    });
+    const dataUrls = validatedCharts.map(({ chart }) => {
+      chart.resize();
       return chart.getDataURL({
         type: 'png',
         pixelRatio: 2,

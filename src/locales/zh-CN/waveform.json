@@ -57,6 +57,8 @@
     "clear": "清空",
     "refresh": "刷新",
     "noData": "暂无数据",
+    "saveAsPng": "保存为 PNG",
+    "saveAsSvg": "保存为 SVG",
     "selectBuffer": "请先选择缓冲区"
   },
   "sidebar": {

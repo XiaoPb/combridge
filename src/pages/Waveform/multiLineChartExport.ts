@@ -1,4 +1,170 @@
 const SVG_DATA_URL_PREFIX = 'data:image/svg+xml';
+const PNG_MIME_TYPE = 'image/png';
+const SVG_MIME_TYPE = 'image/svg+xml';
+
+export const CHART_PNG_GAP = 16;
+
+export interface ChartPngRenderingContext {
+  fillStyle: string | CanvasGradient | CanvasPattern;
+  fillRect(x: number, y: number, width: number, height: number): void;
+  drawImage(image: CanvasImageSource, dx: number, dy: number): void;
+}
+
+export interface ChartPngCanvas {
+  width: number;
+  height: number;
+  getContext(contextId: '2d'): ChartPngRenderingContext | null;
+  toBlob(callback: BlobCallback, type?: string): void;
+}
+
+export interface ChartPngImage {
+  width: number;
+  height: number;
+  draw(context: ChartPngRenderingContext, x: number, y: number): void;
+}
+
+export interface ChartPngAdapters {
+  loadImage?: (dataUrl: string) => Promise<ChartPngImage>;
+  createCanvas?: (width: number, height: number) => ChartPngCanvas;
+}
+
+export interface ComposedChartPng {
+  blob: Blob;
+  width: number;
+  height: number;
+}
+
+export function dataUrlToBlob(value: string): Blob {
+  const trimmed = value.trim();
+  const separator = trimmed.indexOf(',');
+  if (!trimmed.startsWith('data:') || separator < 0)
+    throw new Error('Expected a PNG or SVG data URL');
+
+  const metadata = trimmed.slice(5, separator);
+  const [rawMimeType, ...parameters] = metadata.split(';');
+  const mimeType = rawMimeType.toLowerCase();
+  if (mimeType !== PNG_MIME_TYPE && mimeType !== SVG_MIME_TYPE)
+    throw new Error('Expected a PNG or SVG data URL');
+
+  const payload = trimmed.slice(separator + 1);
+  const isBase64 = parameters.some(
+    (parameter) => parameter.trim().toLowerCase() === 'base64',
+  );
+
+  try {
+    if (isBase64) {
+      const binary = atob(decodeURIComponent(payload));
+      const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+      return new Blob([bytes], { type: mimeType });
+    }
+
+    return new Blob([decodeURIComponent(payload)], { type: mimeType });
+  } catch {
+    throw new Error('Invalid image data URL payload');
+  }
+}
+
+export function downloadBlob(blob: Blob, filename: string): void {
+  const objectUrl = URL.createObjectURL(blob);
+  let link: HTMLAnchorElement | null = null;
+  try {
+    link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+  } finally {
+    link?.remove();
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function loadImage(dataUrl: string): Promise<ChartPngImage> {
+  return new Promise((resolve, reject) => {
+    if (typeof Image === 'undefined') {
+      reject(new Error('Image is unavailable'));
+      return;
+    }
+
+    const image = new Image();
+    image.onload = () => {
+      const width = image.naturalWidth || image.width;
+      const height = image.naturalHeight || image.height;
+      resolve({
+        width,
+        height,
+        draw: (context, x, y) => context.drawImage(image, x, y),
+      });
+    };
+    image.onerror = () => reject(new Error('Image failed to load'));
+    image.src = dataUrl;
+  });
+}
+
+function createCanvas(width: number, height: number): ChartPngCanvas {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+export async function composeChartPng(
+  dataUrls: readonly string[],
+  adapters: ChartPngAdapters = {},
+): Promise<ComposedChartPng> {
+  if (dataUrls.length === 0)
+    throw new Error('Cannot compose chart PNG: no images provided');
+
+  const loader = adapters.loadImage ?? loadImage;
+  const images = await Promise.all(
+    dataUrls.map(async (dataUrl) => {
+      const blob = dataUrlToBlob(dataUrl);
+      if (blob.type !== PNG_MIME_TYPE)
+        throw new Error('composeChartPng expects PNG data URLs');
+
+      try {
+        return await loader(dataUrl);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to load chart image: ${message}`);
+      }
+    }),
+  );
+
+  if (images.some((image) =>
+    !Number.isFinite(image.width) ||
+    !Number.isFinite(image.height) ||
+    image.width <= 0 ||
+    image.height <= 0
+  ))
+    throw new Error('Chart image dimensions must be positive');
+
+  const width = Math.max(...images.map((image) => image.width));
+  const height = images.reduce((total, image) => total + image.height, 0)
+    + CHART_PNG_GAP * (images.length - 1);
+  const canvas = (adapters.createCanvas ?? createCanvas)(width, height);
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Could not get 2D canvas context');
+
+  context.fillStyle = '#fff';
+  context.fillRect(0, 0, width, height);
+  let y = 0;
+  images.forEach((image) => {
+    image.draw(context, 0, y);
+    y += image.height + CHART_PNG_GAP;
+  });
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((result) => {
+      if (result === null) reject(new Error('Canvas toBlob returned null'));
+      else resolve(result);
+    }, PNG_MIME_TYPE);
+  });
+
+  return { blob, width, height };
+}
 
 export type CssVariableResolver = (name: string) => string | undefined;
 

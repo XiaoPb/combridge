@@ -113,6 +113,28 @@ describe('CsvLoaderTab PNG export entry', () => {
     await waitFor(() => expect(button).toHaveProperty('disabled', false));
   });
 
+  it('disables file selection and reload while exporting', async () => {
+    const deferred = createDeferred();
+    exportAllPng.mockReturnValueOnce(deferred.promise);
+    setCsvData();
+    const loadCsvFile = vi.fn<
+      (filePath: string, options?: { resetZoom?: boolean }) => Promise<void>
+    >(async () => undefined);
+    useCsvChartStore.setState({ filePath: 'data.csv', loadCsvFile });
+
+    render(<CsvLoaderTab />);
+    fireEvent.click(screen.getByRole('button', { name: /导出全部 PNG/ }));
+
+    expect(screen.getByRole('button', { name: /选择文件/ })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: /重新加载/ })).toHaveProperty('disabled', true);
+
+    deferred.resolve();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /选择文件/ })).toHaveProperty('disabled', false);
+      expect(screen.getByRole('button', { name: /重新加载/ })).toHaveProperty('disabled', false);
+    });
+  });
+
   it('shows a page error and restores the button when export rejects', async () => {
     exportAllPng.mockRejectedValueOnce(new Error('PNG export failed'));
     setCsvData();
@@ -189,5 +211,20 @@ describe('CsvLoaderTab PNG export entry', () => {
     useCsvChartStore.getState().clearData();
 
     await waitFor(() => expect(document.body.textContent).not.toContain('PNG export failed'));
+  });
+
+  it.each([
+    ['zh-CN', '导出失败'],
+    ['en-US', 'Export failed'],
+  ] as const)('shows the localized export failure label and raw error detail in %s', async (language, label) => {
+    await i18n.changeLanguage(language);
+    exportAllPng.mockRejectedValueOnce(new Error('native export failed'));
+    setCsvData();
+
+    render(<CsvLoaderTab />);
+    fireEvent.click(screen.getByRole('button', { name: /Export All PNG|导出全部 PNG/ }));
+
+    expect(await screen.findByText(label)).toBeTruthy();
+    expect(screen.getByText('native export failed')).toBeTruthy();
   });
 });

@@ -1,4 +1,10 @@
+import React, { createRef } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import type { MultiLineChartHandle, MultiLineChartProps } from './MultiLineChart';
+
+const columns = ['heart_rate'];
+const rows = [[72]];
+const groups = [{ name: 'Heart rate', columns, height: 300 }];
 
 describe('MultiLineChart data zoom synchronization', () => {
   it('dispatches sibling zoom updates silently', async () => {
@@ -80,5 +86,50 @@ describe('MultiLineChart data zoom synchronization', () => {
       { silent: true },
     );
     expect(source.dispatchAction).not.toHaveBeenCalled();
+  });
+});
+
+describe('MultiLineChart export API', () => {
+  it('exposes an exportAllPng method through its ref handle', async () => {
+    const chartModule = await import('./MultiLineChart');
+    const component = chartModule.default as unknown as {
+      $$typeof: symbol;
+      type?: { $$typeof?: symbol };
+    };
+    const ref = createRef<MultiLineChartHandle>();
+    const onExportError = vi.fn();
+    const props = {
+      columns,
+      rows,
+      chartGroups: groups,
+      onExportError,
+    } satisfies MultiLineChartProps;
+    const element = React.createElement(chartModule.default, { ...props, ref });
+
+    expect(component.$$typeof).toBe(Symbol.for('react.memo'));
+    expect(component.type?.$$typeof).toBe(Symbol.for('react.forward_ref'));
+    expect(element.props.ref).toBe(ref);
+  });
+
+  it('reports single-chart export failures to the error callback', async () => {
+    const chartModule = await import('./MultiLineChart');
+    const exportChart = (chartModule as Record<string, unknown>)
+      .exportChart as (
+      chart: { getDataURL: () => string },
+      type: 'png' | 'svg',
+      filename: string,
+      onExportError?: (error: Error) => void,
+    ) => Promise<void>;
+    const onExportError = vi.fn();
+    const chart = {
+      getDataURL: vi.fn(() => {
+        throw new Error('chart export failed');
+      }),
+    };
+
+    await expect(
+      exportChart(chart, 'png', 'chart.png', onExportError),
+    ).rejects.toThrow('chart export failed');
+    expect(onExportError).toHaveBeenCalledWith(expect.any(Error));
   });
 });

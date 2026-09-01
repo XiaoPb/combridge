@@ -1,15 +1,19 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { Card, Button, Switch, InputNumber, Space, Alert, Typography, Spin, Select } from 'antd';
-import { FileOutlined, FolderOpenOutlined, DownOutlined, RightOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { FileOutlined, FolderOpenOutlined, DownOutlined, RightOutlined, PlusOutlined, DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useCsvChartStore } from '../../stores/csvChartStore';
 import MultiLineChart from './MultiLineChart';
+import type { MultiLineChartHandle } from './MultiLineChart';
 
 const { Text } = Typography;
 
 const CsvLoaderTab: React.FC = () => {
   const { t } = useTranslation('waveform');
   const [configCollapsed, setConfigCollapsed] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const chartRef = useRef<MultiLineChartHandle>(null);
 
   const {
     csvData,
@@ -55,18 +59,45 @@ const CsvLoaderTab: React.FC = () => {
     addChartGroup();
   }, [addChartGroup]);
 
+  const handleExportError = useCallback((exportFailure: Error) => {
+    setExportError(exportFailure.message || t('csvLoader.exportAllPngError'));
+  }, [t]);
+
+  const handleClearError = useCallback(() => {
+    clearError();
+    setExportError(null);
+  }, [clearError]);
+
+  const handleExportAllPng = useCallback(async () => {
+    if (!chartRef.current || isExporting) return;
+
+    setIsExporting(true);
+    setExportError(null);
+    try {
+      await chartRef.current.exportAllPng();
+    } catch (err) {
+      setExportError(
+        err instanceof Error && err.message
+          ? err.message
+          : t('csvLoader.exportAllPngError'),
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  }, [isExporting, t]);
+
   const columns = csvData?.columns ?? [];
   const rows = csvData?.rows ?? [];
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden' }}>
-      {error && (
+      {(error || exportError) && (
         <Alert
           message={t('common.error')}
-          description={error}
+          description={error || exportError}
           type="error"
           closable
-          onClose={clearError}
+          onClose={handleClearError}
           style={{ marginBottom: 8, flexShrink: 0 }}
         />
       )}
@@ -107,6 +138,17 @@ const CsvLoaderTab: React.FC = () => {
                   {filePath}
                 </Text>
               </>
+            )}
+            {csvData && columns.length > 0 && (
+              <Button
+                icon={<DownloadOutlined />}
+                onClick={handleExportAllPng}
+                loading={isExporting}
+                disabled={isExporting}
+                size="small"
+              >
+                {t('csvLoader.exportAllPng')}
+              </Button>
             )}
           </Space>
         </div>
@@ -230,6 +272,8 @@ const CsvLoaderTab: React.FC = () => {
             initialDataZoom={dataZoomState}
             onDataZoomChange={setDataZoomState}
             legendScope="csv"
+            ref={chartRef}
+            onExportError={handleExportError}
           />
         ) : (
           <div

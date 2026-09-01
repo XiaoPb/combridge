@@ -80,6 +80,8 @@
     "configTitle": "CSV 解析配置",
     "selectFile": "选择文件",
     "reloadFile": "重新加载",
+    "exportAllPng": "导出全部 PNG",
+    "exportAllPngError": "导出全部 PNG 失败",
     "sampleRate": "采样率",
     "skipInfoRows": "跳过信息区域",
     "rows": "行",

@@ -57,6 +57,8 @@
     "clear": "Clear",
     "refresh": "Refresh",
     "noData": "No data available",
+    "saveAsPng": "Save as PNG",
+    "saveAsSvg": "Save as SVG",
     "selectBuffer": "Please select a buffer first"
   },
   "sidebar": {

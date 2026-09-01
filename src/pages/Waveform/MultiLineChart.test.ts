@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { MultiLineChartHandle, MultiLineChartProps } from './MultiLineChart';
 import type { ChartGroupConfig } from './chartGroup';
 import { getChartGroupKey } from './chartGroup';
+import i18n from '../../i18n';
 
 const columns = ['heart_rate'];
 const rows = [[72]];
@@ -253,6 +254,80 @@ describe('MultiLineChart export API', () => {
     );
   });
 
+  it('preflights every chart dimension before resizing or reading any data URL', async () => {
+    const chartModule = await import('./MultiLineChart');
+    const exportAllChartsPng = (chartModule as Record<string, unknown>)
+      .exportAllChartsPng as (
+      chartGroups: readonly ChartGroupConfig[],
+      chartInstances: ReadonlyMap<string, {
+        resize: () => void;
+        getWidth: () => number;
+        getHeight: () => number;
+        getDataURL: () => string;
+      }>,
+      dependencies: {
+        waitForRender: () => Promise<void>;
+        onExportError?: (error: Error) => void;
+      },
+    ) => Promise<void>;
+    const calls: string[] = [];
+    const first = {
+      resize: vi.fn(() => calls.push('first.resize')),
+      getWidth: vi.fn(() => {
+        calls.push('first.getWidth');
+        return 320;
+      }),
+      getHeight: vi.fn(() => {
+        calls.push('first.getHeight');
+        return 180;
+      }),
+      getDataURL: vi.fn(() => {
+        calls.push('first.getDataURL');
+        return 'first-png';
+      }),
+    };
+    const second = {
+      resize: vi.fn(() => calls.push('second.resize')),
+      getWidth: vi.fn(() => {
+        calls.push('second.getWidth');
+        return 0;
+      }),
+      getHeight: vi.fn(() => {
+        calls.push('second.getHeight');
+        return 240;
+      }),
+      getDataURL: vi.fn(() => {
+        calls.push('second.getDataURL');
+        return 'second-png';
+      }),
+    };
+    const chartGroups: ChartGroupConfig[] = [
+      { name: 'First', columns: ['a'], id: 'first' },
+      { name: 'Second', columns: ['b'], id: 'second' },
+    ];
+    const chartInstances = new Map([
+      [getChartGroupKey(chartGroups[0], 0), first],
+      [getChartGroupKey(chartGroups[1], 1), second],
+    ]);
+
+    await expect(
+      exportAllChartsPng(chartGroups, chartInstances, {
+        waitForRender: vi.fn(async () => undefined),
+      }),
+    ).rejects.toThrow('Cannot export chart PNG: chart dimensions are invalid');
+
+    expect(calls).toEqual([
+      'first.getWidth',
+      'first.getHeight',
+      'second.getWidth',
+      'second.getHeight',
+    ]);
+    expect(first.resize).not.toHaveBeenCalled();
+    expect(first.getDataURL).not.toHaveBeenCalled();
+    expect(second.resize).not.toHaveBeenCalled();
+    expect(second.getDataURL).not.toHaveBeenCalled();
+  });
+
   it('rejects all-chart export when there are no valid instances or dimensions', async () => {
     const chartModule = await import('./MultiLineChart');
     const exportAllChartsPng = (chartModule as Record<string, unknown>)
@@ -324,5 +399,23 @@ describe('MultiLineChart export API', () => {
         message: 'Cannot export chart PNG: chart dimensions are invalid for group "Only"',
       }),
     );
+  });
+});
+
+describe('MultiLineChart context menu labels', () => {
+  it.each([
+    ['zh-CN', '保存为 PNG', '保存为 SVG'],
+    ['en-US', 'Save as PNG', 'Save as SVG'],
+  ] as const)('uses localized labels for %s', async (language, pngLabel, svgLabel) => {
+    const chartModule = await import('./MultiLineChart');
+    const getChartExportMenuLabel = (chartModule as Record<string, unknown>)
+      .getChartExportMenuLabel as (
+      type: 'png' | 'svg',
+      translate: (key: string) => string,
+    ) => string;
+    const translate = i18n.getFixedT(language, 'waveform');
+
+    expect(getChartExportMenuLabel('png', translate)).toBe(pngLabel);
+    expect(getChartExportMenuLabel('svg', translate)).toBe(svgLabel);
   });
 });

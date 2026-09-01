@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Card, Button, Switch, InputNumber, Space, Alert, Typography, Spin, Select } from 'antd';
 import { FileOutlined, FolderOpenOutlined, DownOutlined, RightOutlined, PlusOutlined, DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -35,6 +35,7 @@ const CsvLoaderTab: React.FC = () => {
   } = useCsvChartStore();
 
   const handleSelectFile = useCallback(async () => {
+    setExportError(null);
     try {
       const { open } = await import('@tauri-apps/plugin-dialog');
       const selected = await open({
@@ -51,6 +52,7 @@ const CsvLoaderTab: React.FC = () => {
 
   const handleReloadFile = useCallback(async () => {
     if (filePath) {
+      setExportError(null);
       await loadCsvFile(filePath, { resetZoom: true });
     }
   }, [filePath, loadCsvFile]);
@@ -88,13 +90,18 @@ const CsvLoaderTab: React.FC = () => {
 
   const columns = csvData?.columns ?? [];
   const rows = csvData?.rows ?? [];
+  const visibleError = exportError ?? error;
+
+  useEffect(() => {
+    setExportError(null);
+  }, [csvData, filePath]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 8, overflow: 'hidden' }}>
-      {(error || exportError) && (
+      {visibleError && (
         <Alert
           message={t('common.error')}
-          description={error || exportError}
+          description={visibleError}
           type="error"
           closable
           onClose={handleClearError}
@@ -139,7 +146,7 @@ const CsvLoaderTab: React.FC = () => {
                 </Text>
               </>
             )}
-            {csvData && columns.length > 0 && (
+            {csvData && columns.length > 0 && rows.length > 0 && (
               <Button
                 icon={<DownloadOutlined />}
                 onClick={handleExportAllPng}

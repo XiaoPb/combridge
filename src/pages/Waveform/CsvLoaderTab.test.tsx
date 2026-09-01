@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n';
 import { useCsvChartStore } from '../../stores/csvChartStore';
@@ -34,9 +34,12 @@ vi.mock('./MultiLineChart', async () => {
 
 import CsvLoaderTab from './CsvLoaderTab';
 
-function setCsvData(columns: string[] = ['heart_rate']) {
+function setCsvData(
+  columns: string[] = ['heart_rate'],
+  rows: number[][] = columns.length > 0 ? [[72]] : [],
+) {
   useCsvChartStore.setState({
-    csvData: { columns, rows: columns.length > 0 ? [[72]] : [] },
+    csvData: { columns, rows },
   });
 }
 
@@ -81,6 +84,14 @@ describe('CsvLoaderTab PNG export entry', () => {
     expect(screen.getByRole('button', { name: /导出全部 PNG/ })).toBeTruthy();
   });
 
+  it('hides the export button for a header-only CSV', () => {
+    setCsvData(['heart_rate'], []);
+
+    render(<CsvLoaderTab />);
+
+    expect(screen.queryByRole('button', { name: /导出全部 PNG/ })).toBeNull();
+  });
+
   it('calls the chart ref export method and disables the button while exporting', async () => {
     const deferred = createDeferred();
     exportAllPng.mockReturnValueOnce(deferred.promise);
@@ -122,5 +133,61 @@ describe('CsvLoaderTab PNG export entry', () => {
     fireEvent.click(screen.getByTestId('trigger-chart-error'));
 
     expect(await screen.findByText('chart callback failed')).toBeTruthy();
+  });
+
+  it('prefers a new export error over a stale store error', async () => {
+    exportAllPng.mockRejectedValueOnce(new Error('PNG export failed'));
+    setCsvData();
+
+    render(<CsvLoaderTab />);
+    fireEvent.click(screen.getByRole('button', { name: /导出全部 PNG/ }));
+    expect(await screen.findByText('PNG export failed')).toBeTruthy();
+
+    await act(async () => {
+      useCsvChartStore.setState({ error: 'stale load error' });
+    });
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('PNG export failed');
+      expect(document.body.textContent).not.toContain('stale load error');
+    });
+  });
+
+  it('clears an export error when reloading and receiving new CSV data', async () => {
+    exportAllPng.mockRejectedValueOnce(new Error('PNG export failed'));
+    setCsvData();
+    const loadCsvFile = vi.fn<
+      (filePath: string, options?: { resetZoom?: boolean }) => Promise<void>
+    >(async () => {
+      useCsvChartStore.setState({
+        csvData: { columns: ['temperature'], rows: [[25]] },
+        filePath: 'new-data.csv',
+      });
+    });
+    useCsvChartStore.setState({ filePath: 'old-data.csv', loadCsvFile });
+
+    render(<CsvLoaderTab />);
+    fireEvent.click(screen.getByRole('button', { name: /导出全部 PNG/ }));
+    expect(await screen.findByText('PNG export failed')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /重新加载/ }));
+
+    await waitFor(() => {
+      expect(loadCsvFile).toHaveBeenCalledWith('old-data.csv', { resetZoom: true });
+      expect(document.body.textContent).not.toContain('PNG export failed');
+    });
+  });
+
+  it('clears an export error when CSV data is cleared', async () => {
+    exportAllPng.mockRejectedValueOnce(new Error('PNG export failed'));
+    setCsvData();
+
+    render(<CsvLoaderTab />);
+    fireEvent.click(screen.getByRole('button', { name: /导出全部 PNG/ }));
+    expect(await screen.findByText('PNG export failed')).toBeTruthy();
+
+    useCsvChartStore.getState().clearData();
+
+    await waitFor(() => expect(document.body.textContent).not.toContain('PNG export failed'));
   });
 });

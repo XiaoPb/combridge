@@ -47,7 +47,7 @@ const CsvLoaderTab: React.FC = () => {
 
   const handleReloadFile = useCallback(async () => {
     if (filePath) {
-      await loadCsvFile(filePath);
+      await loadCsvFile(filePath, { resetZoom: true });
     }
   }, [filePath, loadCsvFile]);
 

@@ -18,7 +18,7 @@ interface CsvChartState {
   dataZoomState: DataZoomState;
 }
 interface CsvChartActions {
-  loadCsvFile: (filePath: string) => Promise<void>;
+  loadCsvFile: (filePath: string, options?: { resetZoom?: boolean }) => Promise<void>;
   setChartGroups: (groups: IdentifiedChartGroupConfig[]) => void;
   addChartGroup: () => void;
   removeChartGroup: (id: string) => void;
@@ -62,17 +62,20 @@ export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
   visiblePoints: 1000,
   sampleRate: 25,
   dataZoomState: { ...DEFAULT_DATA_ZOOM_STATE },
-  loadCsvFile: async (filePath) => {
+  loadCsvFile: async (filePath, options = {}) => {
     const generation = ++loadGeneration;
+    const shouldResetZoom = options.resetZoom === true || get().csvData === null;
     set({ isLoading: true, error: null });
     try {
       const csvData = await readCsvFile(filePath, get().parseConfig);
       if (generation !== loadGeneration) return;
       const dataLength = csvData.rows.length;
       const tenSecondsPoints = get().sampleRate * 10;
-      const dataZoomState = dataLength > tenSecondsPoints
-        ? { start: 0, end: (tenSecondsPoints / dataLength) * 100 }
-        : { ...DEFAULT_DATA_ZOOM_STATE };
+      const dataZoomState = shouldResetZoom
+        ? dataLength > tenSecondsPoints
+          ? { start: 0, end: (tenSecondsPoints / dataLength) * 100 }
+          : { ...DEFAULT_DATA_ZOOM_STATE }
+        : get().dataZoomState;
       set({ csvData, filePath, chartGroups: autoAssignChartGroups(csvData.columns), dataZoomState, isLoading: false });
     } catch (err) {
       if (generation !== loadGeneration) return;

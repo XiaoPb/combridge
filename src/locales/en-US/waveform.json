@@ -80,6 +80,8 @@
     "configTitle": "CSV Parse Configuration",
     "selectFile": "Select File",
     "reloadFile": "Reload",
+    "exportAllPng": "Export All PNG",
+    "exportAllPngError": "Failed to export all PNGs",
     "sampleRate": "Sample Rate",
     "skipInfoRows": "Skip Info Rows",
     "rows": "rows",

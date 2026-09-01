@@ -24,6 +24,8 @@ export interface ChartPngImage {
 }
 
 export interface ChartPngAdapters {
+  gap?: number;
+  pixelRatio?: number;
   loadImage?: (dataUrl: string) => Promise<ChartPngImage>;
   createCanvas?: (width: number, height: number) => ChartPngCanvas;
 }
@@ -115,6 +117,13 @@ export async function composeChartPng(
   if (dataUrls.length === 0)
     throw new Error('Cannot compose chart PNG: no images provided');
 
+  const gap = adapters.gap ?? CHART_PNG_GAP;
+  const pixelRatio = adapters.pixelRatio ?? 1;
+  if (!Number.isFinite(gap) || gap < 0)
+    throw new Error('Chart PNG gap must be a non-negative number');
+  if (!Number.isFinite(pixelRatio) || pixelRatio <= 0)
+    throw new Error('Chart PNG pixel ratio must be positive');
+
   const loader = adapters.loadImage ?? loadImage;
   const images = await Promise.all(
     dataUrls.map(async (dataUrl) => {
@@ -141,7 +150,7 @@ export async function composeChartPng(
 
   const width = Math.max(...images.map((image) => image.width));
   const height = images.reduce((total, image) => total + image.height, 0)
-    + CHART_PNG_GAP * (images.length - 1);
+    + gap * (images.length - 1);
   const canvas = (adapters.createCanvas ?? createCanvas)(width, height);
   canvas.width = width;
   canvas.height = height;
@@ -153,7 +162,7 @@ export async function composeChartPng(
   let y = 0;
   images.forEach((image) => {
     image.draw(context, 0, y);
-    y += image.height + CHART_PNG_GAP;
+    y += image.height + gap;
   });
 
   const blob = await new Promise<Blob>((resolve, reject) => {

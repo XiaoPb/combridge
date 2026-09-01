@@ -1,9 +1,11 @@
 import React, {
+  forwardRef,
   useMemo,
   useRef,
   useEffect,
   useCallback,
   useState,
+  useImperativeHandle,
 } from 'react';
 import * as echarts from 'echarts/core';
 import { LineChart } from 'echarts/charts';
@@ -25,6 +27,9 @@ import {
 } from './chartGroup';
 import { buildChartSeries } from './multiLineChartModel';
 import {
+  composeChartPng,
+  dataUrlToBlob,
+  downloadBlob,
   ensureWhiteSvgBackground,
   resolveCssVariablesInValue,
 } from './multiLineChartExport';
@@ -58,6 +63,11 @@ export interface MultiLineChartProps {
   legendScope?: string;
   legendSelected?: Record<string, boolean>;
   onLegendSelectedChange?: (selected: Record<string, boolean>) => void;
+  onExportError?: (error: Error) => void;
+}
+
+export interface MultiLineChartHandle {
+  exportAllPng: () => Promise<void>;
 }
 
 const Y_AXIS_WIDTH = 50;
@@ -126,7 +136,7 @@ interface ContextMenuPosition {
   groupKey: string;
 }
 
-const MultiLineChart: React.FC<MultiLineChartProps> = ({
+const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
   columns,
   rows,
   chartGroups,
@@ -136,7 +146,8 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   legendScope = 'chart',
   legendSelected,
   onLegendSelectedChange,
-}) => {
+  onExportError,
+}, ref) => {
   const containerRefs = useRef(new Map<string, HTMLDivElement>());
   const chartInstances = useRef(new Map<string, echarts.ECharts>());
   const structureSignatures = useRef(new Map<string, string>());
@@ -153,6 +164,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   const localLegendSelectedRef = useRef(localLegendSelected);
   const onLegendSelectedChangeRef = useRef(onLegendSelectedChange);
   const onDataZoomChangeRef = useRef(onDataZoomChange);
+  const onExportErrorRef = useRef(onExportError);
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(
     null,
   );
@@ -161,6 +173,7 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
   localLegendSelectedRef.current = localLegendSelected;
   onLegendSelectedChangeRef.current = onLegendSelectedChange;
   onDataZoomChangeRef.current = onDataZoomChange;
+  onExportErrorRef.current = onExportError;
   const effectiveLegendSelected = legendSelected ?? localLegendSelected;
 
   useEffect(() => {
@@ -575,29 +588,62 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
         setContextMenu(null);
         return;
       }
-      let link: HTMLAnchorElement | null = null;
-      try {
-        const url = type === 'svg'
-          ? exportSvgChart(chart)
-          : chart.getDataURL({
-              type,
-              pixelRatio: 2,
-              backgroundColor: '#fff',
-            });
-        link = document.createElement('a');
-        link.href = url;
-        link.download = `waveform_${group.name || 'chart'}_${Date.now()}.${type}`;
-        document.body.appendChild(link);
-        link.click();
-      } catch {
-        // Ensure failed exports cannot leave the menu open.
-      } finally {
-        link?.remove();
-        setContextMenu(null);
-      }
+      const filename = `waveform_${group.name || 'chart'}_${Date.now()}.${type}`;
+      void exportChart(chart, type, filename, onExportErrorRef.current)
+        .catch((error: unknown) => {
+          console.error('Chart export failed', error);
+        })
+        .finally(() => setContextMenu(null));
     },
     [contextMenu, chartGroups],
   );
+
+  const exportAllPng = useCallback(async (): Promise<void> => {
+    try {
+      await waitForChartRender();
+      const dataUrls = chartGroups
+        .map((group, index) => ({
+          group,
+          chart: chartInstances.current.get(getChartGroupKey(group, index)),
+        }))
+        .filter(
+          (item): item is { group: ChartGroupConfig; chart: echarts.ECharts } =>
+            item.chart !== undefined,
+        )
+        .map(({ chart }) => {
+          chart.resize();
+          const width = chart.getWidth();
+          const height = chart.getHeight();
+          if (
+            !Number.isFinite(width) ||
+            !Number.isFinite(height) ||
+            width <= 0 ||
+            height <= 0
+          )
+            throw new Error('Cannot export chart PNG: chart dimensions are invalid');
+          return chart.getDataURL({
+            type: 'png',
+            pixelRatio: 2,
+            backgroundColor: '#fff',
+          });
+        });
+
+      if (dataUrls.length === 0)
+        throw new Error('Cannot export all charts: no valid chart instances');
+
+      const output = await composeChartPng(dataUrls, {
+        gap: 8,
+        pixelRatio: 2,
+      });
+      downloadBlob(output.blob, `waveform_all_${Date.now()}.png`);
+    } catch (error) {
+      const exportError = toExportError(error);
+      onExportErrorRef.current?.(exportError);
+      throw exportError;
+    }
+  }, [chartGroups]);
+
+  useImperativeHandle(ref, () => ({ exportAllPng }), [exportAllPng]);
   useEffect(() => {
     if (!contextMenu) return;
     const groupIsLive = chartGroups.some(
@@ -710,10 +756,33 @@ const MultiLineChart: React.FC<MultiLineChartProps> = ({
       )}
     </div>
   );
-};
+});
 
 function t(key: string): string {
   return ({ 'chart.time': '时间' } as Record<string, string>)[key] || key;
+}
+
+export async function exportChart(
+  chart: echarts.ECharts,
+  type: 'png' | 'svg',
+  filename: string,
+  onExportError?: (error: Error) => void,
+): Promise<void> {
+  try {
+    await waitForChartRender();
+    const url = type === 'svg'
+      ? exportSvgChart(chart)
+      : chart.getDataURL({
+          type,
+          pixelRatio: 2,
+          backgroundColor: '#fff',
+        });
+    downloadBlob(dataUrlToBlob(url), filename);
+  } catch (error) {
+    const exportError = toExportError(error);
+    onExportError?.(exportError);
+    throw exportError;
+  }
 }
 
 function exportSvgChart(chart: echarts.ECharts): string {
@@ -763,3 +832,15 @@ function exportSvgChart(chart: echarts.ECharts): string {
 }
 
 export default React.memo(MultiLineChart);
+
+function toExportError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function waitForChartRender(): Promise<void> {
+  return new Promise((resolve) => {
+    const finish = () => setTimeout(resolve, 0);
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(finish);
+    else finish();
+  });
+}

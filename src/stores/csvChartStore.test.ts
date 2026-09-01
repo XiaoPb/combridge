@@ -112,4 +112,31 @@ describe('CSV chart store isolation and load ordering', () => {
     expect(channelGroup.columns).toEqual(['CH0', 'CH0 (2)']);
     expect(accelerometerGroup.columns).toEqual(['ACC_X', 'ACC_X (2)']);
   });
+
+  it('preserves zoom when loading another CSV without an explicit reload', async () => {
+    useCsvChartStore.setState({
+      csvData: result(['OLD'], [[1], [2]]),
+      filePath: 'old.csv',
+      dataZoomState: { start: 24, end: 76 },
+    });
+    readCsvFile.mockResolvedValue(result(['NEW'], [[3], [4], [5]]));
+
+    await useCsvChartStore.getState().loadCsvFile('new.csv');
+
+    expect(useCsvChartStore.getState().dataZoomState).toEqual({ start: 24, end: 76 });
+  });
+
+  it('resets zoom when explicitly reloading the CSV', async () => {
+    useCsvChartStore.setState({
+      csvData: result(['OLD'], Array.from({ length: 200 }, (_, index) => [index])),
+      filePath: 'old.csv',
+      sampleRate: 10,
+      dataZoomState: { start: 24, end: 76 },
+    });
+    readCsvFile.mockResolvedValue(result(['NEW'], Array.from({ length: 200 }, (_, index) => [index])));
+
+    await useCsvChartStore.getState().loadCsvFile('old.csv', { resetZoom: true });
+
+    expect(useCsvChartStore.getState().dataZoomState).toEqual({ start: 0, end: 50 });
+  });
 });

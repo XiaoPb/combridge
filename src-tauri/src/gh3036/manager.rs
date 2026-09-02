@@ -774,6 +774,7 @@ impl Gh3036Manager {
         }
 
         let event_bus = self.event_bus.clone();
+        let factory_test_manager = Arc::clone(&self.factory_test_manager);
         let frame_callback: FrameCallback = Arc::new(move |frame: &GhFuncFrame| {
             let frame = CALLBACK_CONTEXT.normalize_frame(frame);
             let func_id = frame.id as u8;
@@ -791,6 +792,7 @@ impl Gh3036Manager {
                 );
             }
 
+            factory_test_manager.record_test1_frame(&frame);
             CALLBACK_CONTEXT.save_frame_to_csv(&frame);
 
             for aggregated in CALLBACK_CONTEXT.add_frame_to_aggregator(&frame) {

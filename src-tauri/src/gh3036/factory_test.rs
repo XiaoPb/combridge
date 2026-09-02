@@ -17,6 +17,7 @@ use tokio::runtime::Runtime;
 use tracing::{error, info, warn};
 
 use super::config_loader::ConfigLoader;
+use super::factory_compute::{CollectionSpec, CollectedFrames, FactoryFrameCollector};
 use super::manager::Gh3036Manager;
 use super::threshold_config::{
     evaluate_measurements, evaluate_test_item, generate_error_codes,
@@ -25,7 +26,7 @@ use super::threshold_config::{
 };
 use super::types::{
     ChannelMeasurement, ConfigValidationResult, FactoryComputeMode, FactoryTestProgressEvent,
-    FactoryTestResult, FactoryTestStatus, FactoryTestStep, FactoryTestStepResult,
+    FactoryTestResult, FactoryTestStatus, FactoryTestStep, FactoryTestStepResult, GhFuncFrame,
 };
 use crate::service::EventBus;
 
@@ -39,6 +40,48 @@ pub struct FactoryTestManager {
     thread_handle: Mutex<Option<thread::JoinHandle<()>>>,
     threshold_config: Mutex<Option<FactoryThresholdConfig>>,
     evaluation_result: Arc<Mutex<Option<FactoryEvaluationResult>>>,
+    frame_collector: Arc<Mutex<FactoryFrameCollector>>,
+}
+
+#[cfg(test)]
+mod collector_lifecycle_tests {
+    use std::sync::Arc;
+
+    use super::super::types::{GhFuncFixIdx, GhFuncFrame};
+    use super::*;
+    use crate::service::EventBus;
+
+    fn test1_frame(frame_cnt: u32) -> GhFuncFrame {
+        GhFuncFrame {
+            frame_cnt,
+            id: GhFuncFixIdx::AlgoMax,
+            ch_num: 0,
+            data: Vec::new(),
+            ..GhFuncFrame::default()
+        }
+    }
+
+    fn spo2_frame(frame_cnt: u32) -> GhFuncFrame {
+        GhFuncFrame {
+            frame_cnt,
+            id: GhFuncFixIdx::Spo2,
+            ch_num: 0,
+            data: Vec::new(),
+            ..GhFuncFrame::default()
+        }
+    }
+
+    #[test]
+    fn collector_records_only_active_test1_frames_and_clears_between_steps() {
+        let manager = FactoryTestManager::new(Arc::new(EventBus::new(8)));
+
+        manager.start_frame_collection(CollectionSpec::ctr_defaults());
+        manager.record_test1_frame(&test1_frame(1));
+        manager.record_test1_frame(&spo2_frame(2));
+
+        assert_eq!(manager.finish_frame_collection().frame_cnts, vec![1]);
+        assert!(manager.finish_frame_collection().frame_cnts.is_empty());
+    }
 }
 
 // SAFETY: All fields use parking_lot::Mutex, Arc, or AtomicBool which are Send+Sync.
@@ -63,6 +106,7 @@ impl FactoryTestManager {
             thread_handle: Mutex::new(None),
             threshold_config: Mutex::new(None),
             evaluation_result: Arc::new(Mutex::new(None)),
+            frame_collector: Arc::new(Mutex::new(FactoryFrameCollector::default())),
         }
     }
 
@@ -112,6 +156,22 @@ impl FactoryTestManager {
 
     pub fn get_evaluation_result(&self) -> Option<FactoryEvaluationResult> {
         self.evaluation_result.lock().clone()
+    }
+
+    pub fn start_frame_collection(&self, spec: CollectionSpec) {
+        self.frame_collector.lock().start(spec);
+    }
+
+    pub fn record_test1_frame(&self, frame: &GhFuncFrame) {
+        self.frame_collector.lock().push_frame(frame.clone());
+    }
+
+    pub fn finish_frame_collection(&self) -> CollectedFrames {
+        self.frame_collector.lock().finish()
+    }
+
+    fn reset_frame_collection(&self) {
+        let _ = self.finish_frame_collection();
     }
 
     pub fn validate_threshold_config(&self) -> ThresholdConfigValidation {
@@ -324,6 +384,7 @@ impl FactoryTestManager {
 
         info!("[FactoryTest] 配置校验通过，开始启动产测流程");
 
+        self.reset_frame_collection();
         self.running.store(true, Ordering::SeqCst);
         {
             let mut status = self.status.lock();
@@ -358,6 +419,7 @@ impl FactoryTestManager {
         let manager = gh3036_manager;
         let threshold_config = self.threshold_config.lock().clone();
         let evaluation_result_clone = self.evaluation_result.clone();
+        let frame_collector = self.frame_collector.clone();
 
         let thread_handle = thread::spawn(move || {
             info!("[FactoryTest] 产测流程线程启动");
@@ -600,6 +662,8 @@ impl FactoryTestManager {
                     *evaluation_result_clone.lock() = Some(eval_result.clone());
                 }
 
+                let _ = frame_collector.lock().finish();
+
                 let project_name = if test_result.project_name.is_empty() {
                     "unknown".to_string()
                 } else {
@@ -677,6 +741,8 @@ impl FactoryTestManager {
         if let Some(thread) = handle.take() {
             let _ = thread.join();
         }
+
+        self.reset_frame_collection();
 
         Ok(())
     }
@@ -1812,6 +1878,8 @@ impl Drop for FactoryTestManager {
         if let Some(thread) = handle.take() {
             let _ = thread.join();
         }
+
+        self.reset_frame_collection();
     }
 }
 

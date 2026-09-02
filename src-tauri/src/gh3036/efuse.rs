@@ -42,7 +42,13 @@ impl Gh3036EfuseReader {
             return Err(error);
         }
 
-        let original_start = Self::read_single(io, Self::EFUSE_START_ADDR).await?;
+        let original_start = match Self::read_single(io, Self::EFUSE_START_ADDR).await {
+            Ok(value) => value,
+            Err(error) => {
+                let _ = Self::restore_rden(io, original_rden).await;
+                return Err(error);
+            }
+        };
         if let Err(error) = Self::write_single(io, Self::EFUSE_START_ADDR, original_start | 1).await
         {
             let _ = Self::restore_rden(io, original_rden).await;
@@ -83,10 +89,10 @@ impl Gh3036EfuseReader {
             }
         };
 
-        if values.len() < 4 {
+        if values.len() != 4 {
             let _ = Self::restore_rden(io, original_rden).await;
             return Err(format!(
-                "insufficient efuse rdata words: expected 4, got {}",
+                "efuse rdata words must be exactly 4, got {}",
                 values.len()
             ));
         }
@@ -180,7 +186,7 @@ mod tests {
 
             let mut reads = self.reads.lock().unwrap();
             if let Some((expected_address, values)) = reads.first().cloned() {
-                if expected_address == address && count >= values.len() as i32 {
+                if expected_address == address {
                     reads.remove(0);
                     return Ok(values);
                 }
@@ -275,6 +281,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn start_register_read_failure_restores_original_rden() {
+        let io = FakeRegisterAccess::with_reads([
+            (Gh3036EfuseReader::EFUSE_MODE_ADDR, vec![0x0000]),
+            (Gh3036EfuseReader::EFUSE_RDEN_ADDR, vec![0x0010]),
+        ]);
+
+        let error = Gh3036EfuseReader::read_segment(&*io, 0).await.unwrap_err();
+
+        assert!(error.contains("unexpected read: 0x058A"));
+        assert_eq!(
+            io.writes(),
+            vec![(0x0580, 0x0000), (0x0584, 0x0011), (0x0584, 0x0010)]
+        );
+    }
+
+    #[tokio::test]
     async fn read_all_returns_32_bytes_in_segment_order() {
         let io = FakeRegisterAccess::with_reads(segment_reads(&[
             (0, [0x1111, 0x2222, 0x3333, 0x4444]),
@@ -314,11 +336,38 @@ mod tests {
 
         let error = Gh3036EfuseReader::read_segment(&*io, 3).await.unwrap_err();
 
-        assert!(error.contains("insufficient efuse rdata words"));
+        assert!(error.contains("exactly 4"));
         assert_eq!(
             io.writes(),
             vec![
                 (0x0580, 0x000C),
+                (0x0584, 0x0001),
+                (0x058A, 0x0001),
+                (0x0584, 0x0000),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn excess_rdata_is_rejected_and_rden_is_restored() {
+        let io = FakeRegisterAccess::with_reads([
+            (Gh3036EfuseReader::EFUSE_MODE_ADDR, vec![0x0000]),
+            (Gh3036EfuseReader::EFUSE_RDEN_ADDR, vec![0x0000]),
+            (Gh3036EfuseReader::EFUSE_START_ADDR, vec![0x0000]),
+            (Gh3036EfuseReader::EFUSE_DONE_ADDR, vec![1]),
+            (
+                Gh3036EfuseReader::EFUSE_RDATA_ADDR,
+                vec![0x1111, 0x2222, 0x3333, 0x4444, 0x5555],
+            ),
+        ]);
+
+        let error = Gh3036EfuseReader::read_segment(&*io, 1).await.unwrap_err();
+
+        assert!(error.contains("exactly 4"));
+        assert_eq!(
+            io.writes(),
+            vec![
+                (0x0580, 0x0004),
                 (0x0584, 0x0001),
                 (0x058A, 0x0001),
                 (0x0584, 0x0000),

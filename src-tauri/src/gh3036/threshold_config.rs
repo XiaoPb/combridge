@@ -870,7 +870,7 @@ tests:
     fn uuid_error_codes_only_mark_failed_channel() {
         let evaluation_result = FactoryEvaluationResult::new("GH3036");
         let mut uuid = vec![0; 32];
-        uuid[16] = 1;
+        uuid[0] = 1;
         let result = generate_error_codes(1, &uuid, &evaluation_result);
 
         assert!(!result.error_codes.contains(&ERROR_CODE_UUID.to_string()));

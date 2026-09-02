@@ -759,13 +759,14 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
     >
       {chartGroups.map((group, index) => {
         const key = getChartGroupKey(group, index);
+        const chartHeight = normalizeChartHeight(group.height);
         return (
           <div
             key={key}
             style={{
               width: '100%',
-              height: normalizeChartHeight(group.height),
-              minHeight: 150,
+              height: 'auto',
+              minHeight: 0,
               flexShrink: 0,
               minWidth: 0,
               display: 'flex',
@@ -791,8 +792,8 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
               className="chart-container"
               style={{
                 width: '100%',
-                flex: 1,
-                minHeight: 0,
+                height: chartHeight,
+                flex: '0 0 auto',
               }}
             />
           </div>
@@ -832,6 +833,16 @@ function formatLineStatistic(value: number | null): string {
   return value === null ? '—' : formatActualValue(value);
 }
 
+function formatLineAverage(value: number | null): string {
+  if (value === null) return '—';
+  if (!Number.isFinite(value)) return String(value);
+  if (value === 0) return '0';
+
+  const decimalPlaces = Math.abs(value) < 1 ? 4 : 2;
+  const rounded = Number(value.toFixed(decimalPlaces));
+  return rounded === 0 ? Number(value.toExponential(2)).toString() : String(rounded);
+}
+
 function getStatisticLabel(
   translate: (key: string) => string,
   key: string,
@@ -868,12 +879,13 @@ function LineStatisticsPanel({
             gap: 8,
             lineHeight: '20px',
             fontSize: 12,
+            color: stat.color,
           }}
         >
           <span style={{ color: stat.color }}>● {stat.name}</span>
           <span>{labels.max}: {formatLineStatistic(stat.max)}</span>
           <span>{labels.min}: {formatLineStatistic(stat.min)}</span>
-          <span>{labels.avg}: {formatLineStatistic(stat.avg)}</span>
+          <span>{labels.avg}: {formatLineAverage(stat.avg)}</span>
           <span>{labels.diff}: {formatLineStatistic(stat.diff)}</span>
         </div>
       ))}
@@ -881,7 +893,7 @@ function LineStatisticsPanel({
   );
 }
 
-export { formatLineStatistic };
+export { formatLineAverage, formatLineStatistic };
 
 function t(key: string): string {
   return ({ 'chart.time': '时间' } as Record<string, string>)[key] || key;

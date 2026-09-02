@@ -38,6 +38,20 @@ describe('MultiLineChart line statistics', () => {
     expect(formatLineStatistic(null)).toBe('—');
     expect(formatLineStatistic(1e-7)).toBe('0.0000001');
   });
+
+  it('limits average statistics to two decimals, or four for values below one', async () => {
+    const chartModule = await import('./MultiLineChart');
+    const formatLineAverage = (chartModule as Record<string, unknown>)
+      .formatLineAverage as (value: number | null) => string;
+
+    expect(formatLineAverage(null)).toBe('—');
+    expect(formatLineAverage(12.3456)).toBe('12.35');
+    expect(formatLineAverage(12.3)).toBe('12.3');
+    expect(formatLineAverage(0.123456)).toBe('0.1235');
+    expect(formatLineAverage(0.0000001)).toBe('1e-7');
+    expect(formatLineAverage(-0.00000012)).toBe('-1.2e-7');
+  });
+
 });
 
 describe('MultiLineChart data zoom synchronization', () => {

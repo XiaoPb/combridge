@@ -12,6 +12,11 @@ export const LINE_COLORS = [
 
 export const MAX_LINES_PER_CHART = 4;
 
+export function normalizeMaxLines(maxLines: number): number {
+  if (!Number.isFinite(maxLines)) return MAX_LINES_PER_CHART;
+  return Math.max(0, Math.min(Math.floor(maxLines), MAX_LINES_PER_CHART));
+}
+
 export interface ChartSeriesData {
   name: string;
   data: number[];
@@ -24,9 +29,9 @@ export function buildChartSeries(
   groupColumns: string[],
   maxLines = MAX_LINES_PER_CHART,
 ): ChartSeriesData[] {
-  const selectedColumns = groupColumns.slice(0, maxLines).filter((column, index, selected) =>
-    selected.indexOf(column) === index
-  );
+  const selectedColumns = groupColumns
+    .slice(0, normalizeMaxLines(maxLines))
+    .filter((column, index, selected) => selected.indexOf(column) === index);
 
   return selectedColumns.map((name, lineIndex) => {
     const columnIndex = columns.indexOf(name);

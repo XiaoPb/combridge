@@ -26,7 +26,10 @@ import {
   migrateLegacyChartLegendSelections,
   resolveChartLegendSelection,
 } from './chartGroup';
-import { buildChartSeries } from './multiLineChartModel';
+import {
+  buildChartSeries,
+  MAX_LINES_PER_CHART,
+} from './multiLineChartModel';
 import {
   composeChartPng,
   dataUrlToBlob,
@@ -94,7 +97,6 @@ interface ChartExportDependencies {
 }
 
 const Y_AXIS_WIDTH = 50;
-const MAX_LINES_PER_CHART = 4;
 type DataZoomState = { start: number; end: number };
 
 export function dispatchDataZoomSilently(

@@ -48,6 +48,31 @@ describe('buildChartSeries', () => {
     ]);
   });
 
+  it('normalizes maxLines before applying the existing slice and deduplication', () => {
+    const columns = ['A', 'B', 'C', 'D', 'E'];
+    const rows = [[1, 2, 3, 4, 5]];
+    const groupColumns = ['A', 'B', 'C', 'D', 'E'];
+    const buildWithMaxLines = (maxLines: number) =>
+      buildChartSeries(columns, rows, groupColumns, maxLines);
+
+    expect(buildWithMaxLines(0)).toHaveLength(0);
+    expect(buildWithMaxLines(-1)).toHaveLength(0);
+    expect(buildWithMaxLines(2.9)).toHaveLength(2);
+    expect(buildWithMaxLines(Number.NaN)).toHaveLength(MAX_LINES_PER_CHART);
+    expect(buildWithMaxLines(Number.POSITIVE_INFINITY)).toHaveLength(MAX_LINES_PER_CHART);
+    expect(buildWithMaxLines(10)).toHaveLength(MAX_LINES_PER_CHART);
+  });
+
+  it('applies the line limit before deduplicating group columns', () => {
+    const series = buildChartSeries(
+      ['A', 'B', 'C', 'D'],
+      [[1, 2, 3, 4]],
+      ['A', 'A', 'B', 'C', 'D'],
+    );
+
+    expect(series.map(({ name }) => name)).toEqual(['A', 'B', 'C']);
+  });
+
   it('assigns colors by local line index rather than global column index', () => {
     const series = buildChartSeries(['A', 'B', 'C', 'D', 'E', 'F'], [[1, 2, 3, 4, 5, 6]], ['E', 'F']);
 

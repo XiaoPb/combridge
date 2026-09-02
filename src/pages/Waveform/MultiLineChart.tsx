@@ -31,6 +31,10 @@ import {
   MAX_LINES_PER_CHART,
 } from './multiLineChartModel';
 import {
+  calculateVisibleLineStats,
+  type LineStatistics,
+} from './multiLineChartStats';
+import {
   composeChartPng,
   dataUrlToBlob,
   downloadBlob,
@@ -68,6 +72,7 @@ export interface MultiLineChartProps {
   legendSelected?: Record<string, boolean>;
   onLegendSelectedChange?: (selected: Record<string, boolean>) => void;
   onExportError?: (error: Error) => void;
+  showLineStatistics?: boolean;
 }
 
 export interface MultiLineChartHandle {
@@ -213,6 +218,7 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
   legendSelected,
   onLegendSelectedChange,
   onExportError,
+  showLineStatistics = false,
 }, ref) => {
   const { t: translate } = useTranslation('waveform');
   const containerRefs = useRef(new Map<string, HTMLDivElement>());
@@ -287,6 +293,18 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
         .map((group, index) => getChartGroupKey(group, index))
         .join('\u0001'),
     [chartGroups],
+  );
+  const visibleLineStats = useMemo(
+    () =>
+      chartGroups.map((group) =>
+        calculateVisibleLineStats(
+          columns,
+          rows,
+          group.columns,
+          localDataZoom,
+        ),
+      ),
+    [chartGroups, columns, rows, localDataZoom],
   );
 
   const getChartOption = useCallback(
@@ -624,7 +642,7 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
   useEffect(() => {
     if (!initialized) return;
     chartInstances.current.forEach((chart) => chart.resize());
-  }, [initialized, instanceRevision, chartGeometrySignature]);
+  }, [initialized, instanceRevision, chartGeometrySignature, showLineStatistics]);
 
   useEffect(
     () => () => {
@@ -744,23 +762,40 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
         return (
           <div
             key={key}
-            ref={(element) => {
-              if (element) containerRefs.current.set(key, element);
-              else containerRefs.current.delete(key);
-            }}
-            className="chart-container"
             style={{
               width: '100%',
               height: normalizeChartHeight(group.height),
               minHeight: 150,
               flexShrink: 0,
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column',
               borderBottom:
                 index < chartGroups.length - 1
                   ? '1px solid var(--border-color)'
                   : 'none',
             }}
             onContextMenu={handleContextMenu(key)}
-          />
+          >
+            {showLineStatistics && visibleLineStats[index]?.length ? (
+              <LineStatisticsPanel
+                stats={visibleLineStats[index]}
+                translate={translate}
+              />
+            ) : null}
+            <div
+              ref={(element) => {
+                if (element) containerRefs.current.set(key, element);
+                else containerRefs.current.delete(key);
+              }}
+              className="chart-container"
+              style={{
+                width: '100%',
+                flex: 1,
+                minHeight: 0,
+              }}
+            />
+          </div>
         );
       })}
       {contextMenu && (
@@ -792,6 +827,61 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
     </div>
   );
 });
+
+function formatLineStatistic(value: number | null): string {
+  return value === null ? '—' : formatActualValue(value);
+}
+
+function getStatisticLabel(
+  translate: (key: string) => string,
+  key: string,
+  fallback: string,
+): string {
+  const translated = translate(key);
+  return translated === key ? fallback : translated;
+}
+
+function LineStatisticsPanel({
+  stats,
+  translate,
+}: {
+  stats: LineStatistics[];
+  translate: (key: string) => string;
+}) {
+  if (stats.length === 0) return null;
+
+  const labels = {
+    max: getStatisticLabel(translate, 'chart.max', 'max'),
+    min: getStatisticLabel(translate, 'chart.min', 'min'),
+    avg: getStatisticLabel(translate, 'chart.avg', 'avg'),
+    diff: getStatisticLabel(translate, 'chart.diff', 'diff'),
+  };
+
+  return (
+    <div style={{ padding: '4px 8px 6px', flexShrink: 0 }}>
+      {stats.map((stat) => (
+        <div
+          key={stat.name}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(100px, 1.2fr) repeat(4, minmax(90px, 1fr))',
+            gap: 8,
+            lineHeight: '20px',
+            fontSize: 12,
+          }}
+        >
+          <span style={{ color: stat.color }}>● {stat.name}</span>
+          <span>{labels.max}: {formatLineStatistic(stat.max)}</span>
+          <span>{labels.min}: {formatLineStatistic(stat.min)}</span>
+          <span>{labels.avg}: {formatLineStatistic(stat.avg)}</span>
+          <span>{labels.diff}: {formatLineStatistic(stat.diff)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export { formatLineStatistic };
 
 function t(key: string): string {
   return ({ 'chart.time': '时间' } as Record<string, string>)[key] || key;

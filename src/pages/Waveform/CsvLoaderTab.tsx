@@ -7,6 +7,9 @@ import MultiLineChart from './MultiLineChart';
 import type { MultiLineChartHandle } from './MultiLineChart';
 
 const { Text } = Typography;
+const CsvMultiLineChart = MultiLineChart as React.ComponentType<
+  React.ComponentProps<typeof MultiLineChart> & { showLineStatistics: boolean }
+>;
 
 const CsvLoaderTab: React.FC = () => {
   const { t } = useTranslation('waveform');
@@ -21,12 +24,14 @@ const CsvLoaderTab: React.FC = () => {
     parseConfig,
     chartGroups,
     sampleRate,
+    showLineStatistics,
     dataZoomState,
     isLoading,
     error,
     loadCsvFile,
     setParseConfig,
     setSampleRate,
+    setShowLineStatistics,
     setDataZoomState,
     clearError,
     addChartGroup,
@@ -200,6 +205,15 @@ const CsvLoaderTab: React.FC = () => {
                     size="small"
                   />
                 </Space>
+
+                <Space>
+                  <Text>{t('csvLoader.showLineStatistics')}</Text>
+                  <Switch
+                    checked={showLineStatistics}
+                    onChange={setShowLineStatistics}
+                    size="small"
+                  />
+                </Space>
               </Space>
             </div>
 
@@ -273,11 +287,12 @@ const CsvLoaderTab: React.FC = () => {
         )}
 
         {csvData && columns.length > 0 ? (
-          <MultiLineChart
+          <CsvMultiLineChart
             columns={columns}
             rows={rows}
             chartGroups={chartGroups}
             sampleRate={sampleRate}
+            showLineStatistics={showLineStatistics}
             initialDataZoom={dataZoomState}
             onDataZoomChange={setDataZoomState}
             legendScope="csv"

@@ -9,6 +9,37 @@ const columns = ['heart_rate'];
 const rows = [[72]];
 const groups: ChartGroupConfig[] = [{ name: 'Heart rate', columns, height: 300 }];
 
+describe('MultiLineChart line statistics', () => {
+  it('uses the chart zoom range when preparing line statistics', async () => {
+    const { calculateVisibleLineStats } = await import('./multiLineChartStats');
+    const full = calculateVisibleLineStats(
+      ['A'],
+      [[1], [2], [9]],
+      ['A'],
+      { start: 0, end: 100 },
+    );
+    const point = calculateVisibleLineStats(
+      ['A'],
+      [[1], [2], [9]],
+      ['A'],
+      { start: 50, end: 50 },
+    );
+
+    expect(full[0]).toMatchObject({ min: 1, max: 9, diff: 8 });
+    expect(full[0].avg).toBeCloseTo(4, 12);
+    expect(point[0]).toMatchObject({ min: 2, max: 2, avg: 2, diff: 0 });
+  });
+
+  it('formats missing statistics as a placeholder', async () => {
+    const chartModule = await import('./MultiLineChart');
+    const formatLineStatistic = (chartModule as Record<string, unknown>)
+      .formatLineStatistic as (value: number | null) => string;
+
+    expect(formatLineStatistic(null)).toBe('—');
+    expect(formatLineStatistic(1e-7)).toBe('0.0000001');
+  });
+});
+
 describe('MultiLineChart data zoom synchronization', () => {
   it('dispatches sibling zoom updates silently', async () => {
     const chartModule = await import('./MultiLineChart');
@@ -106,6 +137,7 @@ describe('MultiLineChart export API', () => {
       rows,
       chartGroups: groups,
       onExportError,
+      showLineStatistics: true,
     } satisfies MultiLineChartProps;
     const element = React.createElement(chartModule.default, { ...props, ref });
 

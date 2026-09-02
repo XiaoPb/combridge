@@ -59,7 +59,11 @@
     "noData": "暂无数据",
     "saveAsPng": "保存为 PNG",
     "saveAsSvg": "保存为 SVG",
-    "selectBuffer": "请先选择缓冲区"
+    "selectBuffer": "请先选择缓冲区",
+    "max": "最大值",
+    "min": "最小值",
+    "avg": "平均值",
+    "diff": "差值"
   },
   "sidebar": {
     "xAxisRange": "X轴范围",
@@ -89,6 +93,7 @@
     "skipInfoRows": "跳过信息区域",
     "rows": "行",
     "noHeader": "无表头",
+    "showLineStatistics": "显示线统计",
     "noData": "请选择 CSV 文件"
   }
 }

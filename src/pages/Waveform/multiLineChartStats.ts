@@ -33,8 +33,8 @@ export function getVisibleRowRange(
   const startPercent = Math.max(0, Math.min(100, Math.min(zoom.start, zoom.end)));
   const endPercent = Math.max(0, Math.min(100, Math.max(zoom.start, zoom.end)));
   return {
-    startIndex: Math.round((startPercent * (rowCount - 1)) / 100),
-    endIndex: Math.round((endPercent * (rowCount - 1)) / 100),
+    startIndex: Math.floor((startPercent * (rowCount - 1)) / 100),
+    endIndex: Math.ceil((endPercent * (rowCount - 1)) / 100),
   };
 }
 

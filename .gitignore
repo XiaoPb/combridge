@@ -27,3 +27,5 @@ target/
 logs/
 memory/
 AGENTS.md
+.codegraph/
+.superpowers/

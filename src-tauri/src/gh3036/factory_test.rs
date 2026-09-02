@@ -11,13 +11,15 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use async_trait::async_trait;
 use chrono::Local;
 use parking_lot::Mutex;
 use tokio::runtime::Runtime;
 use tracing::{error, info, warn};
 
 use super::config_loader::ConfigLoader;
-use super::factory_compute::{CollectionSpec, CollectedFrames, FactoryFrameCollector};
+use super::efuse::{Gh3036EfuseReader, RegisterAccess};
+use super::factory_compute::{CollectedFrames, CollectionSpec, FactoryFrameCollector};
 use super::manager::Gh3036Manager;
 use super::threshold_config::{
     evaluate_measurements, evaluate_test_item, generate_error_codes,
@@ -29,6 +31,92 @@ use super::types::{
     FactoryTestResult, FactoryTestStatus, FactoryTestStep, FactoryTestStepResult, GhFuncFrame,
 };
 use crate::service::EventBus;
+
+fn zero_uuid_bytes() -> Vec<u8> {
+    vec![0; 32]
+}
+
+fn normalize_uuid_bytes(bytes: &[u8]) -> Vec<u8> {
+    if bytes.len() < 32 {
+        return zero_uuid_bytes();
+    }
+
+    bytes[..32].to_vec()
+}
+
+fn split_uuid_halves(bytes: &[u8]) -> ([u8; 16], [u8; 16]) {
+    let mut first = [0u8; 16];
+    let mut second = [0u8; 16];
+
+    if bytes.len() >= 16 {
+        first.copy_from_slice(&bytes[..16]);
+    }
+    if bytes.len() >= 32 {
+        second.copy_from_slice(&bytes[16..32]);
+    }
+
+    (first, second)
+}
+
+fn uuid_halves_pass(bytes: &[u8]) -> (bool, bool) {
+    let (first, second) = split_uuid_halves(bytes);
+    let first_pass = first.iter().any(|byte| *byte != 0);
+    let second_pass = second.iter().any(|byte| *byte != 0);
+    (first_pass, second_pass)
+}
+
+fn supports_app_uuid(chip: Option<&str>) -> bool {
+    chip.map(|chip| {
+        let normalized = chip.to_ascii_lowercase();
+        normalized.starts_with("gh3036") || normalized.starts_with("gh3038")
+    })
+    .unwrap_or(false)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct UuidResolution {
+    uuid: Vec<u8>,
+    step_data: Vec<Option<f64>>,
+    success: bool,
+    message: String,
+}
+
+fn uuid_channel_value(pass: bool) -> Option<f64> {
+    Some(if pass { 1.0 } else { 0.0 })
+}
+
+fn resolve_uuid_result(
+    source: &str,
+    uuid_result: Result<Vec<u8>, String>,
+    chip: Option<&str>,
+) -> UuidResolution {
+    let uuid = match uuid_result {
+        Ok(bytes) => normalize_uuid_bytes(&bytes),
+        Err(error) => {
+            warn!("[FactoryTest] {} UUID 读取失败: {}", source, error);
+            zero_uuid_bytes()
+        }
+    };
+
+    let (first_pass, second_pass) = uuid_halves_pass(&uuid);
+    let step_data = vec![
+        uuid_channel_value(first_pass),
+        uuid_channel_value(second_pass),
+    ];
+    let chip_label = chip.unwrap_or("unknown");
+    let message = format!(
+        "UUID {source} chip={chip_label} ch0={} ch1={}",
+        if first_pass { "PASS" } else { "FAIL" },
+        if second_pass { "PASS" } else { "FAIL" }
+    );
+
+    UuidResolution {
+        uuid,
+        step_data,
+        success: first_pass && second_pass,
+        message,
+    }
+}
 
 pub struct FactoryTestManager {
     config_dir: Mutex<PathBuf>,
@@ -45,11 +133,13 @@ pub struct FactoryTestManager {
 
 #[cfg(test)]
 mod collector_lifecycle_tests {
+    use std::collections::VecDeque;
     use std::sync::Arc;
 
     use super::super::types::{GhFuncFixIdx, GhFuncFrame};
     use super::*;
     use crate::service::EventBus;
+    use tokio::runtime::Runtime;
 
     fn test1_frame(frame_cnt: u32) -> GhFuncFrame {
         GhFuncFrame {
@@ -86,7 +176,10 @@ mod collector_lifecycle_tests {
     #[test]
     fn chip_init_uses_app_mode_when_fg_fails_or_has_no_u16_channel() {
         assert_eq!(select_compute_mode(Ok(vec![])), FactoryComputeMode::App);
-        assert_eq!(select_compute_mode(Err("timeout".into())), FactoryComputeMode::App);
+        assert_eq!(
+            select_compute_mode(Err("timeout".into())),
+            FactoryComputeMode::App
+        );
     }
 
     #[test]
@@ -94,6 +187,436 @@ mod collector_lifecycle_tests {
         let outcome = resolve_mcu_hardware_result(Err("timeout".into()), 3);
         assert_eq!(outcome.mode, FactoryComputeMode::Mcu);
         assert_eq!(outcome.measurements, vec![ChannelMeasurement::failed(); 3]);
+    }
+
+    #[test]
+    fn chip_init_uses_app_mode_when_fs_fails() {
+        let runtime = Runtime::new().unwrap();
+        let event_bus = Arc::new(EventBus::new(8));
+        let mut test_result = FactoryTestResult {
+            chip_init_status: 0,
+            uuid: Vec::new(),
+            compute_mode: FactoryComputeMode::Mcu,
+            base_noise: Vec::new(),
+            ppg_noise: Vec::new(),
+            lpctr: Vec::new(),
+            lplctr: Vec::new(),
+            overall_result: String::new(),
+            timestamp: 0,
+            device_info: String::new(),
+            error_code: String::new(),
+            project_name: String::new(),
+        };
+        let rpc = ScriptedChipInitRpc::new(vec![
+            ("FS", vec!["0x01"], Err("timeout".to_string())),
+            ("W", vec!["0x0020", "0x2919"], Ok(vec![])),
+            ("R", vec!["0x0020"], Ok(vec![0x19, 0x29])),
+        ]);
+
+        let step_result = runtime
+            .block_on(FactoryTestManager::run_chip_init_and_select_mode(
+                &event_bus,
+                &mut test_result,
+                &rpc,
+            ))
+            .unwrap();
+
+        assert_eq!(test_result.compute_mode, FactoryComputeMode::App);
+        assert_eq!(test_result.chip_init_status, 1);
+        assert!(step_result.success);
+        assert_eq!(rpc.calls(), vec!["FS", "W", "R"]);
+    }
+
+    #[test]
+    fn chip_init_uses_app_mode_when_fg_fails() {
+        let runtime = Runtime::new().unwrap();
+        let event_bus = Arc::new(EventBus::new(8));
+        let mut test_result = FactoryTestResult {
+            chip_init_status: 0,
+            uuid: Vec::new(),
+            compute_mode: FactoryComputeMode::Mcu,
+            base_noise: Vec::new(),
+            ppg_noise: Vec::new(),
+            lpctr: Vec::new(),
+            lplctr: Vec::new(),
+            overall_result: String::new(),
+            timestamp: 0,
+            device_info: String::new(),
+            error_code: String::new(),
+            project_name: String::new(),
+        };
+        let rpc = ScriptedChipInitRpc::new(vec![
+            ("FS", vec!["0x01"], Ok(vec![])),
+            ("FG", vec!["0x01"], Err("timeout".to_string())),
+            ("W", vec!["0x0020", "0x2919"], Ok(vec![])),
+            ("R", vec!["0x0020"], Ok(vec![0x19, 0x29])),
+        ]);
+
+        let step_result = runtime
+            .block_on(FactoryTestManager::run_chip_init_and_select_mode(
+                &event_bus,
+                &mut test_result,
+                &rpc,
+            ))
+            .unwrap();
+
+        assert_eq!(test_result.compute_mode, FactoryComputeMode::App);
+        assert_eq!(test_result.chip_init_status, 1);
+        assert!(step_result.success);
+        assert_eq!(rpc.calls(), vec!["FS", "FG", "W", "R"]);
+    }
+
+    #[test]
+    fn chip_init_uses_app_mode_when_fg_returns_empty_u16_list() {
+        let runtime = Runtime::new().unwrap();
+        let event_bus = Arc::new(EventBus::new(8));
+        let mut test_result = FactoryTestResult {
+            chip_init_status: 0,
+            uuid: Vec::new(),
+            compute_mode: FactoryComputeMode::Mcu,
+            base_noise: Vec::new(),
+            ppg_noise: Vec::new(),
+            lpctr: Vec::new(),
+            lplctr: Vec::new(),
+            overall_result: String::new(),
+            timestamp: 0,
+            device_info: String::new(),
+            error_code: String::new(),
+            project_name: String::new(),
+        };
+        let rpc = ScriptedChipInitRpc::new(vec![
+            ("FS", vec!["0x01"], Ok(vec![])),
+            ("FG", vec!["0x01"], Ok(vec![0x01])),
+            ("W", vec!["0x0020", "0x2919"], Ok(vec![])),
+            ("R", vec!["0x0020"], Ok(vec![0x19, 0x29])),
+        ]);
+
+        let step_result = runtime
+            .block_on(FactoryTestManager::run_chip_init_and_select_mode(
+                &event_bus,
+                &mut test_result,
+                &rpc,
+            ))
+            .unwrap();
+
+        assert_eq!(test_result.compute_mode, FactoryComputeMode::App);
+        assert_eq!(test_result.chip_init_status, 1);
+        assert!(step_result.success);
+        assert_eq!(rpc.calls(), vec!["FS", "FG", "W", "R"]);
+    }
+
+    #[test]
+    fn chip_init_locks_mcu_mode_for_nonempty_fg_response() {
+        let runtime = Runtime::new().unwrap();
+        let event_bus = Arc::new(EventBus::new(8));
+        let mut test_result = FactoryTestResult {
+            chip_init_status: 0,
+            uuid: Vec::new(),
+            compute_mode: FactoryComputeMode::App,
+            base_noise: Vec::new(),
+            ppg_noise: Vec::new(),
+            lpctr: Vec::new(),
+            lplctr: Vec::new(),
+            overall_result: String::new(),
+            timestamp: 0,
+            device_info: String::new(),
+            error_code: String::new(),
+            project_name: String::new(),
+        };
+        let rpc = ScriptedChipInitRpc::new(vec![
+            ("FS", vec!["0x01"], Ok(vec![])),
+            ("FG", vec!["0x01"], Ok(vec![0x01, 0x00, 0x02, 0x00])),
+        ]);
+
+        let step_result = runtime
+            .block_on(FactoryTestManager::run_chip_init_and_select_mode(
+                &event_bus,
+                &mut test_result,
+                &rpc,
+            ))
+            .unwrap();
+
+        assert_eq!(test_result.compute_mode, FactoryComputeMode::Mcu);
+        assert_eq!(test_result.chip_init_status, 1);
+        assert!(step_result.success);
+        assert_eq!(step_result.data, vec![Some(1.0), Some(2.0)]);
+        assert_eq!(rpc.calls(), vec!["FS", "FG"]);
+    }
+
+    #[test]
+    fn uuid_helpers_split_and_support_app_chip_ids() {
+        assert_eq!(zero_uuid_bytes(), vec![0; 32]);
+        assert_eq!(normalize_uuid_bytes(&[1, 2, 3]).len(), 32);
+
+        let mut bytes = vec![0; 32];
+        bytes[0] = 1;
+        bytes[16] = 2;
+        let (first, second) = split_uuid_halves(&bytes);
+        assert_eq!(first[0], 1);
+        assert_eq!(second[0], 2);
+        assert_eq!(uuid_halves_pass(&bytes), (true, true));
+        assert!(supports_app_uuid(Some("gh3036")));
+        assert!(supports_app_uuid(Some("GH3038A")));
+        assert!(!supports_app_uuid(Some("gh3220")));
+    }
+
+    #[test]
+    fn uuid_mcu_branch_requires_32_bytes_and_reports_two_channels() {
+        let runtime = Runtime::new().unwrap();
+        let event_bus = Arc::new(EventBus::new(8));
+        let mut test_result = FactoryTestResult {
+            chip_init_status: 1,
+            uuid: Vec::new(),
+            compute_mode: FactoryComputeMode::Mcu,
+            base_noise: Vec::new(),
+            ppg_noise: Vec::new(),
+            lpctr: Vec::new(),
+            lplctr: Vec::new(),
+            overall_result: String::new(),
+            timestamp: 0,
+            device_info: String::new(),
+            error_code: String::new(),
+            project_name: String::new(),
+        };
+        let rpc = ScriptedUuidManager::new(
+            vec![
+                ("FS", vec!["0x02"], Ok(vec![])),
+                (
+                    "FG",
+                    vec!["0x02"],
+                    Ok({
+                        let mut bytes = vec![0; 32];
+                        bytes[0] = 1;
+                        bytes[16] = 2;
+                        bytes
+                    }),
+                ),
+            ],
+            Vec::new(),
+        );
+
+        let step_result = runtime
+            .block_on(FactoryTestManager::execute_uuid_step(
+                &event_bus,
+                &mut test_result,
+                &rpc,
+                Some("gh3036"),
+            ))
+            .unwrap()
+            .unwrap();
+
+        assert!(step_result.success);
+        assert_eq!(step_result.data, vec![Some(1.0), Some(1.0)]);
+        assert_eq!(test_result.uuid.len(), 32);
+        assert_eq!(rpc.calls(), vec!["FS", "FG"]);
+    }
+
+    #[test]
+    fn uuid_app_branch_uses_efuse_reader_for_supported_chip() {
+        let runtime = Runtime::new().unwrap();
+        let event_bus = Arc::new(EventBus::new(8));
+        let mut test_result = FactoryTestResult {
+            chip_init_status: 1,
+            uuid: Vec::new(),
+            compute_mode: FactoryComputeMode::App,
+            base_noise: Vec::new(),
+            ppg_noise: Vec::new(),
+            lpctr: Vec::new(),
+            lplctr: Vec::new(),
+            overall_result: String::new(),
+            timestamp: 0,
+            device_info: String::new(),
+            error_code: String::new(),
+            project_name: String::new(),
+        };
+        let reads = vec![
+            (0x0580, vec![0x0000]),
+            (0x0584, vec![0x0000]),
+            (0x058A, vec![0x0000]),
+            (0x05A6, vec![0x0001]),
+            (0x059E, vec![0x1111, 0x2222, 0x3333, 0x4444]),
+            (0x0580, vec![0x0000]),
+            (0x0584, vec![0x0000]),
+            (0x058A, vec![0x0000]),
+            (0x05A6, vec![0x0001]),
+            (0x059E, vec![0x5555, 0x6666, 0x7777, 0x8888]),
+            (0x0580, vec![0x0000]),
+            (0x0584, vec![0x0000]),
+            (0x058A, vec![0x0000]),
+            (0x05A6, vec![0x0001]),
+            (0x059E, vec![0x9999, 0xAAAA, 0xBBBB, 0xCCCC]),
+            (0x0580, vec![0x0000]),
+            (0x0584, vec![0x0000]),
+            (0x058A, vec![0x0000]),
+            (0x05A6, vec![0x0001]),
+            (0x059E, vec![0xDDDD, 0xEEEE, 0xFFFF, 0x1111]),
+        ];
+        let rpc = ScriptedUuidManager::new(Vec::new(), reads);
+
+        let step_result = runtime
+            .block_on(FactoryTestManager::execute_uuid_step(
+                &event_bus,
+                &mut test_result,
+                &rpc,
+                Some("gh3036"),
+            ))
+            .unwrap()
+            .unwrap();
+
+        assert!(step_result.success);
+        assert_eq!(step_result.data, vec![Some(1.0), Some(1.0)]);
+        assert_eq!(test_result.uuid.len(), 32);
+        assert!(test_result.uuid[..16].iter().any(|&b| b != 0));
+        assert!(test_result.uuid[16..32].iter().any(|&b| b != 0));
+    }
+
+    #[test]
+    fn uuid_app_branch_fails_for_unsupported_chip() {
+        let runtime = Runtime::new().unwrap();
+        let event_bus = Arc::new(EventBus::new(8));
+        let mut test_result = FactoryTestResult {
+            chip_init_status: 1,
+            uuid: Vec::new(),
+            compute_mode: FactoryComputeMode::App,
+            base_noise: Vec::new(),
+            ppg_noise: Vec::new(),
+            lpctr: Vec::new(),
+            lplctr: Vec::new(),
+            overall_result: String::new(),
+            timestamp: 0,
+            device_info: String::new(),
+            error_code: String::new(),
+            project_name: String::new(),
+        };
+        let rpc = ScriptedUuidManager::new(Vec::new(), Vec::new());
+
+        let step_result = runtime
+            .block_on(FactoryTestManager::execute_uuid_step(
+                &event_bus,
+                &mut test_result,
+                &rpc,
+                Some("gh3220"),
+            ))
+            .unwrap()
+            .unwrap();
+
+        assert!(!step_result.success);
+        assert_eq!(step_result.data, vec![Some(0.0), Some(0.0)]);
+        assert_eq!(test_result.uuid, vec![0; 32]);
+    }
+
+    struct ScriptedChipInitRpc {
+        script: Mutex<VecDeque<(String, Vec<String>, Result<Vec<u8>, String>)>>,
+        calls: Mutex<Vec<String>>,
+    }
+
+    impl ScriptedChipInitRpc {
+        fn new(script: Vec<(&'static str, Vec<&'static str>, Result<Vec<u8>, String>)>) -> Self {
+            Self {
+                script: Mutex::new(
+                    script
+                        .into_iter()
+                        .map(|(command, params, result)| {
+                            (
+                                command.to_string(),
+                                params.into_iter().map(|value| value.to_string()).collect(),
+                                result,
+                            )
+                        })
+                        .collect(),
+                ),
+                calls: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn calls(&self) -> Vec<String> {
+            self.calls.lock().clone()
+        }
+    }
+
+    #[async_trait]
+    impl FactoryTestRpc for ScriptedChipInitRpc {
+        async fn execute(&self, command: &str, params: &[String]) -> Result<Vec<u8>, String> {
+            self.calls.lock().push(command.to_string());
+            let (expected_command, expected_params, result) = self
+                .script
+                .lock()
+                .pop_front()
+                .expect("unexpected CHIP_INIT RPC call");
+            assert_eq!(command, expected_command);
+            assert_eq!(params, expected_params.as_slice());
+            result
+        }
+    }
+
+    struct ScriptedUuidManager {
+        rpc_script: Mutex<VecDeque<(String, Vec<String>, Result<Vec<u8>, String>)>>,
+        read_script: Mutex<VecDeque<(u16, Vec<u16>)>>,
+        calls: Mutex<Vec<String>>,
+        reads: Mutex<Vec<u16>>,
+    }
+
+    impl ScriptedUuidManager {
+        fn new(
+            rpc_script: Vec<(&'static str, Vec<&'static str>, Result<Vec<u8>, String>)>,
+            read_script: Vec<(u16, Vec<u16>)>,
+        ) -> Self {
+            Self {
+                rpc_script: Mutex::new(
+                    rpc_script
+                        .into_iter()
+                        .map(|(command, params, result)| {
+                            (
+                                command.to_string(),
+                                params.into_iter().map(|value| value.to_string()).collect(),
+                                result,
+                            )
+                        })
+                        .collect(),
+                ),
+                read_script: Mutex::new(read_script.into_iter().collect()),
+                calls: Mutex::new(Vec::new()),
+                reads: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn calls(&self) -> Vec<String> {
+            self.calls.lock().clone()
+        }
+    }
+
+    #[async_trait]
+    impl FactoryTestRpc for ScriptedUuidManager {
+        async fn execute(&self, command: &str, params: &[String]) -> Result<Vec<u8>, String> {
+            self.calls.lock().push(command.to_string());
+            let (expected_command, expected_params, result) = self
+                .rpc_script
+                .lock()
+                .pop_front()
+                .expect("unexpected UUID RPC call");
+            assert_eq!(command, expected_command);
+            assert_eq!(params, expected_params.as_slice());
+            result
+        }
+    }
+
+    #[async_trait]
+    impl RegisterAccess for ScriptedUuidManager {
+        async fn read_u16(&self, address: u16, count: i32) -> Result<Vec<u16>, String> {
+            self.reads.lock().push(address);
+            let (expected_address, values) = self
+                .read_script
+                .lock()
+                .pop_front()
+                .expect("unexpected UUID register read");
+            assert_eq!(address, expected_address);
+            assert_eq!(count, values.len() as i32);
+            Ok(values)
+        }
+
+        async fn write_u16(&self, _pairs: &[(u16, u16)]) -> Result<(), String> {
+            Ok(())
+        }
     }
 }
 
@@ -156,11 +679,94 @@ pub fn resolve_mcu_hardware_result(
     }
 }
 
+#[async_trait]
+trait FactoryTestRpc: Send + Sync {
+    async fn execute(&self, command: &str, params: &[String]) -> Result<Vec<u8>, String>;
+}
+
+#[async_trait]
+impl FactoryTestRpc for Gh3036Manager {
+    async fn execute(&self, command: &str, params: &[String]) -> Result<Vec<u8>, String> {
+        self.execute_rpc(command, params).await
+    }
+}
+
+fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 // SAFETY: All fields use parking_lot::Mutex, Arc, or AtomicBool which are Send+Sync.
 unsafe impl Send for FactoryTestManager {}
 unsafe impl Sync for FactoryTestManager {}
 
 impl FactoryTestManager {
+    async fn run_chip_init_and_select_mode<R: FactoryTestRpc + ?Sized>(
+        event_bus: &Arc<EventBus>,
+        test_result: &mut FactoryTestResult,
+        rpc: &R,
+    ) -> Result<FactoryTestStepResult, String> {
+        let fs_result = rpc.execute("FS", &["0x01".to_string()]).await;
+        let fg_result = match fs_result {
+            Ok(_) => {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                rpc.execute("FG", &["0x01".to_string()]).await
+            }
+            Err(error) => Err(error),
+        };
+
+        if let Ok(bytes) = &fg_result {
+            let values = decode_u16_values(bytes);
+            if !values.is_empty() {
+                let status = values[0];
+                test_result.compute_mode = FactoryComputeMode::Mcu;
+                test_result.chip_init_status = status;
+                return Ok(FactoryTestStepResult {
+                    step: FactoryTestStep::ChipInit,
+                    success: status == 1,
+                    message: format!("CHIP_INIT MCU status={status}"),
+                    data: values
+                        .into_iter()
+                        .map(|value| Some(f64::from(value)))
+                        .collect(),
+                    timestamp: now_millis(),
+                });
+            }
+        }
+
+        test_result.compute_mode = FactoryComputeMode::App;
+        let _ = rpc
+            .execute("W", &["0x0020".to_string(), "0x2919".to_string()])
+            .await;
+        let readback = rpc.execute("R", &["0x0020".to_string()]).await;
+        let status = readback
+            .as_ref()
+            .ok()
+            .and_then(|bytes| decode_u16_values(bytes).first().copied())
+            .filter(|value| *value == 0x2919)
+            .map(|_| 1)
+            .unwrap_or(0);
+        test_result.chip_init_status = status;
+
+        Self::publish_progress_static(
+            event_bus,
+            FactoryTestStep::ChipInit,
+            FactoryTestStatus::Running,
+            0.12,
+            "CHIP_INIT 未获取 MCU 通道，锁定 App 计算",
+        );
+
+        Ok(FactoryTestStepResult {
+            step: FactoryTestStep::ChipInit,
+            success: status == 1,
+            message: format!("CHIP_INIT App fallback status={status}"),
+            data: vec![Some(f64::from(status))],
+            timestamp: now_millis(),
+        })
+    }
+
     pub fn new(event_bus: Arc<EventBus>) -> Self {
         let config_dir = std::env::current_exe()
             .ok()
@@ -597,6 +1203,9 @@ impl FactoryTestManager {
                     &mut test_result,
                     &event_bus,
                     &manager,
+                    threshold_config
+                        .as_ref()
+                        .and_then(|config| config.chip.as_deref()),
                 ));
 
                 match step_result {
@@ -850,13 +1459,16 @@ impl FactoryTestManager {
         test_result: &mut FactoryTestResult,
         event_bus: &Arc<EventBus>,
         manager: &Gh3036Manager,
+        chip: Option<&str>,
     ) -> Result<Option<FactoryTestStepResult>, String> {
         match step {
             FactoryTestStep::Prepare => Self::execute_prepare_step(event_bus, manager).await,
             FactoryTestStep::ChipInit => {
                 Self::execute_chip_init_step(event_bus, test_result, manager).await
             }
-            FactoryTestStep::Uuid => Self::execute_uuid_step(event_bus, test_result, manager).await,
+            FactoryTestStep::Uuid => {
+                Self::execute_uuid_step(event_bus, test_result, manager, chip).await
+            }
             FactoryTestStep::BaseNoise => {
                 Self::execute_base_noise_step(event_bus, config_dir, test_result, manager).await
             }
@@ -1035,62 +1647,20 @@ impl FactoryTestManager {
         test_result: &mut FactoryTestResult,
         manager: &Gh3036Manager,
     ) -> Result<Option<FactoryTestStepResult>, String> {
-        info!("[FactoryTest] 执行芯片初始化步骤: CMD_FACTORY_SET_MODE 0x01");
-
-        Self::publish_progress_static(
-            event_bus,
-            FactoryTestStep::ChipInit,
-            FactoryTestStatus::Running,
-            0.08,
-            "发送芯片初始化命令 FS 0x01",
-        );
-
-        manager
-            .execute_rpc("FS", &["0x01".to_string()])
+        Self::run_chip_init_and_select_mode(event_bus, test_result, manager)
             .await
-            .map_err(|e| format!("设置产测模式 0x01 失败: {}", e))?;
-
-        thread::sleep(Duration::from_millis(100));
-
-        Self::publish_progress_static(
-            event_bus,
-            FactoryTestStep::ChipInit,
-            FactoryTestStatus::Running,
-            0.10,
-            "获取芯片初始化结果 FG 0x01",
-        );
-
-        let result = manager
-            .execute_rpc("FG", &["0x01".to_string()])
-            .await
-            .map_err(|e| format!("获取产测模式 0x01 结果失败: {}", e))?;
-
-        let status = if !result.is_empty() {
-            result[0] as u16
-        } else {
-            0
-        };
-
-        test_result.chip_init_status = status;
-        info!("[FactoryTest] 芯片初始化状态: {}", status);
-
-        Ok(Some(FactoryTestStepResult {
-            step: FactoryTestStep::ChipInit,
-            success: true,
-            message: format!("芯片初始化完成, status={}", status),
-            data: vec![Some(f64::from(status))],
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis() as u64)
-                .unwrap_or(0),
-        }))
+            .map(Some)
     }
 
-    async fn execute_uuid_step(
+    async fn execute_uuid_step<R>(
         event_bus: &Arc<EventBus>,
         test_result: &mut FactoryTestResult,
-        manager: &Gh3036Manager,
-    ) -> Result<Option<FactoryTestStepResult>, String> {
+        manager: &R,
+        chip: Option<&str>,
+    ) -> Result<Option<FactoryTestStepResult>, String>
+    where
+        R: FactoryTestRpc + RegisterAccess + ?Sized,
+    {
         info!("[FactoryTest] 执行 UUID 读取步骤: CMD_FACTORY_SET_MODE 0x02");
 
         Self::publish_progress_static(
@@ -1101,41 +1671,61 @@ impl FactoryTestManager {
             "发送 UUID 读取命令 FS 0x02",
         );
 
-        manager
-            .execute_rpc("FS", &["0x02".to_string()])
-            .await
-            .map_err(|e| format!("设置产测模式 0x02 失败: {}", e))?;
-
-        thread::sleep(Duration::from_millis(100));
-
         Self::publish_progress_static(
             event_bus,
             FactoryTestStep::Uuid,
             FactoryTestStatus::Running,
             0.20,
-            "获取 UUID 结果 FG 0x02",
+            "读取 UUID 结果",
         );
 
-        let result = manager
-            .execute_rpc("FG", &["0x02".to_string()])
-            .await
-            .map_err(|e| format!("获取产测模式 0x02 结果失败: {}", e))?;
+        let resolution = match test_result.compute_mode {
+            FactoryComputeMode::Mcu => {
+                manager
+                    .execute("FS", &["0x02".to_string()])
+                    .await
+                    .map_err(|e| format!("设置产测模式 0x02 失败: {}", e))?;
+                thread::sleep(Duration::from_millis(100));
 
-        let uuid = result.to_vec();
-        test_result.uuid = uuid.clone();
+                let result = manager
+                    .execute("FG", &["0x02".to_string()])
+                    .await
+                    .map_err(|e| format!("获取产测模式 0x02 结果失败: {}", e))?;
+                let uuid = normalize_uuid_bytes(&result);
+                let (first_pass, second_pass) = uuid_halves_pass(&uuid);
+                UuidResolution {
+                    uuid,
+                    step_data: vec![
+                        uuid_channel_value(first_pass),
+                        uuid_channel_value(second_pass),
+                    ],
+                    success: first_pass && second_pass,
+                    message: format!(
+                        "UUID MCU ch0={} ch1={}",
+                        if first_pass { "PASS" } else { "FAIL" },
+                        if second_pass { "PASS" } else { "FAIL" }
+                    ),
+                }
+            }
+            FactoryComputeMode::App => {
+                if supports_app_uuid(chip) {
+                    match Gh3036EfuseReader::read_all(manager).await {
+                        Ok(bytes) => resolve_uuid_result("APP", Ok(bytes), chip),
+                        Err(error) => resolve_uuid_result("APP", Err(error), chip),
+                    }
+                } else {
+                    resolve_uuid_result("APP", Err("unsupported chip".to_string()), chip)
+                }
+            }
+        };
 
-        let uuid_str: String = uuid
-            .iter()
-            .map(|b| format!("{:02X}", b))
-            .collect::<Vec<_>>()
-            .join(":");
-        info!("[FactoryTest] UUID: {}", uuid_str);
+        test_result.uuid = resolution.uuid.clone();
 
         Ok(Some(FactoryTestStepResult {
             step: FactoryTestStep::Uuid,
-            success: true,
-            message: format!("UUID: {}", uuid_str),
-            data: uuid.iter().map(|&b| Some(f64::from(b))).collect(),
+            success: resolution.success,
+            message: resolution.message,
+            data: resolution.step_data,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)

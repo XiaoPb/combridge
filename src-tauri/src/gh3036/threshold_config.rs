@@ -675,6 +675,7 @@ pub fn evaluate_test_item(
 
 pub const ERROR_CODE_CHIP_INIT: &str = "0x1001";
 pub const ERROR_CODE_UUID: &str = "0x2001";
+pub const ERROR_CODE_UUID_CHANNEL_1: &str = "0x2002";
 pub const ERROR_CODE_BASE_NOISE_BASE: u32 = 0x3000;
 pub const ERROR_CODE_PPG_NOISE_BASE: u32 = 0x4000;
 pub const ERROR_CODE_LPCTR_BASE: u32 = 0x5000;
@@ -699,9 +700,20 @@ pub fn generate_error_codes(
         has_error = true;
     }
 
-    let uuid_valid = !uuid.is_empty() && !uuid.iter().all(|&b| b == 0);
-    if !uuid_valid {
+    let (uuid_first_pass, uuid_second_pass) = if uuid.len() >= 32 {
+        let first = uuid[..16].iter().any(|&b| b != 0);
+        let second = uuid[16..32].iter().any(|&b| b != 0);
+        (first, second)
+    } else {
+        (false, false)
+    };
+
+    if !uuid_first_pass {
         error_codes.push(ERROR_CODE_UUID.to_string());
+        has_error = true;
+    }
+    if !uuid_second_pass {
+        error_codes.push(ERROR_CODE_UUID_CHANNEL_1.to_string());
         has_error = true;
     }
 
@@ -841,5 +853,29 @@ tests:
         assert!(!result.pass);
         assert!(!result.channel_results[0].pass);
         assert_eq!(result.channel_results[0].value, None);
+    }
+
+    #[test]
+    fn uuid_error_codes_split_channels_and_keep_legacy_code() {
+        let evaluation_result = FactoryEvaluationResult::new("GH3036");
+        let result = generate_error_codes(1, &[0; 32], &evaluation_result);
+
+        assert!(result.error_codes.contains(&ERROR_CODE_UUID.to_string()));
+        assert!(result
+            .error_codes
+            .contains(&ERROR_CODE_UUID_CHANNEL_1.to_string()));
+    }
+
+    #[test]
+    fn uuid_error_codes_only_mark_failed_channel() {
+        let evaluation_result = FactoryEvaluationResult::new("GH3036");
+        let mut uuid = vec![0; 32];
+        uuid[16] = 1;
+        let result = generate_error_codes(1, &uuid, &evaluation_result);
+
+        assert!(!result.error_codes.contains(&ERROR_CODE_UUID.to_string()));
+        assert!(result
+            .error_codes
+            .contains(&ERROR_CODE_UUID_CHANNEL_1.to_string()));
     }
 }

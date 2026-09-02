@@ -59,7 +59,11 @@
     "noData": "No data available",
     "saveAsPng": "Save as PNG",
     "saveAsSvg": "Save as SVG",
-    "selectBuffer": "Please select a buffer first"
+    "selectBuffer": "Please select a buffer first",
+    "max": "Max",
+    "min": "Min",
+    "avg": "Avg",
+    "diff": "Diff"
   },
   "sidebar": {
     "xAxisRange": "X-Axis Range",
@@ -89,6 +93,7 @@
     "skipInfoRows": "Skip Info Rows",
     "rows": "rows",
     "noHeader": "No Header",
+    "showLineStatistics": "Show line statistics",
     "noData": "Please select a CSV file"
   }
 }

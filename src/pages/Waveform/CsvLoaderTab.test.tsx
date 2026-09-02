@@ -5,9 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n';
 import { useCsvChartStore } from '../../stores/csvChartStore';
 
-const { exportAllPng, openFileDialog } = vi.hoisted(() => ({
+const { exportAllPng, openFileDialog, chartProps } = vi.hoisted(() => ({
   exportAllPng: vi.fn(),
   openFileDialog: vi.fn(),
+  chartProps: { showLineStatistics: undefined as boolean | undefined },
 }));
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({
@@ -19,8 +20,12 @@ vi.mock('./MultiLineChart', async () => {
 
   const MockMultiLineChart = ReactModule.forwardRef<
     { exportAllPng: () => Promise<void> },
-    { onExportError?: (error: Error) => void }
-  >(({ onExportError }, ref) => {
+    {
+      onExportError?: (error: Error) => void;
+      showLineStatistics?: boolean;
+    }
+  >(({ onExportError, showLineStatistics }, ref) => {
+    chartProps.showLineStatistics = showLineStatistics;
     ReactModule.useImperativeHandle(ref, () => ({ exportAllPng }), []);
 
     return ReactModule.createElement(
@@ -69,6 +74,43 @@ describe('CsvLoaderTab PNG export entry', () => {
     exportAllPng.mockReset();
     exportAllPng.mockResolvedValue(undefined);
     openFileDialog.mockReset();
+    chartProps.showLineStatistics = undefined;
+  });
+
+  it('renders and toggles the line statistics switch after the no-header option', async () => {
+    setCsvData();
+
+    render(<CsvLoaderTab />);
+
+    expect(screen.getByText('无表头')).toBeTruthy();
+    expect(screen.getByText('显示线统计')).toBeTruthy();
+    const switches = screen.getAllByRole('switch');
+    const statisticsSwitch = switches[switches.length - 1]!;
+    expect(statisticsSwitch.getAttribute('aria-checked')).toBe('false');
+    expect(chartProps.showLineStatistics).toBe(false);
+
+    fireEvent.click(statisticsSwitch);
+
+    await waitFor(() => {
+      expect(useCsvChartStore.getState().showLineStatistics).toBe(true);
+      expect(chartProps.showLineStatistics).toBe(true);
+    });
+  });
+
+  it('provides localized line statistics labels', async () => {
+    await i18n.changeLanguage('zh-CN');
+    expect(i18n.t('waveform:csvLoader.showLineStatistics')).toBe('显示线统计');
+    expect(i18n.t('waveform:chart.max')).toBe('最大值');
+    expect(i18n.t('waveform:chart.min')).toBe('最小值');
+    expect(i18n.t('waveform:chart.avg')).toBe('平均值');
+    expect(i18n.t('waveform:chart.diff')).toBe('差值');
+
+    await i18n.changeLanguage('en-US');
+    expect(i18n.t('waveform:csvLoader.showLineStatistics')).toBe('Show line statistics');
+    expect(i18n.t('waveform:chart.max')).toBe('Max');
+    expect(i18n.t('waveform:chart.min')).toBe('Min');
+    expect(i18n.t('waveform:chart.avg')).toBe('Avg');
+    expect(i18n.t('waveform:chart.diff')).toBe('Diff');
   });
 
   it('hides the export button when CSV data or columns are unavailable', () => {

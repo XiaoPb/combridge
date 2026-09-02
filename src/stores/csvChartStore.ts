@@ -15,6 +15,7 @@ interface CsvChartState {
   parseConfig: CsvParseConfig;
   visiblePoints: number;
   sampleRate: number;
+  showLineStatistics: boolean;
   dataZoomState: DataZoomState;
 }
 interface CsvChartActions {
@@ -26,6 +27,7 @@ interface CsvChartActions {
   setParseConfig: (config: Partial<CsvParseConfig>) => void;
   setVisiblePoints: (points: number) => void;
   setSampleRate: (rate: number) => void;
+  setShowLineStatistics: (show: boolean) => void;
   setDataZoomState: (state: DataZoomState) => void;
   clearData: () => void;
   clearError: () => void;
@@ -61,6 +63,7 @@ export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
   parseConfig: { ...DEFAULT_PARSE_CONFIG },
   visiblePoints: 1000,
   sampleRate: 25,
+  showLineStatistics: false,
   dataZoomState: { ...DEFAULT_DATA_ZOOM_STATE },
   loadCsvFile: async (filePath, options = {}) => {
     const generation = ++loadGeneration;
@@ -95,10 +98,11 @@ export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
   setParseConfig: (config) => set({ parseConfig: { ...get().parseConfig, ...config } }),
   setVisiblePoints: (points) => set({ visiblePoints: points }),
   setSampleRate: (rate) => set({ sampleRate: rate }),
+  setShowLineStatistics: (show) => set({ showLineStatistics: show }),
   setDataZoomState: (state) => set({ dataZoomState: state }),
   clearData: () => {
     ++loadGeneration;
-    set({ csvData: null, filePath: null, chartGroups: createDefaultChartGroups(), isLoading: false, error: null, dataZoomState: { ...DEFAULT_DATA_ZOOM_STATE } });
+    set({ csvData: null, filePath: null, chartGroups: createDefaultChartGroups(), isLoading: false, error: null, showLineStatistics: false, dataZoomState: { ...DEFAULT_DATA_ZOOM_STATE } });
   },
   clearError: () => set({ error: null }),
 }));

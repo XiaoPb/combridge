@@ -21,6 +21,22 @@ describe('CSV chart store isolation and load ordering', () => {
     useCsvChartStore.setState(useCsvChartStore.getInitialState(), true);
   });
 
+  it('defaults line statistics to hidden and updates the setting', () => {
+    expect(useCsvChartStore.getState().showLineStatistics).toBe(false);
+
+    useCsvChartStore.getState().setShowLineStatistics(true);
+
+    expect(useCsvChartStore.getState().showLineStatistics).toBe(true);
+  });
+
+  it('clears line statistics visibility with the chart data', () => {
+    useCsvChartStore.getState().setShowLineStatistics(true);
+
+    useCsvChartStore.getState().clearData();
+
+    expect(useCsvChartStore.getState().showLineStatistics).toBe(false);
+  });
+
   it('updates and removes only the group matching the ID', () => {
     const first = createChartGroup('相同名称');
     const second = createChartGroup('相同名称');

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { LINE_COLORS, buildChartSeries } from './multiLineChartModel';
+import {
+  LINE_COLORS,
+  MAX_LINES_PER_CHART,
+  buildChartSeries,
+} from './multiLineChartModel';
 
 describe('buildChartSeries', () => {
   it('builds one independent series and color per selected column', () => {
@@ -35,6 +39,7 @@ describe('buildChartSeries', () => {
   it('limits to four lines by default while preserving group order', () => {
     const series = buildChartSeries(['A', 'B', 'C', 'D', 'E'], [[1, 2, 3, 4, 5]], ['D', 'B', 'E', 'A', 'C']);
 
+    expect(series).toHaveLength(MAX_LINES_PER_CHART);
     expect(series.map(({ name, data }) => [name, data])).toEqual([
       ['D', [4]],
       ['B', [2]],

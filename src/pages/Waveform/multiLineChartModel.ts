@@ -10,6 +10,8 @@ export const LINE_COLORS = [
   '#40A9FF',
 ];
 
+export const MAX_LINES_PER_CHART = 4;
+
 export interface ChartSeriesData {
   name: string;
   data: number[];
@@ -20,7 +22,7 @@ export function buildChartSeries(
   columns: string[],
   rows: number[][],
   groupColumns: string[],
-  maxLines = 4,
+  maxLines = MAX_LINES_PER_CHART,
 ): ChartSeriesData[] {
   const selectedColumns = groupColumns.slice(0, maxLines).filter((column, index, selected) =>
     selected.indexOf(column) === index

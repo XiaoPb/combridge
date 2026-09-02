@@ -3,6 +3,7 @@ import {
   calculateVisibleLineStats,
   getVisibleRowRange,
 } from './multiLineChartStats';
+import { LINE_COLORS } from './multiLineChartModel';
 
 describe('getVisibleRowRange', () => {
   it('converts percentages to an inclusive row range', () => {
@@ -29,7 +30,9 @@ describe('getVisibleRowRange', () => {
       startIndex: 1,
       endIndex: 3,
     });
-    expect(getVisibleRowRange(3, { start: 0, end: Number.POSITIVE_INFINITY })).toEqual({
+    expect(
+      getVisibleRowRange(3, { start: 0, end: Number.POSITIVE_INFINITY }),
+    ).toEqual({
       startIndex: 0,
       endIndex: 2,
     });
@@ -58,10 +61,17 @@ describe('calculateVisibleLineStats', () => {
       [-100, -1000, 0, 0, 0],
     ];
 
-    expect(calculateVisibleLineStats(columns, visibleRows, ['A', 'B'], { start: 25, end: 50 }))
+    expect(
+      calculateVisibleLineStats(
+        columns,
+        visibleRows,
+        ['A', 'B'],
+        { start: 25, end: 50 },
+      ),
+    )
       .toEqual([
-        { name: 'A', color: '#165DFF', max: 5, min: 3, avg: 4, diff: 2 },
-        { name: 'B', color: '#F53F3F', max: 40, min: 20, avg: 30, diff: 20 },
+        { name: 'A', color: LINE_COLORS[0], max: 5, min: 3, avg: 4, diff: 2 },
+        { name: 'B', color: LINE_COLORS[1], max: 40, min: 20, avg: 30, diff: 20 },
       ]);
   });
 
@@ -74,10 +84,17 @@ describe('calculateVisibleLineStats', () => {
       [-100, -1000],
     ];
 
-    expect(calculateVisibleLineStats(['A', 'B'], visibleRows, ['A', 'B'], { start: 50, end: 50 }))
+    expect(
+      calculateVisibleLineStats(
+        ['A', 'B'],
+        visibleRows,
+        ['A', 'B'],
+        { start: 50, end: 50 },
+      ),
+    )
       .toEqual([
-        { name: 'A', color: '#165DFF', max: 5, min: 5, avg: 5, diff: 0 },
-        { name: 'B', color: '#F53F3F', max: 40, min: 40, avg: 40, diff: 0 },
+        { name: 'A', color: LINE_COLORS[0], max: 5, min: 5, avg: 5, diff: 0 },
+        { name: 'B', color: LINE_COLORS[1], max: 40, min: 40, avg: 40, diff: 0 },
       ]);
   });
 
@@ -89,7 +106,13 @@ describe('calculateVisibleLineStats', () => {
       { start: 0, end: 100 },
     );
     expect(result).toHaveLength(4);
-    expect(result[1]).toMatchObject({ name: 'B', max: 40, min: 10, avg: 70 / 3, diff: 30 });
+    expect(result[1]).toMatchObject({
+      name: 'B',
+      max: 40,
+      min: 10,
+      diff: 30,
+    });
+    expect(result[1].avg).toBeCloseTo(70 / 3, 12);
     expect(result.map((item) => item.name)).toEqual(['A', 'B', 'C', 'D']);
   });
 
@@ -101,7 +124,7 @@ describe('calculateVisibleLineStats', () => {
       { start: 0, end: 100 },
     );
 
-    expect(result.map((item) => item.name)).toEqual(['A', 'B', 'C', 'D']);
+    expect(result.map((item) => item.name)).toEqual(['A', 'B', 'C']);
   });
 
   it('keeps the hard four-line limit when maxLines is larger', () => {
@@ -116,13 +139,70 @@ describe('calculateVisibleLineStats', () => {
     expect(result).toHaveLength(4);
   });
 
+  it('keeps the average finite for very large values', () => {
+    const [stat] = calculateVisibleLineStats(
+      ['A'],
+      [[1e308], [1e308]],
+      ['A'],
+      { start: 0, end: 100 },
+    );
+
+    expect(stat.avg).toBe(1e308);
+    expect(Number.isFinite(stat.avg)).toBe(true);
+  });
+
+  it('normalizes maxLines to a finite integer in the range zero through four', () => {
+    const getStats = (maxLines: number) => calculateVisibleLineStats(
+      ['A', 'B', 'C', 'D', 'E'],
+      [[1, 2, 3, 4, 5]],
+      ['A', 'B', 'C', 'D', 'E'],
+      { start: 0, end: 100 },
+      maxLines,
+    );
+
+    expect(getStats(Number.NaN)).toHaveLength(4);
+    expect(getStats(Number.POSITIVE_INFINITY)).toHaveLength(4);
+    expect(getStats(2.9)).toHaveLength(2);
+    expect(getStats(-1)).toHaveLength(0);
+  });
+
   it('returns null values when a line has no finite values', () => {
-    expect(calculateVisibleLineStats(['A'], [[Number.NaN], [Number.POSITIVE_INFINITY]], ['A'], { start: 0, end: 100 }))
-      .toEqual([{ name: 'A', color: '#165DFF', max: null, min: null, avg: null, diff: null }]);
+    expect(
+      calculateVisibleLineStats(
+        ['A'],
+        [[Number.NaN], [Number.POSITIVE_INFINITY]],
+        ['A'],
+        { start: 0, end: 100 },
+      ),
+    ).toEqual([
+      {
+        name: 'A',
+        color: LINE_COLORS[0],
+        max: null,
+        min: null,
+        avg: null,
+        diff: null,
+      },
+    ]);
   });
 
   it('returns null values for a missing column', () => {
-    expect(calculateVisibleLineStats(['A'], [[1], [2]], ['B'], { start: 0, end: 100 }))
-      .toEqual([{ name: 'B', color: '#165DFF', max: null, min: null, avg: null, diff: null }]);
+    expect(
+      calculateVisibleLineStats(
+        ['A'],
+        [[1], [2]],
+        ['B'],
+        { start: 0, end: 100 },
+      ),
+    ).toEqual([
+      {
+        name: 'B',
+        color: LINE_COLORS[0],
+        max: null,
+        min: null,
+        avg: null,
+        diff: null,
+      },
+    ]);
   });
 });

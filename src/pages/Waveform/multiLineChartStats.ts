@@ -48,24 +48,36 @@ export function calculateVisibleLineStats(
   const range = getVisibleRowRange(rows.length, zoom);
   if (!range) return [];
 
-  const lineLimit = Math.max(0, Math.min(maxLines, MAX_LINES_PER_CHART));
-  const selectedColumns = [...new Set(groupColumns)].slice(0, lineLimit);
+  const normalizedMaxLines = Number.isFinite(maxLines)
+    ? Math.floor(maxLines)
+    : MAX_LINES_PER_CHART;
+  const lineLimit = Math.max(0, Math.min(normalizedMaxLines, MAX_LINES_PER_CHART));
+  const selectedColumns = groupColumns
+    .slice(0, lineLimit)
+    .filter((column, index, selected) => selected.indexOf(column) === index);
 
   return selectedColumns.map((name, lineIndex) => {
     const columnIndex = columns.indexOf(name);
-    const values = rows
-      .slice(range.startIndex, range.endIndex + 1)
-      .map((row) => row[columnIndex])
-      .filter((value): value is number => Number.isFinite(value));
     const color = LINE_COLORS[lineIndex % LINE_COLORS.length];
+    let count = 0;
+    let max: number | null = null;
+    let min: number | null = null;
+    let mean = 0;
 
-    if (values.length === 0) {
+    for (let rowIndex = range.startIndex; rowIndex <= range.endIndex; rowIndex += 1) {
+      const value = rows[rowIndex]?.[columnIndex];
+      if (!Number.isFinite(value)) continue;
+
+      count += 1;
+      if (max === null || value > max) max = value;
+      if (min === null || value < min) min = value;
+      mean = mean * ((count - 1) / count) + value / count;
+    }
+
+    if (count === 0 || max === null || min === null) {
       return { name, color, max: null, min: null, avg: null, diff: null };
     }
 
-    const max = Math.max(...values);
-    const min = Math.min(...values);
-    const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
-    return { name, color, max, min, avg, diff: max - min };
+    return { name, color, max, min, avg: mean, diff: max - min };
   });
 }

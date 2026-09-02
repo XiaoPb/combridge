@@ -419,3 +419,61 @@ describe('MultiLineChart context menu labels', () => {
     expect(getChartExportMenuLabel('svg', translate)).toBe(svgLabel);
   });
 });
+
+describe('MultiLineChart axis and tooltip value formatting', () => {
+  it.each([
+    [300, 5],
+    [220, 4],
+    [0, 3],
+    [219, 3],
+    [Number.NaN, 3],
+    [Number.POSITIVE_INFINITY, 3],
+  ])('uses %s y-axis splits for a chart height of %s', async (height, expected) => {
+    const chartModule = await import('./MultiLineChart');
+    const getYAxisSplitNumber = (chartModule as Record<string, unknown>)
+      .getYAxisSplitNumber as (chartHeight: number) => number;
+
+    expect(getYAxisSplitNumber(height)).toBe(expected);
+  });
+
+  it.each([
+    [1e21, '1000000000000000000000'],
+    [-1.23e-7, '-0.000000123'],
+    [0, '0'],
+    [-123.45, '-123.45'],
+    [123.45, '123.45'],
+    [Number.NaN, 'NaN'],
+    [Number.POSITIVE_INFINITY, 'Infinity'],
+    [Number.NEGATIVE_INFINITY, '-Infinity'],
+  ])('expands %s without scientific notation', async (value, expected) => {
+    const chartModule = await import('./MultiLineChart');
+    const formatActualValue = (chartModule as Record<string, unknown>)
+      .formatActualValue as (actualValue: number) => string;
+
+    expect(formatActualValue(value)).toBe(expected);
+    expect(formatActualValue(value)).not.toMatch(/[eE]/);
+  });
+
+  it('keeps explicit zero and NaN heights when selecting y-axis splits', async () => {
+    const chartModule = await import('./MultiLineChart');
+    const getChartYAxisSplitNumber = (chartModule as Record<string, unknown>)
+      .getChartYAxisSplitNumber as (height?: number) => number;
+
+    expect(getChartYAxisSplitNumber(0)).toBe(3);
+    expect(getChartYAxisSplitNumber(Number.NaN)).toBe(3);
+    expect(getChartYAxisSplitNumber()).toBe(5);
+  });
+
+  it('normalizes only missing or non-finite layout heights to the default', async () => {
+    const chartModule = await import('./MultiLineChart');
+    const normalizeChartHeight = (chartModule as Record<string, unknown>)
+      .normalizeChartHeight as (height?: number) => number;
+
+    expect(normalizeChartHeight()).toBe(300);
+    expect(normalizeChartHeight(0)).toBe(0);
+    expect(normalizeChartHeight(220)).toBe(220);
+    expect(normalizeChartHeight(Number.NaN)).toBe(300);
+    expect(normalizeChartHeight(Number.POSITIVE_INFINITY)).toBe(300);
+    expect(normalizeChartHeight(Number.NEGATIVE_INFINITY)).toBe(300);
+  });
+});

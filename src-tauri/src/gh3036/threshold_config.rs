@@ -28,7 +28,7 @@ impl ThresholdOperator {
         }
     }
 
-    pub fn evaluate(&self, value: u16, threshold: &ThresholdConfig) -> bool {
+    pub fn evaluate(&self, value: f64, threshold: &ThresholdConfig) -> bool {
         match self {
             Self::Lt => threshold.value.is_some_and(|t| value < t),
             Self::Le => threshold.value.is_some_and(|t| value <= t),
@@ -46,8 +46,8 @@ impl ThresholdOperator {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ThresholdConfig {
     pub operator: ThresholdOperator,
-    pub value: Option<u16>,
-    pub range: Option<[u16; 2]>,
+    pub value: Option<f64>,
+    pub range: Option<[f64; 2]>,
     pub description: Option<String>,
 }
 
@@ -115,8 +115,46 @@ pub struct TestItemConfig {
     pub enabled: bool,
     pub description: Option<String>,
     pub unit: Option<String>,
+    pub mode: Option<u8>,
+    pub channels: Option<usize>,
+    pub compute: Option<ComputeConfig>,
     pub global_threshold: Option<ThresholdConfig>,
     pub channel_rules: Option<Vec<ChannelRule>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ComputeConfig {
+    pub sample_rate_hz: Option<f64>,
+    pub min_number: Option<usize>,
+    pub skip_number: Option<usize>,
+    pub is_continuous: Option<bool>,
+    pub timeout_ms: Option<u64>,
+    pub gain_k: Option<f64>,
+    pub led_current_ma: Option<f64>,
+}
+
+impl ComputeConfig {
+    fn validate(&self, test_name: &str) -> Result<(), String> {
+        if self.min_number.is_some_and(|value| value == 0) {
+            return Err(format!(
+                "{} compute.min_number must be greater than 0",
+                test_name
+            ));
+        }
+        if self.timeout_ms.is_some_and(|value| value == 0) {
+            return Err(format!(
+                "{} compute.timeout_ms must be greater than 0",
+                test_name
+            ));
+        }
+        if self.sample_rate_hz.is_some_and(|value| value <= 1.0) {
+            return Err(format!(
+                "{} compute.sample_rate_hz must be greater than 1.0",
+                test_name
+            ));
+        }
+        Ok(())
+    }
 }
 
 fn default_enabled() -> bool {
@@ -127,6 +165,23 @@ impl TestItemConfig {
     pub fn validate(&self, test_name: &str) -> Result<(), String> {
         if !self.enabled {
             return Ok(());
+        }
+
+        if let Some(mode) = self.mode {
+            if !matches!(mode, 1 | 2 | 4 | 8 | 16 | 32) {
+                return Err(format!(
+                    "{} mode must be one of 1, 2, 4, 8, 16, 32",
+                    test_name
+                ));
+            }
+        }
+
+        if test_name != "chip_uid" && self.channels.is_none_or(|channels| channels == 0) {
+            return Err(format!("{} channels must be greater than 0", test_name));
+        }
+
+        if let Some(compute) = &self.compute {
+            compute.validate(test_name)?;
         }
 
         if let Some(gt) = &self.global_threshold {
@@ -187,6 +242,8 @@ impl Default for GlobalConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TestsConfig {
+    pub chip_init: Option<TestItemConfig>,
+    pub chip_uid: Option<TestItemConfig>,
     pub base_noise: Option<TestItemConfig>,
     pub ppg_noise: Option<TestItemConfig>,
     pub lpctr: Option<TestItemConfig>,
@@ -198,6 +255,7 @@ pub struct FactoryThresholdConfig {
     pub project: String,
     pub version: String,
     pub description: Option<String>,
+    pub chip: Option<String>,
     #[serde(default)]
     pub global: Option<GlobalConfig>,
     pub tests: TestsConfig,
@@ -222,6 +280,12 @@ impl FactoryThresholdConfig {
             return Err("version field is required".to_string());
         }
 
+        if let Some(config) = &self.tests.chip_init {
+            config.validate("chip_init")?;
+        }
+        if let Some(config) = &self.tests.chip_uid {
+            config.validate("chip_uid")?;
+        }
         if let Some(config) = &self.tests.base_noise {
             config.validate("base_noise")?;
         }
@@ -294,12 +358,12 @@ impl FactoryThresholdConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChannelEvaluationResult {
     pub channel_index: usize,
-    pub value: u16,
+    pub value: Option<f64>,
     pub pass: bool,
     pub threshold_display: String,
     pub operator: String,
-    pub threshold_value: Option<u16>,
-    pub threshold_range: Option<[u16; 2]>,
+    pub threshold_value: Option<f64>,
+    pub threshold_range: Option<[f64; 2]>,
     pub description: Option<String>,
 }
 
@@ -338,7 +402,7 @@ impl TestEvaluationResult {
         }
     }
 
-    pub fn evaluate_channels(&mut self, values: &[u16], config: Option<&TestItemConfig>) {
+    pub fn evaluate_channels(&mut self, values: &[Option<f64>], config: Option<&TestItemConfig>) {
         if !self.enabled {
             self.message = "Test disabled".to_string();
             return;
@@ -348,7 +412,13 @@ impl TestEvaluationResult {
         let mut all_pass = true;
         let mut failed_channels = Vec::new();
 
-        for (idx, &value) in values.iter().enumerate() {
+        let channel_count = config
+            .and_then(|item| item.channels)
+            .unwrap_or(values.len())
+            .max(values.len());
+
+        for idx in 0..channel_count {
+            let value = values.get(idx).copied().flatten();
             let threshold = config
                 .as_ref()
                 .and_then(|c| c.find_threshold_for_channel(idx));
@@ -356,13 +426,14 @@ impl TestEvaluationResult {
             let (pass, threshold_display, operator, threshold_value, threshold_range, description) =
                 match threshold {
                     Some(t) => {
-                        let p = t.operator.evaluate(value, &t);
+                        let p =
+                            value.is_some_and(|measurement| t.operator.evaluate(measurement, &t));
                         let display = t.to_display_text(unit);
                         let op = t.operator.display_symbol().to_string();
                         (p, display, op, t.value, t.range, t.description.clone())
                     }
                     None => (
-                        true,
+                        value.is_some(),
                         "No threshold configured".to_string(),
                         String::new(),
                         None,
@@ -555,10 +626,10 @@ pub fn validate_threshold_config_file(config_dir: &Path) -> ThresholdConfigValid
 
 pub fn evaluate_test_data(
     config: &FactoryThresholdConfig,
-    base_noise: &[u16],
-    ppg_noise: &[u16],
-    lpctr: &[u16],
-    lplctr: &[u16],
+    base_noise: &[Option<f64>],
+    ppg_noise: &[Option<f64>],
+    lpctr: &[Option<f64>],
+    lplctr: &[Option<f64>],
 ) -> FactoryEvaluationResult {
     let mut result = FactoryEvaluationResult::new(&config.project);
 
@@ -583,14 +654,23 @@ pub fn evaluate_test_data(
     result
 }
 
+pub fn evaluate_measurements(
+    test_name: &str,
+    config: Option<&TestItemConfig>,
+    values: &[Option<f64>],
+) -> TestEvaluationResult {
+    let mut result = TestEvaluationResult::new(test_name, config);
+    result.evaluate_channels(values, config);
+    result
+}
+
 pub fn evaluate_test_item(
     test_name: &str,
     config: Option<&TestItemConfig>,
     values: &[u16],
 ) -> TestEvaluationResult {
-    let mut result = TestEvaluationResult::new(test_name, config);
-    result.evaluate_channels(values, config);
-    result
+    let measurements: Vec<Option<f64>> = values.iter().copied().map(f64::from).map(Some).collect();
+    evaluate_measurements(test_name, config, &measurements)
 }
 
 pub const ERROR_CODE_CHIP_INIT: &str = "0x1001";
@@ -658,14 +738,35 @@ pub fn generate_error_codes(
 mod tests {
     use super::*;
 
-    fn test_config(enabled: bool, maximum: u16) -> TestItemConfig {
+    fn test_config_with_threshold(enabled: bool, maximum: u16) -> TestItemConfig {
         TestItemConfig {
             enabled,
             description: Some("测试项".to_string()),
             unit: Some("LSB".to_string()),
+            mode: Some(4),
+            channels: None,
+            compute: None,
             global_threshold: Some(ThresholdConfig {
                 operator: ThresholdOperator::Lt,
-                value: Some(maximum),
+                value: Some(f64::from(maximum)),
+                range: None,
+                description: None,
+            }),
+            channel_rules: None,
+        }
+    }
+
+    fn test_config(channels: usize) -> TestItemConfig {
+        TestItemConfig {
+            enabled: true,
+            description: None,
+            unit: Some("nA/mA".to_string()),
+            mode: Some(16),
+            channels: Some(channels),
+            compute: None,
+            global_threshold: Some(ThresholdConfig {
+                operator: ThresholdOperator::Lt,
+                value: Some(100.0),
                 range: None,
                 description: None,
             }),
@@ -675,7 +776,7 @@ mod tests {
 
     #[test]
     fn evaluate_test_item_passes_enabled_values() {
-        let config = test_config(true, 100);
+        let config = test_config_with_threshold(true, 100);
 
         let result = evaluate_test_item("base_noise", Some(&config), &[10, 99]);
 
@@ -686,7 +787,7 @@ mod tests {
 
     #[test]
     fn evaluate_test_item_reports_failed_channels() {
-        let config = test_config(true, 100);
+        let config = test_config_with_threshold(true, 100);
 
         let result = evaluate_test_item("base_noise", Some(&config), &[10, 100, 120]);
 
@@ -698,7 +799,7 @@ mod tests {
 
     #[test]
     fn evaluate_test_item_marks_disabled_without_channels() {
-        let config = test_config(false, 100);
+        let config = test_config_with_threshold(false, 100);
 
         let result = evaluate_test_item("base_noise", Some(&config), &[120]);
 
@@ -706,5 +807,39 @@ mod tests {
         assert!(result.pass);
         assert!(result.channel_results.is_empty());
         assert_eq!(result.message, "Test disabled");
+    }
+
+    #[test]
+    fn app_compute_config_requires_channels_and_gain_for_raw_ctr_fallback() {
+        let config = FactoryThresholdConfig::from_yaml(
+            r#"
+project: GH3036
+version: "2"
+chip: gh3036
+tests:
+  chip_init:
+    enabled: true
+    mode: 1
+    channels: 1
+    unit: status
+    global_threshold: { operator: eq, value: 1 }
+  lpctr:
+    enabled: true
+    mode: 16
+    channels: 2
+    compute: { gain_k: 100.0, led_current_ma: 20.0 }
+    global_threshold: { operator: ge, value: 0.1 }
+"#,
+        )
+        .unwrap();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn missing_measurement_is_a_failed_configured_channel() {
+        let result = evaluate_measurements("lpctr", Some(&test_config(2)), &[None, Some(2.5)]);
+        assert!(!result.pass);
+        assert!(!result.channel_results[0].pass);
+        assert_eq!(result.channel_results[0].value, None);
     }
 }

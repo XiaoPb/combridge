@@ -339,7 +339,9 @@ fn tail_slice<T>(values: &[T], min: usize) -> Option<&[T]> {
 }
 
 pub fn calculate_noise_uv(raw: &[i32], spec: &CollectionSpec, adc: AdcParams) -> Option<f64> {
-    let raw = tail_slice(raw, spec.min_number)?;
+    if raw.len() < spec.min_number {
+        return None;
+    }
     let raw = raw.iter().map(|&v| v as f64).collect::<Vec<_>>();
     let filtered = butterworth_high_pass_7(&raw, spec.sample_rate_hz, 0.5)?;
     let tail = filtered.get(filtered.len().saturating_sub(spec.min_number)..)?;

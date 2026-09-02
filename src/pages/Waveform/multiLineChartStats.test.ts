@@ -10,6 +10,10 @@ describe('getVisibleRowRange', () => {
       startIndex: 0,
       endIndex: 1,
     });
+    expect(getVisibleRowRange(10, { start: 11, end: 22 })).toEqual({
+      startIndex: 0,
+      endIndex: 2,
+    });
   });
 
   it('clamps invalid percentages and uses all rows when zoom is invalid', () => {

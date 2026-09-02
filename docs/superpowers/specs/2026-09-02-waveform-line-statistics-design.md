@@ -72,7 +72,7 @@ CSV 波形图表配置区当前已有“无表头”开关。需要在其后新�
 - `NaN`、`Infinity`、缺失值过滤。
 - 多图表、多曲线、重复列名和每图最多 4 条线。
 
-补充 `MultiLineChart.test.ts` 或现有组件测试，覆盖统计开关传递和缩放后统计更新；若现有测试环境不适合挂载 ECharts，则至少验证纯函数和 props 接口，并通过手工验收确认页面布局。
+在现有 `CsvLoaderTab.test.tsx` 中使用已经配置好的 happy-dom 和 mock 图表组件，覆盖统计开关默认关闭、控件切换和 store 状态更新；在 `MultiLineChart.test.ts` 中覆盖新增统计函数的接口输入，实际数值边界由 `multiLineChartStats.test.ts` 独立覆盖，并通过手工验收确认页面布局。
 
 验收命令：
 

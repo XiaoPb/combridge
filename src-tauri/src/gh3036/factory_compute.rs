@@ -59,6 +59,7 @@ impl CollectionSpec {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CollectedFrames {
+    pub channel_count: usize,
     pub frame_cnts: Vec<u32>,
     pub timestamps: Vec<u64>,
     pub rawdata: Vec<Vec<i32>>,
@@ -77,6 +78,7 @@ impl CollectedFrames {
             self.led_drv1.push(Vec::new());
             self.led_drv_fs.push(Vec::new());
         }
+        self.channel_count = self.channel_count.max(channels);
     }
 }
 
@@ -124,6 +126,7 @@ impl FactoryFrameCollector {
 
         self.samples.frame_cnts.push(frame.frame_cnt);
         self.samples.timestamps.push(frame.timestamp);
+        self.samples.channel_count = self.samples.channel_count.max(frame.data.len());
         self.samples.ensure_channels(frame.data.len());
 
         for (idx, ch) in frame.data.iter().enumerate() {
@@ -402,8 +405,8 @@ fn led_current_sum_ma(led0: u8, led1: u8, led_fs: u8) -> f64 {
 
 fn choose_led_current(chip: ChipSeries, decoded: Option<f64>, configured: Option<f64>) -> Option<f64> {
     match chip {
-        ChipSeries::Gh3036 | ChipSeries::Gh3038 => decoded.filter(|v| *v > 0.0).or(configured),
-        ChipSeries::Gh3220 => configured.filter(|v| *v > 0.0).or(decoded),
+        ChipSeries::Gh3036 | ChipSeries::Gh3038 => decoded.or(configured),
+        ChipSeries::Gh3220 => configured.or(decoded),
         ChipSeries::Other => configured.filter(|v| *v > 0.0).or(decoded),
     }
 }
@@ -417,6 +420,15 @@ pub fn calculate_app_measurements(
     let chip_series = ChipSeries::from_chip(chip);
     let adc = AdcParams::for_chip(chip);
     let spec = CollectionSpec::resolve(Some(config), test_name);
+
+    if !matches!(test_name, "base_noise" | "ppg_noise" | "lpctr" | "lplctr") {
+        return (0..samples.channel_count)
+            .map(|_| ChannelMeasurement {
+                computed_value: None,
+                device_value: None,
+            })
+            .collect();
+    }
 
     let channel_count = samples
         .rawdata
@@ -604,21 +616,43 @@ mod tests {
     }
 
     #[test]
-    fn gh3220_led_current_prefers_configured_value() {
+    fn gh3036_led_current_none_when_decoded_source_is_nonpositive() {
+        let mut samples = CollectedFrames::default();
+        samples.rawdata = vec![vec![1, 2]];
+        samples.ipd_pa = vec![vec![1200, 1300]];
+        samples.led_drv0 = vec![vec![0, 0]];
+        samples.led_drv1 = vec![vec![0, 0]];
+        samples.led_drv_fs = vec![vec![255, 255]];
+        let mut config = compute();
+        config.led_current_ma = Some(4.0);
+        let out = calculate_app_measurements("lpctr", &samples, "gh3036", &config);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].computed_value, None);
+    }
+
+    #[test]
+    fn gh3220_led_current_none_when_configured_source_is_nonpositive() {
         let mut samples = CollectedFrames::default();
         samples.rawdata = vec![vec![1, 2]];
         samples.ipd_pa = vec![vec![1200, 1300]];
         samples.led_drv0 = vec![vec![10, 10]];
         samples.led_drv1 = vec![vec![20, 20]];
         samples.led_drv_fs = vec![vec![255, 255]];
-        let out = calculate_app_measurements("lpctr", &samples, "gh3220", &compute());
+        let mut config = compute();
+        config.led_current_ma = Some(0.0);
+        let out = calculate_app_measurements("lpctr", &samples, "gh3220", &config);
         assert_eq!(out.len(), 1);
-        assert!(out[0].computed_value.is_some());
+        assert_eq!(out[0].computed_value, None);
     }
 
     #[test]
-    fn invalid_test_name_produces_empty_measurements() {
-        let out = calculate_app_measurements("unknown", &CollectedFrames::default(), "gh3036", &compute());
-        assert!(out.is_empty());
+    fn unsupported_test_name_keeps_configured_channel_count_as_none_entries() {
+        let samples = CollectedFrames {
+            channel_count: 2,
+            ..CollectedFrames::default()
+        };
+        let out = calculate_app_measurements("unknown", &samples, "gh3036", &compute());
+        assert_eq!(out.len(), 2);
+        assert!(out.iter().all(|m| m.computed_value.is_none() && m.device_value.is_none()));
     }
 }

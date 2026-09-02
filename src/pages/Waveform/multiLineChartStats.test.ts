@@ -65,6 +65,29 @@ describe('calculateVisibleLineStats', () => {
     expect(result.map((item) => item.name)).toEqual(['A', 'B', 'C', 'D']);
   });
 
+  it('deduplicates before applying the four-line limit', () => {
+    const result = calculateVisibleLineStats(
+      columns,
+      rows,
+      ['A', 'A', 'B', 'C', 'D'],
+      { start: 0, end: 100 },
+    );
+
+    expect(result.map((item) => item.name)).toEqual(['A', 'B', 'C', 'D']);
+  });
+
+  it('keeps the hard four-line limit when maxLines is larger', () => {
+    const result = calculateVisibleLineStats(
+      columns,
+      rows,
+      ['A', 'B', 'C', 'D', 'E'],
+      { start: 0, end: 100 },
+      5,
+    );
+
+    expect(result).toHaveLength(4);
+  });
+
   it('returns null values when a line has no finite values', () => {
     expect(calculateVisibleLineStats(['A'], [[Number.NaN], [Number.POSITIVE_INFINITY]], ['A'], { start: 0, end: 100 }))
       .toEqual([{ name: 'A', color: '#165DFF', max: null, min: null, avg: null, diff: null }]);

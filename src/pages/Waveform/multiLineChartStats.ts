@@ -1,6 +1,4 @@
-import { LINE_COLORS } from './multiLineChartModel';
-
-const MAX_LINES_PER_CHART = 4;
+import { LINE_COLORS, MAX_LINES_PER_CHART } from './multiLineChartModel';
 
 export interface DataZoomPercent {
   start: number;
@@ -43,7 +41,7 @@ export function calculateVisibleLineStats(
   rows: number[][],
   groupColumns: string[],
   zoom: DataZoomPercent,
-  maxLines = 4,
+  maxLines = MAX_LINES_PER_CHART,
 ): LineStatistics[] {
   const range = getVisibleRowRange(rows.length, zoom);
   if (!range) return [];

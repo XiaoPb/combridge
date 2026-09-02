@@ -116,7 +116,7 @@ describe('calculateVisibleLineStats', () => {
     expect(result.map((item) => item.name)).toEqual(['A', 'B', 'C', 'D']);
   });
 
-  it('deduplicates before applying the four-line limit', () => {
+  it('applies the four-line limit before deduplicating', () => {
     const result = calculateVisibleLineStats(
       columns,
       rows,

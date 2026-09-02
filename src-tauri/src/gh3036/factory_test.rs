@@ -82,6 +82,78 @@ mod collector_lifecycle_tests {
         assert_eq!(manager.finish_frame_collection().frame_cnts, vec![1]);
         assert!(manager.finish_frame_collection().frame_cnts.is_empty());
     }
+
+    #[test]
+    fn chip_init_uses_app_mode_when_fg_fails_or_has_no_u16_channel() {
+        assert_eq!(select_compute_mode(Ok(vec![])), FactoryComputeMode::App);
+        assert_eq!(select_compute_mode(Err("timeout".into())), FactoryComputeMode::App);
+    }
+
+    #[test]
+    fn mcu_hardware_fg_failure_returns_failed_channels_without_switching_mode() {
+        let outcome = resolve_mcu_hardware_result(Err("timeout".into()), 3);
+        assert_eq!(outcome.mode, FactoryComputeMode::Mcu);
+        assert_eq!(outcome.measurements, vec![ChannelMeasurement::failed(); 3]);
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct HardwareResolution {
+    pub mode: FactoryComputeMode,
+    pub measurements: Vec<ChannelMeasurement>,
+}
+
+pub fn select_compute_mode(result: Result<Vec<u16>, String>) -> FactoryComputeMode {
+    match result {
+        Ok(values) if !values.is_empty() => FactoryComputeMode::Mcu,
+        _ => FactoryComputeMode::App,
+    }
+}
+
+fn decode_u16_values(bytes: &[u8]) -> Vec<u16> {
+    bytes
+        .chunks_exact(2)
+        .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+        .collect()
+}
+
+fn channel_measurements_from_u16(values: &[u16]) -> Vec<ChannelMeasurement> {
+    values
+        .iter()
+        .copied()
+        .map(|device_value| ChannelMeasurement {
+            computed_value: None,
+            device_value: Some(device_value),
+        })
+        .collect()
+}
+
+fn failed_measurements(count: usize) -> Vec<ChannelMeasurement> {
+    vec![ChannelMeasurement::failed(); count]
+}
+
+pub fn resolve_mcu_hardware_result(
+    result: Result<Vec<u8>, String>,
+    channels: usize,
+) -> HardwareResolution {
+    let measurements = match result {
+        Ok(bytes) => {
+            let decoded = decode_u16_values(&bytes);
+            if decoded.is_empty() || (channels > 0 && decoded.len() < channels) {
+                failed_measurements(channels)
+            } else if channels == 0 {
+                channel_measurements_from_u16(&decoded)
+            } else {
+                channel_measurements_from_u16(&decoded[..channels.min(decoded.len())])
+            }
+        }
+        Err(_) => failed_measurements(channels),
+    };
+
+    HardwareResolution {
+        mode: FactoryComputeMode::Mcu,
+        measurements,
+    }
 }
 
 // SAFETY: All fields use parking_lot::Mutex, Arc, or AtomicBool which are Send+Sync.

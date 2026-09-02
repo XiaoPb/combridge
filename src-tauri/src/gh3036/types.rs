@@ -850,6 +850,13 @@ pub struct ChannelMeasurement {
 }
 
 impl ChannelMeasurement {
+    pub fn failed() -> Self {
+        Self {
+            computed_value: None,
+            device_value: None,
+        }
+    }
+
     pub fn evaluation_value(&self) -> Option<f64> {
         self.computed_value.or(self.device_value.map(f64::from))
     }

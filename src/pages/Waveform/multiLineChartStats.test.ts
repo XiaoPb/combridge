@@ -6,9 +6,9 @@ import {
 
 describe('getVisibleRowRange', () => {
   it('converts percentages to an inclusive row range', () => {
-    expect(getVisibleRowRange(10, { start: 11, end: 22 })).toEqual({
+    expect(getVisibleRowRange(10, { start: 0, end: 5 })).toEqual({
       startIndex: 0,
-      endIndex: 2,
+      endIndex: 1,
     });
   });
 
@@ -46,10 +46,34 @@ describe('calculateVisibleLineStats', () => {
   ];
 
   it('calculates max, min, average, and diff only in the visible range', () => {
-    expect(calculateVisibleLineStats(columns, rows, ['A', 'B'], { start: 25, end: 75 }))
+    const visibleRows = [
+      [100, 1000, 0, 0, 0],
+      [3, 20, 0, 0, 0],
+      [5, 40, 0, 0, 0],
+      [7, 80, 0, 0, 0],
+      [-100, -1000, 0, 0, 0],
+    ];
+
+    expect(calculateVisibleLineStats(columns, visibleRows, ['A', 'B'], { start: 25, end: 50 }))
       .toEqual([
-        { name: 'A', color: '#165DFF', max: 7, min: 1, avg: 4, diff: 6 },
-        { name: 'B', color: '#F53F3F', max: 40, min: 10, avg: 70 / 3, diff: 30 },
+        { name: 'A', color: '#165DFF', max: 5, min: 3, avg: 4, diff: 2 },
+        { name: 'B', color: '#F53F3F', max: 40, min: 20, avg: 30, diff: 20 },
+      ]);
+  });
+
+  it('calculates statistics from the single middle row when zoom is collapsed', () => {
+    const visibleRows = [
+      [100, 1000],
+      [3, 20],
+      [5, 40],
+      [7, 80],
+      [-100, -1000],
+    ];
+
+    expect(calculateVisibleLineStats(['A', 'B'], visibleRows, ['A', 'B'], { start: 50, end: 50 }))
+      .toEqual([
+        { name: 'A', color: '#165DFF', max: 5, min: 5, avg: 5, diff: 0 },
+        { name: 'B', color: '#F53F3F', max: 40, min: 40, avg: 40, diff: 0 },
       ]);
   });
 

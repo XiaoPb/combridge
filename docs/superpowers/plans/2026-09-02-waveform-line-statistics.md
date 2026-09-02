@@ -300,7 +300,7 @@ it('renders the line statistics switch after the no-header option', () => {
 "showLineStatistics": "Show line statistics"
 ```
 
-统计标签使用固定 key `chart.max`、`chart.min`、`chart.avg`、`chart.diff`；若这些 key 不存在，则在同一 `chart` 节点补充中英文值 `max`、`min`、`avg`、`diff`。
+在两个文件的 `chart` 节点新增 `max`、`min`、`avg`、`diff` 四个 key，中文值分别为“最大值”“最小值”“平均值”“差值”，英文值分别为“Max”“Min”“Avg”“Diff”；组件使用 `t('chart.max')` 等 key 渲染标签。
 
 - [ ] **Step 4: Run CSV loader tests and type check**
 
@@ -326,7 +326,17 @@ git commit -m "feat(waveform): 增加线统计显示开关"
 
 - [ ] **Step 1: Extend the chart props and add a rendering helper test**
 
-在 `MultiLineChartProps` 增加 `showLineStatistics?: boolean`，默认值为 `false`。在测试中增加对 `calculateVisibleLineStats` 的集成输入断言，确认 chart props 采用 `{ start: 0, end: 100 }` 时展示完整数据，采用 `{ start: 50, end: 50 }` 时只展示中间数据点。纯函数结果由 Task 1 覆盖，组件测试不依赖真实 ECharts 实例。
+在 `MultiLineChartProps` 增加 `showLineStatistics?: boolean`，默认值为 `false`。在 `MultiLineChart.test.ts` 中导入 `calculateVisibleLineStats`，增加以下接口级断言，确认 chart props 采用 `{ start: 0, end: 100 }` 时展示完整数据，采用 `{ start: 50, end: 50 }` 时只展示中间数据点；该测试不依赖真实 ECharts 实例，数值边界由 Task 1 覆盖：
+
+```ts
+it('uses the chart zoom range when preparing line statistics', async () => {
+  const { calculateVisibleLineStats } = await import('./multiLineChartStats');
+  const full = calculateVisibleLineStats(['A'], [[1], [2], [9]], ['A'], { start: 0, end: 100 });
+  const point = calculateVisibleLineStats(['A'], [[1], [2], [9]], ['A'], { start: 50, end: 50 });
+  expect(full[0]).toMatchObject({ min: 1, max: 9, avg: 4, diff: 8 });
+  expect(point[0]).toMatchObject({ min: 2, max: 2, avg: 2, diff: 0 });
+});
+```
 
 - [ ] **Step 2: Calculate statistics from local zoom state**
 

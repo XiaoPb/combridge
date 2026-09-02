@@ -6,9 +6,9 @@ import {
 
 describe('getVisibleRowRange', () => {
   it('converts percentages to an inclusive row range', () => {
-    expect(getVisibleRowRange(5, { start: 25, end: 75 })).toEqual({
-      startIndex: 1,
-      endIndex: 3,
+    expect(getVisibleRowRange(10, { start: 11, end: 22 })).toEqual({
+      startIndex: 0,
+      endIndex: 2,
     });
   });
 
@@ -48,8 +48,8 @@ describe('calculateVisibleLineStats', () => {
   it('calculates max, min, average, and diff only in the visible range', () => {
     expect(calculateVisibleLineStats(columns, rows, ['A', 'B'], { start: 25, end: 75 }))
       .toEqual([
-        { name: 'A', color: '#165DFF', max: 5, min: 3, avg: 4, diff: 2 },
-        { name: 'B', color: '#F53F3F', max: 20, min: 20, avg: 20, diff: 0 },
+        { name: 'A', color: '#165DFF', max: 7, min: 1, avg: 4, diff: 6 },
+        { name: 'B', color: '#F53F3F', max: 40, min: 10, avg: 70 / 3, diff: 30 },
       ]);
   });
 

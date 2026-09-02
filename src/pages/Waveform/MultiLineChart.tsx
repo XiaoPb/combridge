@@ -146,6 +146,47 @@ const formatScientific = (value: number): string => {
   return value.toFixed(4);
 };
 
+export function getYAxisSplitNumber(height: number): number {
+  if (!Number.isFinite(height) || height < 220) return 3;
+  if (height < 300) return 4;
+  return 5;
+}
+
+export function getChartYAxisSplitNumber(height?: number): number {
+  return getYAxisSplitNumber(height ?? 300);
+}
+
+export function normalizeChartHeight(height?: number): number {
+  return height !== undefined && Number.isFinite(height) ? height : 300;
+}
+
+export function formatActualValue(value: number): string {
+  if (!Number.isFinite(value)) return String(value);
+
+  const valueString = value.toString();
+  const exponentIndex = valueString.search(/[eE]/);
+  if (exponentIndex === -1) return valueString;
+
+  const [coefficient, exponentString] = valueString.split(/[eE]/);
+  const exponent = Number(exponentString);
+  const sign = coefficient.startsWith('-') ? '-' : '';
+  const unsignedCoefficient = coefficient.replace(/^[+-]/, '');
+  const digits = unsignedCoefficient.replace('.', '');
+  const coefficientDecimalPosition = unsignedCoefficient.indexOf('.');
+  const decimalPosition =
+    (coefficientDecimalPosition === -1
+      ? unsignedCoefficient.length
+      : coefficientDecimalPosition) + exponent;
+
+  if (decimalPosition <= 0) {
+    return `${sign}0.${'0'.repeat(-decimalPosition)}${digits}`;
+  }
+  if (decimalPosition >= digits.length) {
+    return `${sign}${digits}${'0'.repeat(decimalPosition - digits.length)}`;
+  }
+  return `${sign}${digits.slice(0, decimalPosition)}.${digits.slice(decimalPosition)}`;
+}
+
 const formatTime = (seconds: number | undefined): string => {
   if (seconds === undefined || isNaN(seconds)) return '0ms';
   if (seconds < 1) return `${(seconds * 1000).toFixed(0)}ms`;
@@ -233,7 +274,7 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
       chartGroups
         .map(
           (group, index) =>
-            `${getChartGroupKey(group, index)}:${group.height || 300}`,
+            `${getChartGroupKey(group, index)}:${normalizeChartHeight(group.height)}`,
         )
         .join('|'),
     [chartGroups],
@@ -273,6 +314,7 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
           type: 'value' as const,
           position: pos.position,
           offset: pos.offset,
+          splitNumber: getChartYAxisSplitNumber(group.height),
           scale: true,
           axisLine: { show: hasData, lineStyle: { color } },
           axisLabel: {
@@ -324,7 +366,7 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
               const val = Array.isArray(item.value)
                 ? item.value[1]
                 : item.value;
-              html += `<div style="display: flex; align-items: center; gap: 8px;"><span style="display: inline-block; width: 10px; height: 10px; background: ${item.color}; border-radius: 50%;"></span><span>${item.seriesName}: ${formatScientific(val)}</span></div>`;
+              html += `<div style="display: flex; align-items: center; gap: 8px;"><span style="display: inline-block; width: 10px; height: 10px; background: ${item.color}; border-radius: 50%;"></span><span>${item.seriesName}: ${formatActualValue(val)}</span></div>`;
             });
             return html;
           },
@@ -707,7 +749,7 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
             className="chart-container"
             style={{
               width: '100%',
-              height: group.height || 300,
+              height: normalizeChartHeight(group.height),
               minHeight: 150,
               flexShrink: 0,
               borderBottom:

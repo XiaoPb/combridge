@@ -11,6 +11,7 @@
 //! - HR金标蓝牙监听器
 
 pub mod config_loader;
+pub mod factory_compute;
 pub mod csv_writer;
 pub mod factory_test;
 pub mod hr_ref_monitor;

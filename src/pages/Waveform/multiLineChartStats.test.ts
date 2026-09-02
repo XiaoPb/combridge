@@ -151,6 +151,29 @@ describe('calculateVisibleLineStats', () => {
     expect(Number.isFinite(stat.avg)).toBe(true);
   });
 
+  it('preserves cancellation when averaging extreme positive and negative values', () => {
+    const [stat] = calculateVisibleLineStats(
+      ['A'],
+      [[1], [Number.MAX_VALUE], [-Number.MAX_VALUE]],
+      ['A'],
+      { start: 0, end: 100 },
+    );
+
+    expect(stat.avg).toBeCloseTo(1 / 3, 12);
+    expect(Number.isFinite(stat.avg)).toBe(true);
+  });
+
+  it('preserves the minimum positive value when averaging two minimum values', () => {
+    const [stat] = calculateVisibleLineStats(
+      ['A'],
+      [[Number.MIN_VALUE], [Number.MIN_VALUE]],
+      ['A'],
+      { start: 0, end: 100 },
+    );
+
+    expect(stat.avg).toBe(Number.MIN_VALUE);
+  });
+
   it('normalizes maxLines to a finite integer in the range zero through four', () => {
     const getStats = (maxLines: number) => calculateVisibleLineStats(
       ['A', 'B', 'C', 'D', 'E'],

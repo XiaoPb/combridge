@@ -19,13 +19,13 @@ use tracing::{error, info, warn};
 use super::config_loader::ConfigLoader;
 use super::manager::Gh3036Manager;
 use super::threshold_config::{
-    evaluate_test_item, generate_error_codes, validate_threshold_config_file,
-    FactoryEvaluationResult, FactoryThresholdConfig, FailAction, TestItemConfig,
-    ThresholdConfigValidation,
+    evaluate_measurements, evaluate_test_item, generate_error_codes,
+    validate_threshold_config_file, FactoryEvaluationResult, FactoryThresholdConfig, FailAction,
+    TestItemConfig, ThresholdConfigValidation,
 };
 use super::types::{
-    ConfigValidationResult, FactoryTestProgressEvent, FactoryTestResult, FactoryTestStatus,
-    FactoryTestStep, FactoryTestStepResult,
+    ChannelMeasurement, ConfigValidationResult, FactoryComputeMode, FactoryTestProgressEvent,
+    FactoryTestResult, FactoryTestStatus, FactoryTestStep, FactoryTestStepResult,
 };
 use crate::service::EventBus;
 
@@ -388,6 +388,7 @@ impl FactoryTestManager {
             let mut test_result = FactoryTestResult {
                 chip_init_status: 0,
                 uuid: Vec::new(),
+                compute_mode: FactoryComputeMode::Mcu,
                 base_noise: Vec::new(),
                 ppg_noise: Vec::new(),
                 lpctr: Vec::new(),
@@ -474,7 +475,7 @@ impl FactoryTestManager {
                                     Self::evaluation_input(config, &test_result, *step)
                                 {
                                     let item_result =
-                                        evaluate_test_item(test_name, item_config, values);
+                                        evaluate_measurements(test_name, item_config, &values);
                                     step_result.success = item_result.pass;
                                     step_result.message = item_result.message.clone();
                                     evaluation_result.add_test_result(item_result);
@@ -799,22 +800,44 @@ impl FactoryTestManager {
         config: &'a FactoryThresholdConfig,
         result: &'a FactoryTestResult,
         step: FactoryTestStep,
-    ) -> Option<(&'static str, Option<&'a TestItemConfig>, &'a [u16])> {
+    ) -> Option<(&'static str, Option<&'a TestItemConfig>, Vec<Option<f64>>)> {
         match step {
             FactoryTestStep::BaseNoise => Some((
                 "base_noise",
                 config.tests.base_noise.as_ref(),
-                &result.base_noise,
+                result
+                    .base_noise
+                    .iter()
+                    .map(ChannelMeasurement::evaluation_value)
+                    .collect(),
             )),
             FactoryTestStep::PpgNoise => Some((
                 "ppg_noise",
                 config.tests.ppg_noise.as_ref(),
-                &result.ppg_noise,
+                result
+                    .ppg_noise
+                    .iter()
+                    .map(ChannelMeasurement::evaluation_value)
+                    .collect(),
             )),
-            FactoryTestStep::Lpctr => Some(("lpctr", config.tests.lpctr.as_ref(), &result.lpctr)),
-            FactoryTestStep::Lplctr => {
-                Some(("lplctr", config.tests.lplctr.as_ref(), &result.lplctr))
-            }
+            FactoryTestStep::Lpctr => Some((
+                "lpctr",
+                config.tests.lpctr.as_ref(),
+                result
+                    .lpctr
+                    .iter()
+                    .map(ChannelMeasurement::evaluation_value)
+                    .collect(),
+            )),
+            FactoryTestStep::Lplctr => Some((
+                "lplctr",
+                config.tests.lplctr.as_ref(),
+                result
+                    .lplctr
+                    .iter()
+                    .map(ChannelMeasurement::evaluation_value)
+                    .collect(),
+            )),
             _ => None,
         }
     }
@@ -917,7 +940,7 @@ impl FactoryTestManager {
             step: FactoryTestStep::ChipInit,
             success: true,
             message: format!("芯片初始化完成, status={}", status),
-            data: vec![status],
+            data: vec![Some(f64::from(status))],
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -974,7 +997,7 @@ impl FactoryTestManager {
             step: FactoryTestStep::Uuid,
             success: true,
             message: format!("UUID: {}", uuid_str),
-            data: uuid.iter().map(|&b| b as u16).collect(),
+            data: uuid.iter().map(|&b| Some(f64::from(b))).collect(),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -1129,14 +1152,14 @@ impl FactoryTestManager {
             })
             .collect();
 
-        test_result.base_noise = base_noise.clone();
+        test_result.base_noise = Self::device_measurements(&base_noise);
         info!("[FactoryTest] 底噪数据: {:?}", base_noise);
 
         Ok(Some(FactoryTestStepResult {
             step: FactoryTestStep::BaseNoise,
             success: true,
             message: format!("底噪测试完成, {} 个通道", base_noise.len()),
-            data: base_noise,
+            data: Self::step_data(&base_noise),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -1259,14 +1282,14 @@ impl FactoryTestManager {
             })
             .collect();
 
-        test_result.ppg_noise = ppg_noise.clone();
+        test_result.ppg_noise = Self::device_measurements(&ppg_noise);
         info!("[FactoryTest] PPG 噪声数据: {:?}", ppg_noise);
 
         Ok(Some(FactoryTestStepResult {
             step: FactoryTestStep::PpgNoise,
             success: true,
             message: format!("PPG 噪声测试完成, {} 个通道", ppg_noise.len()),
-            data: ppg_noise,
+            data: Self::step_data(&ppg_noise),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -1389,14 +1412,14 @@ impl FactoryTestManager {
             })
             .collect();
 
-        test_result.lpctr = lpctr.clone();
+        test_result.lpctr = Self::device_measurements(&lpctr);
         info!("[FactoryTest] LPCTR 数据: {:?}", lpctr);
 
         Ok(Some(FactoryTestStepResult {
             step: FactoryTestStep::Lpctr,
             success: true,
             message: format!("LPCTR 测试完成, {} 个通道", lpctr.len()),
-            data: lpctr,
+            data: Self::step_data(&lpctr),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -1519,14 +1542,14 @@ impl FactoryTestManager {
             })
             .collect();
 
-        test_result.lplctr = lplctr.clone();
+        test_result.lplctr = Self::device_measurements(&lplctr);
         info!("[FactoryTest] LPLCTR 数据: {:?}", lplctr);
 
         Ok(Some(FactoryTestStepResult {
             step: FactoryTestStep::Lplctr,
             success: true,
             message: format!("LPLCTR 测试完成, {} 个通道", lplctr.len()),
-            data: lplctr,
+            data: Self::step_data(&lplctr),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -1688,8 +1711,27 @@ impl FactoryTestManager {
         row
     }
 
-    fn pad_channels(data: &[u16], max_count: usize) -> Vec<String> {
-        let mut result: Vec<String> = data.iter().map(|v| v.to_string()).collect();
+    fn device_measurements(values: &[u16]) -> Vec<ChannelMeasurement> {
+        values
+            .iter()
+            .copied()
+            .map(|device_value| ChannelMeasurement {
+                computed_value: None,
+                device_value: Some(device_value),
+            })
+            .collect()
+    }
+
+    fn step_data(values: &[u16]) -> Vec<Option<f64>> {
+        values.iter().copied().map(f64::from).map(Some).collect()
+    }
+
+    fn pad_channels(data: &[ChannelMeasurement], max_count: usize) -> Vec<String> {
+        let mut result: Vec<String> = data
+            .iter()
+            .map(ChannelMeasurement::evaluation_value)
+            .map(|value| value.map_or_else(|| "0".to_string(), |value| value.to_string()))
+            .collect();
 
         while result.len() < max_count {
             result.push("0".to_string());
@@ -1783,6 +1825,9 @@ mod tests {
             enabled,
             description: None,
             unit: None,
+            mode: Some(4),
+            channels: Some(1),
+            compute: None,
             global_threshold: None,
             channel_rules: None,
         }
@@ -1793,11 +1838,14 @@ mod tests {
             project: "GH3036".to_string(),
             version: "1.0".to_string(),
             description: None,
+            chip: None,
             global: Some(GlobalConfig {
                 fail_action,
                 ..GlobalConfig::default()
             }),
             tests: TestsConfig {
+                chip_init: None,
+                chip_uid: None,
                 base_noise: Some(item(false)),
                 ppg_noise: Some(item(true)),
                 lpctr: Some(item(true)),

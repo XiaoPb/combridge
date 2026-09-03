@@ -848,6 +848,10 @@ impl FactoryTestManager {
         self.frame_collector.lock().finish()
     }
 
+    pub fn is_frame_collection_complete(&self) -> bool {
+        self.frame_collector.lock().is_complete()
+    }
+
     fn reset_frame_collection(&self) {
         let _ = self.finish_frame_collection();
     }
@@ -1206,6 +1210,9 @@ impl FactoryTestManager {
                     threshold_config
                         .as_ref()
                         .and_then(|config| config.chip.as_deref()),
+                    threshold_config.as_ref(),
+                    &running,
+                    &frame_collector,
                 ));
 
                 match step_result {
@@ -1460,6 +1467,9 @@ impl FactoryTestManager {
         event_bus: &Arc<EventBus>,
         manager: &Gh3036Manager,
         chip: Option<&str>,
+        threshold_config: Option<&FactoryThresholdConfig>,
+        running: &AtomicBool,
+        frame_collector: &Arc<Mutex<FactoryFrameCollector>>,
     ) -> Result<Option<FactoryTestStepResult>, String> {
         match step {
             FactoryTestStep::Prepare => Self::execute_prepare_step(event_bus, manager).await,
@@ -1470,17 +1480,61 @@ impl FactoryTestManager {
                 Self::execute_uuid_step(event_bus, test_result, manager, chip).await
             }
             FactoryTestStep::BaseNoise => {
-                Self::execute_base_noise_step(event_bus, config_dir, test_result, manager).await
+                Self::run_hardware_test(
+                    FactoryTestStep::BaseNoise,
+                    event_bus,
+                    config_dir,
+                    test_result,
+                    manager,
+                    chip,
+                    threshold_config,
+                    running,
+                    frame_collector,
+                )
+                .await
             }
             FactoryTestStep::PpgNoise => {
-                Self::execute_ppg_noise_step(event_bus, config_dir, test_result, manager).await
+                Self::run_hardware_test(
+                    FactoryTestStep::PpgNoise,
+                    event_bus,
+                    config_dir,
+                    test_result,
+                    manager,
+                    chip,
+                    threshold_config,
+                    running,
+                    frame_collector,
+                )
+                .await
             }
             FactoryTestStep::Lpctr => {
-                Self::execute_lpctr_step(event_bus, config_dir, test_result, manager).await
+                Self::run_hardware_test(
+                    FactoryTestStep::Lpctr,
+                    event_bus,
+                    config_dir,
+                    test_result,
+                    manager,
+                    chip,
+                    threshold_config,
+                    running,
+                    frame_collector,
+                )
+                .await
             }
             FactoryTestStep::EnvironmentSwitch => Ok(None),
             FactoryTestStep::Lplctr => {
-                Self::execute_lplctr_step(event_bus, config_dir, test_result, manager).await
+                Self::run_hardware_test(
+                    FactoryTestStep::Lplctr,
+                    event_bus,
+                    config_dir,
+                    test_result,
+                    manager,
+                    chip,
+                    threshold_config,
+                    running,
+                    frame_collector,
+                )
+                .await
             }
             FactoryTestStep::Cleanup => Self::execute_cleanup_step(event_bus, manager).await,
             FactoryTestStep::Idle | FactoryTestStep::Completed => Ok(None),
@@ -1731,6 +1785,266 @@ impl FactoryTestManager {
                 .map(|d| d.as_millis() as u64)
                 .unwrap_or(0),
         }))
+    }
+
+    fn hardware_test_spec(step: FactoryTestStep) -> Option<(&'static str, u8, f32, f32)> {
+        match step {
+            FactoryTestStep::BaseNoise => Some(("base_noise", 0x04, 0.26, 0.39)),
+            FactoryTestStep::PpgNoise => Some(("ppg_noise", 0x08, 0.42, 0.54)),
+            FactoryTestStep::Lpctr => Some(("lpctr", 0x10, 0.58, 0.69)),
+            FactoryTestStep::Lplctr => Some(("lplctr", 0x20, 0.78, 0.89)),
+            _ => None,
+        }
+    }
+
+    fn set_hardware_measurements(
+        result: &mut FactoryTestResult,
+        step: FactoryTestStep,
+        measurements: Vec<ChannelMeasurement>,
+    ) {
+        match step {
+            FactoryTestStep::BaseNoise => result.base_noise = measurements,
+            FactoryTestStep::PpgNoise => result.ppg_noise = measurements,
+            FactoryTestStep::Lpctr => result.lpctr = measurements,
+            FactoryTestStep::Lplctr => result.lplctr = measurements,
+            _ => {}
+        }
+    }
+
+    fn hardware_test_measurements(
+        result: &FactoryTestResult,
+        step: FactoryTestStep,
+    ) -> &[ChannelMeasurement] {
+        match step {
+            FactoryTestStep::BaseNoise => &result.base_noise,
+            FactoryTestStep::PpgNoise => &result.ppg_noise,
+            FactoryTestStep::Lpctr => &result.lpctr,
+            FactoryTestStep::Lplctr => &result.lplctr,
+            _ => &[],
+        }
+    }
+
+    fn hardware_test_channels(item: Option<&TestItemConfig>) -> usize {
+        item.and_then(|config| config.channels).unwrap_or(0)
+    }
+
+    async fn run_hardware_test(
+        step: FactoryTestStep,
+        event_bus: &Arc<EventBus>,
+        config_dir: &Path,
+        test_result: &mut FactoryTestResult,
+        manager: &Gh3036Manager,
+        chip: Option<&str>,
+        threshold_config: Option<&FactoryThresholdConfig>,
+        running: &AtomicBool,
+        frame_collector: &Arc<Mutex<FactoryFrameCollector>>,
+    ) -> Result<Option<FactoryTestStepResult>, String> {
+        let Some((test_name, mode, progress_start, _progress_end)) = Self::hardware_test_spec(step)
+        else {
+            return Ok(None);
+        };
+        let item = threshold_config.and_then(|config| match step {
+            FactoryTestStep::BaseNoise => config.tests.base_noise.as_ref(),
+            FactoryTestStep::PpgNoise => config.tests.ppg_noise.as_ref(),
+            FactoryTestStep::Lpctr => config.tests.lpctr.as_ref(),
+            FactoryTestStep::Lplctr => config.tests.lplctr.as_ref(),
+            _ => None,
+        });
+        let channels = Self::hardware_test_channels(item);
+        let failed = || failed_measurements(channels);
+        let finish = |test_result: &FactoryTestResult, success: bool, message: String| {
+            let data = Self::hardware_test_measurements(test_result, step)
+                .iter()
+                .map(ChannelMeasurement::evaluation_value)
+                .collect();
+            FactoryTestStepResult {
+                step,
+                success,
+                message,
+                data,
+                timestamp: now_millis(),
+            }
+        };
+
+        let config_file = match Self::find_config_file(config_dir, test_name) {
+            Err(error) => {
+                Self::set_hardware_measurements(test_result, step, failed());
+                return Ok(Some(finish(test_result, false, error)));
+            }
+            Ok(Some(path)) => path,
+            Ok(None) => {
+                Self::set_hardware_measurements(test_result, step, failed());
+                return Ok(Some(finish(
+                    test_result,
+                    false,
+                    format!("未找到 {test_name} 配置文件"),
+                )));
+            }
+        };
+        let config_loader = match ConfigLoader::from_file(&config_file) {
+            Ok(loader) if !loader.is_empty() => loader,
+            Ok(_) => {
+                Self::set_hardware_measurements(test_result, step, failed());
+                return Ok(Some(finish(
+                    test_result,
+                    false,
+                    format!("{test_name} 寄存器列表为空"),
+                )));
+            }
+            Err(error) => {
+                Self::set_hardware_measurements(test_result, step, failed());
+                return Ok(Some(finish(test_result, false, error)));
+            }
+        };
+
+        Self::publish_progress_static(
+            event_bus,
+            step,
+            FactoryTestStatus::Running,
+            progress_start,
+            &format!("加载配置文件: {}", config_file.display()),
+        );
+
+        if test_result.compute_mode == FactoryComputeMode::Mcu {
+            if let Err(error) = manager.execute_rpc("FS", &[format!("0x{mode:02X}")]).await {
+                Self::set_hardware_measurements(test_result, step, failed());
+                return Ok(Some(finish(
+                    test_result,
+                    false,
+                    format!("设置产测模式失败: {error}"),
+                )));
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+
+        let mut command_error: Option<String> = None;
+        for (command, params, label) in [
+            ("D", vec!["0".to_string()], "下载配置阶段 0"),
+            ("L", config_loader.format_for_download(), "写入寄存器列表"),
+            ("D", vec!["1".to_string()], "下载配置阶段 1"),
+        ] {
+            if let Err(error) = manager.execute_rpc(command, &params).await {
+                command_error = Some(format!("{label}失败: {error}"));
+                break;
+            }
+        }
+
+        if let Some(error) = command_error {
+            Self::set_hardware_measurements(test_result, step, failed());
+            return Ok(Some(finish(test_result, false, error)));
+        }
+
+        if test_result.compute_mode == FactoryComputeMode::App {
+            let compute = item.and_then(|config| config.compute.as_ref());
+            let spec = CollectionSpec::resolve(compute, test_name);
+            frame_collector.lock().start(spec);
+        }
+
+        let started = manager
+            .execute_rpc("S", &["0x40".to_string(), "0".to_string()])
+            .await;
+        if let Err(error) = started {
+            if test_result.compute_mode == FactoryComputeMode::App {
+                let _ = frame_collector.lock().finish();
+            }
+            Self::set_hardware_measurements(test_result, step, failed());
+            return Ok(Some(finish(
+                test_result,
+                false,
+                format!("启动 TEST1 失败: {error}"),
+            )));
+        }
+
+        let compute = item.and_then(|config| config.compute.as_ref());
+        let spec = CollectionSpec::resolve(compute, test_name);
+        if test_result.compute_mode == FactoryComputeMode::App {
+            let deadline = tokio::time::Instant::now() + Duration::from_millis(spec.timeout_ms);
+            while running.load(Ordering::SeqCst)
+                && !frame_collector.lock().is_complete()
+                && tokio::time::Instant::now() < deadline
+            {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        } else {
+            tokio::time::sleep(Duration::from_secs(3)).await;
+        }
+
+        let stop_result = manager
+            .execute_rpc("S", &["0x40".to_string(), "1".to_string()])
+            .await;
+
+        if test_result.compute_mode == FactoryComputeMode::App {
+            let collected = frame_collector.lock().finish();
+            let complete = collected.frame_cnts.len()
+                >= spec.skip_number.saturating_add(spec.min_number)
+                && (!spec.is_continuous
+                    || super::factory_compute::is_tail_continuous(
+                        &collected.frame_cnts,
+                        spec.min_number,
+                    ));
+            let measurements = if stop_result.is_ok() && running.load(Ordering::SeqCst) && complete {
+                let compute_config = item.and_then(|config| config.compute.as_ref()).cloned().unwrap_or_default();
+                let values = super::factory_compute::calculate_app_measurements(
+                    test_name,
+                    &collected,
+                    chip.unwrap_or_default(),
+                    &compute_config,
+                );
+                if values.len() >= channels {
+                    values.into_iter().take(channels).collect()
+                } else {
+                    failed()
+                }
+            } else {
+                failed()
+            };
+            let success = measurements.iter().all(|measurement| measurement.computed_value.is_some());
+            Self::set_hardware_measurements(test_result, step, measurements);
+            return Ok(Some(finish(
+                test_result,
+                success,
+                if success {
+                    format!("{test_name} App 计算完成")
+                } else {
+                    format!("{test_name} App 采集或计算失败")
+                },
+            )));
+        }
+
+        if let Err(error) = stop_result {
+            Self::set_hardware_measurements(test_result, step, failed());
+            return Ok(Some(finish(
+                test_result,
+                false,
+                format!("停止 TEST1 失败: {error}"),
+            )));
+        }
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let measurements = match manager
+            .execute_rpc("FG", &[format!("0x{mode:02X}")])
+            .await
+        {
+            Ok(bytes) => {
+                let outcome = resolve_mcu_hardware_result(Ok(bytes), channels);
+                outcome.measurements
+            }
+            Err(_) => failed(),
+        };
+        let success = measurements.len() == channels
+            && measurements
+                .iter()
+                .all(|measurement| measurement.device_value.is_some());
+        Self::set_hardware_measurements(test_result, step, measurements);
+        Ok(Some(finish(
+            test_result,
+            success,
+            if success {
+                format!("{test_name} MCU 测试完成")
+            } else {
+                format!("{test_name} MCU 结果失败")
+            },
+        )))
     }
 
     async fn execute_base_noise_step(

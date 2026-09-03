@@ -1999,8 +1999,12 @@ impl FactoryTestManager {
                         &collected.frame_cnts,
                         spec.min_number,
                     ));
-            let measurements = if stop_result.is_ok() && running.load(Ordering::SeqCst) && complete {
-                let compute_config = item.and_then(|config| config.compute.as_ref()).cloned().unwrap_or_default();
+            let measurements = if stop_result.is_ok() && running.load(Ordering::SeqCst) && complete
+            {
+                let compute_config = item
+                    .and_then(|config| config.compute.as_ref())
+                    .cloned()
+                    .unwrap_or_default();
                 let values = super::factory_compute::calculate_app_measurements(
                     test_name,
                     &collected,
@@ -2015,7 +2019,9 @@ impl FactoryTestManager {
             } else {
                 failed()
             };
-            let success = measurements.iter().all(|measurement| measurement.computed_value.is_some());
+            let success = measurements
+                .iter()
+                .all(|measurement| measurement.computed_value.is_some());
             Self::set_hardware_measurements(test_result, step, measurements);
             return Ok(Some(finish(
                 test_result,
@@ -2039,10 +2045,7 @@ impl FactoryTestManager {
 
         tokio::time::sleep(Duration::from_secs(3)).await;
         tokio::time::sleep(Duration::from_secs(1)).await;
-        let measurements = match manager
-            .execute_rpc("FG", &[format!("0x{mode:02X}")])
-            .await
-        {
+        let measurements = match manager.execute_rpc("FG", &[format!("0x{mode:02X}")]).await {
             Ok(bytes) => {
                 let outcome = resolve_mcu_hardware_result(Ok(bytes), channels);
                 outcome.measurements
@@ -2798,10 +2801,7 @@ impl FactoryTestManager {
     }
 
     fn pad_channels(data: &[ChannelMeasurement], max_count: usize) -> Vec<String> {
-        let mut result: Vec<String> = data
-            .iter()
-            .map(Self::csv_measurement)
-            .collect();
+        let mut result: Vec<String> = data.iter().map(Self::csv_measurement).collect();
 
         while result.len() < max_count {
             result.push(String::new());

@@ -205,21 +205,39 @@ export type FactoryTestStatus =
   | 'failed' 
   | 'stopped';
 
+export type FactoryComputeMode = 'mcu' | 'app';
+
+export interface ChannelMeasurement {
+  computed_value: number | null;
+  device_value: number | null;
+}
+
+export interface ComputeConfig {
+  sample_rate_hz?: number;
+  min_number?: number;
+  skip_number?: number;
+  is_continuous?: boolean;
+  timeout_ms?: number;
+  gain_k?: number;
+  led_current_ma?: number;
+}
+
 export interface FactoryTestStepResult {
   step: FactoryTestStep;
   success: boolean;
   message: string;
-  data: number[];
+  data: (number | null)[];
   timestamp: number;
 }
 
 export interface FactoryTestResult {
   chip_init_status: number;
   uuid: number[];
-  base_noise: number[];
-  ppg_noise: number[];
-  lpctr: number[];
-  lplctr: number[];
+  compute_mode: FactoryComputeMode;
+  base_noise: ChannelMeasurement[];
+  ppg_noise: ChannelMeasurement[];
+  lpctr: ChannelMeasurement[];
+  lplctr: ChannelMeasurement[];
   overall_result: string;
   timestamp: number;
 }
@@ -262,11 +280,16 @@ export interface TestItemConfig {
   enabled: boolean;
   description?: string;
   unit?: string;
+  mode?: number;
+  channels?: number;
+  compute?: ComputeConfig;
   global_threshold?: ThresholdConfig;
   channel_rules?: ChannelRule[];
 }
 
 export interface TestsConfig {
+  chip_init?: TestItemConfig;
+  chip_uid?: TestItemConfig;
   base_noise?: TestItemConfig;
   ppg_noise?: TestItemConfig;
   lpctr?: TestItemConfig;
@@ -282,13 +305,14 @@ export interface FactoryThresholdConfig {
   project: string;
   version: string;
   description?: string;
+  chip?: string;
   global?: GlobalConfig;
   tests: TestsConfig;
 }
 
 export interface ChannelEvaluationResult {
   channel_index: number;
-  value: number;
+  value: number | null;
   pass: boolean;
   threshold_display: string;
   operator: string;

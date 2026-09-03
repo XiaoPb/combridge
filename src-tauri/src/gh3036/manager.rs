@@ -774,6 +774,7 @@ impl Gh3036Manager {
         }
 
         let event_bus = self.event_bus.clone();
+        let factory_test_manager = Arc::clone(&self.factory_test_manager);
         let frame_callback: FrameCallback = Arc::new(move |frame: &GhFuncFrame| {
             let frame = CALLBACK_CONTEXT.normalize_frame(frame);
             let func_id = frame.id as u8;
@@ -791,6 +792,7 @@ impl Gh3036Manager {
                 );
             }
 
+            factory_test_manager.record_test1_frame(&frame);
             CALLBACK_CONTEXT.save_frame_to_csv(&frame);
 
             for aggregated in CALLBACK_CONTEXT.add_frame_to_aggregator(&frame) {
@@ -986,6 +988,39 @@ impl Gh3036Manager {
             })?;
 
         Ok(())
+    }
+
+    pub async fn read_registers_u16(&self, address: u16, count: i32) -> Result<Vec<u16>, String> {
+        let mut data = Vec::new();
+        data.extend_from_slice(&address.to_le_bytes());
+        data.extend_from_slice(&count.to_le_bytes());
+
+        let param_data = self
+            .call_command(KEY_GH3X_REGS_READ_CMD, FMT_GH3X_REGS_READ_CMD, &data)
+            .await?;
+        let value =
+            unpack(&param_data, RET_GH3X_REGS_READ_CMD).map_err(|e| format!("瑙ｅ寘澶辫触: {:?}", e))?;
+
+        match value {
+            UnpackValue::U16Array(arr) => Ok(arr),
+            _ => Err("瀵勫瓨鍣ㄨ鍙栧け璐? 瑙ｅ寘缁撴灉涓嶆槸鏁扮粍".into()),
+        }
+    }
+
+    pub async fn write_registers_u16(&self, pairs: &[(u16, u16)]) -> Result<(), String> {
+        if pairs.is_empty() {
+            return Ok(());
+        }
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&((pairs.len() * 2) as u16).to_le_bytes());
+        for (address, value) in pairs {
+            data.extend_from_slice(&address.to_le_bytes());
+            data.extend_from_slice(&value.to_le_bytes());
+        }
+
+        self.send_command(KEY_GH3X_REGS_WRITE_CMD, FMT_GH3X_REGS_WRITE_CMD, &data)
+            .await
     }
 
     async fn call_command(&self, key: &str, format: &str, data: &[u8]) -> Result<Vec<u8>, String> {

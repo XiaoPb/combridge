@@ -836,12 +836,38 @@ pub enum FactoryTestStatus {
     Stopped,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FactoryComputeMode {
+    Mcu,
+    App,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ChannelMeasurement {
+    pub computed_value: Option<f64>,
+    pub device_value: Option<u16>,
+}
+
+impl ChannelMeasurement {
+    pub fn failed() -> Self {
+        Self {
+            computed_value: None,
+            device_value: None,
+        }
+    }
+
+    pub fn evaluation_value(&self) -> Option<f64> {
+        self.computed_value.or(self.device_value.map(f64::from))
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FactoryTestStepResult {
     pub step: FactoryTestStep,
     pub success: bool,
     pub message: String,
-    pub data: Vec<u16>,
+    pub data: Vec<Option<f64>>,
     pub timestamp: u64,
 }
 
@@ -849,10 +875,11 @@ pub struct FactoryTestStepResult {
 pub struct FactoryTestResult {
     pub chip_init_status: u16,
     pub uuid: Vec<u8>,
-    pub base_noise: Vec<u16>,
-    pub ppg_noise: Vec<u16>,
-    pub lpctr: Vec<u16>,
-    pub lplctr: Vec<u16>,
+    pub compute_mode: FactoryComputeMode,
+    pub base_noise: Vec<ChannelMeasurement>,
+    pub ppg_noise: Vec<ChannelMeasurement>,
+    pub lpctr: Vec<ChannelMeasurement>,
+    pub lplctr: Vec<ChannelMeasurement>,
     pub overall_result: String,
     pub timestamp: u64,
     pub device_info: String,

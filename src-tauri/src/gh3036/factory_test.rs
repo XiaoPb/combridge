@@ -1828,6 +1828,25 @@ impl FactoryTestManager {
         item.and_then(|config| config.channels).unwrap_or(0)
     }
 
+    #[cfg(test)]
+    fn hardware_test_command_order(mode: FactoryComputeMode, test_mode: u8) -> Vec<String> {
+        let mut commands = Vec::new();
+        if mode == FactoryComputeMode::Mcu {
+            commands.push(format!("FS 0x{test_mode:02X}"));
+        }
+        commands.extend([
+            "D 0".to_string(),
+            "L".to_string(),
+            "D 1".to_string(),
+            "S 0x40 0".to_string(),
+            "S 0x40 1".to_string(),
+        ]);
+        if mode == FactoryComputeMode::Mcu {
+            commands.push(format!("FG 0x{test_mode:02X}"));
+        }
+        commands
+    }
+
     async fn run_hardware_test(
         step: FactoryTestStep,
         event_bus: &Arc<EventBus>,
@@ -1965,8 +1984,6 @@ impl FactoryTestManager {
             {
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
-        } else {
-            tokio::time::sleep(Duration::from_secs(3)).await;
         }
 
         let stop_result = manager
@@ -2020,6 +2037,7 @@ impl FactoryTestManager {
             )));
         }
 
+        tokio::time::sleep(Duration::from_secs(3)).await;
         tokio::time::sleep(Duration::from_secs(1)).await;
         let measurements = match manager
             .execute_rpc("FG", &[format!("0x{mode:02X}")])
@@ -2047,6 +2065,7 @@ impl FactoryTestManager {
         )))
     }
 
+    #[allow(dead_code)]
     async fn execute_base_noise_step(
         event_bus: &Arc<EventBus>,
         config_dir: &Path,
@@ -2209,6 +2228,7 @@ impl FactoryTestManager {
         }))
     }
 
+    #[allow(dead_code)]
     async fn execute_ppg_noise_step(
         event_bus: &Arc<EventBus>,
         config_dir: &Path,
@@ -2339,6 +2359,7 @@ impl FactoryTestManager {
         }))
     }
 
+    #[allow(dead_code)]
     async fn execute_lpctr_step(
         event_bus: &Arc<EventBus>,
         config_dir: &Path,
@@ -2469,6 +2490,7 @@ impl FactoryTestManager {
         }))
     }
 
+    #[allow(dead_code)]
     async fn execute_lplctr_step(
         event_bus: &Arc<EventBus>,
         config_dir: &Path,
@@ -2699,6 +2721,7 @@ impl FactoryTestManager {
             "error_code".to_string(),
             "device_info".to_string(),
             "chip_init_status".to_string(),
+            "compute_mode".to_string(),
             "uuid".to_string(),
         ];
 
@@ -2739,6 +2762,10 @@ impl FactoryTestManager {
             result.error_code.clone(),
             result.device_info.clone(),
             result.chip_init_status.to_string(),
+            match result.compute_mode {
+                FactoryComputeMode::Mcu => "mcu".to_string(),
+                FactoryComputeMode::App => "app".to_string(),
+            },
             uuid_str,
         ];
 
@@ -2753,6 +2780,7 @@ impl FactoryTestManager {
         row
     }
 
+    #[allow(dead_code)]
     fn device_measurements(values: &[u16]) -> Vec<ChannelMeasurement> {
         values
             .iter()
@@ -2764,6 +2792,7 @@ impl FactoryTestManager {
             .collect()
     }
 
+    #[allow(dead_code)]
     fn step_data(values: &[u16]) -> Vec<Option<f64>> {
         values.iter().copied().map(f64::from).map(Some).collect()
     }
@@ -2771,15 +2800,23 @@ impl FactoryTestManager {
     fn pad_channels(data: &[ChannelMeasurement], max_count: usize) -> Vec<String> {
         let mut result: Vec<String> = data
             .iter()
-            .map(ChannelMeasurement::evaluation_value)
-            .map(|value| value.map_or_else(|| "0".to_string(), |value| value.to_string()))
+            .map(Self::csv_measurement)
             .collect();
 
         while result.len() < max_count {
-            result.push("0".to_string());
+            result.push(String::new());
         }
 
         result
+    }
+
+    fn csv_measurement(measurement: &ChannelMeasurement) -> String {
+        measurement
+            .computed_value
+            .filter(|value| value.is_finite())
+            .map(|value| value.to_string())
+            .or_else(|| measurement.device_value.map(|value| value.to_string()))
+            .unwrap_or_default()
     }
 
     fn publish_progress(
@@ -2875,6 +2912,48 @@ mod tests {
             global_threshold: None,
             channel_rules: None,
         }
+    }
+
+    #[test]
+    fn csv_prefers_computed_device_then_empty() {
+        assert_eq!(
+            FactoryTestManager::csv_measurement(&ChannelMeasurement {
+                computed_value: Some(1.25),
+                device_value: Some(9),
+            }),
+            "1.25"
+        );
+        assert_eq!(
+            FactoryTestManager::csv_measurement(&ChannelMeasurement {
+                computed_value: None,
+                device_value: Some(9),
+            }),
+            "9"
+        );
+        assert_eq!(
+            FactoryTestManager::csv_measurement(&ChannelMeasurement::failed()),
+            ""
+        );
+    }
+
+    #[test]
+    fn csv_headers_include_compute_mode_after_chip_init_status() {
+        let headers = FactoryTestManager::generate_csv_headers();
+        assert_eq!(headers[5], "chip_init_status");
+        assert_eq!(headers[6], "compute_mode");
+        assert_eq!(headers[7], "uuid");
+    }
+
+    #[test]
+    fn hardware_command_order_is_mode_specific_and_stable() {
+        assert_eq!(
+            FactoryTestManager::hardware_test_command_order(FactoryComputeMode::Mcu, 0x04),
+            ["FS 0x04", "D 0", "L", "D 1", "S 0x40 0", "S 0x40 1", "FG 0x04"]
+        );
+        assert_eq!(
+            FactoryTestManager::hardware_test_command_order(FactoryComputeMode::App, 0x04),
+            ["D 0", "L", "D 1", "S 0x40 0", "S 0x40 1"]
+        );
     }
 
     fn config(fail_action: FailAction) -> FactoryThresholdConfig {

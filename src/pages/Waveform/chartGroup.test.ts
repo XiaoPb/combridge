@@ -21,7 +21,7 @@ describe('chart group identity', () => {
 
     expect(group.columns).toEqual([]);
     expect(group.height).toBe(300);
-    expect(group.yAxisMode).toBe('shared');
+    expect(group.yAxisMode).toBe('per-line');
   });
 
   it('keeps legacy chart group objects valid without a mode', () => {

@@ -139,7 +139,7 @@ describe('CSV chart store isolation and load ordering', () => {
       'CH0 (other)',
       'ACC_X (other)',
       'OTHER (2)',
-    ]));
+    ], [[1, 2, 3, 4]]));
 
     await useCsvChartStore.getState().loadCsvFile('headers.csv');
 
@@ -147,6 +147,17 @@ describe('CSV chart store isolation and load ordering', () => {
       useCsvChartStore.getState().chartGroups;
     expect(channelGroup.columns).toEqual(['CH0', 'CH0 (2)']);
     expect(accelerometerGroup.columns).toEqual(['ACC_X', 'ACC_X (2)']);
+  });
+
+  it('does not auto-select known waveform columns whose values are all zero', async () => {
+    readCsvFile.mockResolvedValue(result(
+      ['Ipd0', 'Ipd1', 'Ipd2', 'Ipd3'],
+      [[10, 20, 0, 0], [11, 21, 0, 0]],
+    ));
+
+    await useCsvChartStore.getState().loadCsvFile('ipd.csv');
+
+    expect(useCsvChartStore.getState().chartGroups[0].columns).toEqual(['Ipd0', 'Ipd1']);
   });
 
   it('preserves zoom when loading another CSV without an explicit reload', async () => {

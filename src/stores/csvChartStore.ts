@@ -44,13 +44,20 @@ export function createDefaultChartGroups(): IdentifiedChartGroupConfig[] {
   return [createChartGroup('图表1'), createChartGroup('图表2')];
 }
 
-function autoAssignChartGroups(columns: string[]): IdentifiedChartGroupConfig[] {
+function autoAssignChartGroups(columns: string[], rows: number[][]): IdentifiedChartGroupConfig[] {
   const accColumns: string[] = [];
   const chColumns: string[] = [];
+  const hasNonZeroData = (column: string) => {
+    const columnIndex = columns.indexOf(column);
+    return columnIndex >= 0 && rows.some((row) => {
+      const value = row[columnIndex];
+      return Number.isFinite(value) && value !== 0;
+    });
+  };
   columns.forEach((col) => {
     const baseColumn = col.replace(/ \(\d+\)$/, '');
-    if (/^ACC_?[XYZ]$/i.test(baseColumn)) accColumns.push(col);
-    else if (/^(?:CH|Ipd)[0-3]$/i.test(baseColumn)) chColumns.push(col);
+    if (/^ACC_?[XYZ]$/i.test(baseColumn) && hasNonZeroData(col)) accColumns.push(col);
+    else if (/^(?:CH|Ipd)[0-3]$/i.test(baseColumn) && hasNonZeroData(col)) chColumns.push(col);
   });
   return [createChartGroup('图表1', chColumns), createChartGroup('图表2', accColumns)];
 }
@@ -84,7 +91,7 @@ export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
           : { ...DEFAULT_DATA_ZOOM_STATE }
         : get().dataZoomState;
       const lineOffsets = Object.fromEntries(Object.entries(get().lineOffsets).filter(([column]) => csvData.columns.includes(column)));
-      set({ csvData, filePath, chartGroups: autoAssignChartGroups(csvData.columns), dataZoomState, lineOffsets, isLoading: false });
+      set({ csvData, filePath, chartGroups: autoAssignChartGroups(csvData.columns, csvData.rows), dataZoomState, lineOffsets, isLoading: false });
     } catch (err) {
       if (generation !== loadGeneration) return;
       set({ error: formatErrorMessage(err, i18n.t('waveform:errors.loadCsv')), isLoading: false });

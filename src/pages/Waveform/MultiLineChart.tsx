@@ -75,6 +75,7 @@ export interface MultiLineChartProps {
   showLineStatistics?: boolean;
   lineOffsets?: Readonly<Record<string, number>>;
   defaultYAxisMode?: YAxisMode;
+  exportFilePath?: string;
 }
 
 export interface MultiLineChartHandle {
@@ -100,6 +101,9 @@ interface ChartExportDependencies {
   downloadBlob: (blob: Blob, filename: string) => void;
   waitForRender: () => Promise<void>;
   now: () => number;
+  saveBlob?: (blob: Blob, filename: string, preferredDirectory?: string) => Promise<void>;
+  filenamePrefix?: string;
+  preferredDirectory?: string;
   onExportError?: (error: Error) => void;
 }
 
@@ -282,6 +286,7 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
   showLineStatistics = false,
   lineOffsets,
   defaultYAxisMode = 'per-line',
+  exportFilePath,
 }, ref) => {
   const { t: translate } = useTranslation('waveform');
   const containerRefs = useRef(new Map<string, HTMLDivElement>());
@@ -699,31 +704,39 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
       const group = chartGroups.find(
         (item, index) => getChartGroupKey(item, index) === contextMenu.groupKey,
       );
-      const filename = `waveform_${group?.name || 'chart'}_${Date.now()}.${type}`;
+      const timestamp = formatExportTimestamp(Date.now());
+      const filename = exportFilePath
+        ? getExportFilename(exportFilePath, type, timestamp)
+        : `waveform_${group?.name || 'chart'}_${timestamp}.${type}`;
       void exportSingleChart(
         chart,
         group,
         type,
         filename,
         onExportErrorRef.current,
+        exportFilePath ? saveBlobToPreferredPath : undefined,
+        exportFilePath ? getFileDirectory(exportFilePath) : undefined,
       )
         .catch((error: unknown) => {
           console.error('Chart export failed', error);
         })
         .finally(() => setContextMenu(null));
     },
-    [contextMenu, chartGroups],
+    [contextMenu, chartGroups, exportFilePath],
   );
 
   const exportAllPng = useCallback(async (): Promise<void> => {
     try {
       await exportAllChartsPng(chartGroups, chartInstances.current, {
         onExportError: onExportErrorRef.current,
+        filenamePrefix: exportFilePath ? getFileStem(exportFilePath) : undefined,
+        preferredDirectory: exportFilePath ? getFileDirectory(exportFilePath) : undefined,
+        saveBlob: exportFilePath ? saveBlobToPreferredPath : undefined,
       });
     } catch (error) {
       throw toExportError(error);
     }
-  }, [chartGroups]);
+  }, [chartGroups, exportFilePath]);
 
   useImperativeHandle(ref, () => ({ exportAllPng }), [exportAllPng]);
   useEffect(() => {
@@ -940,6 +953,8 @@ export async function exportChart(
   type: 'png' | 'svg',
   filename: string,
   onExportError?: (error: Error) => void,
+  saveBlob?: (blob: Blob, filename: string, preferredDirectory?: string) => Promise<void>,
+  preferredDirectory?: string,
 ): Promise<void> {
   try {
     await waitForChartRender();
@@ -950,7 +965,9 @@ export async function exportChart(
           pixelRatio: 2,
           backgroundColor: '#fff',
         });
-    downloadBlob(dataUrlToBlob(url), filename);
+    const blob = dataUrlToBlob(url);
+    if (saveBlob) await saveBlob(blob, filename, preferredDirectory);
+    else downloadBlob(blob, filename);
   } catch (error) {
     const exportError = toExportError(error);
     onExportError?.(exportError);
@@ -964,11 +981,13 @@ export async function exportSingleChart(
   type: 'png' | 'svg',
   filename: string,
   onExportError?: (error: Error) => void,
+  saveBlob?: (blob: Blob, filename: string, preferredDirectory?: string) => Promise<void>,
+  preferredDirectory?: string,
 ): Promise<void> {
   try {
     if (!chart || !group)
       throw new Error('Cannot export chart: chart or group is unavailable');
-    await exportChart(chart, type, filename);
+    await exportChart(chart, type, filename, undefined, saveBlob, preferredDirectory);
   } catch (error) {
     const exportError = toExportError(error);
     onExportError?.(exportError);
@@ -986,6 +1005,9 @@ export async function exportAllChartsPng(
     downloadBlob: download = downloadBlob,
     waitForRender = waitForChartRender,
     now = Date.now,
+    saveBlob,
+    filenamePrefix = 'waveform_all',
+    preferredDirectory,
     onExportError,
   } = dependencies;
 
@@ -1026,7 +1048,9 @@ export async function exportAllChartsPng(
     });
 
     const output = await compose(dataUrls, { gap: 8 });
-    download(output.blob, `waveform_all_${now()}.png`);
+    const filename = `${filenamePrefix}_${formatExportTimestamp(now())}.png`;
+    if (saveBlob) await saveBlob(output.blob, filename, preferredDirectory);
+    else download(output.blob, filename);
   } catch (error) {
     const exportError = toExportError(error);
     onExportError?.(exportError);
@@ -1092,4 +1116,77 @@ function waitForChartRender(): Promise<void> {
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(finish);
     else finish();
   });
+}
+
+export function getFileStem(filePath: string): string {
+  const name = filePath.split(/[\\/]/).pop() || 'waveform';
+  return name.replace(/\.[^.]*$/, '') || 'waveform';
+}
+
+export function getFileDirectory(filePath: string): string | undefined {
+  const separatorIndex = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  return separatorIndex > 0 ? filePath.slice(0, separatorIndex) : undefined;
+}
+
+export function getExportFilename(
+  filePath: string,
+  type: 'png' | 'svg',
+  timestamp: number | string,
+): string {
+  const formattedTimestamp =
+    typeof timestamp === 'number' ? formatExportTimestamp(timestamp) : timestamp;
+  return `${getFileStem(filePath)}_${formattedTimestamp}.${type}`;
+}
+
+export function formatExportTimestamp(timestamp: number): string {
+  const date = new Date(timestamp);
+  const pad = (value: number, width: number): string =>
+    String(value).padStart(width, '0');
+  return [
+    `${date.getFullYear()}${pad(date.getMonth() + 1, 2)}${pad(date.getDate(), 2)}`,
+    `${pad(date.getHours(), 2)}${pad(date.getMinutes(), 2)}${pad(date.getSeconds(), 2)}`,
+    pad(date.getMilliseconds(), 3),
+  ].join('_');
+}
+
+export async function saveBlobToPreferredPath(
+  blob: Blob,
+  filename: string,
+  preferredDirectory?: string,
+): Promise<void> {
+  const [{ writeFile }, { downloadDir, join }] = await Promise.all([
+    import('@tauri-apps/plugin-fs'),
+    import('@tauri-apps/api/path'),
+  ]);
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+
+  if (preferredDirectory) {
+    try {
+      await writeFile(await join(preferredDirectory, filename), bytes);
+      return;
+    } catch {
+      // Fall back to Downloads when the CSV directory is unavailable.
+    }
+  }
+
+  try {
+    await writeFile(await join(await downloadDir(), filename), bytes);
+    return;
+  } catch {
+    // The Downloads folder can also be restricted by the platform scope.
+  }
+
+  try {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const selectedPath = await save({
+      defaultPath: filename,
+      filters: [{ name: 'PNG image', extensions: ['png'] }],
+    });
+    if (!selectedPath) throw new Error('Export save cancelled');
+    await writeFile(selectedPath, bytes);
+  } catch (error) {
+    throw new Error(
+      `Failed to save export to the CSV directory, Downloads folder, or selected location: ${String(error)}`,
+    );
+  }
 }

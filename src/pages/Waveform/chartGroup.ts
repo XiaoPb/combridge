@@ -32,7 +32,7 @@ export function createChartGroup(
     name,
     columns: [...columns],
     height,
-    yAxisMode: 'shared',
+    yAxisMode: 'per-line',
   };
 }
 

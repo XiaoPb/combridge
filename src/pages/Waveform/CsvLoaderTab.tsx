@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Card, Button, Switch, InputNumber, Space, Alert, Typography, Spin, Select } from 'antd';
+import { Card, Button, Switch, InputNumber, Space, Alert, Typography, Spin, Select, Radio } from 'antd';
 import { FileOutlined, FolderOpenOutlined, DownOutlined, RightOutlined, PlusOutlined, DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useCsvChartStore } from '../../stores/csvChartStore';
@@ -238,17 +238,25 @@ const CsvLoaderTab: React.FC = () => {
                         size="small"
                         style={{ minWidth: 150 }}
                       />
-                      <Select
-                        size="small"
-                        value={group.yAxisMode ?? 'shared'}
-                        onChange={(yAxisMode) => updateChartGroup(group.id, { yAxisMode })}
-                        options={[
-                          { label: t('csvLoader.sharedYAxis'), value: 'shared' },
-                          { label: t('csvLoader.perLineYAxis'), value: 'per-line' },
-                        ]}
-                        aria-label={t('csvLoader.yAxisMode')}
-                        style={{ width: 150 }}
-                      />
+                      <Space size={4} style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {t('csvLoader.yAxisLabel')}:
+                        </Text>
+                        <Radio.Group
+                          size="small"
+                          value={group.yAxisMode ?? 'per-line'}
+                          onChange={(event) =>
+                            updateChartGroup(group.id, { yAxisMode: event.target.value })
+                          }
+                          optionType="button"
+                          buttonStyle="solid"
+                          options={[
+                            { label: t('csvLoader.perLineYAxis'), value: 'per-line' },
+                            { label: t('csvLoader.sharedYAxis'), value: 'shared' },
+                          ]}
+                          aria-label={t('csvLoader.yAxisMode')}
+                        />
+                      </Space>
                       <InputNumber
                         min={150}
                         max={600}
@@ -286,7 +294,7 @@ const CsvLoaderTab: React.FC = () => {
                                 onChange={(value) => setLineOffset(column, value ?? 0)}
                                 addonAfter={t('csvLoader.offsetPoints')}
                                 aria-label={`${t('csvLoader.lineOffset')} ${column}`}
-                                style={{ width: 130 }}
+                                style={{ width: 65 }}
                               />
                             </Space>
                           ))}
@@ -332,7 +340,7 @@ const CsvLoaderTab: React.FC = () => {
             rows={rows}
             chartGroups={chartGroups}
             lineOffsets={lineOffsets}
-            defaultYAxisMode="shared"
+            defaultYAxisMode="per-line"
             sampleRate={sampleRate}
             showLineStatistics={showLineStatistics}
             initialDataZoom={dataZoomState}
@@ -340,6 +348,7 @@ const CsvLoaderTab: React.FC = () => {
             legendScope="csv"
             ref={chartRef}
             onExportError={handleExportError}
+            exportFilePath={filePath ?? undefined}
           />
         ) : (
           <div

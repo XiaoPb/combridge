@@ -137,14 +137,16 @@ describe('CsvLoaderTab PNG export entry', () => {
     fireEvent.change(offsetInput, { target: { value: '2' } });
     fireEvent.blur(offsetInput);
 
-    fireEvent.mouseDown(screen.getAllByLabelText('Y轴模式')[0]);
-    fireEvent.click(await screen.findByText('每条折线独立 Y 轴'));
+    const yAxisGroups = screen.getAllByLabelText('Y轴模式');
+    expect(yAxisGroups).toHaveLength(2);
+    fireEvent.click(yAxisGroups[0]!.querySelector('label:nth-of-type(2)')!);
+    fireEvent.click(yAxisGroups[0]!.querySelector('label:nth-of-type(1)')!);
 
     await waitFor(() => {
       const state = useCsvChartStore.getState();
       expect(state.lineOffsets.A).toBe(2);
       expect(state.chartGroups[0].yAxisMode).toBe('per-line');
-      expect(state.chartGroups[1].yAxisMode).toBe('shared');
+      expect(state.chartGroups[1].yAxisMode).toBe('per-line');
       expect(chartProps.lineOffsets).toEqual({ A: 2 });
     });
   });

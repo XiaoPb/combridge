@@ -29,6 +29,26 @@ describe('CSV chart store isolation and load ordering', () => {
     expect(useCsvChartStore.getState().showLineStatistics).toBe(true);
   });
 
+  it('normalizes line offsets through the store action', () => {
+    useCsvChartStore.getState().setLineOffset('A', 2.8);
+    expect(useCsvChartStore.getState().lineOffsets).toEqual({ A: 3 });
+    useCsvChartStore.getState().setLineOffset('A', Number.NaN);
+    expect(useCsvChartStore.getState().lineOffsets).toEqual({ A: 0 });
+  });
+
+  it('keeps matching offsets and removes absent columns on load', async () => {
+    useCsvChartStore.setState({ lineOffsets: { A: 2, OLD: -1 } });
+    readCsvFile.mockResolvedValueOnce(result(['A', 'B'], [[1, 2]]));
+    await useCsvChartStore.getState().loadCsvFile('new.csv');
+    expect(useCsvChartStore.getState().lineOffsets).toEqual({ A: 2 });
+  });
+
+  it('clears line offsets with CSV data', () => {
+    useCsvChartStore.setState({ lineOffsets: { A: 2 } });
+    useCsvChartStore.getState().clearData();
+    expect(useCsvChartStore.getState().lineOffsets).toEqual({});
+  });
+
   it('clears line statistics visibility with the chart data', () => {
     useCsvChartStore.getState().setShowLineStatistics(true);
 

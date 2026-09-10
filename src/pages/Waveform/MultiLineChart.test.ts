@@ -54,6 +54,41 @@ describe('MultiLineChart line statistics', () => {
 
 });
 
+describe('MultiLineChart Y axis options', () => {
+  it('preserves per-line axes for legacy non-CSV callers', async () => {
+    const { resolveYAxisMode } = await import('./MultiLineChart');
+    expect(resolveYAxisMode(undefined)).toBe('per-line');
+    expect(resolveYAxisMode(undefined, 'shared')).toBe('shared');
+    expect(resolveYAxisMode('shared')).toBe('shared');
+  });
+
+  it('maps all series to one axis in shared mode', async () => {
+    const { buildYAxisOptions } = await import('./MultiLineChart');
+    const result = buildYAxisOptions('shared', [
+      { name: 'A', data: [1], color: '#165DFF' },
+      { name: 'B', data: [100], color: '#F53F3F' },
+    ], 300);
+    expect(result.yAxis).toHaveLength(1);
+    expect(result.series.map((item) => item.yAxisIndex)).toEqual([0, 0]);
+  });
+
+  it('creates one axis per series in per-line mode', async () => {
+    const { buildYAxisOptions } = await import('./MultiLineChart');
+    const result = buildYAxisOptions('per-line', [
+      { name: 'A', data: [1], color: '#165DFF' },
+      { name: 'B', data: [100], color: '#F53F3F' },
+    ], 300);
+    expect(result.yAxis).toHaveLength(2);
+    expect(result.series.map((item) => item.yAxisIndex)).toEqual([0, 1]);
+  });
+
+  it('keeps one placeholder axis when a chart group has no lines', async () => {
+    const { buildYAxisOptions } = await import('./MultiLineChart');
+    expect(buildYAxisOptions('shared', [], 300).yAxis).toHaveLength(1);
+    expect(buildYAxisOptions('per-line', [], 300).yAxis).toHaveLength(1);
+  });
+});
+
 describe('MultiLineChart data zoom synchronization', () => {
   it('dispatches sibling zoom updates silently', async () => {
     const chartModule = await import('./MultiLineChart');

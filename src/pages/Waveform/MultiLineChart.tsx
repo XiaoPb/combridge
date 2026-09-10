@@ -18,7 +18,7 @@ import {
 } from 'echarts/components';
 import { UniversalTransition } from 'echarts/features';
 import { CanvasRenderer, SVGRenderer } from 'echarts/renderers';
-import type { ChartGroupConfig } from './chartGroup';
+import type { ChartGroupConfig, YAxisMode } from './chartGroup';
 import {
   getChartGroupKey,
   getChartLegendKey,
@@ -73,6 +73,8 @@ export interface MultiLineChartProps {
   onLegendSelectedChange?: (selected: Record<string, boolean>) => void;
   onExportError?: (error: Error) => void;
   showLineStatistics?: boolean;
+  lineOffsets?: Readonly<Record<string, number>>;
+  defaultYAxisMode?: YAxisMode;
 }
 
 export interface MultiLineChartHandle {
@@ -103,6 +105,65 @@ interface ChartExportDependencies {
 
 const Y_AXIS_WIDTH = 50;
 type DataZoomState = { start: number; end: number };
+
+export function buildYAxisOptions(
+  mode: YAxisMode | undefined,
+  seriesData: ReadonlyArray<{ name: string; data: number[]; color: string }>,
+  height = 300,
+): {
+  yAxis: Array<Record<string, unknown>>;
+  series: Array<Record<string, unknown>>;
+} {
+  const perLine = mode === 'per-line';
+  const positions: Array<{ position: 'left' | 'right'; offset: number }> = [
+    { position: 'left', offset: 0 },
+    { position: 'right', offset: 0 },
+    { position: 'left', offset: Y_AXIS_WIDTH },
+    { position: 'right', offset: Y_AXIS_WIDTH },
+  ];
+  const axisSources = seriesData.length > 0
+    ? seriesData
+    : [{ name: '', data: [], color: 'transparent' }];
+  const axes = perLine ? axisSources : axisSources.slice(0, 1);
+  const yAxis = axes.map((series, idx) => {
+    const pos = perLine ? positions[idx % positions.length] : positions[0];
+    const color = series?.color || 'transparent';
+    return {
+      name: series?.name || '',
+      type: 'value' as const,
+      position: pos.position,
+      offset: pos.offset,
+      splitNumber: getChartYAxisSplitNumber(height),
+      scale: true,
+      axisLine: { show: Boolean(series), lineStyle: { color } },
+      axisLabel: {
+        color: series ? color : 'transparent',
+        formatter: (value: number) => formatScientific(value),
+      },
+      nameTextStyle: { color: series ? color : 'transparent' },
+      splitLine: { show: idx === 0 },
+    };
+  });
+  const series = seriesData.map((item, idx) => ({
+    name: item.name,
+    type: 'line' as const,
+    data: item.data,
+    smooth: false,
+    yAxisIndex: perLine ? idx : 0,
+    lineStyle: { color: item.color, width: 1.5 },
+    itemStyle: { color: item.color },
+    symbol: 'none',
+    animation: false,
+  }));
+  return { yAxis, series };
+}
+
+export function resolveYAxisMode(
+  groupMode: YAxisMode | undefined,
+  defaultMode: YAxisMode = 'per-line',
+): YAxisMode {
+  return groupMode ?? defaultMode;
+}
 
 export function dispatchDataZoomSilently(
   chart: Pick<echarts.ECharts, 'dispatchAction'>,
@@ -219,6 +280,8 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
   onLegendSelectedChange,
   onExportError,
   showLineStatistics = false,
+  lineOffsets,
+  defaultYAxisMode = 'per-line',
 }, ref) => {
   const { t: translate } = useTranslation('waveform');
   const containerRefs = useRef(new Map<string, HTMLDivElement>());
@@ -302,9 +365,11 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
           rows,
           group.columns,
           localDataZoom,
+          MAX_LINES_PER_CHART,
+          lineOffsets,
         ),
       ),
-    [chartGroups, columns, rows, localDataZoom],
+    [chartGroups, columns, rows, localDataZoom, lineOffsets],
   );
 
   const getChartOption = useCallback(
@@ -314,48 +379,10 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
         rows,
         group.columns,
         MAX_LINES_PER_CHART,
+        lineOffsets,
       );
-      const yAxisPositions: Array<{
-        position: 'left' | 'right';
-        offset: number;
-      }> = [
-        { position: 'left', offset: 0 },
-        { position: 'right', offset: 0 },
-        { position: 'left', offset: Y_AXIS_WIDTH },
-        { position: 'right', offset: Y_AXIS_WIDTH },
-      ];
-      const yAxis = yAxisPositions.map((pos, idx) => {
-        const series = seriesData[idx];
-        const col = series?.name;
-        const color = series?.color || 'transparent';
-        const hasData = !!col;
-        return {
-          name: col || '',
-          type: 'value' as const,
-          position: pos.position,
-          offset: pos.offset,
-          splitNumber: getChartYAxisSplitNumber(group.height),
-          scale: true,
-          axisLine: { show: hasData, lineStyle: { color } },
-          axisLabel: {
-            color: hasData ? color : 'transparent',
-            formatter: (value: number) => formatScientific(value),
-          },
-          nameTextStyle: { color: hasData ? color : 'transparent' },
-          splitLine: { show: idx === 0 },
-        };
-      });
-      const series = seriesData.map((s, idx) => ({
-        name: s.name,
-        type: 'line' as const,
-        data: s.data,
-        smooth: false,
-        yAxisIndex: idx,
-        lineStyle: { color: s.color, width: 1.5 },
-        itemStyle: { color: s.color },
-        symbol: 'none',
-        animation: false,
-      }));
+      const yAxisMode = resolveYAxisMode(group.yAxisMode, defaultYAxisMode);
+      const { yAxis, series } = buildYAxisOptions(yAxisMode, seriesData, group.height);
       return {
         animation: false,
         animationDuration: 0,
@@ -398,7 +425,9 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
           data: seriesData.map((s) => s.name),
           textStyle: { color: 'var(--text-primary)' },
         },
-        grid: unifiedGridConfig,
+        grid: yAxisMode === 'per-line'
+          ? unifiedGridConfig
+          : { top: 40, left: Y_AXIS_WIDTH, right: Y_AXIS_WIDTH, bottom: 50 },
         xAxis: {
           type: 'category',
           data: xAxisData,
@@ -450,7 +479,7 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
         ],
       };
     },
-    [columns, rows, sampleRate, xAxisData, unifiedGridConfig, localDataZoom],
+    [columns, rows, sampleRate, xAxisData, unifiedGridConfig, localDataZoom, lineOffsets, defaultYAxisMode],
   );
 
   const replayLegendSelection = useCallback(
@@ -516,7 +545,7 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
             selectedColumns,
             MAX_LINES_PER_CHART,
           ).map((series) => series.name);
-          const structureSignature = `${groupKey}:${selectedColumns.join('\u0000')}:${seriesStructure.join('\u0000')}`;
+          const structureSignature = `${groupKey}:${resolveYAxisMode(group.yAxisMode, defaultYAxisMode)}:${selectedColumns.join('\u0000')}:${seriesStructure.join('\u0000')}`;
           const structureChanged =
             structureSignatures.current.get(groupKey) !== structureSignature;
           chart.setOption(

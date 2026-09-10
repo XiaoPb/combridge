@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useCsvChartStore } from '../../stores/csvChartStore';
 import MultiLineChart from './MultiLineChart';
 import type { MultiLineChartHandle } from './MultiLineChart';
+import { MAX_LINE_OFFSET_POINTS } from './multiLineChartModel';
 
 const { Text } = Typography;
 const CsvMultiLineChart = MultiLineChart as React.ComponentType<
@@ -37,6 +38,8 @@ const CsvLoaderTab: React.FC = () => {
     addChartGroup,
     removeChartGroup,
     updateChartGroup,
+    lineOffsets,
+    setLineOffset,
   } = useCsvChartStore();
 
   const handleSelectFile = useCallback(async () => {
@@ -221,7 +224,8 @@ const CsvLoaderTab: React.FC = () => {
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-color)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   {chartGroups.map((group) => (
-                    <Space key={group.id} style={{ background: 'var(--bg-secondary)', padding: '4px 8px', borderRadius: 4 }}>
+                    <Space key={group.id} orientation="vertical" size={4} style={{ background: 'var(--bg-secondary)', padding: '6px 8px', borderRadius: 4, alignItems: 'flex-start' }}>
+                      <Space wrap size="small">
                       <Text strong style={{ fontSize: 12 }}>{group.name}</Text>
                       <Select
                         mode="multiple"
@@ -233,6 +237,17 @@ const CsvLoaderTab: React.FC = () => {
                         maxTagCount="responsive"
                         size="small"
                         style={{ minWidth: 150 }}
+                      />
+                      <Select
+                        size="small"
+                        value={group.yAxisMode ?? 'shared'}
+                        onChange={(yAxisMode) => updateChartGroup(group.id, { yAxisMode })}
+                        options={[
+                          { label: t('csvLoader.sharedYAxis'), value: 'shared' },
+                          { label: t('csvLoader.perLineYAxis'), value: 'per-line' },
+                        ]}
+                        aria-label={t('csvLoader.yAxisMode')}
+                        style={{ width: 150 }}
                       />
                       <InputNumber
                         min={150}
@@ -251,6 +266,31 @@ const CsvLoaderTab: React.FC = () => {
                           size="small"
                           danger
                         />
+                      )}
+                      </Space>
+                      {group.columns.slice(0, 4).length > 0 && (
+                        <Space wrap size="small">
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {t('csvLoader.lineOffset')}
+                          </Text>
+                          {group.columns.slice(0, 4).map((column) => (
+                            <Space key={column} size={4}>
+                              <Text type="secondary" style={{ fontSize: 12 }}>{column}</Text>
+                              <InputNumber
+                                size="small"
+                                min={-MAX_LINE_OFFSET_POINTS}
+                                max={MAX_LINE_OFFSET_POINTS}
+                                precision={0}
+                                step={1}
+                                value={lineOffsets[column] ?? 0}
+                                onChange={(value) => setLineOffset(column, value ?? 0)}
+                                addonAfter={t('csvLoader.offsetPoints')}
+                                aria-label={`${t('csvLoader.lineOffset')} ${column}`}
+                                style={{ width: 130 }}
+                              />
+                            </Space>
+                          ))}
+                        </Space>
                       )}
                     </Space>
                   ))}
@@ -291,6 +331,8 @@ const CsvLoaderTab: React.FC = () => {
             columns={columns}
             rows={rows}
             chartGroups={chartGroups}
+            lineOffsets={lineOffsets}
+            defaultYAxisMode="shared"
             sampleRate={sampleRate}
             showLineStatistics={showLineStatistics}
             initialDataZoom={dataZoomState}

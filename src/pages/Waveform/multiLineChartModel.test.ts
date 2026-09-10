@@ -2,8 +2,34 @@ import { describe, expect, it } from 'vitest';
 import {
   LINE_COLORS,
   MAX_LINES_PER_CHART,
+  applyLineOffset,
   buildChartSeries,
+  normalizeLineOffset,
 } from './multiLineChartModel';
+
+describe('line offsets', () => {
+  it('shifts right and fills the leading gap with zero', () => {
+    expect(applyLineOffset([1, 2, 3], 1)).toEqual([0, 1, 2]);
+  });
+  it('shifts left and fills the trailing gap with zero', () => {
+    expect(applyLineOffset([1, 2, 3], -1)).toEqual([2, 3, 0]);
+  });
+  it('returns zeros when offset exceeds data', () => {
+    expect(applyLineOffset([1, 2, 3], 3)).toEqual([0, 0, 0]);
+    expect(applyLineOffset([1, 2, 3], -4)).toEqual([0, 0, 0]);
+  });
+  it('normalizes invalid offsets', () => {
+    expect(normalizeLineOffset(Number.NaN)).toBe(0);
+    expect(normalizeLineOffset(2.8)).toBe(3);
+    expect(normalizeLineOffset(Number.POSITIVE_INFINITY)).toBe(0);
+  });
+  it('applies offsets without mutating source rows', () => {
+    const rows = [[1, 10], [2, 20], [3, 30]];
+    const series = buildChartSeries(['A', 'B'], rows, ['A'], MAX_LINES_PER_CHART, { A: 1 });
+    expect(series[0].data).toEqual([0, 1, 2]);
+    expect(rows).toEqual([[1, 10], [2, 20], [3, 30]]);
+  });
+});
 
 describe('buildChartSeries', () => {
   it('builds one independent series and color per selected column', () => {

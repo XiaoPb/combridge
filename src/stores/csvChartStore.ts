@@ -4,6 +4,7 @@ import type { IdentifiedChartGroupConfig } from '../pages/Waveform/chartGroup';
 import { createChartGroup, getNextChartGroupName } from '../pages/Waveform/chartGroup';
 import i18n from '../i18n';
 import { formatErrorMessage } from '../utils/errorMessage';
+import { normalizeLineOffset } from '../pages/Waveform/multiLineChartModel';
 
 interface DataZoomState { start: number; end: number; }
 interface CsvChartState {
@@ -17,6 +18,7 @@ interface CsvChartState {
   sampleRate: number;
   showLineStatistics: boolean;
   dataZoomState: DataZoomState;
+  lineOffsets: Record<string, number>;
 }
 interface CsvChartActions {
   loadCsvFile: (filePath: string, options?: { resetZoom?: boolean }) => Promise<void>;
@@ -31,6 +33,7 @@ interface CsvChartActions {
   setDataZoomState: (state: DataZoomState) => void;
   clearData: () => void;
   clearError: () => void;
+  setLineOffset: (column: string, offset: number) => void;
 }
 export type CsvChartStore = CsvChartState & CsvChartActions;
 
@@ -65,6 +68,7 @@ export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
   sampleRate: 25,
   showLineStatistics: false,
   dataZoomState: { ...DEFAULT_DATA_ZOOM_STATE },
+  lineOffsets: {},
   loadCsvFile: async (filePath, options = {}) => {
     const generation = ++loadGeneration;
     const shouldResetZoom = options.resetZoom === true || get().csvData === null;
@@ -79,7 +83,8 @@ export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
           ? { start: 0, end: (tenSecondsPoints / dataLength) * 100 }
           : { ...DEFAULT_DATA_ZOOM_STATE }
         : get().dataZoomState;
-      set({ csvData, filePath, chartGroups: autoAssignChartGroups(csvData.columns), dataZoomState, isLoading: false });
+      const lineOffsets = Object.fromEntries(Object.entries(get().lineOffsets).filter(([column]) => csvData.columns.includes(column)));
+      set({ csvData, filePath, chartGroups: autoAssignChartGroups(csvData.columns), dataZoomState, lineOffsets, isLoading: false });
     } catch (err) {
       if (generation !== loadGeneration) return;
       set({ error: formatErrorMessage(err, i18n.t('waveform:errors.loadCsv')), isLoading: false });
@@ -100,9 +105,10 @@ export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
   setSampleRate: (rate) => set({ sampleRate: rate }),
   setShowLineStatistics: (show) => set({ showLineStatistics: show }),
   setDataZoomState: (state) => set({ dataZoomState: state }),
+  setLineOffset: (column, offset) => set({ lineOffsets: { ...get().lineOffsets, [column]: normalizeLineOffset(offset) } }),
   clearData: () => {
     ++loadGeneration;
-    set({ csvData: null, filePath: null, chartGroups: createDefaultChartGroups(), isLoading: false, error: null, showLineStatistics: false, dataZoomState: { ...DEFAULT_DATA_ZOOM_STATE } });
+    set({ csvData: null, filePath: null, chartGroups: createDefaultChartGroups(), isLoading: false, error: null, showLineStatistics: false, dataZoomState: { ...DEFAULT_DATA_ZOOM_STATE }, lineOffsets: {} });
   },
   clearError: () => set({ error: null }),
 }));

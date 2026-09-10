@@ -8,7 +8,10 @@ import { useCsvChartStore } from '../../stores/csvChartStore';
 const { exportAllPng, openFileDialog, chartProps } = vi.hoisted(() => ({
   exportAllPng: vi.fn(),
   openFileDialog: vi.fn(),
-  chartProps: { showLineStatistics: undefined as boolean | undefined },
+  chartProps: {
+    showLineStatistics: undefined as boolean | undefined,
+    lineOffsets: undefined as Readonly<Record<string, number>> | undefined,
+  },
 }));
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({
@@ -23,9 +26,11 @@ vi.mock('./MultiLineChart', async () => {
     {
       onExportError?: (error: Error) => void;
       showLineStatistics?: boolean;
+      lineOffsets?: Readonly<Record<string, number>>;
     }
-  >(({ onExportError, showLineStatistics }, ref) => {
+  >(({ onExportError, showLineStatistics, lineOffsets }, ref) => {
     chartProps.showLineStatistics = showLineStatistics;
+    chartProps.lineOffsets = lineOffsets;
     ReactModule.useImperativeHandle(ref, () => ({ exportAllPng }), []);
 
     return ReactModule.createElement(
@@ -75,6 +80,7 @@ describe('CsvLoaderTab PNG export entry', () => {
     exportAllPng.mockResolvedValue(undefined);
     openFileDialog.mockReset();
     chartProps.showLineStatistics = undefined;
+    chartProps.lineOffsets = undefined;
   });
 
   it('renders and toggles the line statistics switch after the no-header option', async () => {
@@ -111,6 +117,38 @@ describe('CsvLoaderTab PNG export entry', () => {
     expect(i18n.t('waveform:chart.min')).toBe('Min');
     expect(i18n.t('waveform:chart.avg')).toBe('Avg');
     expect(i18n.t('waveform:chart.diff')).toBe('Diff');
+  });
+
+  it('updates the selected chart Y axis mode and line offset', async () => {
+    const [group, secondGroup] = useCsvChartStore.getState().chartGroups;
+    setCsvData(['A', 'B'], [[1, 2]]);
+    useCsvChartStore.setState({
+      chartGroups: [
+        { ...group, columns: ['A'] },
+        { ...secondGroup, columns: ['B'] },
+      ],
+    });
+
+    render(<CsvLoaderTab />);
+
+    expect(screen.getAllByLabelText('Y轴模式')).toHaveLength(2);
+    expect(screen.getAllByText('采样点偏移')).toHaveLength(2);
+    const offsetInput = screen.getByLabelText('采样点偏移 A');
+    fireEvent.change(offsetInput, { target: { value: '2' } });
+    fireEvent.blur(offsetInput);
+
+    const yAxisGroups = screen.getAllByLabelText('Y轴模式');
+    expect(yAxisGroups).toHaveLength(2);
+    fireEvent.click(yAxisGroups[0]!.querySelector('label:nth-of-type(2)')!);
+    fireEvent.click(yAxisGroups[0]!.querySelector('label:nth-of-type(1)')!);
+
+    await waitFor(() => {
+      const state = useCsvChartStore.getState();
+      expect(state.lineOffsets.A).toBe(2);
+      expect(state.chartGroups[0].yAxisMode).toBe('per-line');
+      expect(state.chartGroups[1].yAxisMode).toBe('per-line');
+      expect(chartProps.lineOffsets).toEqual({ A: 2 });
+    });
   });
 
   it('hides the export button when CSV data or columns are unavailable', () => {

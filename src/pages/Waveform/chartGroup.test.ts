@@ -8,6 +8,7 @@ import {
   getNextChartGroupName,
   migrateLegacyChartLegendSelections,
   resolveChartLegendSelection,
+  type ChartGroupConfig,
 } from './chartGroup';
 
 describe('chart group identity', () => {
@@ -20,6 +21,12 @@ describe('chart group identity', () => {
 
     expect(group.columns).toEqual([]);
     expect(group.height).toBe(300);
+    expect(group.yAxisMode).toBe('per-line');
+  });
+
+  it('keeps legacy chart group objects valid without a mode', () => {
+    const legacy: ChartGroupConfig = { name: '旧图表', columns: ['A'] };
+    expect(legacy.yAxisMode).toBeUndefined();
   });
 
   it('clones the input columns', () => {

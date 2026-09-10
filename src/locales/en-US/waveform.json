@@ -94,6 +94,12 @@
     "rows": "rows",
     "noHeader": "No Header",
     "showLineStatistics": "Show line statistics",
+    "yAxisMode": "Y-axis mode",
+    "yAxisLabel": "Y axis",
+    "sharedYAxis": "Shared",
+    "perLineYAxis": "Independent",
+    "lineOffset": "Line offset",
+    "offsetPoints": "pts",
     "noData": "Please select a CSV file"
   }
 }

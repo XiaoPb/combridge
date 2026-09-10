@@ -18,7 +18,7 @@ import {
 } from 'echarts/components';
 import { UniversalTransition } from 'echarts/features';
 import { CanvasRenderer, SVGRenderer } from 'echarts/renderers';
-import type { ChartGroupConfig } from './chartGroup';
+import type { ChartGroupConfig, YAxisMode } from './chartGroup';
 import {
   getChartGroupKey,
   getChartLegendKey,
@@ -73,6 +73,9 @@ export interface MultiLineChartProps {
   onLegendSelectedChange?: (selected: Record<string, boolean>) => void;
   onExportError?: (error: Error) => void;
   showLineStatistics?: boolean;
+  lineOffsets?: Readonly<Record<string, number>>;
+  defaultYAxisMode?: YAxisMode;
+  exportFilePath?: string;
 }
 
 export interface MultiLineChartHandle {
@@ -98,11 +101,73 @@ interface ChartExportDependencies {
   downloadBlob: (blob: Blob, filename: string) => void;
   waitForRender: () => Promise<void>;
   now: () => number;
+  saveBlob?: (blob: Blob, filename: string, preferredDirectory?: string) => Promise<void>;
+  filenamePrefix?: string;
+  preferredDirectory?: string;
   onExportError?: (error: Error) => void;
 }
 
 const Y_AXIS_WIDTH = 50;
 type DataZoomState = { start: number; end: number };
+
+export function buildYAxisOptions(
+  mode: YAxisMode | undefined,
+  seriesData: ReadonlyArray<{ name: string; data: number[]; color: string }>,
+  height = 300,
+): {
+  yAxis: Array<Record<string, unknown>>;
+  series: Array<Record<string, unknown>>;
+} {
+  const perLine = mode === 'per-line';
+  const positions: Array<{ position: 'left' | 'right'; offset: number }> = [
+    { position: 'left', offset: 0 },
+    { position: 'right', offset: 0 },
+    { position: 'left', offset: Y_AXIS_WIDTH },
+    { position: 'right', offset: Y_AXIS_WIDTH },
+  ];
+  const axisSources = seriesData.length > 0
+    ? seriesData
+    : [{ name: '', data: [], color: 'transparent' }];
+  const axes = perLine ? axisSources : axisSources.slice(0, 1);
+  const yAxis = axes.map((series, idx) => {
+    const pos = perLine ? positions[idx % positions.length] : positions[0];
+    const color = series?.color || 'transparent';
+    return {
+      name: series?.name || '',
+      type: 'value' as const,
+      position: pos.position,
+      offset: pos.offset,
+      splitNumber: getChartYAxisSplitNumber(height),
+      scale: true,
+      axisLine: { show: Boolean(series), lineStyle: { color } },
+      axisLabel: {
+        color: series ? color : 'transparent',
+        formatter: (value: number) => formatScientific(value),
+      },
+      nameTextStyle: { color: series ? color : 'transparent' },
+      splitLine: { show: idx === 0 },
+    };
+  });
+  const series = seriesData.map((item, idx) => ({
+    name: item.name,
+    type: 'line' as const,
+    data: item.data,
+    smooth: false,
+    yAxisIndex: perLine ? idx : 0,
+    lineStyle: { color: item.color, width: 1.5 },
+    itemStyle: { color: item.color },
+    symbol: 'none',
+    animation: false,
+  }));
+  return { yAxis, series };
+}
+
+export function resolveYAxisMode(
+  groupMode: YAxisMode | undefined,
+  defaultMode: YAxisMode = 'per-line',
+): YAxisMode {
+  return groupMode ?? defaultMode;
+}
 
 export function dispatchDataZoomSilently(
   chart: Pick<echarts.ECharts, 'dispatchAction'>,
@@ -219,6 +284,9 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
   onLegendSelectedChange,
   onExportError,
   showLineStatistics = false,
+  lineOffsets,
+  defaultYAxisMode = 'per-line',
+  exportFilePath,
 }, ref) => {
   const { t: translate } = useTranslation('waveform');
   const containerRefs = useRef(new Map<string, HTMLDivElement>());
@@ -302,9 +370,11 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
           rows,
           group.columns,
           localDataZoom,
+          MAX_LINES_PER_CHART,
+          lineOffsets,
         ),
       ),
-    [chartGroups, columns, rows, localDataZoom],
+    [chartGroups, columns, rows, localDataZoom, lineOffsets],
   );
 
   const getChartOption = useCallback(
@@ -314,48 +384,10 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
         rows,
         group.columns,
         MAX_LINES_PER_CHART,
+        lineOffsets,
       );
-      const yAxisPositions: Array<{
-        position: 'left' | 'right';
-        offset: number;
-      }> = [
-        { position: 'left', offset: 0 },
-        { position: 'right', offset: 0 },
-        { position: 'left', offset: Y_AXIS_WIDTH },
-        { position: 'right', offset: Y_AXIS_WIDTH },
-      ];
-      const yAxis = yAxisPositions.map((pos, idx) => {
-        const series = seriesData[idx];
-        const col = series?.name;
-        const color = series?.color || 'transparent';
-        const hasData = !!col;
-        return {
-          name: col || '',
-          type: 'value' as const,
-          position: pos.position,
-          offset: pos.offset,
-          splitNumber: getChartYAxisSplitNumber(group.height),
-          scale: true,
-          axisLine: { show: hasData, lineStyle: { color } },
-          axisLabel: {
-            color: hasData ? color : 'transparent',
-            formatter: (value: number) => formatScientific(value),
-          },
-          nameTextStyle: { color: hasData ? color : 'transparent' },
-          splitLine: { show: idx === 0 },
-        };
-      });
-      const series = seriesData.map((s, idx) => ({
-        name: s.name,
-        type: 'line' as const,
-        data: s.data,
-        smooth: false,
-        yAxisIndex: idx,
-        lineStyle: { color: s.color, width: 1.5 },
-        itemStyle: { color: s.color },
-        symbol: 'none',
-        animation: false,
-      }));
+      const yAxisMode = resolveYAxisMode(group.yAxisMode, defaultYAxisMode);
+      const { yAxis, series } = buildYAxisOptions(yAxisMode, seriesData, group.height);
       return {
         animation: false,
         animationDuration: 0,
@@ -398,7 +430,9 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
           data: seriesData.map((s) => s.name),
           textStyle: { color: 'var(--text-primary)' },
         },
-        grid: unifiedGridConfig,
+        grid: yAxisMode === 'per-line'
+          ? unifiedGridConfig
+          : { top: 40, left: Y_AXIS_WIDTH, right: Y_AXIS_WIDTH, bottom: 50 },
         xAxis: {
           type: 'category',
           data: xAxisData,
@@ -450,7 +484,7 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
         ],
       };
     },
-    [columns, rows, sampleRate, xAxisData, unifiedGridConfig, localDataZoom],
+    [columns, rows, sampleRate, xAxisData, unifiedGridConfig, localDataZoom, lineOffsets, defaultYAxisMode],
   );
 
   const replayLegendSelection = useCallback(
@@ -516,7 +550,7 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
             selectedColumns,
             MAX_LINES_PER_CHART,
           ).map((series) => series.name);
-          const structureSignature = `${groupKey}:${selectedColumns.join('\u0000')}:${seriesStructure.join('\u0000')}`;
+          const structureSignature = `${groupKey}:${resolveYAxisMode(group.yAxisMode, defaultYAxisMode)}:${selectedColumns.join('\u0000')}:${seriesStructure.join('\u0000')}`;
           const structureChanged =
             structureSignatures.current.get(groupKey) !== structureSignature;
           chart.setOption(
@@ -670,31 +704,39 @@ const MultiLineChart = forwardRef<MultiLineChartHandle, MultiLineChartProps>(({
       const group = chartGroups.find(
         (item, index) => getChartGroupKey(item, index) === contextMenu.groupKey,
       );
-      const filename = `waveform_${group?.name || 'chart'}_${Date.now()}.${type}`;
+      const timestamp = formatExportTimestamp(Date.now());
+      const filename = exportFilePath
+        ? getExportFilename(exportFilePath, type, timestamp)
+        : `waveform_${group?.name || 'chart'}_${timestamp}.${type}`;
       void exportSingleChart(
         chart,
         group,
         type,
         filename,
         onExportErrorRef.current,
+        exportFilePath ? saveBlobToPreferredPath : undefined,
+        exportFilePath ? getFileDirectory(exportFilePath) : undefined,
       )
         .catch((error: unknown) => {
           console.error('Chart export failed', error);
         })
         .finally(() => setContextMenu(null));
     },
-    [contextMenu, chartGroups],
+    [contextMenu, chartGroups, exportFilePath],
   );
 
   const exportAllPng = useCallback(async (): Promise<void> => {
     try {
       await exportAllChartsPng(chartGroups, chartInstances.current, {
         onExportError: onExportErrorRef.current,
+        filenamePrefix: exportFilePath ? getFileStem(exportFilePath) : undefined,
+        preferredDirectory: exportFilePath ? getFileDirectory(exportFilePath) : undefined,
+        saveBlob: exportFilePath ? saveBlobToPreferredPath : undefined,
       });
     } catch (error) {
       throw toExportError(error);
     }
-  }, [chartGroups]);
+  }, [chartGroups, exportFilePath]);
 
   useImperativeHandle(ref, () => ({ exportAllPng }), [exportAllPng]);
   useEffect(() => {
@@ -911,6 +953,8 @@ export async function exportChart(
   type: 'png' | 'svg',
   filename: string,
   onExportError?: (error: Error) => void,
+  saveBlob?: (blob: Blob, filename: string, preferredDirectory?: string) => Promise<void>,
+  preferredDirectory?: string,
 ): Promise<void> {
   try {
     await waitForChartRender();
@@ -921,7 +965,9 @@ export async function exportChart(
           pixelRatio: 2,
           backgroundColor: '#fff',
         });
-    downloadBlob(dataUrlToBlob(url), filename);
+    const blob = dataUrlToBlob(url);
+    if (saveBlob) await saveBlob(blob, filename, preferredDirectory);
+    else downloadBlob(blob, filename);
   } catch (error) {
     const exportError = toExportError(error);
     onExportError?.(exportError);
@@ -935,11 +981,13 @@ export async function exportSingleChart(
   type: 'png' | 'svg',
   filename: string,
   onExportError?: (error: Error) => void,
+  saveBlob?: (blob: Blob, filename: string, preferredDirectory?: string) => Promise<void>,
+  preferredDirectory?: string,
 ): Promise<void> {
   try {
     if (!chart || !group)
       throw new Error('Cannot export chart: chart or group is unavailable');
-    await exportChart(chart, type, filename);
+    await exportChart(chart, type, filename, undefined, saveBlob, preferredDirectory);
   } catch (error) {
     const exportError = toExportError(error);
     onExportError?.(exportError);
@@ -957,6 +1005,9 @@ export async function exportAllChartsPng(
     downloadBlob: download = downloadBlob,
     waitForRender = waitForChartRender,
     now = Date.now,
+    saveBlob,
+    filenamePrefix = 'waveform_all',
+    preferredDirectory,
     onExportError,
   } = dependencies;
 
@@ -997,7 +1048,9 @@ export async function exportAllChartsPng(
     });
 
     const output = await compose(dataUrls, { gap: 8 });
-    download(output.blob, `waveform_all_${now()}.png`);
+    const filename = `${filenamePrefix}_${formatExportTimestamp(now())}.png`;
+    if (saveBlob) await saveBlob(output.blob, filename, preferredDirectory);
+    else download(output.blob, filename);
   } catch (error) {
     const exportError = toExportError(error);
     onExportError?.(exportError);
@@ -1063,4 +1116,77 @@ function waitForChartRender(): Promise<void> {
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(finish);
     else finish();
   });
+}
+
+export function getFileStem(filePath: string): string {
+  const name = filePath.split(/[\\/]/).pop() || 'waveform';
+  return name.replace(/\.[^.]*$/, '') || 'waveform';
+}
+
+export function getFileDirectory(filePath: string): string | undefined {
+  const separatorIndex = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  return separatorIndex > 0 ? filePath.slice(0, separatorIndex) : undefined;
+}
+
+export function getExportFilename(
+  filePath: string,
+  type: 'png' | 'svg',
+  timestamp: number | string,
+): string {
+  const formattedTimestamp =
+    typeof timestamp === 'number' ? formatExportTimestamp(timestamp) : timestamp;
+  return `${getFileStem(filePath)}_${formattedTimestamp}.${type}`;
+}
+
+export function formatExportTimestamp(timestamp: number): string {
+  const date = new Date(timestamp);
+  const pad = (value: number, width: number): string =>
+    String(value).padStart(width, '0');
+  return [
+    `${date.getFullYear()}${pad(date.getMonth() + 1, 2)}${pad(date.getDate(), 2)}`,
+    `${pad(date.getHours(), 2)}${pad(date.getMinutes(), 2)}${pad(date.getSeconds(), 2)}`,
+    pad(date.getMilliseconds(), 3),
+  ].join('_');
+}
+
+export async function saveBlobToPreferredPath(
+  blob: Blob,
+  filename: string,
+  preferredDirectory?: string,
+): Promise<void> {
+  const [{ writeFile }, { downloadDir, join }] = await Promise.all([
+    import('@tauri-apps/plugin-fs'),
+    import('@tauri-apps/api/path'),
+  ]);
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+
+  if (preferredDirectory) {
+    try {
+      await writeFile(await join(preferredDirectory, filename), bytes);
+      return;
+    } catch {
+      // Fall back to Downloads when the CSV directory is unavailable.
+    }
+  }
+
+  try {
+    await writeFile(await join(await downloadDir(), filename), bytes);
+    return;
+  } catch {
+    // The Downloads folder can also be restricted by the platform scope.
+  }
+
+  try {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const selectedPath = await save({
+      defaultPath: filename,
+      filters: [{ name: 'PNG image', extensions: ['png'] }],
+    });
+    if (!selectedPath) throw new Error('Export save cancelled');
+    await writeFile(selectedPath, bytes);
+  } catch (error) {
+    throw new Error(
+      `Failed to save export to the CSV directory, Downloads folder, or selected location: ${String(error)}`,
+    );
+  }
 }

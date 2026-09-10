@@ -94,6 +94,12 @@
     "rows": "行",
     "noHeader": "无表头",
     "showLineStatistics": "显示线统计",
+    "yAxisMode": "Y轴模式",
+    "yAxisLabel": "Y轴",
+    "sharedYAxis": "共用",
+    "perLineYAxis": "独立",
+    "lineOffset": "采样点偏移",
+    "offsetPoints": "点",
     "noData": "请选择 CSV 文件"
   }
 }

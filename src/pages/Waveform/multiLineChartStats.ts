@@ -1,4 +1,5 @@
 import {
+  buildChartSeries,
   LINE_COLORS,
   MAX_LINES_PER_CHART,
   normalizeMaxLines,
@@ -46,6 +47,7 @@ export function calculateVisibleLineStats(
   groupColumns: string[],
   zoom: DataZoomPercent,
   maxLines = MAX_LINES_PER_CHART,
+  lineOffsets?: Readonly<Record<string, number>>,
 ): LineStatistics[] {
   const range = getVisibleRowRange(rows.length, zoom);
   if (!range) return [];
@@ -55,15 +57,19 @@ export function calculateVisibleLineStats(
     .slice(0, lineLimit)
     .filter((column, index, selected) => selected.indexOf(column) === index);
 
-  return selectedColumns.map((name, lineIndex) => {
-    const columnIndex = columns.indexOf(name);
+  const series = buildChartSeries(columns, rows, selectedColumns, lineLimit, lineOffsets);
+  return series.map((line, lineIndex) => {
+    const { name, data } = line;
+    if (!columns.includes(name)) {
+      return { name, color: LINE_COLORS[lineIndex % LINE_COLORS.length], max: null, min: null, avg: null, diff: null };
+    }
     const color = LINE_COLORS[lineIndex % LINE_COLORS.length];
     let max: number | null = null;
     let min: number | null = null;
     const values: number[] = [];
 
     for (let rowIndex = range.startIndex; rowIndex <= range.endIndex; rowIndex += 1) {
-      const value = rows[rowIndex]?.[columnIndex];
+      const value = data[rowIndex];
       if (!Number.isFinite(value)) continue;
 
       values.push(value);

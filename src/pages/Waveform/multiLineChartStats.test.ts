@@ -52,6 +52,13 @@ describe('calculateVisibleLineStats', () => {
     [7, 40, 12, 40, 11],
   ];
 
+  it('calculates statistics from offset line values', () => {
+    const stats = calculateVisibleLineStats(
+      ['A'], [[1], [2], [3]], ['A'], { start: 0, end: 100 }, 4, { A: 1 },
+    );
+    expect(stats[0]).toMatchObject({ min: 0, max: 2, diff: 2 });
+  });
+
   it('calculates max, min, average, and diff only in the visible range', () => {
     const visibleRows = [
       [100, 1000, 0, 0, 0],

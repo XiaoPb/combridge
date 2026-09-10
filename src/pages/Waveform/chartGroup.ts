@@ -3,7 +3,10 @@ export interface ChartGroupConfig {
   name: string;
   columns: string[];
   height?: number;
+  yAxisMode?: YAxisMode;
 }
+
+export type YAxisMode = 'shared' | 'per-line';
 
 export type IdentifiedChartGroupConfig = ChartGroupConfig & { id: string };
 
@@ -29,6 +32,7 @@ export function createChartGroup(
     name,
     columns: [...columns],
     height,
+    yAxisMode: 'per-line',
   };
 }
 

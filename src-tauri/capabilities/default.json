@@ -22,15 +22,23 @@
     "dialog:default",
     {
       "identifier": "fs:allow-mkdir",
-      "allow": [{ "path": "$RESOURCE/**" }, { "path": "$CWD/**" }]
+      "allow": [{ "path": "$RESOURCE/**/*" }, { "path": "$CWD/**/*" }]
     },
     {
       "identifier": "fs:allow-write-text-file",
-      "allow": [{ "path": "$CWD/**" }]
+      "allow": [
+        { "path": "$CWD/**/*" },
+        { "path": "$HOME/**/*" },
+        { "path": "$DOWNLOAD/**/*" }
+      ]
     },
     {
       "identifier": "fs:allow-write-file",
-      "allow": [{ "path": "$CWD/**" }]
+      "allow": [
+        { "path": "$CWD/**/*" },
+        { "path": "$HOME/**/*" },
+        { "path": "$DOWNLOAD/**/*" }
+      ]
     }
   ]
 }

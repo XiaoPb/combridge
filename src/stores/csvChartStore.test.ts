@@ -29,6 +29,26 @@ describe('CSV chart store isolation and load ordering', () => {
     expect(useCsvChartStore.getState().showLineStatistics).toBe(true);
   });
 
+  it('normalizes line offsets through the store action', () => {
+    useCsvChartStore.getState().setLineOffset('A', 2.8);
+    expect(useCsvChartStore.getState().lineOffsets).toEqual({ A: 3 });
+    useCsvChartStore.getState().setLineOffset('A', Number.NaN);
+    expect(useCsvChartStore.getState().lineOffsets).toEqual({ A: 0 });
+  });
+
+  it('keeps matching offsets and removes absent columns on load', async () => {
+    useCsvChartStore.setState({ lineOffsets: { A: 2, OLD: -1 } });
+    readCsvFile.mockResolvedValueOnce(result(['A', 'B'], [[1, 2]]));
+    await useCsvChartStore.getState().loadCsvFile('new.csv');
+    expect(useCsvChartStore.getState().lineOffsets).toEqual({ A: 2 });
+  });
+
+  it('clears line offsets with CSV data', () => {
+    useCsvChartStore.setState({ lineOffsets: { A: 2 } });
+    useCsvChartStore.getState().clearData();
+    expect(useCsvChartStore.getState().lineOffsets).toEqual({});
+  });
+
   it('clears line statistics visibility with the chart data', () => {
     useCsvChartStore.getState().setShowLineStatistics(true);
 
@@ -119,7 +139,7 @@ describe('CSV chart store isolation and load ordering', () => {
       'CH0 (other)',
       'ACC_X (other)',
       'OTHER (2)',
-    ]));
+    ], [[1, 2, 3, 4]]));
 
     await useCsvChartStore.getState().loadCsvFile('headers.csv');
 
@@ -127,6 +147,17 @@ describe('CSV chart store isolation and load ordering', () => {
       useCsvChartStore.getState().chartGroups;
     expect(channelGroup.columns).toEqual(['CH0', 'CH0 (2)']);
     expect(accelerometerGroup.columns).toEqual(['ACC_X', 'ACC_X (2)']);
+  });
+
+  it('does not auto-select known waveform columns whose values are all zero', async () => {
+    readCsvFile.mockResolvedValue(result(
+      ['Ipd0', 'Ipd1', 'Ipd2', 'Ipd3'],
+      [[10, 20, 0, 0], [11, 21, 0, 0]],
+    ));
+
+    await useCsvChartStore.getState().loadCsvFile('ipd.csv');
+
+    expect(useCsvChartStore.getState().chartGroups[0].columns).toEqual(['Ipd0', 'Ipd1']);
   });
 
   it('preserves zoom when loading another CSV without an explicit reload', async () => {

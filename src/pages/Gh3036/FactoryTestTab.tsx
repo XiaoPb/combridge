@@ -168,9 +168,9 @@ const FactoryTestTab: React.FC = () => {
         dataIndex: 'value',
         key: 'value',
         width: 100,
-        render: (val: number, record: ChannelEvaluationResult) => (
+        render: (val: number | null, record: ChannelEvaluationResult) => (
           <Text style={{ color: record.pass ? token.colorText : token.colorError, fontWeight: 500 }}>
-            {val} {testResult.unit || ''}
+            {val === null || !Number.isFinite(val) ? '--' : val.toLocaleString(undefined, { maximumFractionDigits: 6 })} {testResult.unit || ''}
           </Text>
         ),
       },
@@ -259,6 +259,11 @@ const FactoryTestTab: React.FC = () => {
                 ) : (
                   <CloseCircleOutlined style={{ color: token.colorError }} />
                 )}
+              </Descriptions.Item>
+              <Descriptions.Item label="compute mode">
+                <Tag color={result.compute_mode === 'app' ? 'blue' : 'default'}>
+                  {result.compute_mode}
+                </Tag>
               </Descriptions.Item>
               <Descriptions.Item label={t('factory.uuid')}>
                 <Paragraph

@@ -542,3 +542,31 @@ config_dir/
 | `src/api/types.ts` | TypeScript 类型定义 |
 | `src/utils/msgpack.ts` | MsgPack 解码工具 |
 | `src/services/eventListeners.ts` | 事件监听服务 |
+## 双计算方式配置与决策
+
+产测支持 `mcu` 和 `app` 两种计算方式。配置文件中的 `chip`、各测试项的 `channels`、
+`mode`、`compute` 参数以及寄存器配置文件共同决定采集和计算行为。`compute` 可配置
+`sample_rate_hz`、`min_number`、`skip_number`、`is_continuous`、`timeout_ms`、
+`gain_k` 和 `led_current_ma`。
+
+默认采样参数：噪声测试为 100 Hz、跳过 200 帧、至少 100 帧、连续采样、10 秒超时；
+CTR 测试为 100 Hz、至少 100 帧、非连续采样、10 秒超时。
+
+ADC 芯片族、Ipd 和 LED 电流的优先级由后端计算模块统一处理：GH3036/GH3038 优先使用
+帧内 AGC LED 电流，GH3220/GH3300 优先使用配置电流；Ipd 优先使用 `ipd_pa`，缺失时
+只有在配置了正 `gain_k` 后才从 rawdata 回退计算。
+
+CHIP_INIT 完成后锁定模式，整个本次产测不再切换：
+
+| CHIP_INIT 结果 | 后续模式 |
+| --- | --- |
+| FS/FG 返回至少一个 U16 通道 | MCU |
+| FS 失败、FG 失败或没有 U16 通道 | 先做寄存器检查，然后 APP |
+| 后续 MCU FG 失败或为空 | 当前测试失败，不切换 APP |
+| APP 采集超时或帧不完整 | 当前测试失败，按 `fail_action` 继续或停止 |
+
+MCU 硬件测试执行 `FS -> D 0 -> L -> D 1 -> S start -> S stop -> FG`；APP 硬件测试执行
+同一配置和 TEST1 序列，但省略 `FS/FG`，在启动 TEST1 前开启作用域采集器，停止 TEST1
+后使用采集帧进行本地计算。结果中的 `compute_mode` 会写入 UI 和 CSV。
+
+CSV 通道值按“计算值 -> 设备值 -> 空单元格”选择，缺失值不会写成 0。

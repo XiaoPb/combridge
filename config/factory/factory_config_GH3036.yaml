@@ -1,6 +1,7 @@
 # GH3036 产测卡控配置文件
 project: "GH3036"
 version: "1.0"
+chip: gh3036
 description: "GH3036 产测卡控配置"
 
 global:
@@ -8,10 +9,31 @@ global:
   fail_action: "stop"
 
 tests:
+  chip_init:
+    enabled: true
+    mode: 1
+    channels: 1
+    unit: status
+    global_threshold:
+      operator: eq
+      value: 1
+
+  chip_uid:
+    enabled: true
+    mode: 2
+
   base_noise:
     enabled: true
+    mode: 4
+    channels: 8
     description: "底噪测试"
-    unit: "LSB"
+    unit: "uV"
+    compute:
+      sample_rate_hz: 100
+      min_number: 100
+      skip_number: 200
+      is_continuous: true
+      timeout_ms: 10000
     global_threshold:
       operator: "lt"
       value: 100
@@ -28,8 +50,16 @@ tests:
 
   ppg_noise:
     enabled: true
+    mode: 8
+    channels: 8
     description: "PPG噪声测试"
-    unit: "LSB"
+    unit: "uV"
+    compute:
+      sample_rate_hz: 100
+      min_number: 100
+      skip_number: 200
+      is_continuous: true
+      timeout_ms: 10000
     global_threshold:
       operator: "lt"
       value: 200
@@ -46,8 +76,18 @@ tests:
 
   lpctr:
     enabled: true
+    mode: 16
+    channels: 32
     description: "LPCTR测试"
-    unit: "count"
+    unit: "nA/mA"
+    compute:
+      sample_rate_hz: 100
+      min_number: 100
+      skip_number: 0
+      is_continuous: false
+      timeout_ms: 10000
+      gain_k: 100.0
+      led_current_ma: 20.0
     global_threshold:
       operator: "range"
       range: [0, 1000]
@@ -60,8 +100,18 @@ tests:
 
   lplctr:
     enabled: true
+    mode: 32
+    channels: 32
     description: "LPLCTR测试"
-    unit: "count"
+    unit: "nA/mA"
+    compute:
+      sample_rate_hz: 100
+      min_number: 100
+      skip_number: 0
+      is_continuous: false
+      timeout_ms: 10000
+      gain_k: 100.0
+      led_current_ma: 20.0
     global_threshold:
       operator: "range"
       range: [0, 2000]

@@ -9,6 +9,39 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
   return tauriInvoke<T>(cmd, args);
 }
 
+export interface UpdateAsset {
+  name: string;
+  original_url: string;
+  proxy_urls: string[];
+  size: number;
+}
+
+export interface UpdateInfo {
+  current_version: string;
+  latest_version: string;
+  release_name: string;
+  published_at?: string | null;
+  body?: string | null;
+  asset: UpdateAsset;
+}
+
+export interface DownloadResult {
+  path: string;
+  name: string;
+}
+
+export interface DownloadProgress {
+  downloaded: number;
+  total?: number | null;
+  percent?: number | null;
+}
+
+export const updateApi = {
+  check: () => invoke<UpdateInfo | null>('check_for_update'),
+  download: (asset: UpdateAsset) => invoke<DownloadResult>('download_update', { asset }),
+  openInstaller: (path: string) => invoke<void>('open_update_installer', { path }),
+};
+
 export const serialApi = {
   async listPorts(): Promise<SerialPortInfo[]> {
     return invoke<SerialPortInfo[]>('scan_serial_ports');

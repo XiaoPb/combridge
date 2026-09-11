@@ -2,10 +2,11 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ConfigProvider, theme, Spin, Result, Button, message } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import enUS from 'antd/locale/en_US';
-import { lazy, Suspense, useEffect, useState, useCallback } from 'react';
+import { lazy, Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
-import { MainLayout, ErrorBoundary } from './components';
+import { MainLayout, ErrorBoundary, UpdateModal } from './components';
+import { updateApi, type UpdateInfo } from './api/tauri';
 import { useTheme } from './hooks';
 import { useConfigStore } from './stores/configStore';
 import { useMenuVisibilityStore } from './stores/menuVisibilityStore';
@@ -87,10 +88,26 @@ function AppContent() {
   const { loadMenuVisibility } = useMenuVisibilityStore();
   const [antdLocale, setAntdLocale] = useState(zhCN);
   const [menuConfigOpen, setMenuConfigOpen] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const updateCheckStarted = useRef(false);
 
   useEffect(() => {
     loadMenuVisibility();
   }, [loadMenuVisibility]);
+
+  useEffect(() => {
+    if (updateCheckStarted.current) return;
+    updateCheckStarted.current = true;
+    updateApi.check()
+      .then((info) => {
+        if (info) {
+          setUpdateInfo(info);
+          setUpdateModalOpen(true);
+        }
+      })
+      .catch((error) => console.warn('[Update] startup check failed', error));
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -228,6 +245,11 @@ function AppContent() {
         <MenuVisibilityConfigModal
           open={menuConfigOpen}
           onClose={() => setMenuConfigOpen(false)}
+        />
+        <UpdateModal
+          update={updateInfo}
+          open={updateModalOpen}
+          onClose={() => setUpdateModalOpen(false)}
         />
         <Routes>
           <Route

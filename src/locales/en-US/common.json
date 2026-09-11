@@ -71,6 +71,17 @@
     "dispatchFailed": "Failed to perform operation",
     "formatFailed": "Failed to format data"
   },
+  "update": {
+    "title": "Update available",
+    "versionChange": "Current version {{current}}, latest version {{latest}}",
+    "publishedAt": "Published: {{date}}",
+    "download": "Download update",
+    "later": "Later",
+    "retry": "Retry",
+    "downloadComplete": "The update has finished downloading. Open the installer to continue.",
+    "openInstaller": "Open installer",
+    "failed": "Update failed"
+  },
   "validation": {
     "required": "This field is required",
     "invalidFormat": "Invalid format",

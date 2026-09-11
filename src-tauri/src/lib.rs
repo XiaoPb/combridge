@@ -7,6 +7,7 @@ pub mod gh3036;
 pub mod protocol;
 pub mod service;
 pub mod state;
+pub mod update;
 pub mod waveform;
 
 use std::sync::Arc;
@@ -95,6 +96,8 @@ pub fn run() {
 
     let app_state = create_app_state_with_event_bus(event_bus.clone());
     let app_data_dir = get_app_data_dir();
+    let update_service = update::UpdateService::new(app_data_dir.clone())
+        .expect("failed to initialize update service");
     let state_persistence = create_state_persistence(app_data_dir.clone());
     let action_dispatcher = create_action_dispatcher(
         app_state.clone(),
@@ -127,6 +130,7 @@ pub fn run() {
         .manage(parser_script_manager)
         .manage(json_config_manager)
         .manage(event_bus)
+        .manage(update_service)
         .setup(move |app| {
             info!("Tauri setup hook 开始执行");
 
@@ -279,6 +283,9 @@ pub fn run() {
             commands::system::set_timezone_config,
             commands::system::get_timezone_config,
             commands::system::get_platform,
+            commands::update::check_for_update,
+            commands::update::download_update,
+            commands::update::open_update_installer,
             commands::system::open_url,
             commands::system::show_in_folder,
             commands::system::show_main_window,

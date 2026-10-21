@@ -2278,7 +2278,7 @@ interface OtaDeviceInfo {
 | protocol             | string  | 否  | OTA 协议 id，缺省 `smp`        |
 | options              | object  | 是  | 升级选项                     |
 | options.forceConfirm | boolean | 是  | 是否跳过设备端确认                |
-| options.upgradeOnly  | boolean | 是  | 是否仅升级应用镜像（不写 bootloader） |
+| options.upgradeOnly  | boolean | 是  | 禁止降级（true 时拒绝低于当前版本的固件） |
 
 **返回**: `OtaStatus`
 
@@ -2403,8 +2403,18 @@ interface OtaStatus {
 }
 
 import { listen } from '@tauri-apps/api/event';
-const unlisten = await listen<OtaStatus>('ota:progress', (event) => {
-  console.log('OTA 进度:', event.payload.stage, event.payload.percent);
+import { decodePayload, type EventBusEvent } from '../utils/msgpack';
+import { useOtaStore } from '../stores/otaStore';
+import type { OtaStatus } from '../types/ota';
+
+// OTA 进度通过统一的 event-bus 事件下发，payload 为 msgpack+base64
+const unlisten = await listen<EventBusEvent>('event-bus', (event) => {
+  if (event.payload.topic !== 'ota:progress') {
+    return;
+  }
+  // 先按 msgpack 解码，数组形式会被转换为 OtaStatus 对象
+  const status = decodePayload<OtaStatus>(event.payload);
+  useOtaStore.getState().handleProgress(status);
 });
 ```
 

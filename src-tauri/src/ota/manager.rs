@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -20,6 +21,37 @@ pub type OtaManagerRef = Arc<OtaManager>;
 
 const DEVICE_DISCONNECTED_MESSAGE: &str = "设备已断开，升级中止";
 
+/// 预期断开的共享标记。
+///
+/// 单 Bank V2 升级或设备主动复位时，链路会断开并重新广播；
+/// 协议在触发重启前登记地址，管理接口收到对应的 BLE 断开事件后
+/// 忽略一次，避免把升级过程误判为设备掉线。
+#[derive(Clone, Default)]
+pub struct ExpectedDisconnects {
+    addresses: Arc<Mutex<HashSet<String>>>,
+}
+
+impl ExpectedDisconnects {
+    /// 登记某个地址即将发生的断开。
+    pub fn mark(&self, address: &str) {
+        self.addresses.lock().insert(normalize_address(address));
+    }
+
+    /// 消费一次预期断开；返回 true 表示应忽略该事件。
+    fn take(&self, address: &str) -> bool {
+        self.addresses.lock().remove(&normalize_address(address))
+    }
+
+    /// 清空未消费的标记，避免影响后续真实断开。
+    pub fn clear(&self) {
+        self.addresses.lock().clear();
+    }
+}
+
+fn normalize_address(address: &str) -> String {
+    address.trim().to_ascii_uppercase()
+}
+
 struct OtaInner {
     running: bool,
     session: u64,
@@ -34,10 +66,15 @@ pub struct OtaManager {
     inner: Mutex<OtaInner>,
     /// 串行化设备通道：预检与升级互斥，避免复用同一 GATT 订阅时互相覆盖。
     op_lock: Arc<tokio::sync::Mutex<()>>,
+    expected_disconnects: ExpectedDisconnects,
 }
 
 impl OtaManager {
-    pub fn new(protocols: ProtocolRegistry, event_bus: Arc<EventBus>) -> Self {
+    pub fn new(
+        protocols: ProtocolRegistry,
+        event_bus: Arc<EventBus>,
+        expected_disconnects: ExpectedDisconnects,
+    ) -> Self {
         Self {
             protocols,
             event_bus,
@@ -48,6 +85,7 @@ impl OtaManager {
                 cancel: Arc::new(AtomicBool::new(false)),
             }),
             op_lock: Arc::new(tokio::sync::Mutex::new(())),
+            expected_disconnects,
         }
     }
 
@@ -318,6 +356,10 @@ impl OtaManager {
     }
 
     fn on_device_disconnected(&self, address: &str) -> Option<OtaStatusDto> {
+        if self.expected_disconnects.take(address) {
+            info!(address = %address, "忽略升级过程中预期的设备断开");
+            return None;
+        }
         let mut inner = self.inner.lock();
         if !inner.running || inner.status.address.as_deref() != Some(address) {
             return None;
@@ -406,7 +448,11 @@ mod tests {
         bus.subscribe_msgpack::<OtaStatusDto, _>(topics::OTA_PROGRESS, move |_topic, status| {
             sink.lock().push(status);
         });
-        let manager = Arc::new(OtaManager::new(ProtocolRegistry::new(), bus));
+        let manager = Arc::new(OtaManager::new(
+            ProtocolRegistry::new(),
+            bus,
+            ExpectedDisconnects::default(),
+        ));
         (manager, events)
     }
 
@@ -430,10 +476,7 @@ mod tests {
     }
 
     fn start_options() -> OtaStartOptions {
-        OtaStartOptions {
-            force_confirm: false,
-            upgrade_only: false,
-        }
+        OtaStartOptions::default()
     }
 
     #[test]

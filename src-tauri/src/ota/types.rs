@@ -102,11 +102,36 @@ pub struct OtaPackageInfo {
     pub fields: Vec<OtaKeyValue>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OtaStartOptions {
     pub force_confirm: bool,
     pub upgrade_only: bool,
+    /// Goodix 路由：`auto` / `normal` / `fastService`；SMP 忽略该字段。
+    #[serde(default)]
+    pub route: Option<String>,
+    /// Goodix 传输模式：`auto` / `normal` / `fast`；SMP 忽略该字段。
+    #[serde(default)]
+    pub transfer_mode: Option<String>,
+    /// Goodix 显式写入地址（十六进制字符串）；为空时使用镜像加载地址。
+    #[serde(default)]
+    pub target_address: Option<String>,
+    /// Goodix 完成后是否立即复位运行；默认 `true`。
+    #[serde(default)]
+    pub run_immediately: Option<bool>,
+}
+
+impl Default for OtaStartOptions {
+    fn default() -> Self {
+        Self {
+            force_confirm: false,
+            upgrade_only: false,
+            route: None,
+            transfer_mode: None,
+            target_address: None,
+            run_immediately: None,
+        }
+    }
 }
 
 pub fn now_millis() -> u64 {

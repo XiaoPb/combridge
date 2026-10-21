@@ -1,3 +1,4 @@
+pub mod goodix;
 pub mod smp;
 
 use std::sync::atomic::AtomicBool;

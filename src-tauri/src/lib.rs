@@ -18,6 +18,7 @@ use compat::check_compatibility;
 use dashboard::{create_json_config_manager, create_parser_script_manager};
 use device::DeviceManager;
 use gh3036::Gh3036Manager;
+use ota::protocol::goodix::GoodixProtocol;
 use ota::protocol::smp::SmpProtocol;
 use ota::{OtaManager, ProtocolRegistry};
 use protocol::PluginManager;
@@ -92,11 +93,20 @@ pub fn run() {
         },
     );
 
+    let expected_disconnects = ota::ExpectedDisconnects::default();
     let mut ota_registry = ProtocolRegistry::new();
     ota_registry.register(Arc::new(SmpProtocol::new(
         device_manager.ble_manager.clone(),
     )));
-    let ota_manager = Arc::new(OtaManager::new(ota_registry, event_bus.clone()));
+    ota_registry.register(Arc::new(GoodixProtocol::new(
+        device_manager.ble_manager.clone(),
+        expected_disconnects.clone(),
+    )));
+    let ota_manager = Arc::new(OtaManager::new(
+        ota_registry,
+        event_bus.clone(),
+        expected_disconnects,
+    ));
     ota_manager.subscribe_events();
 
     let gh3036_manager = Arc::new(Gh3036Manager::new(

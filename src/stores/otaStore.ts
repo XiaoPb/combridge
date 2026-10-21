@@ -23,6 +23,8 @@ const STAGE_LABEL: Record<OtaStage, string> = {
 };
 
 let logId = 0;
+let validateSeq = 0;
+let preflightSeq = 0;
 
 function appendLog(logs: OtaLogEntry[], level: 'info' | 'error', message: string): OtaLogEntry[] {
   return [...logs, { id: ++logId, time: new Date().toLocaleTimeString(), level, message }].slice(-500);
@@ -94,9 +96,13 @@ export const useOtaStore = create<OtaStoreState>((set, get) => ({
   },
 
   validatePackage: async (path) => {
+    const seq = ++validateSeq;
     set({ validating: true, packageInfo: null, error: null });
     try {
       const packageInfo = await otaApi.validatePackage(path, get().selectedProtocol);
+      if (seq !== validateSeq) {
+        return;
+      }
       set(state => ({
         packageInfo,
         logs: appendLog(
@@ -106,34 +112,48 @@ export const useOtaStore = create<OtaStoreState>((set, get) => ({
         ),
       }));
     } catch (error) {
+      if (seq !== validateSeq) {
+        return;
+      }
       console.error('OTA 固件包校验失败', error);
       set(state => ({
         error: toMessage(error),
         logs: appendLog(state.logs, 'error', `固件包校验失败：${toMessage(error)}`),
       }));
     } finally {
-      set({ validating: false });
+      if (seq === validateSeq) {
+        set({ validating: false });
+      }
     }
   },
 
   clearPackage: () => set({ packageInfo: null, error: null }),
 
   preflight: async (address) => {
-    set({ preflighting: true });
+    const seq = ++preflightSeq;
+    set({ preflighting: true, deviceInfo: null, error: null });
     try {
       const deviceInfo = await otaApi.preflight(address, get().selectedProtocol);
+      if (seq !== preflightSeq) {
+        return;
+      }
       set(state => ({
         deviceInfo,
         logs: appendLog(state.logs, 'info', `预检成功：${deviceInfo.version ?? deviceInfo.name ?? address}`),
       }));
     } catch (error) {
+      if (seq !== preflightSeq) {
+        return;
+      }
       console.error('OTA 预检失败', error);
       set(state => ({
         error: toMessage(error),
         logs: appendLog(state.logs, 'error', `预检失败：${toMessage(error)}`),
       }));
     } finally {
-      set({ preflighting: false });
+      if (seq === preflightSeq) {
+        set({ preflighting: false });
+      }
     }
   },
 
@@ -182,6 +202,9 @@ export const useOtaStore = create<OtaStoreState>((set, get) => ({
 
   handleProgress: (status) => {
     set(state => {
+      if (status.updatedAt < state.status.updatedAt) {
+        return state;
+      }
       const changed = state.status.stage !== status.stage || state.status.message !== status.message;
       if (!changed) {
         return { status };

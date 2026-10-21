@@ -29,6 +29,7 @@ const running: OtaStatus = {
 
 describe('otaStore', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     useOtaStore.setState({
       status: {
         state: 'idle', stage: 'idle', protocol: null, address: null, firmwarePath: null,
@@ -85,5 +86,43 @@ describe('otaStore', () => {
     await useOtaStore.getState().validatePackage('C:/fw/dfu_application.zip');
     expect(useOtaStore.getState().packageInfo?.imageName).toBe('app_chelsea_a.signed.bin');
     expect(otaApi.validatePackage).toHaveBeenCalledWith('C:/fw/dfu_application.zip', 'smp');
+  });
+
+  it('忽略过期进度事件', () => {
+    useOtaStore.getState().handleProgress({ ...running, updatedAt: 10 });
+    useOtaStore.getState().handleProgress({ ...running, updatedAt: 5, percent: 5 });
+    const state = useOtaStore.getState();
+    expect(state.status.percent).toBe(25);
+    expect(state.logs[state.logs.length - 1]?.message).toBe('传输固件 25%');
+  });
+
+  it('切换协议后重新校验原包', async () => {
+    const { otaApi } = await import('../api/ota');
+    vi.mocked(otaApi.validatePackage).mockResolvedValue({
+      path: 'C:/fw/a.zip',
+      fileName: 'a.zip',
+      packageSize: 1,
+      protocol: 'smp2',
+      imageName: 'a.bin',
+      imageSize: 1,
+      imageSha256: 'a'.repeat(64),
+      fields: [],
+    });
+    useOtaStore.setState({
+      packageInfo: {
+        path: 'C:/fw/a.zip',
+        fileName: 'a.zip',
+        packageSize: 1,
+        protocol: 'smp',
+        imageName: 'a.bin',
+        imageSize: 1,
+        imageSha256: 'a'.repeat(64),
+        fields: [],
+      },
+      selectedProtocol: 'smp',
+    });
+    await useOtaStore.getState().setProtocol('smp2');
+    expect(otaApi.validatePackage).toHaveBeenCalledWith('C:/fw/a.zip', 'smp2');
+    expect(useOtaStore.getState().selectedProtocol).toBe('smp2');
   });
 });

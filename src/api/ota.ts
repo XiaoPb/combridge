@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from './tauri';
 import type {
   OtaDeviceInfo, OtaPackageInfo, OtaProtocolDescriptor, OtaStartOptions, OtaStatus,
 } from '../types/ota';

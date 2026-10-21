@@ -18,8 +18,11 @@ use super::types::{
 
 pub type OtaManagerRef = Arc<OtaManager>;
 
+const DEVICE_DISCONNECTED_MESSAGE: &str = "设备已断开，升级中止";
+
 struct OtaInner {
     running: bool,
+    session: u64,
     status: OtaStatusDto,
     cancel: Arc<AtomicBool>,
 }
@@ -38,6 +41,7 @@ impl OtaManager {
             event_bus,
             inner: Mutex::new(OtaInner {
                 running: false,
+                session: 0,
                 status: OtaStatusDto::idle(),
                 cancel: Arc::new(AtomicBool::new(false)),
             }),
@@ -108,6 +112,7 @@ impl OtaManager {
 
         let resolved = self.protocols.resolve(protocol.as_deref())?;
         let protocol_id = resolved.id().to_string();
+        let updater = Arc::clone(&resolved);
 
         let verify_path = firmware_path.clone();
         let verified = tokio::task::spawn_blocking(move || {
@@ -117,12 +122,13 @@ impl OtaManager {
         .await
         .map_err(|e| ComBridgeError::ota(format!("固件包校验线程异常: {e}")))??;
 
-        let (cancel, snapshot) = {
+        let (cancel, session, snapshot) = {
             let mut inner = self.inner.lock();
             if inner.running {
                 return Err(ComBridgeError::ota("OTA 升级正在进行中"));
             }
             inner.running = true;
+            inner.session += 1;
             inner.cancel = Arc::new(AtomicBool::new(false));
             inner.status = OtaStatusDto {
                 state: OtaState::Running,
@@ -140,7 +146,11 @@ impl OtaManager {
                 error: None,
                 updated_at: now_millis(),
             };
-            (Arc::clone(&inner.cancel), inner.status.clone())
+            (
+                Arc::clone(&inner.cancel),
+                inner.session,
+                inner.status.clone(),
+            )
         };
         self.event_bus
             .publish_msgpack(topics::OTA_PROGRESS, &snapshot);
@@ -154,12 +164,11 @@ impl OtaManager {
             "OTA 固件包校验通过，开始升级"
         );
 
-        let updater = self.protocols.resolve(Some(&protocol_id))?;
         let image = verified.image;
         let manager = Arc::clone(self);
         tokio::spawn(async move {
             manager
-                .run_update(updater, address, image, options, cancel)
+                .run_update(updater, address, image, options, cancel, session)
                 .await;
         });
 
@@ -183,12 +192,13 @@ impl OtaManager {
         image: Vec<u8>,
         options: OtaStartOptions,
         cancel: Arc<AtomicBool>,
+        session: u64,
     ) {
         let protocol_id = updater.id().to_string();
         let cancel_cb = Arc::clone(&cancel);
         let manager = Arc::clone(&self);
         let progress: OtaProgressFn = Arc::new(move |stage, bytes, message| {
-            manager.report_progress(&protocol_id, stage, bytes, message);
+            manager.report_progress(&protocol_id, stage, bytes, message, session);
             !cancel_cb.load(Ordering::Relaxed)
         });
 
@@ -197,11 +207,15 @@ impl OtaManager {
             .await;
 
         let mut inner = self.inner.lock();
+        if inner.session != session {
+            return;
+        }
         inner.running = false;
         match result {
             Ok(()) => {
                 inner.status.state = OtaState::Success;
                 inner.status.stage = OtaStage::Completed;
+                inner.status.current = inner.status.total;
                 inner.status.percent = 100.0;
                 inner.status.message = "升级完成，设备正在重启".to_string();
                 info!(address = %address, "OTA 升级完成");
@@ -209,7 +223,9 @@ impl OtaManager {
             Err(err) => {
                 if cancel.load(Ordering::Relaxed) {
                     inner.status.state = OtaState::Cancelled;
-                    inner.status.message = format!("升级已取消: {err}");
+                    if inner.status.message != DEVICE_DISCONNECTED_MESSAGE {
+                        inner.status.message = format!("升级已取消: {err}");
+                    }
                 } else {
                     inner.status.state = OtaState::Failed;
                     inner.status.stage = OtaStage::Failed;
@@ -232,21 +248,34 @@ impl OtaManager {
         stage: OtaStage,
         progress: Option<(u64, u64)>,
         message: &str,
+        session: u64,
     ) {
-        let (current, total) = progress.unwrap_or((0, 0));
-        let percent = if total > 0 {
-            (current as f64) * 100.0 / (total as f64)
-        } else {
-            0.0
-        };
-
         let mut inner = self.inner.lock();
-        if !inner.running {
+        if !inner.running || inner.session != session {
             return;
         }
+
+        // 无字节进度时只更新阶段与文案，保留已有百分比，避免进度条回退。
+        let (current, total, percent) = match progress {
+            Some((current, total)) => {
+                let percent = if total > 0 {
+                    (current as f64) * 100.0 / (total as f64)
+                } else {
+                    0.0
+                };
+                (current, total, percent)
+            }
+            None => (
+                inner.status.current,
+                inner.status.total,
+                inner.status.percent,
+            ),
+        };
+
         if inner.status.stage == stage
             && (percent - inner.status.percent).abs() < 0.5
             && current == inner.status.current
+            && inner.status.message == message
         {
             return;
         }
@@ -264,11 +293,222 @@ impl OtaManager {
     }
 
     fn on_device_disconnected(&self, address: &str) {
-        let mut inner = self.inner.lock();
-        if !inner.running || inner.status.address.as_deref() != Some(address) {
-            return;
+        let snapshot = {
+            let mut inner = self.inner.lock();
+            if !inner.running || inner.status.address.as_deref() != Some(address) {
+                return;
+            }
+            inner.cancel.store(true, Ordering::Relaxed);
+            inner.status.message = DEVICE_DISCONNECTED_MESSAGE.to_string();
+            inner.status.updated_at = now_millis();
+            inner.status.clone()
+        };
+        self.event_bus
+            .publish_msgpack(topics::OTA_PROGRESS, &snapshot);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ota::protocol::FirmwareImage;
+    use async_trait::async_trait;
+
+    type CapturedEvents = Arc<Mutex<Vec<OtaStatusDto>>>;
+    type FakeReport = Option<(OtaStage, Option<(u64, u64)>, String)>;
+
+    struct FakeProtocol {
+        result: Result<(), String>,
+        report: FakeReport,
+    }
+
+    impl FakeProtocol {
+        fn ok(report: FakeReport) -> Self {
+            Self {
+                result: Ok(()),
+                report,
+            }
         }
-        inner.cancel.store(true, Ordering::Relaxed);
-        inner.status.message = "设备已断开，升级中止".to_string();
+
+        fn failed(message: &str) -> Self {
+            Self {
+                result: Err(message.to_string()),
+                report: None,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl OtaProtocol for FakeProtocol {
+        fn id(&self) -> &'static str {
+            "fake"
+        }
+
+        fn display_name(&self) -> &'static str {
+            "Fake"
+        }
+
+        fn description(&self) -> &'static str {
+            "OTA 管理接口测试协议"
+        }
+
+        fn validate_package(
+            &self,
+            _package: &mut ZipPackage,
+        ) -> Result<FirmwareImage, ComBridgeError> {
+            Err(ComBridgeError::ota("测试协议不支持包校验"))
+        }
+
+        async fn preflight(&self, _address: &str) -> Result<OtaDeviceInfo, ComBridgeError> {
+            Err(ComBridgeError::ota("测试协议不支持预检"))
+        }
+
+        async fn upgrade(
+            &self,
+            _address: &str,
+            _image: Vec<u8>,
+            _options: &OtaStartOptions,
+            _cancel: Arc<AtomicBool>,
+            progress: OtaProgressFn,
+        ) -> Result<(), ComBridgeError> {
+            if let Some((stage, bytes, message)) = &self.report {
+                progress(*stage, *bytes, message);
+            }
+            self.result.clone().map_err(ComBridgeError::ota)
+        }
+    }
+
+    fn manager() -> (Arc<OtaManager>, CapturedEvents) {
+        let bus = Arc::new(EventBus::new(1024));
+        let events: CapturedEvents = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&events);
+        bus.subscribe_msgpack::<OtaStatusDto, _>(topics::OTA_PROGRESS, move |_topic, status| {
+            sink.lock().push(status);
+        });
+        let manager = Arc::new(OtaManager::new(ProtocolRegistry::new(), bus));
+        (manager, events)
+    }
+
+    fn seed_running(manager: &OtaManager, session: u64) {
+        let mut inner = manager.inner.lock();
+        inner.running = true;
+        inner.session = session;
+        inner.status = OtaStatusDto {
+            state: OtaState::Running,
+            stage: OtaStage::Transferring,
+            protocol: Some("fake".to_string()),
+            address: Some("AA:BB".to_string()),
+            firmware_path: Some("firmware.zip".to_string()),
+            current: 50,
+            total: 100,
+            percent: 50.0,
+            message: String::new(),
+            error: None,
+            updated_at: 0,
+        };
+    }
+
+    fn start_options() -> OtaStartOptions {
+        OtaStartOptions {
+            force_confirm: false,
+            upgrade_only: false,
+        }
+    }
+
+    #[test]
+    fn cancel_rejects_when_not_running() {
+        let (manager, _events) = manager();
+        assert!(manager.cancel().is_err());
+    }
+
+    #[test]
+    fn progress_without_bytes_preserves_percent() {
+        let (manager, events) = manager();
+        seed_running(&manager, 1);
+
+        manager.report_progress("smp", OtaStage::Activating, None, "激活中", 1);
+
+        let status = manager.status();
+        assert_eq!(status.stage, OtaStage::Activating);
+        assert_eq!(status.current, 50);
+        assert_eq!(status.total, 100);
+        assert!((status.percent - 50.0).abs() < f64::EPSILON);
+        assert_eq!(status.message, "激活中");
+
+        let captured = events.lock();
+        assert_eq!(captured.len(), 1);
+        assert!((captured[0].percent - 50.0).abs() < f64::EPSILON);
+    }
+
+    #[tokio::test]
+    async fn run_update_success_sets_completed() {
+        let (manager, events) = manager();
+        seed_running(&manager, 1);
+        let protocol = FakeProtocol::ok(Some((
+            OtaStage::Transferring,
+            Some((100, 100)),
+            "传输完成".to_string(),
+        )));
+
+        Arc::clone(&manager)
+            .run_update(
+                Arc::new(protocol),
+                "AA:BB".to_string(),
+                Vec::new(),
+                start_options(),
+                Arc::new(AtomicBool::new(false)),
+                1,
+            )
+            .await;
+
+        let status = manager.status();
+        assert_eq!(status.state, OtaState::Success);
+        assert_eq!(status.stage, OtaStage::Completed);
+        assert!((status.percent - 100.0).abs() < f64::EPSILON);
+        assert_eq!(status.current, status.total);
+        assert!(!manager.inner.lock().running);
+
+        let captured = events.lock();
+        let last = captured.last().expect("终态事件");
+        assert_eq!(last.state, OtaState::Success);
+        assert!((last.percent - 100.0).abs() < f64::EPSILON);
+    }
+
+    #[tokio::test]
+    async fn run_update_failure_sets_failed() {
+        let (manager, _events) = manager();
+        seed_running(&manager, 1);
+
+        Arc::clone(&manager)
+            .run_update(
+                Arc::new(FakeProtocol::failed("传输中断")),
+                "AA:BB".to_string(),
+                Vec::new(),
+                start_options(),
+                Arc::new(AtomicBool::new(false)),
+                1,
+            )
+            .await;
+
+        let status = manager.status();
+        assert_eq!(status.state, OtaState::Failed);
+        assert_eq!(status.stage, OtaStage::Failed);
+        assert!(status.error.is_some());
+        assert!(!manager.inner.lock().running);
+    }
+
+    #[test]
+    fn stale_session_progress_is_ignored() {
+        let (manager, events) = manager();
+        seed_running(&manager, 2);
+
+        manager.report_progress("smp", OtaStage::Activating, Some((80, 100)), "激活中", 1);
+
+        let status = manager.status();
+        assert_eq!(status.stage, OtaStage::Transferring);
+        assert_eq!(status.current, 50);
+        assert!((status.percent - 50.0).abs() < f64::EPSILON);
+        assert!(status.message.is_empty());
+        assert!(events.lock().is_empty());
     }
 }

@@ -1,5 +1,6 @@
 pub mod ble;
 pub mod gh3036;
+pub mod ota;
 pub mod preferences;
 pub mod protocol;
 pub mod serial;

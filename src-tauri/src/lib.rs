@@ -18,6 +18,8 @@ use compat::check_compatibility;
 use dashboard::{create_json_config_manager, create_parser_script_manager};
 use device::DeviceManager;
 use gh3036::Gh3036Manager;
+use ota::protocol::smp::SmpProtocol;
+use ota::{OtaManager, ProtocolRegistry};
 use protocol::PluginManager;
 use service::event_bus::{topics, BleConnectionEvent};
 use service::{EventBridge, EventBus, EventFilter};
@@ -90,6 +92,13 @@ pub fn run() {
         },
     );
 
+    let mut ota_registry = ProtocolRegistry::new();
+    ota_registry.register(Arc::new(SmpProtocol::new(
+        device_manager.ble_manager.clone(),
+    )));
+    let ota_manager = Arc::new(OtaManager::new(ota_registry, event_bus.clone()));
+    ota_manager.subscribe_events();
+
     let gh3036_manager = Arc::new(Gh3036Manager::new(
         device_manager.clone(),
         event_bus.clone(),
@@ -130,6 +139,7 @@ pub fn run() {
         .manage(waveform_manager)
         .manage(parser_script_manager)
         .manage(json_config_manager)
+        .manage(ota_manager)
         .manage(event_bus)
         .manage(update_service)
         .setup(move |app| {
@@ -220,6 +230,7 @@ pub fn run() {
                 "ble:".to_string(),
                 "gh3036:".to_string(),
                 "protocol:".to_string(),
+                "ota:".to_string(),
             ]);
             let mut event_bridge =
                 EventBridge::new(event_bus_clone.clone(), app_handle).with_filter(filter);
@@ -373,6 +384,12 @@ pub fn run() {
             commands::gh3036::gh3036_start_hr_ref_monitor,
             commands::gh3036::gh3036_stop_hr_ref_monitor,
             commands::gh3036::gh3036_get_hr_ref_monitor_status,
+            commands::ota::ota_list_protocols,
+            commands::ota::ota_validate_package,
+            commands::ota::ota_preflight,
+            commands::ota::ota_start,
+            commands::ota::ota_get_status,
+            commands::ota::ota_cancel,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

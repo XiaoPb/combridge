@@ -78,6 +78,12 @@ impl ZipPackage {
 
     /// 读取条目内容；`max_bytes` 为允许的最大解压尺寸（防 zip 炸弹）。
     pub fn read_entry(&mut self, name: &str, max_bytes: u64) -> Result<Vec<u8>, ComBridgeError> {
+        if name.ends_with('/') {
+            return Err(ComBridgeError::ota(format!(
+                "{name} 是目录条目，不能作为固件镜像"
+            )));
+        }
+
         let entry = self
             .archive
             .by_name(name)
@@ -89,9 +95,10 @@ impl ZipPackage {
             )));
         }
 
-        let mut data = Vec::with_capacity(entry.size() as usize);
+        let limit = max_bytes.saturating_add(1);
+        let mut data = Vec::with_capacity(entry.size().min(max_bytes) as usize);
         entry
-            .take(max_bytes + 1)
+            .take(limit)
             .read_to_end(&mut data)
             .map_err(|e| ComBridgeError::ota(format!("解压 {name} 失败: {e}")))?;
         if data.len() as u64 > max_bytes {

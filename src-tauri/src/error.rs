@@ -6,6 +6,7 @@ pub enum ErrorCode {
     SerialError = 1000,
     BleError = 2000,
     ProtocolError = 3000,
+    OtaError = 4000,
     ConfigError = 5000,
     IoError = 6000,
     ParseError = 7000,
@@ -18,6 +19,7 @@ impl fmt::Display for ErrorCode {
             ErrorCode::SerialError => write!(f, "E1000"),
             ErrorCode::BleError => write!(f, "E2000"),
             ErrorCode::ProtocolError => write!(f, "E3000"),
+            ErrorCode::OtaError => write!(f, "E4000"),
             ErrorCode::ConfigError => write!(f, "E5000"),
             ErrorCode::IoError => write!(f, "E6000"),
             ErrorCode::ParseError => write!(f, "E7000"),
@@ -34,6 +36,8 @@ pub enum ComBridgeError {
     BleError(String),
     #[error("[E3000] {0}")]
     ProtocolError(String),
+    #[error("[E4000] {0}")]
+    OtaError(String),
     #[error("[E5000] {0}")]
     ConfigError(String),
     #[error("[E6000] {0}")]
@@ -55,6 +59,7 @@ impl serde::Serialize for ComBridgeError {
             ComBridgeError::SerialError(msg) => map.serialize_entry("SerialError", msg)?,
             ComBridgeError::BleError(msg) => map.serialize_entry("BleError", msg)?,
             ComBridgeError::ProtocolError(msg) => map.serialize_entry("ProtocolError", msg)?,
+            ComBridgeError::OtaError(msg) => map.serialize_entry("OtaError", msg)?,
             ComBridgeError::ConfigError(msg) => map.serialize_entry("ConfigError", msg)?,
             ComBridgeError::IoError(msg) => map.serialize_entry("IoError", msg)?,
             ComBridgeError::ParseError(msg) => map.serialize_entry("ParseError", msg)?,
@@ -75,6 +80,7 @@ impl ComBridgeError {
             ComBridgeError::SerialError(_) => ErrorCode::SerialError,
             ComBridgeError::BleError(_) => ErrorCode::BleError,
             ComBridgeError::ProtocolError(_) => ErrorCode::ProtocolError,
+            ComBridgeError::OtaError(_) => ErrorCode::OtaError,
             ComBridgeError::ConfigError(_) => ErrorCode::ConfigError,
             ComBridgeError::IoError(_) => ErrorCode::IoError,
             ComBridgeError::ParseError(_) => ErrorCode::ParseError,
@@ -87,6 +93,7 @@ impl ComBridgeError {
             ComBridgeError::SerialError(msg) => msg,
             ComBridgeError::BleError(msg) => msg,
             ComBridgeError::ProtocolError(msg) => msg,
+            ComBridgeError::OtaError(msg) => msg,
             ComBridgeError::ConfigError(msg) => msg,
             ComBridgeError::IoError(msg) => msg,
             ComBridgeError::ParseError(msg) => msg,
@@ -112,6 +119,10 @@ impl ComBridgeError {
 
     pub fn protocol<T: Into<String>>(msg: T) -> Self {
         ComBridgeError::ProtocolError(msg.into())
+    }
+
+    pub fn ota<T: Into<String>>(msg: T) -> Self {
+        ComBridgeError::OtaError(msg.into())
     }
 
     pub fn config<T: Into<String>>(msg: T) -> Self {
@@ -189,6 +200,7 @@ mod tests {
         assert_eq!(ErrorCode::SerialError.to_string(), "E1000");
         assert_eq!(ErrorCode::BleError.to_string(), "E2000");
         assert_eq!(ErrorCode::ProtocolError.to_string(), "E3000");
+        assert_eq!(ErrorCode::OtaError.to_string(), "E4000");
         assert_eq!(ErrorCode::DeviceError.to_string(), "E8000");
     }
 

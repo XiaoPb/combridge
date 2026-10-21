@@ -4,6 +4,7 @@ pub mod dashboard;
 pub mod device;
 pub mod error;
 pub mod gh3036;
+pub mod ota;
 pub mod protocol;
 pub mod service;
 pub mod state;

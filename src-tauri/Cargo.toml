@@ -26,6 +26,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 tracing-log = "0.2"
+# OTA：协议抽象使用 async trait
 async-trait = "0.1"
 serialport = "4"
 futures-util = "0.3"
@@ -52,6 +53,12 @@ rpc = { path = "../libs/protocol_rust/rpc" }
 heapless = "0.8"
 base64 = "0.22"
 csv = "1.4"
+# OTA：Zephyr/NCS MCUmgr SMP 协议客户端，仅使用协议层，BLE 传输复用 BleManager
+mcumgr-toolkit = { version = "0.20", default-features = false }
+# OTA：解压产线固件包并校验镜像
+zip = { version = "2", default-features = false, features = ["deflate"] }
+# OTA：计算镜像 SHA-256 并展示/比对 manifest
+sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["dwmapi", "winuser", "windef"] }

@@ -535,6 +535,8 @@ pub mod topics {
     pub const PROTOCOL_PARSED: &str = "protocol:parsed";
     pub const PROTOCOL_ERROR: &str = "protocol:error";
 
+    pub const OTA_PROGRESS: &str = "ota:progress";
+
     pub const WAVEFORM_DATA: &str = "waveform:data";
     pub const WAVEFORM_STATUS: &str = "waveform:status";
 

@@ -13,6 +13,7 @@
 - [波形模块 (Waveform)](#波形模块-waveform)
 - [状态模块 (State)](#状态模块-state)
 - [偏好设置模块 (Preferences)](#偏好设置模块-preferences)
+- [OTA 模块 (OTA)](#ota-模块-ota)
 - [事件汇总](#事件汇总)
 - [类型定义汇总](#类型定义汇总)
 - [命名规范](#命名规范)
@@ -2167,6 +2168,178 @@ await invoke('update_ble_preferences', {
 
 ***
 
+## OTA 模块 (OTA)
+
+OTA 命令与具体升级协议解耦：`protocol` 为可选参数，缺省使用注册表中的默认协议 `smp`。协议通过后端 `ProtocolRegistry` 注册，新增协议只需实现 `OtaProtocol` trait 并注册，命令层与前端无需改动。
+
+### ota\_list\_protocols
+
+列出已注册的 OTA 协议。
+
+**后端命令**: `ota_list_protocols`
+
+**参数**: 无
+
+**返回**: `OtaProtocolDescriptor[]`
+
+```typescript
+const protocols = await invoke<OtaProtocolDescriptor[]>('ota_list_protocols');
+
+interface OtaProtocolDescriptor {
+  id: string;
+  name: string;
+  description: string;
+}
+```
+
+***
+
+### ota\_validate\_package
+
+校验固件包并提取镜像信息。
+
+**后端命令**: `ota_validate_package`
+
+**参数**:
+
+| 参数名           | 类型     | 必填 | 描述                        |
+| ------------- | ------ | -- | ------------------------- |
+| firmwarePath  | string | 是  | 固件包路径（`.zip`）             |
+| protocol      | string | 否  | OTA 协议 id，缺省 `smp`       |
+
+**返回**: `OtaPackageInfo`
+
+```typescript
+const info = await invoke<OtaPackageInfo>('ota_validate_package', {
+  firmwarePath: 'C:\\firmware\\app.zip',
+  protocol: 'smp',
+});
+
+interface OtaPackageInfo {
+  path: string;
+  fileName: string;
+  packageSize: number;
+  protocol: string;
+  imageName: string;
+  imageSize: number;
+  imageSha256: string;
+  fields: OtaKeyValue[];
+}
+```
+
+***
+
+### ota\_preflight
+
+升级前预检：确认设备已连接、协议服务可用，并读取设备信息。
+
+**后端命令**: `ota_preflight`
+
+**参数**:
+
+| 参数名      | 类型     | 必填 | 描述                  |
+| -------- | ------ | -- | ------------------- |
+| address  | string | 是  | BLE 设备地址            |
+| protocol | string | 否  | OTA 协议 id，缺省 `smp` |
+
+**返回**: `OtaDeviceInfo`
+
+```typescript
+const device = await invoke<OtaDeviceInfo>('ota_preflight', {
+  address: 'AA:BB:CC:DD:EE:FF',
+  protocol: 'smp',
+});
+
+interface OtaDeviceInfo {
+  address: string;
+  protocol: string;
+  name: string | null;
+  mode: string | null;
+  mtu: number | null;
+  version: string | null;
+  fields: OtaKeyValue[];
+}
+```
+
+***
+
+### ota\_start
+
+启动升级。启动前会再次按当前协议校验固件包；已有任务运行时返回错误。
+
+**后端命令**: `ota_start`
+
+**参数**:
+
+| 参数名                  | 类型      | 必填 | 描述                       |
+| -------------------- | ------- | -- | ------------------------ |
+| address              | string  | 是  | BLE 设备地址                 |
+| firmwarePath         | string  | 是  | 已校验通过的固件包路径              |
+| protocol             | string  | 否  | OTA 协议 id，缺省 `smp`        |
+| options              | object  | 是  | 升级选项                     |
+| options.forceConfirm | boolean | 是  | 是否跳过设备端确认                |
+| options.upgradeOnly  | boolean | 是  | 是否仅升级应用镜像（不写 bootloader） |
+
+**返回**: `OtaStatus`
+
+```typescript
+const status = await invoke<OtaStatus>('ota_start', {
+  address: 'AA:BB:CC:DD:EE:FF',
+  firmwarePath: 'C:\\firmware\\app.zip',
+  protocol: 'smp',
+  options: { forceConfirm: true, upgradeOnly: false },
+});
+
+interface OtaStatus {
+  state: 'idle' | 'running' | 'success' | 'failed' | 'cancelled';
+  stage: 'idle' | 'unpacking' | 'validating' | 'preparing'
+    | 'transferring' | 'activating' | 'rebooting' | 'completed' | 'failed';
+  protocol: string | null;
+  address: string | null;
+  firmwarePath: string | null;
+  current: number;
+  total: number;
+  percent: number;
+  message: string;
+  error: string | null;
+  updatedAt: number; // 毫秒时间戳
+}
+```
+
+***
+
+### ota\_get\_status
+
+获取当前 OTA 状态快照。
+
+**后端命令**: `ota_get_status`
+
+**参数**: 无
+
+**返回**: `OtaStatus`
+
+```typescript
+const status = await invoke<OtaStatus>('ota_get_status');
+```
+
+***
+
+### ota\_cancel
+
+请求取消当前升级。无运行中的任务时返回错误。
+
+**后端命令**: `ota_cancel`
+
+**参数**: 无
+
+**返回**: `void`
+
+```typescript
+await invoke('ota_cancel');
+```
+
+***
+
 ## 事件汇总
 
 ### serial:data
@@ -2204,6 +2377,34 @@ interface BleDataPayload {
 import { listen } from '@tauri-apps/api/event';
 const unlisten = await listen<BleDataPayload>('ble:data', (event) => {
   console.log('BLE数据:', event.payload.device_id, event.payload.characteristic_uuid);
+});
+```
+
+***
+
+### ota:progress
+
+OTA 升级进度与终态事件。payload 编码为 msgpack，前端 `src/utils/msgpack.ts` 会将数组形式映射为 `OtaStatus` 对象。事件在升级各阶段与终态发布。
+
+```typescript
+interface OtaStatus {
+  state: 'idle' | 'running' | 'success' | 'failed' | 'cancelled';
+  stage: 'idle' | 'unpacking' | 'validating' | 'preparing'
+    | 'transferring' | 'activating' | 'rebooting' | 'completed' | 'failed';
+  protocol: string | null;
+  address: string | null;
+  firmwarePath: string | null;
+  current: number;
+  total: number;
+  percent: number;
+  message: string;
+  error: string | null;
+  updatedAt: number; // 毫秒时间戳
+}
+
+import { listen } from '@tauri-apps/api/event';
+const unlisten = await listen<OtaStatus>('ota:progress', (event) => {
+  console.log('OTA 进度:', event.payload.stage, event.payload.percent);
 });
 ```
 
@@ -2424,6 +2625,62 @@ interface WaveformStatus {
 }
 ```
 
+### OTA 类型
+
+```typescript
+interface OtaKeyValue {
+  key: string;
+  value: string;
+}
+
+interface OtaProtocolDescriptor {
+  id: string;
+  name: string;
+  description: string;
+}
+
+interface OtaPackageInfo {
+  path: string;
+  fileName: string;
+  packageSize: number;
+  protocol: string;
+  imageName: string;
+  imageSize: number;
+  imageSha256: string;
+  fields: OtaKeyValue[];
+}
+
+interface OtaDeviceInfo {
+  address: string;
+  protocol: string;
+  name: string | null;
+  mode: string | null;
+  mtu: number | null;
+  version: string | null;
+  fields: OtaKeyValue[];
+}
+
+interface OtaStartOptions {
+  forceConfirm: boolean;
+  upgradeOnly: boolean;
+}
+
+interface OtaStatus {
+  state: 'idle' | 'running' | 'success' | 'failed' | 'cancelled';
+  stage: 'idle' | 'unpacking' | 'validating' | 'preparing'
+    | 'transferring' | 'activating' | 'rebooting' | 'completed' | 'failed';
+  protocol: string | null;
+  address: string | null;
+  firmwarePath: string | null;
+  current: number;
+  total: number;
+  percent: number;
+  message: string;
+  error: string | null;
+  updatedAt: number;
+}
+```
+
 ***
 
 ## 命名规范
@@ -2442,6 +2699,7 @@ interface WaveformStatus {
 
 ## 更新日志
 
+- **2026-10-21**: 新增 OTA 模块（`ota_list_protocols`、`ota_validate_package`、`ota_preflight`、`ota_start`、`ota_get_status`、`ota_cancel`）、`ota:progress` 事件与 OTA 类型定义
 - **2026-04-13**: 全面重写 API 文档，新增 Dashboard、GH3036、Waveform、State、Preferences 模块；修复 BLE 事件类型命名（BleNotificationEvent → BleDataEvent，char\_uuid → characteristicUuid）；补充串口 export\_serial\_data 命令；补充系统模块 get\_window\_status、show\_main\_window 等命令
 - **2026-04-02**: 统一使用蛇形命名规范，修复 BLE 和 Serial 模块所有参数不匹配问题
 

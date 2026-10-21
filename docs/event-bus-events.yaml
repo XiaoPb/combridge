@@ -347,6 +347,56 @@ data_flow_events:
           type: "number"
           description: "时间戳（毫秒）"
 
+  ota_events:
+    ota_progress:
+      topic: "ota:progress"
+      description: "OTA 升级进度与终态（前端由 src/stores/otaStore.ts 的 handleProgress 消费）"
+      publisher: "OtaManager"
+      encoding: "msgpack+base64"
+      payload:
+        type: "OtaStatusDto"
+        description: "与 Rust serde camelCase 对齐；事件在升级各阶段与终态发布"
+        properties:
+          state:
+            type: "string"
+            enum: ["idle", "running", "success", "failed", "cancelled"]
+            description: "升级状态"
+          stage:
+            type: "string"
+            enum: ["idle", "unpacking", "validating", "preparing", "transferring", "activating", "rebooting", "completed", "failed"]
+            description: "升级阶段"
+          protocol:
+            type: "string"
+            optional: true
+            description: "OTA 协议 id（缺省 smp），可空"
+          address:
+            type: "string"
+            optional: true
+            description: "设备地址，可空"
+          firmwarePath:
+            type: "string"
+            optional: true
+            description: "固件包路径，可空"
+          current:
+            type: "number"
+            description: "已传输字节数"
+          total:
+            type: "number"
+            description: "镜像总字节数"
+          percent:
+            type: "number"
+            description: "进度百分比（0-100）"
+          message:
+            type: "string"
+            description: "阶段文案或错误描述"
+          error:
+            type: "string"
+            optional: true
+            description: "失败原因，成功/进行中为空"
+          updatedAt:
+            type: "number"
+            description: "更新时间戳（毫秒）"
+
   dashboard_events:
     dashboard_parser_updated:
       topic: "dashboard:parser:updated"
@@ -1049,6 +1099,12 @@ event_subscriptions:
       - topic: "gh3036:frame"
         description: "订阅GH3036帧数据"
 
+  OtaManager:
+    module: "ota::manager"
+    subscribes:
+      - topic: "ble:disconnected"
+        description: "设备断开时中止进行中的 OTA 升级"
+
 event_publishers:
   description: "事件发布者清单"
   
@@ -1094,6 +1150,11 @@ event_publishers:
     publishes:
       - "dashboard:parser:updated"
       - "dashboard:json:updated"
+
+  OtaManager:
+    module: "ota::manager"
+    publishes:
+      - "ota:progress"
 
   SystemManager:
     module: "service::system"

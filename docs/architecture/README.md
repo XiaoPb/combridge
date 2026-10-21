@@ -92,6 +92,7 @@ graph TB
 | 状态管理 | [state-module.md](./backend/state-module.md) | 应用状态持久化 |
 | 服务层 | [service-module.md](./backend/service-module.md) | 日志、配置、事件总线等 |
 | 波形模块 | [waveform-module.md](./backend/waveform-module.md) | 波形数据缓冲和解析 |
+| OTA 固件升级 | [OTA 固件升级架构](#ota-固件升级架构) | 协议无关的 OTA 管理接口、注册表与 SMP 实现 |
 | 命令层 | [commands-module.md](./backend/commands-module.md) | Tauri 命令定义 |
 | 错误处理 | [error-handling.md](./backend/error-handling.md) | 统一错误处理机制 |
 | 工厂测试 | [factory-test-module.md](./backend/factory-test-module.md) | GH3036 工厂测试功能 |
@@ -126,6 +127,54 @@ flowchart LR
         Store_R --> UI_R[界面显示]
     end
 ```
+
+## OTA 固件升级架构
+
+OTA 采用接入层、协议抽象层、协议实现层三层结构，命令层与前端不感知具体升级协议。
+
+```mermaid
+flowchart TB
+    subgraph Access [接入层]
+        CMD["commands::ota（6 个 Tauri Command）"]
+        MGR["OtaManager：状态机 / 进度节流 / 取消 / 设备断开中止 / 发布 ota:progress"]
+    end
+
+    subgraph Abstraction [协议抽象层]
+        REG["ProtocolRegistry：默认 smp，同 id 覆盖"]
+        TRAIT["OtaProtocol trait"]
+    end
+
+    subgraph Impl [协议实现层]
+        SMP["SmpProtocol"]
+        TRANS["SmpBleTransport（复用 BleManager）"]
+        MCU["mcumgr-toolkit 同步 Transport（spawn_blocking 内运行）"]
+    end
+
+    FE[前端 otaStore]
+    BLE[BleManager]
+    DEV[BLE 设备]
+    BUS[EventBus: ota:progress]
+    BRIDGE[EventBridge]
+
+    FE -->|invoke| CMD
+    CMD --> MGR
+    MGR -->|按 id 解析| REG
+    REG --> TRAIT
+    REG --> SMP
+    SMP --> TRANS
+    SMP --> MCU
+    TRANS --> BLE
+    BLE --> DEV
+    DEV -->|BLE 通知 / SMP 分片重组| TRANS
+    MCU -->|进度回调| MGR
+    MGR --> BUS
+    BUS --> BRIDGE
+    BRIDGE --> FE
+```
+
+数据流：设备 → BLE 通知（SMP 分片重组）→ `SmpBleTransport` → `mcumgr-toolkit` → 进度回调 → `OtaManager` → `EventBus(ota:progress)` → `EventBridge` → 前端 `otaStore`。
+
+扩展点：新增协议只需实现 `OtaProtocol`（`id` / `display_name` / `description` / `validate_package` / `preflight` / `upgrade`），并在 `lib.rs` 的 `ProtocolRegistry` 中 `register`，无需修改命令层与前端。
 
 ## 项目目录结构
 

@@ -69,6 +69,11 @@ ComBridge 是一款基于 Tauri 2.0 构建的跨平台串口与 BLE 蓝牙通信
 - 自动重连与心跳维护
 - 消息收发监控
 
+### 🚀 OTA 固件升级
+- Nordic SMP（Zephyr MCUmgr over BLE）+ MCUboot
+- `.zip` 固件包校验、设备预检、进度展示与取消
+- 协议可扩展（`OtaProtocol` + `ProtocolRegistry`）
+
 ### 🎨 现代化界面
 - 基于 Ant Design v6.3.5 的美观 UI
 - 深色/浅色主题切换
@@ -104,7 +109,7 @@ ComBridge 是一款基于 Tauri 2.0 构建的跨平台串口与 BLE 蓝牙通信
 
 ### 开发环境
 - **Node.js**: >= 18.0.0
-- **Rust**: >= 1.70.0
+- **Rust**: >= 1.85.0（OTA 依赖 `mcumgr-toolkit 0.20` 要求；其余功能最低 1.70.0）
 - **pnpm/npm/yarn**: 任意包管理器
 
 #### 平台特定依赖
@@ -120,6 +125,19 @@ ComBridge 是一款基于 Tauri 2.0 构建的跨平台串口与 BLE 蓝牙通信
 ```bash
 sudo apt install libwebkit2gtk-4.0-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
 ```
+
+### OTA 固件包
+
+- 固件包必须为 `.zip`（nrfutil 产线包格式：`manifest.json` + MCUboot 签名的 `.bin`）
+- 不支持裸 `.bin` 文件
+
+## 配置说明
+
+### OTA 设备端配置（Nordic NCS）
+
+- 启用 MCUmgr BLE 传输：`CONFIG_MCUMGR_TRANSPORT_BT=y`
+- 性能建议：`CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE=4096`
+- AT 模式为实验性支持，OTA 验收以 native BLE 为准
 
 ## 安装
 

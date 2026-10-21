@@ -118,4 +118,9 @@ pub trait BleBackend: Send + Sync {
     async fn unsubscribe_notify(&self, address: &str, char_uuid: &str) -> Result<()>;
     async fn get_rssi(&self, address: &str) -> Result<i16>;
     async fn set_mtu(&self, address: &str, mtu: u16) -> Result<u16>;
+
+    /// 单次 GATT 写入可承载的最大字节数（不含 ATT 头）。默认取最小 MTU 23 的安全值。
+    async fn max_write_len(&self, _address: &str, _char_uuid: &str) -> Result<usize> {
+        Ok(20)
+    }
 }

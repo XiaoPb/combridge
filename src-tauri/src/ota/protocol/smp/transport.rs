@@ -22,6 +22,7 @@ pub const SMP_SERVICE_UUID: &str = "8d53dc1d-1db7-4cd3-868b-8a527460aa84";
 pub const SMP_CHAR_UUID: &str = "da2e7828-fbce-4e01-ae9e-261174997c48";
 
 const DEFAULT_MTU: u16 = 23;
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_WRITE_DELAY_MS: u64 = 2;
 
 /// 从接收缓冲中切出所有完整 SMP 帧，未完成的尾部保留。
@@ -71,11 +72,17 @@ impl SmpBleTransport {
             ComBridgeError::ota(format!("SMP Transport 需在 Tokio 运行时内创建: {}", e))
         })?;
 
-        let mtu = ble
-            .set_mtu(&address, 247)
+        let max_write = ble
+            .max_write_len(&address, SMP_CHAR_UUID)
             .await
-            .unwrap_or(DEFAULT_MTU)
-            .max(DEFAULT_MTU);
+            .unwrap_or_else(|e| {
+                warn!(
+                    "获取 SMP 特征写入长度失败，回退 {} 字节: {}",
+                    DEFAULT_MTU - 3,
+                    e
+                );
+                (DEFAULT_MTU - 3) as usize
+            });
 
         let (tx, rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = std::sync::mpsc::channel();
         let pending = Arc::new(Mutex::new(Vec::<u8>::new()));
@@ -99,10 +106,10 @@ impl SmpBleTransport {
         ble.subscribe_notify(&address, SMP_CHAR_UUID, callback)
             .await?;
 
-        let chunk_size = (mtu as usize).saturating_sub(3).max(20);
+        let chunk_size = max_write.max(20);
         info!(
-            "SMP BLE Transport 已打开: 设备 {}, MTU {}, 分片 {}",
-            address, mtu, chunk_size
+            "SMP BLE Transport 已打开: 设备 {}, 分片 {} 字节",
+            address, chunk_size
         );
 
         Ok(Self {
@@ -110,7 +117,7 @@ impl SmpBleTransport {
             address,
             handle,
             rx,
-            timeout: Duration::from_secs(10),
+            timeout: DEFAULT_TIMEOUT,
             chunk_size,
             cancel,
         })
@@ -162,12 +169,35 @@ impl Transport for SmpBleTransport {
         &mut self,
         buffer: &'a mut [u8; SMP_TRANSFER_BUFFER_SIZE],
     ) -> Result<&'a [u8], ReceiveError> {
-        let frame = self.rx.recv_timeout(self.timeout).map_err(|e| match e {
-            RecvTimeoutError::Timeout => ReceiveError::Timeout,
-            RecvTimeoutError::Disconnected => ReceiveError::TransportError(Box::new(
-                std::io::Error::new(std::io::ErrorKind::BrokenPipe, "SMP 通知通道已关闭"),
-            )),
-        })?;
+        let deadline = std::time::Instant::now() + self.timeout;
+        let frame = loop {
+            if self.cancel.load(Ordering::Relaxed) {
+                return Err(ReceiveError::TransportError(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Interrupted,
+                    "OTA 已取消",
+                ))));
+            }
+
+            let now = std::time::Instant::now();
+            if now >= deadline {
+                return Err(ReceiveError::Timeout);
+            }
+
+            let remaining = deadline - now;
+            match self
+                .rx
+                .recv_timeout(remaining.min(Duration::from_millis(200)))
+            {
+                Ok(frame) => break frame,
+                Err(RecvTimeoutError::Timeout) => continue,
+                Err(RecvTimeoutError::Disconnected) => {
+                    return Err(ReceiveError::TransportError(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::BrokenPipe,
+                        "SMP 通知通道已关闭",
+                    ))))
+                }
+            }
+        };
 
         if frame.len() > buffer.len() {
             return Err(ReceiveError::FrameTooBig);
@@ -182,6 +212,19 @@ impl Transport for SmpBleTransport {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.timeout = timeout;
         Ok(())
+    }
+}
+
+impl Drop for SmpBleTransport {
+    fn drop(&mut self) {
+        let ble = Arc::clone(&self.ble);
+        let address = self.address.clone();
+        let handle = self.handle.clone();
+        handle.spawn(async move {
+            if let Err(e) = ble.unsubscribe_notify(&address, SMP_CHAR_UUID).await {
+                warn!("SMP 取消订阅失败: 设备 {}, 错误 {}", address, e);
+            }
+        });
     }
 }
 
@@ -234,5 +277,14 @@ mod tests {
         let frames = take_frames(&mut pending);
         assert_eq!(frames, vec![a]);
         assert_eq!(pending, b[..5].to_vec());
+    }
+
+    #[test]
+    fn accepts_empty_payload() {
+        let expected = frame(&[]);
+        let mut pending = expected.clone();
+        let frames = take_frames(&mut pending);
+        assert_eq!(frames, vec![expected]);
+        assert!(pending.is_empty());
     }
 }

@@ -811,6 +811,14 @@ impl GattClient {
         Ok(actual_mtu)
     }
 
+    pub async fn max_write_len(&self, char_uuid: &str) -> Result<usize> {
+        let characteristic = self.find_characteristic(char_uuid).await?;
+        characteristic
+            .max_write_len_async()
+            .await
+            .map_err(|e| ComBridgeError::ble(format!("获取写入长度失败: {}", e)))
+    }
+
     pub fn get_discovered_services(&self) -> Result<Vec<BleService>> {
         let services = self
             .services

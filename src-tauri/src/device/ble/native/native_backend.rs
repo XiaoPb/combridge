@@ -258,4 +258,14 @@ impl BleBackend for NativeBleBackend {
         let client = adapter.get_ready_client(address)?;
         client.set_mtu(mtu).await
     }
+
+    async fn max_write_len(&self, address: &str, char_uuid: &str) -> Result<usize> {
+        let adapter = self
+            .adapter
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("蓝牙适配器未初始化"))?;
+
+        let client = adapter.get_ready_client(address)?;
+        client.max_write_len(char_uuid).await
+    }
 }

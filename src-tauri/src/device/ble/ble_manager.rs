@@ -548,6 +548,18 @@ impl BleManager {
         }
     }
 
+    pub async fn max_write_len(&self, address: &str, char_uuid: &str) -> Result<usize> {
+        let backend_guard = self.backend.read().await;
+        let backend = backend_guard
+            .as_ref()
+            .ok_or_else(|| ComBridgeError::ble("BLE后端未配置"))?;
+
+        match backend {
+            Backend::Native(b) => b.max_write_len(address, char_uuid).await,
+            Backend::At(b) => b.max_write_len(address, char_uuid).await,
+        }
+    }
+
     pub async fn get_subscriptions(&self, address: &str) -> Vec<String> {
         let subscriptions = self.subscriptions.read().await;
         subscriptions

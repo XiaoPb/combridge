@@ -38,7 +38,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
   const location = useLocation();
   const { t } = useTranslation('sidebar');
   const { menuVisibility } = useMenuVisibilityStore();
-  const { setWaveformActiveTab, setProtocolActiveTab, setSystemActiveTab, setGh3036ActiveTab } = usePageTabsStore();
+  const { setWaveformActiveTab, setProtocolActiveTab, setSystemActiveTab, setGh3036ActiveTab, setOtaActiveTab } = usePageTabsStore();
   const { setActiveTabs } = useDashboardStore();
 
   const allMenuItems: SidebarMenuItem[] = [
@@ -118,6 +118,13 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
         const tab = firstVisibleTab('gh3036');
         if (tab) {
           setGh3036ActiveTab(tab as 'config' | 'monitor' | 'version' | 'factory' | 'threshold');
+        }
+        break;
+      }
+      case '/ota': {
+        const tab = firstVisibleTab('ota');
+        if (tab) {
+          setOtaActiveTab(tab as 'upgrade' | 'history');
         }
         break;
       }

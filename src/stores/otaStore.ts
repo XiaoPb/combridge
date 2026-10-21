@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { otaApi } from '../api/ota';
+import { getErrorDetail } from '../utils/errorMessage';
 import type {
   OtaDeviceInfo, OtaPackageInfo, OtaProtocolDescriptor, OtaStage, OtaStartOptions, OtaStatus,
 } from '../types/ota';
@@ -53,7 +54,18 @@ interface OtaStoreState {
 }
 
 function toMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  const detail = getErrorDetail(error);
+  if (detail) {
+    return detail;
+  }
+  if (error && typeof error === 'object') {
+    const values = Object.values(error as Record<string, unknown>);
+    const variant = values.find((value) => typeof value === 'string' && value.trim());
+    if (typeof variant === 'string') {
+      return variant;
+    }
+  }
+  return String(error);
 }
 
 export const useOtaStore = create<OtaStoreState>((set, get) => ({
@@ -165,15 +177,20 @@ export const useOtaStore = create<OtaStoreState>((set, get) => ({
     }
     try {
       const status = await otaApi.start(address, packageInfo.path, get().selectedProtocol, options);
-      set(state => ({
-        status,
-        error: null,
-        logs: appendLog(
-          state.logs,
-          'info',
-          `开始升级：${packageInfo.fileName}（协议 ${get().selectedProtocol}）`,
-        ),
-      }));
+      set(state => {
+        const patch: Partial<OtaStoreState> = {
+          error: null,
+          logs: appendLog(
+            state.logs,
+            'info',
+            `开始升级：${packageInfo.fileName}（协议 ${get().selectedProtocol}）`,
+          ),
+        };
+        if (status.updatedAt >= state.status.updatedAt) {
+          patch.status = status;
+        }
+        return patch;
+      });
     } catch (error) {
       console.error('OTA 升级启动失败', error);
       set(state => ({
@@ -194,7 +211,9 @@ export const useOtaStore = create<OtaStoreState>((set, get) => ({
   refreshStatus: async () => {
     try {
       const status = await otaApi.getStatus();
-      set({ status });
+      if (status.updatedAt >= get().status.updatedAt) {
+        set({ status });
+      }
     } catch (error) {
       console.error('OTA 状态刷新失败', error);
     }

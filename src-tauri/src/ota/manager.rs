@@ -32,6 +32,8 @@ pub struct OtaManager {
     protocols: ProtocolRegistry,
     event_bus: Arc<EventBus>,
     inner: Mutex<OtaInner>,
+    /// 串行化设备通道：预检与升级互斥，避免复用同一 GATT 订阅时互相覆盖。
+    op_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl OtaManager {
@@ -45,6 +47,7 @@ impl OtaManager {
                 status: OtaStatusDto::idle(),
                 cancel: Arc::new(AtomicBool::new(false)),
             }),
+            op_lock: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 
@@ -98,6 +101,13 @@ impl OtaManager {
         protocol: Option<&str>,
         address: &str,
     ) -> Result<OtaDeviceInfo, ComBridgeError> {
+        let _guard = self.op_lock.clone().try_lock_owned().map_err(|_| {
+            ComBridgeError::ota("设备通道正忙（可能正在预检或升级），请稍后再试")
+        })?;
+        if self.inner.lock().running {
+            return Err(ComBridgeError::ota("OTA 升级正在进行中，无法预检设备"));
+        }
+
         let protocol = self.protocols.resolve(protocol)?;
         protocol.preflight(address).await
     }
@@ -128,6 +138,13 @@ impl OtaManager {
         })
         .await
         .map_err(|e| ComBridgeError::ota(format!("固件包校验线程异常: {e}")))??;
+
+        // 校验通过后占用设备通道；guard 随升级任务移动到 spawn 块中，升级全程持有。
+        let op_guard = self
+            .op_lock
+            .clone()
+            .try_lock_owned()
+            .map_err(|_| ComBridgeError::ota("设备通道正忙（可能正在预检），请稍后再试"))?;
 
         let (cancel, session, snapshot) = {
             let mut inner = self.inner.lock();
@@ -174,6 +191,7 @@ impl OtaManager {
         let image = verified.image;
         let manager = Arc::clone(self);
         tokio::spawn(async move {
+            let _guard = op_guard;
             manager
                 .run_update(updater, address, image, options, cancel, session)
                 .await;

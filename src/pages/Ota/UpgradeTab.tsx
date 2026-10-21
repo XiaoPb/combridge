@@ -81,9 +81,10 @@ export const UpgradeTab: React.FC = () => {
           <Button
             size="small"
             icon={<ReloadOutlined />}
+            disabled={running}
             onClick={() => {
               void refreshStatus();
-              if (address) {
+              if (!running && address) {
                 void preflight(address);
               }
             }}
@@ -192,7 +193,7 @@ export const UpgradeTab: React.FC = () => {
         <Space style={{ marginTop: 16 }}>
           <Button
             type="primary"
-            disabled={!targetConnected || !packageInfo || running}
+            disabled={!targetConnected || !packageInfo || running || preflighting}
             onClick={() => address && start(address, { forceConfirm, upgradeOnly })}
           >
             {t('actions.start')}

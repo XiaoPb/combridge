@@ -55,7 +55,14 @@ impl OtaManager {
             topics::BLE_DISCONNECTED,
             move |_topic, event| {
                 if let Some(manager) = weak.upgrade() {
-                    manager.on_device_disconnected(&event.address);
+                    if let Some(snapshot) = manager.on_device_disconnected(&event.address) {
+                        // 回调运行在 EventBus 的同步分发路径上（已持有读锁），
+                        // 异步发布以避免发布时再次取锁造成重入。
+                        let bus = Arc::clone(&manager.event_bus);
+                        tauri::async_runtime::spawn(async move {
+                            bus.publish_msgpack(topics::OTA_PROGRESS, &snapshot);
+                        });
+                    }
                 }
             },
         );
@@ -251,7 +258,7 @@ impl OtaManager {
         session: u64,
     ) {
         let mut inner = self.inner.lock();
-        if !inner.running || inner.session != session {
+        if !inner.running || inner.session != session || inner.cancel.load(Ordering::Relaxed) {
             return;
         }
 
@@ -292,19 +299,15 @@ impl OtaManager {
             .publish_msgpack(topics::OTA_PROGRESS, &snapshot);
     }
 
-    fn on_device_disconnected(&self, address: &str) {
-        let snapshot = {
-            let mut inner = self.inner.lock();
-            if !inner.running || inner.status.address.as_deref() != Some(address) {
-                return;
-            }
-            inner.cancel.store(true, Ordering::Relaxed);
-            inner.status.message = DEVICE_DISCONNECTED_MESSAGE.to_string();
-            inner.status.updated_at = now_millis();
-            inner.status.clone()
-        };
-        self.event_bus
-            .publish_msgpack(topics::OTA_PROGRESS, &snapshot);
+    fn on_device_disconnected(&self, address: &str) -> Option<OtaStatusDto> {
+        let mut inner = self.inner.lock();
+        if !inner.running || inner.status.address.as_deref() != Some(address) {
+            return None;
+        }
+        inner.cancel.store(true, Ordering::Relaxed);
+        inner.status.message = DEVICE_DISCONNECTED_MESSAGE.to_string();
+        inner.status.updated_at = now_millis();
+        Some(inner.status.clone())
     }
 }
 
@@ -509,6 +512,90 @@ mod tests {
         assert_eq!(status.current, 50);
         assert!((status.percent - 50.0).abs() < f64::EPSILON);
         assert!(status.message.is_empty());
+        assert!(events.lock().is_empty());
+    }
+
+    #[tokio::test]
+    async fn device_disconnected_publishes_and_keeps_message() {
+        let (manager, events) = manager();
+        seed_running(&manager, 1);
+
+        let snapshot = manager.on_device_disconnected("AA:BB").expect("断开快照");
+        manager
+            .event_bus
+            .publish_msgpack(topics::OTA_PROGRESS, &snapshot);
+
+        {
+            let captured = events.lock();
+            assert_eq!(captured.len(), 1);
+            assert_eq!(captured[0].message, DEVICE_DISCONNECTED_MESSAGE);
+        }
+
+        Arc::clone(&manager)
+            .run_update(
+                Arc::new(FakeProtocol::failed("传输中断")),
+                "AA:BB".to_string(),
+                Vec::new(),
+                start_options(),
+                Arc::new(AtomicBool::new(true)),
+                1,
+            )
+            .await;
+
+        let status = manager.status();
+        assert_eq!(status.state, OtaState::Cancelled);
+        assert_eq!(status.message, DEVICE_DISCONNECTED_MESSAGE);
+    }
+
+    #[tokio::test]
+    async fn cancel_while_running_sets_cancelled() {
+        let (manager, events) = manager();
+        seed_running(&manager, 1);
+        let cancel = Arc::clone(&manager.inner.lock().cancel);
+
+        assert!(manager.cancel().is_ok());
+
+        Arc::clone(&manager)
+            .run_update(
+                Arc::new(FakeProtocol::failed("已取消")),
+                "AA:BB".to_string(),
+                Vec::new(),
+                start_options(),
+                cancel,
+                1,
+            )
+            .await;
+
+        let status = manager.status();
+        assert_eq!(status.state, OtaState::Cancelled);
+        assert!(!manager.inner.lock().running);
+
+        let captured = events.lock();
+        let last = captured.last().expect("终态事件");
+        assert_eq!(last.state, OtaState::Cancelled);
+    }
+
+    #[tokio::test]
+    async fn stale_session_terminal_update_is_ignored() {
+        let (manager, events) = manager();
+        seed_running(&manager, 2);
+
+        Arc::clone(&manager)
+            .run_update(
+                Arc::new(FakeProtocol::ok(None)),
+                "AA:BB".to_string(),
+                Vec::new(),
+                start_options(),
+                Arc::new(AtomicBool::new(false)),
+                1,
+            )
+            .await;
+
+        let status = manager.status();
+        assert_eq!(status.state, OtaState::Running);
+        assert_eq!(status.stage, OtaStage::Transferring);
+        assert!((status.percent - 50.0).abs() < f64::EPSILON);
+        assert!(manager.inner.lock().running);
         assert!(events.lock().is_empty());
     }
 }

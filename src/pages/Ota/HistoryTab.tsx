@@ -19,6 +19,7 @@ export const HistoryTab: React.FC = () => {
       ) : (
         <List
           size="small"
+          rowKey="id"
           dataSource={logs}
           renderItem={(item) => (
             <List.Item>

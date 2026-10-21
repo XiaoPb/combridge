@@ -26,6 +26,7 @@ export const UpgradeTab: React.FC = () => {
 
   const connected = useMemo(() => connections.filter((c) => c.isConnected), [connections]);
   const running = status.state === 'running';
+  const targetConnected = address != null && connected.some((c) => c.address === address);
 
   useEffect(() => {
     loadProtocols();
@@ -74,7 +75,21 @@ export const UpgradeTab: React.FC = () => {
         </Card>
       )}
 
-      <Card title={t('device.title')} extra={<Button size="small" icon={<ReloadOutlined />} onClick={refreshStatus} />}>
+      <Card
+        title={t('device.title')}
+        extra={
+          <Button
+            size="small"
+            icon={<ReloadOutlined />}
+            onClick={() => {
+              void refreshStatus();
+              if (address) {
+                void preflight(address);
+              }
+            }}
+          />
+        }
+      >
         <Space direction="vertical" style={{ width: '100%' }}>
           <Select
             style={{ width: '100%' }}
@@ -159,7 +174,7 @@ export const UpgradeTab: React.FC = () => {
         <Steps
           size="small"
           current={STAGE_INDEX[status.stage]}
-          status={status.state === 'failed' ? 'error' : status.state === 'success' ? 'finish' : 'process'}
+          status={status.state === 'failed' ? 'error' : status.state === 'success' ? 'finish' : running ? 'process' : 'wait'}
           items={[
             { title: t('stages.validate') },
             { title: t('stages.prepare') },
@@ -171,13 +186,13 @@ export const UpgradeTab: React.FC = () => {
         <Progress
           style={{ marginTop: 16 }}
           percent={Math.round(status.percent)}
-          status={status.state === 'failed' ? 'exception' : status.state === 'success' ? 'success' : 'active'}
+          status={status.state === 'failed' ? 'exception' : status.state === 'success' ? 'success' : running ? 'active' : 'normal'}
         />
         <Typography.Text type="secondary">{status.message}</Typography.Text>
         <Space style={{ marginTop: 16 }}>
           <Button
             type="primary"
-            disabled={!address || !packageInfo || running}
+            disabled={!targetConnected || !packageInfo || running}
             onClick={() => address && start(address, { forceConfirm, upgradeOnly })}
           >
             {t('actions.start')}

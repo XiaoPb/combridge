@@ -13,12 +13,20 @@
     "mtu": "MTU",
     "version": "Current firmware",
     "preflighting": "Checking device...",
-    "fields": {}
+    "fields": {
+      "dfuVersion": "DFU version",
+      "stackVersion": "Stack version",
+      "sdkVersion": "SDK version",
+      "stackSvn": "Stack SVN",
+      "scaAddress": "SCA address",
+      "services": "Services"
+    }
   },
   "firmware": {
     "title": "Firmware Package",
     "select": "Select .zip package",
     "hint": "Packaged .zip only (nrfutil package: manifest.json + MCUboot-signed .bin)",
+    "hintGoodix": "Packaged .zip only; it must contain exactly one Goodix .bin with the image info trailer",
     "validating": "Validating package...",
     "valid": "Validated",
     "package": "Package",
@@ -28,9 +36,30 @@
       "name": "Application",
       "board": "Board",
       "soc": "SoC",
-      "version": "MCUboot version"
+      "version": "MCUboot version",
+      "loadAddr": "Load address",
+      "runAddr": "Run address",
+      "checksum": "Checksum",
+      "binSize": "Image size",
+      "signed": "Signed",
+      "encrypted": "Encrypted",
+      "comments": "Comments"
     },
     "sha256": "Image SHA-256"
+  },
+  "goodix": {
+    "title": "Goodix DFU options",
+    "route": "Protocol route",
+    "routeAuto": "Auto (prefer basic service)",
+    "routeNormal": "Basic service (a6ed0401)",
+    "routeFast": "Fast service (a6ed0701)",
+    "transferMode": "Transfer mode",
+    "modeAuto": "Auto (fast on DFU V2)",
+    "modeNormal": "Normal segmented transfer",
+    "modeFast": "Fast streaming transfer",
+    "targetAddress": "Write address (optional)",
+    "targetPlaceholder": "e.g. 0x00010000; leave empty to use the image load address",
+    "runImmediately": "Reset and run after completion"
   },
   "options": {
     "forceConfirm": "Confirm immediately (no rollback on failure)",

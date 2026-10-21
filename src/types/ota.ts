@@ -43,4 +43,15 @@ export interface OtaDeviceInfo {
   fields: OtaKeyValue[];
 }
 
-export interface OtaStartOptions { forceConfirm: boolean; upgradeOnly: boolean; }
+export interface OtaStartOptions {
+  forceConfirm: boolean;
+  upgradeOnly: boolean;
+  /** Goodix 路由：auto / normal / fastService；SMP 忽略。 */
+  route?: 'auto' | 'normal' | 'fastService';
+  /** Goodix 传输模式：auto / normal / fast；SMP 忽略。 */
+  transferMode?: 'auto' | 'normal' | 'fast';
+  /** Goodix 显式写入地址（十六进制）；为空时使用镜像加载地址。 */
+  targetAddress?: string;
+  /** Goodix 完成后是否立即复位运行。 */
+  runImmediately?: boolean;
+}

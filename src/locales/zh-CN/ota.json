@@ -13,12 +13,20 @@
     "mtu": "MTU",
     "version": "当前固件",
     "preflighting": "正在预检设备...",
-    "fields": {}
+    "fields": {
+      "dfuVersion": "DFU 版本",
+      "stackVersion": "Stack 版本",
+      "sdkVersion": "SDK 版本",
+      "stackSvn": "Stack SVN",
+      "scaAddress": "SCA 地址",
+      "services": "服务"
+    }
   },
   "firmware": {
     "title": "固件包",
     "select": "选择 .zip 固件包",
     "hint": "仅支持打包好的 .zip（nrfutil 包：manifest.json + MCUboot 签名 .bin）",
+    "hintGoodix": "仅支持打包好的 .zip，包内需包含唯一的 Goodix .bin（带 image info trailer）",
     "validating": "正在校验固件包...",
     "valid": "校验通过",
     "package": "压缩包",
@@ -28,9 +36,30 @@
       "name": "应用名",
       "board": "目标板",
       "soc": "目标 SoC",
-      "version": "MCUboot 版本"
+      "version": "MCUboot 版本",
+      "loadAddr": "加载地址",
+      "runAddr": "运行地址",
+      "checksum": "校验和",
+      "binSize": "镜像大小",
+      "signed": "签名",
+      "encrypted": "加密",
+      "comments": "备注"
     },
     "sha256": "镜像 SHA-256"
+  },
+  "goodix": {
+    "title": "Goodix DFU 选项",
+    "route": "协议路由",
+    "routeAuto": "自动（优先基础服务）",
+    "routeNormal": "基础服务（a6ed0401）",
+    "routeFast": "快速服务（a6ed0701）",
+    "transferMode": "传输模式",
+    "modeAuto": "自动（V2 使用快速传输）",
+    "modeNormal": "普通分段传输",
+    "modeFast": "快速流传输",
+    "targetAddress": "写入地址（可选）",
+    "targetPlaceholder": "如 0x00010000；留空使用镜像加载地址",
+    "runImmediately": "完成后立即复位运行"
   },
   "options": {
     "forceConfirm": "升级后直接确认（失败不回滚）",

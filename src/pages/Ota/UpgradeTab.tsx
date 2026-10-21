@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Descriptions, Progress, Select, Space, Steps, Switch, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Descriptions, Input, Progress, Select, Space, Steps, Switch, Tag, Typography } from 'antd';
 import { open } from '@tauri-apps/plugin-dialog';
 import { CloudUploadOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useOtaStore } from '../../stores/otaStore';
 import { useBleStore } from '../../stores/bleStore';
-import type { OtaStage } from '../../types/ota';
+import type { OtaStartOptions, OtaStage } from '../../types/ota';
 
 const STAGE_INDEX: Record<OtaStage, number> = {
   idle: 0, unpacking: 0, validating: 0, preparing: 1, transferring: 2,
@@ -18,6 +18,10 @@ export const UpgradeTab: React.FC = () => {
   const [address, setAddress] = useState<string>();
   const [forceConfirm, setForceConfirm] = useState(true);
   const [upgradeOnly, setUpgradeOnly] = useState(true);
+  const [route, setRoute] = useState<NonNullable<OtaStartOptions['route']>>('auto');
+  const [transferMode, setTransferMode] = useState<NonNullable<OtaStartOptions['transferMode']>>('auto');
+  const [targetAddress, setTargetAddress] = useState('');
+  const [runImmediately, setRunImmediately] = useState(true);
 
   const {
     status, protocols, selectedProtocol, deviceInfo, packageInfo, preflighting, validating, error,
@@ -27,6 +31,7 @@ export const UpgradeTab: React.FC = () => {
   const connected = useMemo(() => connections.filter((c) => c.isConnected), [connections]);
   const running = status.state === 'running';
   const targetConnected = address != null && connected.some((c) => c.address === address);
+  const isGoodix = selectedProtocol === 'goodix';
 
   useEffect(() => {
     loadProtocols();
@@ -49,6 +54,23 @@ export const UpgradeTab: React.FC = () => {
     }
     clearPackage();
     await validatePackage(selected);
+  };
+
+  const startWithOptions = () => {
+    if (!address) {
+      return;
+    }
+    const options: OtaStartOptions = isGoodix
+      ? {
+          forceConfirm,
+          upgradeOnly,
+          route,
+          transferMode,
+          targetAddress: targetAddress.trim() || undefined,
+          runImmediately,
+        }
+      : { forceConfirm, upgradeOnly };
+    void start(address, options);
   };
 
   return (
@@ -135,7 +157,9 @@ export const UpgradeTab: React.FC = () => {
             </Button>
             {packageInfo && <Tag color="green">{t('firmware.valid')}</Tag>}
           </Space>
-          <Typography.Text type="secondary">{t('firmware.hint')}</Typography.Text>
+          <Typography.Text type="secondary">
+            {isGoodix ? t('firmware.hintGoodix') : t('firmware.hint')}
+          </Typography.Text>
           {validating && <Typography.Text type="secondary">{t('firmware.validating')}</Typography.Text>}
           {packageInfo && (
             <Descriptions size="small" column={1} bordered>
@@ -160,14 +184,57 @@ export const UpgradeTab: React.FC = () => {
               </Descriptions.Item>
             </Descriptions>
           )}
-          <Space>
-            <Switch checked={forceConfirm} onChange={setForceConfirm} disabled={running} />
-            <Typography.Text>{t('options.forceConfirm')}</Typography.Text>
-          </Space>
-          <Space>
-            <Switch checked={upgradeOnly} onChange={setUpgradeOnly} disabled={running} />
-            <Typography.Text>{t('options.upgradeOnly')}</Typography.Text>
-          </Space>
+          {isGoodix ? (
+            <Space direction="vertical" style={{ width: '100%' }} size={8}>
+              <Typography.Text strong>{t('goodix.title')}</Typography.Text>
+              <Typography.Text type="secondary">{t('goodix.route')}</Typography.Text>
+              <Select
+                style={{ width: '100%' }}
+                value={route}
+                disabled={running}
+                onChange={setRoute}
+                options={[
+                  { value: 'auto', label: t('goodix.routeAuto') },
+                  { value: 'normal', label: t('goodix.routeNormal') },
+                  { value: 'fastService', label: t('goodix.routeFast') },
+                ]}
+              />
+              <Typography.Text type="secondary">{t('goodix.transferMode')}</Typography.Text>
+              <Select
+                style={{ width: '100%' }}
+                value={transferMode}
+                disabled={running}
+                onChange={setTransferMode}
+                options={[
+                  { value: 'auto', label: t('goodix.modeAuto') },
+                  { value: 'normal', label: t('goodix.modeNormal') },
+                  { value: 'fast', label: t('goodix.modeFast') },
+                ]}
+              />
+              <Typography.Text type="secondary">{t('goodix.targetAddress')}</Typography.Text>
+              <Input
+                placeholder={t('goodix.targetPlaceholder')}
+                value={targetAddress}
+                disabled={running}
+                onChange={(event) => setTargetAddress(event.target.value)}
+              />
+              <Space>
+                <Switch checked={runImmediately} onChange={setRunImmediately} disabled={running} />
+                <Typography.Text>{t('goodix.runImmediately')}</Typography.Text>
+              </Space>
+            </Space>
+          ) : (
+            <>
+              <Space>
+                <Switch checked={forceConfirm} onChange={setForceConfirm} disabled={running} />
+                <Typography.Text>{t('options.forceConfirm')}</Typography.Text>
+              </Space>
+              <Space>
+                <Switch checked={upgradeOnly} onChange={setUpgradeOnly} disabled={running} />
+                <Typography.Text>{t('options.upgradeOnly')}</Typography.Text>
+              </Space>
+            </>
+          )}
         </Space>
       </Card>
 
@@ -194,7 +261,7 @@ export const UpgradeTab: React.FC = () => {
           <Button
             type="primary"
             disabled={!targetConnected || !packageInfo || running || preflighting}
-            onClick={() => address && start(address, { forceConfirm, upgradeOnly })}
+            onClick={startWithOptions}
           >
             {t('actions.start')}
           </Button>

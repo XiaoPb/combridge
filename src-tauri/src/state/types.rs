@@ -486,12 +486,22 @@ impl MenuGroupVisibility {
     }
 }
 
+fn default_ota_visible() -> bool {
+    true
+}
+
+fn default_ota_group() -> MenuGroupVisibility {
+    MenuGroupVisibility::new(true, &[("upgrade", true), ("history", true)])
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HomeMenuVisibility {
     pub connection: MenuGroupVisibility,
     pub dashboard: MenuGroupVisibility,
     pub gh3036: MenuGroupVisibility,
+    #[serde(default = "default_ota_group")]
+    pub ota: MenuGroupVisibility,
     pub protocol: MenuGroupVisibility,
     pub waveform: MenuGroupVisibility,
     pub system: MenuGroupVisibility,
@@ -532,6 +542,7 @@ impl HomeMenuVisibility {
                 true,
                 &[("info", false), ("logs", false), ("settings", true)],
             ),
+            ota: MenuGroupVisibility::new(true, &[("upgrade", true), ("history", true)]),
         }
     }
 }
@@ -544,6 +555,8 @@ pub struct SidebarMenuVisibility {
     pub ble: bool,
     pub dashboard: bool,
     pub gh3036: bool,
+    #[serde(default = "default_ota_visible")]
+    pub ota: bool,
     pub protocol: bool,
     pub waveform: bool,
     pub system: bool,
@@ -563,6 +576,7 @@ impl SidebarMenuVisibility {
             ble: true,
             dashboard: false,
             gh3036: true,
+            ota: true,
             protocol: false,
             waveform: true,
             system: true,

@@ -19,6 +19,7 @@ import SystemTitleTabs from './SystemTitleTabs';
 import WaveformTitleTabs from './WaveformTitleTabs';
 import Gh3036TitleTabs from './Gh3036TitleTabs';
 import DashboardTitleTabs from './DashboardTitleTabs';
+import OtaTitleTabs from './OtaTitleTabs';
 import { useTranslation } from 'react-i18next';
 
 interface ThemeSwitchProps {
@@ -118,6 +119,8 @@ const TitleBar: React.FC = () => {
         return <SystemTitleTabs />;
       case '/waveform':
         return <WaveformTitleTabs />;
+      case '/ota':
+        return <OtaTitleTabs />;
       default:
         return null;
     }

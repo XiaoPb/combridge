@@ -24,6 +24,8 @@ import {
   SettingOutlined as SettingsTabIcon,
   FileTextOutlined as JsonEditorIcon,
   FileProtectOutlined,
+  CloudUploadOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -227,7 +229,7 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation('home');
-  const { setWaveformActiveTab, setProtocolActiveTab, setSystemActiveTab, setGh3036ActiveTab } = usePageTabsStore();
+  const { setWaveformActiveTab, setProtocolActiveTab, setSystemActiveTab, setGh3036ActiveTab, setOtaActiveTab } = usePageTabsStore();
   const { setActiveTabs } = useDashboardStore();
   const { menuVisibility } = useMenuVisibilityStore();
 
@@ -262,6 +264,15 @@ const HomePage: React.FC = () => {
         { key: 'version', label: t('modules.gh3036.tabs.version'), icon: <InfoCircleOutlined /> },
         { key: 'factory', label: t('modules.gh3036.tabs.factory'), icon: <ExperimentOutlined /> },
         { key: 'threshold', label: t('modules.gh3036.tabs.threshold'), icon: <FileProtectOutlined /> },
+      ],
+    },
+    {
+      key: 'ota',
+      icon: <CloudUploadOutlined />,
+      path: '/ota',
+      subTabs: [
+        { key: 'upgrade', label: t('modules.ota.tabs.upgrade'), icon: <CloudUploadOutlined /> },
+        { key: 'history', label: t('modules.ota.tabs.history'), icon: <HistoryOutlined /> },
       ],
     },
     {
@@ -341,6 +352,13 @@ const HomePage: React.FC = () => {
         }
         break;
       }
+      case '/ota': {
+        const tab = getFirstVisibleTab('ota');
+        if (tab) {
+          setOtaActiveTab(tab as 'upgrade' | 'history');
+        }
+        break;
+      }
     }
     navigate(path);
   };
@@ -368,6 +386,9 @@ const HomePage: React.FC = () => {
         break;
       case '/dashboard':
         setActiveTabs([tabKey as 'dashboard' | 'console' | 'settings' | 'jsonEditor']);
+        break;
+      case '/ota':
+        setOtaActiveTab(tabKey as 'upgrade' | 'history');
         break;
     }
     navigate(path);

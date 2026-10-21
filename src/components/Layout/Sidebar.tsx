@@ -12,6 +12,7 @@ import {
   LineChartOutlined,
   DashboardOutlined,
   HeartOutlined,
+  CloudUploadOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useMenuVisibilityStore, type SidebarMenuKey } from '../../stores/menuVisibilityStore';
@@ -70,6 +71,12 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
       visibilityKey: 'gh3036',
       icon: <HeartOutlined />,
       label: t('menu.gh3036'),
+    },
+    {
+      key: '/ota',
+      visibilityKey: 'ota',
+      icon: <CloudUploadOutlined />,
+      label: t('menu.ota'),
     },
     {
       key: '/protocol',

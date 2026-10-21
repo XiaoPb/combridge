@@ -26,6 +26,7 @@ const DashboardPage = lazy(() => import('./pages/Dashboard'));
 const SystemPage = lazy(() => import('./pages/System'));
 const WaveformPage = lazy(() => import('./pages/Waveform'));
 const Spo2RefPage = lazy(() => import('./pages/Spo2Ref'));
+const OtaPage = lazy(() => import('./pages/Ota'));
 
 const LOADING_TIMEOUT_MS = 30000;
 
@@ -277,6 +278,7 @@ function AppContent() {
                       <Route path="/dashboard" element={<DashboardPage />} />
                       <Route path="/waveform" element={<WaveformPage />} />
                       <Route path="/system" element={<SystemPage />} />
+                      <Route path="/ota" element={<OtaPage />} />
                     </Routes>
                   </Suspense>
                 </ErrorBoundary>

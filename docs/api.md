@@ -2172,7 +2172,7 @@ await invoke('update_ble_preferences', {
 
 OTA 命令与具体升级协议解耦：`protocol` 为可选参数，缺省使用注册表中的默认协议 `smp`。当前注册了 `smp`（MCUboot / mcumgr）与 `goodix`（Goodix GR5xx DFU）两个协议。协议通过后端 `ProtocolRegistry` 注册，新增协议只需实现 `OtaProtocol` trait 并注册，命令层与前端无需改动。
 
-Goodix 协议仅接受 `.zip` 包，包内需包含唯一的 Goodix `.bin`（带 40 字节 image info trailer）；解压后上限 16MB。
+Goodix 协议支持两种固件输入：直接选择 `.bin` 镜像（需带 40 字节 image info trailer），或打包好的 `.zip`（包内需包含唯一的 Goodix `.bin`）；镜像上限 16MB。`ota_validate_package` / `ota_start` 按扩展名路由：`.zip` 走包校验，其余交给协议解析裸镜像。
 
 ### ota\_list\_protocols
 
@@ -2206,7 +2206,7 @@ interface OtaProtocolDescriptor {
 
 | 参数名           | 类型     | 必填 | 描述                        |
 | ------------- | ------ | -- | ------------------------- |
-| firmwarePath  | string | 是  | 固件包路径（`.zip`）             |
+| firmwarePath  | string | 是  | 固件路径（`.zip` 固件包或 Goodix `.bin` 镜像） |
 | protocol      | string | 否  | OTA 协议 id，缺省 `smp`       |
 
 **返回**: `OtaPackageInfo`
@@ -2716,7 +2716,7 @@ interface OtaStatus {
 ## 更新日志
 
 - **2026-10-21**: 新增 OTA 模块（`ota_list_protocols`、`ota_validate_package`、`ota_preflight`、`ota_start`、`ota_get_status`、`ota_cancel`）、`ota:progress` 事件与 OTA 类型定义
-- **2026-10-22**: OTA 新增 `goodix` 协议（Goodix GR5xx DFU）；`ota_start` 的 `options` 增加 `route`、`transferMode`、`targetAddress`、`runImmediately`（SMP 忽略）
+- **2026-10-22**: OTA 新增 `goodix` 协议（Goodix GR5xx DFU）；`ota_start` 的 `options` 增加 `route`、`transferMode`、`targetAddress`、`runImmediately`（SMP 忽略）；Goodix 固件支持直接选择 `.bin` 镜像，`.zip` 仍可作为打包形式
 - **2026-04-13**: 全面重写 API 文档，新增 Dashboard、GH3036、Waveform、State、Preferences 模块；修复 BLE 事件类型命名（BleNotificationEvent → BleDataEvent，char\_uuid → characteristicUuid）；补充串口 export\_serial\_data 命令；补充系统模块 get\_window\_status、show\_main\_window 等命令
 - **2026-04-02**: 统一使用蛇形命名规范，修复 BLE 和 Serial 模块所有参数不匹配问题
 

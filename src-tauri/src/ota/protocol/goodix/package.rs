@@ -1,9 +1,10 @@
-//! Goodix 固件 zip 包校验。
+//! Goodix 固件校验。
 //!
-//! 沿用项目约束：只接受 `.zip`；包内必须存在**唯一**的 Goodix `.bin`
-//! （含 image info trailer）。解压后上限 16MB。
+//! 支持两种输入：打包好的 `.zip`（包内必须存在**唯一**的 Goodix `.bin`）
+//! 与直接选择的 `.bin`（含 image info trailer）。镜像上限 16MB。
 
 use std::fmt::Write as _;
+use std::path::Path;
 
 use sha2::{Digest, Sha256};
 
@@ -15,7 +16,7 @@ use crate::ota::types::{OtaKeyValue, OtaPackageInfo};
 use super::error::DfuError;
 use super::firmware::DfuImage;
 
-/// 解压后镜像的上限，同时用于防 zip 炸弹。
+/// 镜像上限，同时用于防 zip 炸弹。
 pub const MAX_IMAGE_BYTES: u64 = 16 * 1024 * 1024;
 const PROTOCOL_ID: &str = "goodix";
 
@@ -42,6 +43,62 @@ pub fn validate(package: &mut ZipPackage) -> Result<FirmwareImage, ComBridgeErro
     };
 
     let image = package.read_entry(&image_name, MAX_IMAGE_BYTES)?;
+    build_image(
+        image,
+        package.path().display().to_string(),
+        package.file_name().to_string(),
+        package.file_size(),
+        image_name,
+    )
+}
+
+/// 校验直接选择的 Goodix `.bin` 镜像。
+pub fn validate_image(path: &Path) -> Result<FirmwareImage, ComBridgeError> {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("firmware.bin")
+        .to_string();
+    if !file_name.to_ascii_lowercase().ends_with(".bin") {
+        return Err(ComBridgeError::ota(
+            "Goodix 固件需为 .bin 镜像（含 image info trailer）",
+        ));
+    }
+
+    let metadata = std::fs::metadata(path).map_err(|e| {
+        ComBridgeError::ota(format!("读取固件镜像失败 {}: {e}", path.display()))
+    })?;
+    if !metadata.is_file() {
+        return Err(ComBridgeError::ota("固件镜像路径不是文件"));
+    }
+    if metadata.len() > MAX_IMAGE_BYTES {
+        return Err(ComBridgeError::ota(format!(
+            "固件镜像过大: {} 字节（上限 {} 字节）",
+            metadata.len(),
+            MAX_IMAGE_BYTES
+        )));
+    }
+
+    let image = std::fs::read(path)
+        .map_err(|e| ComBridgeError::ota(format!("读取固件镜像失败 {}: {e}", path.display())))?;
+    build_image(
+        image,
+        path.display().to_string(),
+        file_name.clone(),
+        metadata.len(),
+        file_name,
+    )
+}
+
+/// 解析镜像并组装统一的展示信息。
+fn build_image(
+    image: Vec<u8>,
+    path: String,
+    file_name: String,
+    package_size: u64,
+    image_name: String,
+) -> Result<FirmwareImage, ComBridgeError> {
+    let image_size = image.len() as u64;
     let parsed = DfuImage::parse(image.clone()).map_err(|error| {
         let detail = match error {
             DfuError::Firmware(message) => message,
@@ -69,12 +126,12 @@ pub fn validate(package: &mut ZipPackage) -> Result<FirmwareImage, ComBridgeErro
     }
 
     let info = OtaPackageInfo {
-        path: package.path().display().to_string(),
-        file_name: package.file_name().to_string(),
-        package_size: package.file_size(),
+        path,
+        file_name,
+        package_size,
         protocol: PROTOCOL_ID.to_string(),
         image_name,
-        image_size: image.len() as u64,
+        image_size,
         image_sha256: hex_lower(&Sha256::digest(&image)),
         fields,
     };
@@ -86,7 +143,7 @@ pub fn validate(package: &mut ZipPackage) -> Result<FirmwareImage, ComBridgeErro
         checksum = format_args!("0x{:08X}", boot.checksum),
         signed = parsed.signed,
         encrypted = parsed.encrypted,
-        "Goodix firmware package validated"
+        "Goodix firmware validated"
     );
 
     Ok(FirmwareImage { info, image })
@@ -206,5 +263,40 @@ mod tests {
     fn rejects_invalid_trailer() {
         let zip = make_zip(&[("app.bin", &[0xAA_u8; 128])]);
         assert!(validate_zip(&zip).is_err());
+    }
+
+    fn write_bin(data: &[u8], suffix: &str) -> tempfile::NamedTempFile {
+        let mut file = tempfile::Builder::new()
+            .suffix(suffix)
+            .tempfile()
+            .expect("temp firmware");
+        file.write_all(data).expect("write");
+        file
+    }
+
+    #[test]
+    fn accepts_raw_bin() {
+        let data = goodix_bin(64);
+        let file = write_bin(&data, ".bin");
+        let firmware = validate_image(file.path()).expect("valid image");
+        assert_eq!(firmware.info.protocol, "goodix");
+        assert_eq!(firmware.info.package_size, data.len() as u64);
+        assert_eq!(firmware.info.image_size, data.len() as u64);
+        assert_eq!(firmware.image, data);
+        assert_eq!(field(&firmware.info, "checksum"), Some("0x12345678"));
+        assert_eq!(firmware.info.image_sha256.len(), 64);
+    }
+
+    #[test]
+    fn rejects_raw_non_bin_extension() {
+        let data = goodix_bin(32);
+        let file = write_bin(&data, ".dat");
+        assert!(validate_image(file.path()).is_err());
+    }
+
+    #[test]
+    fn rejects_invalid_raw_bin() {
+        let file = write_bin(&[0xAA_u8; 128], ".bin");
+        assert!(validate_image(file.path()).is_err());
     }
 }

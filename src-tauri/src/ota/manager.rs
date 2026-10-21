@@ -10,7 +10,7 @@ use crate::error::ComBridgeError;
 use crate::service::event_bus::{topics, BleConnectionEvent, EventBus};
 
 use super::package::ZipPackage;
-use super::protocol::{OtaProgressFn, OtaProtocol};
+use super::protocol::{FirmwareImage, OtaProgressFn, OtaProtocol};
 use super::registry::ProtocolRegistry;
 use super::types::{
     now_millis, OtaDeviceInfo, OtaPackageInfo, OtaProtocolDescriptor, OtaStage, OtaStartOptions,
@@ -50,6 +50,23 @@ impl ExpectedDisconnects {
 
 fn normalize_address(address: &str) -> String {
     address.trim().to_ascii_uppercase()
+}
+
+/// 按扩展名路由固件校验：`.zip` 交给包校验，裸镜像（如 `.bin`）交给协议自身解析。
+fn validate_firmware(
+    protocol: &dyn OtaProtocol,
+    path: &Path,
+) -> Result<FirmwareImage, ComBridgeError> {
+    let is_zip = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"));
+    if is_zip {
+        let mut package = ZipPackage::open(path)?;
+        protocol.validate_package(&mut package)
+    } else {
+        protocol.validate_image(path)
+    }
 }
 
 struct OtaInner {
@@ -124,14 +141,10 @@ impl OtaManager {
     ) -> Result<OtaPackageInfo, ComBridgeError> {
         let protocol = self.protocols.resolve(protocol)?;
         let path = Path::new(firmware_path).to_path_buf();
-        tokio::task::spawn_blocking(move || {
-            let mut package = ZipPackage::open(&path)?;
-            protocol
-                .validate_package(&mut package)
-                .map(|image| image.info)
-        })
-        .await
-        .map_err(|e| ComBridgeError::ota(format!("固件包校验线程异常: {e}")))?
+        tokio::task::spawn_blocking(move || validate_firmware(protocol.as_ref(), &path))
+            .await
+            .map_err(|e| ComBridgeError::ota(format!("固件包校验线程异常: {e}")))?
+            .map(|image| image.info)
     }
 
     pub async fn preflight(
@@ -150,7 +163,7 @@ impl OtaManager {
         protocol.preflight(address).await
     }
 
-    /// 启动升级：先用所选协议校验 zip，通过后才占用状态并连接设备。
+    /// 启动升级：先用所选协议校验固件，通过后才占用状态并连接设备。
     pub async fn start(
         self: &Arc<Self>,
         protocol: Option<String>,
@@ -171,8 +184,7 @@ impl OtaManager {
 
         let verify_path = firmware_path.clone();
         let verified = tokio::task::spawn_blocking(move || {
-            let mut package = ZipPackage::open(Path::new(&verify_path))?;
-            resolved.validate_package(&mut package)
+            validate_firmware(resolved.as_ref(), Path::new(&verify_path))
         })
         .await
         .map_err(|e| ComBridgeError::ota(format!("固件包校验线程异常: {e}")))??;
@@ -658,5 +670,94 @@ mod tests {
         assert!((status.percent - 50.0).abs() < f64::EPSILON);
         assert!(manager.inner.lock().running);
         assert!(events.lock().is_empty());
+    }
+
+    struct RoutingProtocol;
+
+    fn routing_image(name: &str) -> FirmwareImage {
+        FirmwareImage {
+            info: OtaPackageInfo {
+                path: name.to_string(),
+                file_name: name.to_string(),
+                package_size: 4,
+                protocol: "route".to_string(),
+                image_name: name.to_string(),
+                image_size: 4,
+                image_sha256: String::new(),
+                fields: Vec::new(),
+            },
+            image: vec![0; 4],
+        }
+    }
+
+    #[async_trait]
+    impl OtaProtocol for RoutingProtocol {
+        fn id(&self) -> &'static str {
+            "route"
+        }
+
+        fn display_name(&self) -> &'static str {
+            "Route"
+        }
+
+        fn description(&self) -> &'static str {
+            "校验路由测试协议"
+        }
+
+        fn validate_package(
+            &self,
+            _package: &mut ZipPackage,
+        ) -> Result<FirmwareImage, ComBridgeError> {
+            Ok(routing_image("package"))
+        }
+
+        fn validate_image(&self, _path: &Path) -> Result<FirmwareImage, ComBridgeError> {
+            Ok(routing_image("image"))
+        }
+
+        async fn preflight(&self, _address: &str) -> Result<OtaDeviceInfo, ComBridgeError> {
+            Err(ComBridgeError::ota("测试协议不支持预检"))
+        }
+
+        async fn upgrade(
+            &self,
+            _address: &str,
+            _image: Vec<u8>,
+            _options: &OtaStartOptions,
+            _cancel: Arc<AtomicBool>,
+            _progress: OtaProgressFn,
+        ) -> Result<(), ComBridgeError> {
+            Err(ComBridgeError::ota("测试协议不支持升级"))
+        }
+    }
+
+    #[test]
+    fn routes_bin_to_raw_image_validation() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("firmware.bin");
+        std::fs::write(&path, [0_u8; 4]).expect("write bin");
+
+        let image = validate_firmware(&RoutingProtocol, &path).expect("valid image");
+        assert_eq!(image.info.image_name, "image");
+    }
+
+    #[test]
+    fn routes_zip_to_package_validation() {
+        use std::io::Write as _;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("firmware.zip");
+        {
+            let file = std::fs::File::create(&path).expect("create zip");
+            let mut writer = zip::ZipWriter::new(file);
+            writer
+                .start_file("app.bin", zip::write::SimpleFileOptions::default())
+                .expect("start_file");
+            writer.write_all(&[0_u8; 4]).expect("write_all");
+            writer.finish().expect("finish zip");
+        }
+
+        let image = validate_firmware(&RoutingProtocol, &path).expect("valid package");
+        assert_eq!(image.info.image_name, "package");
     }
 }

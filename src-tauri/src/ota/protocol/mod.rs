@@ -1,6 +1,7 @@
 pub mod goodix;
 pub mod smp;
 
+use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
@@ -27,6 +28,17 @@ pub trait OtaProtocol: Send + Sync {
     fn display_name(&self) -> &'static str;
     fn description(&self) -> &'static str;
     fn validate_package(&self, package: &mut ZipPackage) -> Result<FirmwareImage, ComBridgeError>;
+
+    /// 校验并提取单个原始镜像文件（如 Goodix `.bin`）。
+    ///
+    /// 默认不支持直接镜像；只有以裸镜像为升级单元的协议才实现。
+    fn validate_image(&self, _path: &Path) -> Result<FirmwareImage, ComBridgeError> {
+        Err(ComBridgeError::ota(format!(
+            "{} 协议只支持 .zip 固件包",
+            self.display_name()
+        )))
+    }
+
     async fn preflight(&self, address: &str) -> Result<OtaDeviceInfo, ComBridgeError>;
     async fn upgrade(
         &self,

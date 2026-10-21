@@ -25,11 +25,12 @@
   "firmware": {
     "title": "固件包",
     "select": "选择 .zip 固件包",
+    "selectGoodix": "选择 .bin 固件",
     "hint": "仅支持打包好的 .zip（nrfutil 包：manifest.json + MCUboot 签名 .bin）",
-    "hintGoodix": "仅支持打包好的 .zip，包内需包含唯一的 Goodix .bin（带 image info trailer）",
-    "validating": "正在校验固件包...",
+    "hintGoodix": "直接选择 Goodix .bin 镜像（需含 image info trailer，大小不超过 16MB）",
+    "validating": "正在校验固件...",
     "valid": "校验通过",
-    "package": "压缩包",
+    "package": "固件文件",
     "image": "升级镜像",
     "protocol": "协议",
     "fields": {

@@ -25,11 +25,12 @@
   "firmware": {
     "title": "Firmware Package",
     "select": "Select .zip package",
+    "selectGoodix": "Select .bin firmware",
     "hint": "Packaged .zip only (nrfutil package: manifest.json + MCUboot-signed .bin)",
-    "hintGoodix": "Packaged .zip only; it must contain exactly one Goodix .bin with the image info trailer",
-    "validating": "Validating package...",
+    "hintGoodix": "Select a Goodix .bin image directly (must contain the image info trailer, up to 16MB)",
+    "validating": "Validating firmware...",
     "valid": "Validated",
-    "package": "Package",
+    "package": "Firmware file",
     "image": "Image",
     "protocol": "Protocol",
     "fields": {

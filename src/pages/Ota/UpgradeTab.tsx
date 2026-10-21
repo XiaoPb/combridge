@@ -47,7 +47,9 @@ export const UpgradeTab: React.FC = () => {
   const pickPackage = async () => {
     const selected = await open({
       multiple: false,
-      filters: [{ name: 'Firmware Package', extensions: ['zip'] }],
+      filters: isGoodix
+        ? [{ name: 'Goodix Firmware', extensions: ['bin'] }]
+        : [{ name: 'Firmware Package', extensions: ['zip'] }],
     });
     if (typeof selected !== 'string') {
       return;
@@ -153,7 +155,7 @@ export const UpgradeTab: React.FC = () => {
         <Space direction="vertical" style={{ width: '100%' }}>
           <Space>
             <Button icon={<CloudUploadOutlined />} onClick={pickPackage} disabled={running} loading={validating}>
-              {t('firmware.select')}
+              {isGoodix ? t('firmware.selectGoodix') : t('firmware.select')}
             </Button>
             {packageInfo && <Tag color="green">{t('firmware.valid')}</Tag>}
           </Space>

@@ -21,6 +21,7 @@ pub mod mock;
 #[cfg(test)]
 mod tests;
 
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -85,6 +86,10 @@ impl OtaProtocol for GoodixProtocol {
 
     fn validate_package(&self, package: &mut ZipPackage) -> Result<FirmwareImage, ComBridgeError> {
         package::validate(package)
+    }
+
+    fn validate_image(&self, path: &Path) -> Result<FirmwareImage, ComBridgeError> {
+        package::validate_image(path)
     }
 
     async fn preflight(&self, address: &str) -> Result<OtaDeviceInfo, ComBridgeError> {

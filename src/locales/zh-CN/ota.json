@@ -1,0 +1,53 @@
+{
+  "tabs": { "upgrade": "固件升级", "history": "升级记录" },
+  "protocol": {
+    "title": "升级协议",
+    "single": "当前仅注册了 SMP 协议"
+  },
+  "device": {
+    "title": "目标设备",
+    "placeholder": "选择已连接的 BLE 设备",
+    "none": "暂无已连接设备，请先在 BLE 页面连接设备",
+    "protocol": "协议",
+    "mode": "连接模式",
+    "mtu": "MTU",
+    "version": "当前固件",
+    "preflighting": "正在预检设备...",
+    "fields": {}
+  },
+  "firmware": {
+    "title": "固件包",
+    "select": "选择 .zip 固件包",
+    "hint": "仅支持打包好的 .zip（nrfutil 包：manifest.json + MCUboot 签名 .bin）",
+    "validating": "正在校验固件包...",
+    "valid": "校验通过",
+    "package": "压缩包",
+    "image": "升级镜像",
+    "protocol": "协议",
+    "fields": {
+      "name": "应用名",
+      "board": "目标板",
+      "soc": "目标 SoC",
+      "version": "MCUboot 版本"
+    },
+    "sha256": "镜像 SHA-256"
+  },
+  "options": {
+    "forceConfirm": "升级后直接确认（失败不回滚）",
+    "upgradeOnly": "禁止降级"
+  },
+  "progress": { "title": "升级进度" },
+  "stages": {
+    "validate": "校验",
+    "prepare": "准备",
+    "transfer": "传输",
+    "activate": "激活",
+    "reboot": "重启"
+  },
+  "actions": { "start": "开始升级", "cancel": "取消升级" },
+  "history": {
+    "title": "升级记录",
+    "clear": "清空",
+    "empty": "暂无升级记录"
+  }
+}

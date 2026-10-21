@@ -1,0 +1,49 @@
+{
+  "tabs": { "upgrade": "Firmware Upgrade", "history": "History" },
+  "protocol": {
+    "title": "Upgrade protocol",
+    "single": "Only the SMP protocol is registered"
+  },
+  "device": {
+    "title": "Target Device",
+    "placeholder": "Select a connected BLE device",
+    "none": "No connected device. Connect one on the BLE page first.",
+    "protocol": "Protocol",
+    "mode": "Mode",
+    "mtu": "MTU",
+    "version": "Current firmware",
+    "preflighting": "Checking device...",
+    "fields": {}
+  },
+  "firmware": {
+    "title": "Firmware Package",
+    "select": "Select .zip package",
+    "hint": "Packaged .zip only (nrfutil package: manifest.json + MCUboot-signed .bin)",
+    "validating": "Validating package...",
+    "valid": "Validated",
+    "package": "Package",
+    "image": "Image",
+    "protocol": "Protocol",
+    "fields": {
+      "name": "Application",
+      "board": "Board",
+      "soc": "SoC",
+      "version": "MCUboot version"
+    },
+    "sha256": "Image SHA-256"
+  },
+  "options": {
+    "forceConfirm": "Confirm immediately (no rollback on failure)",
+    "upgradeOnly": "Disallow downgrade"
+  },
+  "progress": { "title": "Progress" },
+  "stages": {
+    "validate": "Validate",
+    "prepare": "Prepare",
+    "transfer": "Transfer",
+    "activate": "Activate",
+    "reboot": "Reboot"
+  },
+  "actions": { "start": "Start upgrade", "cancel": "Cancel" },
+  "history": { "title": "Upgrade history", "clear": "Clear", "empty": "No records yet" }
+}

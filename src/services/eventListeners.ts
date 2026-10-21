@@ -4,7 +4,9 @@ import { useBleStore, generateBleId } from '../stores/bleStore';
 import { useLogStore } from '../stores/logStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useGh3036Store } from '../stores/gh3036Store';
+import { useOtaStore } from '../stores/otaStore';
 import { decodePayload, type EventBusEvent } from '../utils/msgpack';
+import type { OtaStatus } from '../types/ota';
 import type {
   SerialDataPayload,
   BleDataPayload,
@@ -143,6 +145,11 @@ function dispatchEvent(event: EventBusEvent) {
       case 'gh3036:factory_test_progress':
         console.log(`[${ts}] [EventListeners] gh3036:factory_test_progress received (handled by store)`);
         break;
+      case 'ota:progress': {
+        const payload = decodePayload<OtaStatus>(event);
+        useOtaStore.getState().handleProgress(payload);
+        break;
+      }
       default:
         console.log(`[${ts}] [EventListeners] Unknown topic: ${event.topic}`);
         break;

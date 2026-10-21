@@ -110,6 +110,20 @@ function convertArrayToObject(arr: unknown[], topic: string): Record<string, unk
         progress: arr[3] as number,
         message: arr[4] as string,
       };
+    case 'ota:progress':
+      return {
+        state: arr[0] as string,
+        stage: arr[1] as string,
+        protocol: arr[2] as string | null,
+        address: arr[3] as string | null,
+        firmwarePath: arr[4] as string | null,
+        current: arr[5] as number,
+        total: arr[6] as number,
+        percent: arr[7] as number,
+        message: arr[8] as string,
+        error: arr[9] as string | null,
+        updatedAt: arr[10] as number,
+      };
     default:
       console.warn('[decodePayload] Unknown topic for array conversion:', topic);
       return { data: arr };

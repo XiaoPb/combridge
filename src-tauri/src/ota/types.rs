@@ -102,7 +102,7 @@ pub struct OtaPackageInfo {
     pub fields: Vec<OtaKeyValue>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OtaStartOptions {
     pub force_confirm: bool,
@@ -119,19 +119,6 @@ pub struct OtaStartOptions {
     /// Goodix 完成后是否立即复位运行；默认 `true`。
     #[serde(default)]
     pub run_immediately: Option<bool>,
-}
-
-impl Default for OtaStartOptions {
-    fn default() -> Self {
-        Self {
-            force_confirm: false,
-            upgrade_only: false,
-            route: None,
-            transfer_mode: None,
-            target_address: None,
-            run_immediately: None,
-        }
-    }
 }
 
 pub fn now_millis() -> u64 {

@@ -34,7 +34,11 @@ pub fn validate(package: &mut ZipPackage) -> Result<FirmwareImage, ComBridgeErro
                 "固件包内没有 Goodix .bin 镜像（需包含 image info trailer）",
             ))
         }
-        _ => return Err(ComBridgeError::ota("固件包内存在多个 .bin，无法确定升级镜像")),
+        _ => {
+            return Err(ComBridgeError::ota(
+                "固件包内存在多个 .bin，无法确定升级镜像",
+            ))
+        }
     };
 
     let image = package.read_entry(&image_name, MAX_IMAGE_BYTES)?;

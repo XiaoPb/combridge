@@ -9,9 +9,7 @@ use super::super::engine::events::{DfuReport, ProgressSink, Stage};
 use super::super::engine::plan::{Route, TargetAddress, TransferOptions};
 use super::super::engine::EngineConfig;
 use super::super::error::{DfuError, Result};
-use super::super::firmware::{
-    ensure_no_overlap, ensure_status, sum_checksum, DfuImage, ImgInfo,
-};
+use super::super::firmware::{ensure_no_overlap, ensure_status, sum_checksum, DfuImage, ImgInfo};
 use super::super::frame::fast::{erase_stage, opcode, FastFrame};
 use super::super::link::FastLink;
 use super::super::transport::Transport;

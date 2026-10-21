@@ -454,7 +454,9 @@ fn basic_handler(
     }
 }
 
-fn collect_events(rx: &mut tokio::sync::mpsc::UnboundedReceiver<ProgressEvent>) -> Vec<ProgressEvent> {
+fn collect_events(
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<ProgressEvent>,
+) -> Vec<ProgressEvent> {
     let mut events = Vec::new();
     while let Ok(event) = rx.try_recv() {
         events.push(event);
@@ -479,10 +481,7 @@ async fn v2_normal_firmware_update() {
         basic_handler(Arc::clone(&fast_flag), data.len()),
     ));
 
-    let engine = DfuEngine::new(
-        Arc::clone(&mock) as Arc<dyn Transport>,
-        test_config(),
-    );
+    let engine = DfuEngine::new(Arc::clone(&mock) as Arc<dyn Transport>, test_config());
 
     let (sink, mut rx) = ProgressSink::channel();
     let report = engine

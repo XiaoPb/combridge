@@ -36,8 +36,8 @@ use crate::ota::ExpectedDisconnects;
 
 use ble_transport::GoodixBleTransport;
 use engine::events::{ProgressEvent, ProgressSink, Stage};
-use engine::{DfuEngine, DfuPlan, EngineConfig};
 use engine::plan::{Route, TargetAddress, TransferMode, TransferOptions};
+use engine::{DfuEngine, DfuPlan, EngineConfig};
 use error::DfuError;
 use firmware::{ensure_status, ChipInfo, DfuImage};
 use frame::basic::opcode;
@@ -59,10 +59,7 @@ impl GoodixProtocol {
         }
     }
 
-    async fn open_transport(
-        &self,
-        address: &str,
-    ) -> Result<GoodixBleTransport, ComBridgeError> {
+    async fn open_transport(&self, address: &str) -> Result<GoodixBleTransport, ComBridgeError> {
         GoodixBleTransport::open(
             Arc::clone(&self.ble),
             address,
@@ -106,12 +103,13 @@ impl OtaProtocol for GoodixProtocol {
                 true,
             )
             .await
-            .map_err(|e| ComBridgeError::ota(format!("订阅 DFU 通知失败（设备 {address}）: {e}")))?;
+            .map_err(|e| {
+                ComBridgeError::ota(format!("订阅 DFU 通知失败（设备 {address}）: {e}"))
+            })?;
 
-            let payload = link
-                .request(opcode::GET_INFO, &[])
-                .await
-                .map_err(|e| ComBridgeError::ota(format!("读取 Goodix 芯片信息失败（设备 {address}）: {e}")))?;
+            let payload = link.request(opcode::GET_INFO, &[]).await.map_err(|e| {
+                ComBridgeError::ota(format!("读取 Goodix 芯片信息失败（设备 {address}）: {e}"))
+            })?;
             if payload.is_empty() {
                 return Err(ComBridgeError::ota(format!(
                     "设备 {address} 的 GET_INFO 响应为空"
@@ -138,14 +136,20 @@ impl OtaProtocol for GoodixProtocol {
             fields.push(key_value("dfuVersion", format!("V{dfu_version}")));
             fields.push(key_value(
                 "stackVersion",
-                format!("{}.{}.{}", chip.stack_major, chip.stack_minor, chip.stack_build),
+                format!(
+                    "{}.{}.{}",
+                    chip.stack_major, chip.stack_minor, chip.stack_build
+                ),
             ));
             fields.push(key_value(
                 "sdkVersion",
                 format!("{}.{}.{}", chip.sdk_major, chip.sdk_minor, chip.sdk_build),
             ));
             fields.push(key_value("stackSvn", format!("0x{:08X}", chip.stack_svn)));
-            fields.push(key_value("scaAddress", format!("0x{:08X}", chip.sca_address())));
+            fields.push(key_value(
+                "scaAddress",
+                format!("0x{:08X}", chip.sca_address()),
+            ));
         }
 
         let services = capabilities
@@ -204,7 +208,10 @@ impl OtaProtocol for GoodixProtocol {
         );
 
         let transport = self.open_transport(address).await?;
-        let engine = DfuEngine::new(Arc::new(transport) as Arc<dyn Transport>, EngineConfig::default());
+        let engine = DfuEngine::new(
+            Arc::new(transport) as Arc<dyn Transport>,
+            EngineConfig::default(),
+        );
 
         let (sink, mut events) = ProgressSink::channel();
         let consumer_cancel = Arc::clone(&cancel);
@@ -268,9 +275,7 @@ impl OtaProtocol for GoodixProtocol {
             }
             Err(DfuError::Cancelled) => {
                 info!(address = address, "Goodix upgrade cancelled");
-                Err(ComBridgeError::ota(format!(
-                    "升级已取消（设备 {address}）"
-                )))
+                Err(ComBridgeError::ota(format!("升级已取消（设备 {address}）")))
             }
             Err(error) => {
                 error!(address = address, error = %error, "Goodix upgrade failed");

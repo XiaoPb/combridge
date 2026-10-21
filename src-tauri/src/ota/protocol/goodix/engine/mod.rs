@@ -16,7 +16,9 @@ use super::firmware::{sum_checksum, DfuImage};
 use super::transport::{Service, Transport};
 
 pub use events::{DfuReport, ProgressEvent, ProgressSink, Stage};
-pub use plan::{DfuPlan, Operation, ResourceImage, Route, TargetAddress, TransferMode, TransferOptions};
+pub use plan::{
+    DfuPlan, Operation, ResourceImage, Route, TargetAddress, TransferMode, TransferOptions,
+};
 
 /// 命令往返的重试策略。
 ///
@@ -120,12 +122,8 @@ impl DfuEngine {
 
     /// 不监听进度执行会话。
     pub async fn run(&self, plan: DfuPlan) -> Result<DfuReport> {
-        self.execute(
-            plan,
-            ProgressSink::none(),
-            Arc::new(AtomicBool::new(false)),
-        )
-        .await
+        self.execute(plan, ProgressSink::none(), Arc::new(AtomicBool::new(false)))
+            .await
     }
 
     async fn execute_connected(
@@ -209,7 +207,10 @@ impl DfuEngine {
     }
 }
 
-fn resolve_route(requested: Route, caps: &super::transport::TransportCapabilities) -> Result<Route> {
+fn resolve_route(
+    requested: Route,
+    caps: &super::transport::TransportCapabilities,
+) -> Result<Route> {
     let resolved = match requested {
         Route::Auto => {
             if caps.has_service(Service::Dfu) {

@@ -204,7 +204,10 @@ impl GoodixBleTransport {
                 continue;
             };
             let Some((uuid, _)) = self.binding(channel) else {
-                warn!(?channel, "channel disappeared after reconnect; skipping resubscribe");
+                warn!(
+                    ?channel,
+                    "channel disappeared after reconnect; skipping resubscribe"
+                );
                 continue;
             };
             let callback: NotifyCallback = Arc::new(move |_addr, _char, data| {
@@ -215,11 +218,13 @@ impl GoodixBleTransport {
                 .await
                 .map_err(|e| {
                     error!(address = address, uuid = uuid, error = %e, "resubscribe failed");
-                    DfuError::Transport(format!(
-                        "重新订阅 {uuid} 失败（设备 {address}）: {e}"
-                    ))
+                    DfuError::Transport(format!("重新订阅 {uuid} 失败（设备 {address}）: {e}"))
                 })?;
-            debug!(address = address, uuid = uuid, "resubscribed after reconnect");
+            debug!(
+                address = address,
+                uuid = uuid,
+                "resubscribed after reconnect"
+            );
         }
         Ok(())
     }
@@ -351,9 +356,7 @@ impl Transport for GoodixBleTransport {
             Some(_) => Err(DfuError::Transport(format!(
                 "设备 {address} 当前不在连接状态"
             ))),
-            None => Err(DfuError::Transport(format!(
-                "设备 {address} 已断开连接"
-            ))),
+            None => Err(DfuError::Transport(format!("设备 {address} 已断开连接"))),
         }
     }
 

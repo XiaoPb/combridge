@@ -2170,7 +2170,9 @@ await invoke('update_ble_preferences', {
 
 ## OTA 模块 (OTA)
 
-OTA 命令与具体升级协议解耦：`protocol` 为可选参数，缺省使用注册表中的默认协议 `smp`。协议通过后端 `ProtocolRegistry` 注册，新增协议只需实现 `OtaProtocol` trait 并注册，命令层与前端无需改动。
+OTA 命令与具体升级协议解耦：`protocol` 为可选参数，缺省使用注册表中的默认协议 `smp`。当前注册了 `smp`（MCUboot / mcumgr）与 `goodix`（Goodix GR5xx DFU）两个协议。协议通过后端 `ProtocolRegistry` 注册，新增协议只需实现 `OtaProtocol` trait 并注册，命令层与前端无需改动。
+
+Goodix 协议仅接受 `.zip` 包，包内需包含唯一的 Goodix `.bin`（带 40 字节 image info trailer）；解压后上限 16MB。
 
 ### ota\_list\_protocols
 
@@ -2277,8 +2279,12 @@ interface OtaDeviceInfo {
 | firmwarePath         | string  | 是  | 已校验通过的固件包路径              |
 | protocol             | string  | 否  | OTA 协议 id，缺省 `smp`        |
 | options              | object  | 是  | 升级选项                     |
-| options.forceConfirm | boolean | 是  | 是否跳过设备端确认                |
-| options.upgradeOnly  | boolean | 是  | 禁止降级（true 时拒绝低于当前版本的固件） |
+| options.forceConfirm | boolean | 是  | 是否跳过设备端确认（SMP）           |
+| options.upgradeOnly  | boolean | 是  | 禁止降级（SMP）                |
+| options.route        | string  | 否  | Goodix 路由：`auto` / `normal` / `fastService`，默认 `auto` |
+| options.transferMode | string  | 否  | Goodix 传输模式：`auto` / `normal` / `fast`，默认 `auto` |
+| options.targetAddress | string | 否  | Goodix 显式写入地址（十六进制），留空使用镜像加载地址 |
+| options.runImmediately | boolean | 否 | Goodix 完成后立即复位运行，默认 `true` |
 
 **返回**: `OtaStatus`
 
@@ -2710,6 +2716,7 @@ interface OtaStatus {
 ## 更新日志
 
 - **2026-10-21**: 新增 OTA 模块（`ota_list_protocols`、`ota_validate_package`、`ota_preflight`、`ota_start`、`ota_get_status`、`ota_cancel`）、`ota:progress` 事件与 OTA 类型定义
+- **2026-10-22**: OTA 新增 `goodix` 协议（Goodix GR5xx DFU）；`ota_start` 的 `options` 增加 `route`、`transferMode`、`targetAddress`、`runImmediately`（SMP 忽略）
 - **2026-04-13**: 全面重写 API 文档，新增 Dashboard、GH3036、Waveform、State、Preferences 模块；修复 BLE 事件类型命名（BleNotificationEvent → BleDataEvent，char\_uuid → characteristicUuid）；补充串口 export\_serial\_data 命令；补充系统模块 get\_window\_status、show\_main\_window 等命令
 - **2026-04-02**: 统一使用蛇形命名规范，修复 BLE 和 Serial 模块所有参数不匹配问题
 

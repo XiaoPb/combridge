@@ -213,6 +213,12 @@ impl Transport for SmpBleTransport {
         self.timeout = timeout;
         Ok(())
     }
+
+    /// 完整 SMP 帧必须在单个 GATT 写内送达（Zephyr 不做跨写重组），
+    /// 因此可用的最大帧长就是单包写入长度。
+    fn max_smp_frame_size(&self) -> usize {
+        self.chunk_size
+    }
 }
 
 impl Drop for SmpBleTransport {

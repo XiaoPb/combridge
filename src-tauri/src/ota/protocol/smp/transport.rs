@@ -14,9 +14,12 @@ use crate::device::ble::BleManagerRef;
 use crate::error::ComBridgeError;
 
 /// Zephyr/NCS SMP 服务 UUID。
-pub const SMP_SERVICE_UUID: &str = "8D53DC1D-1DB7-4CD3-868B-8A527460AA84";
+///
+/// 必须使用小写：`bluest` 返回的 UUID 字符串为小写，
+/// `BleManager` 内部按精确字符串匹配特征。
+pub const SMP_SERVICE_UUID: &str = "8d53dc1d-1db7-4cd3-868b-8a527460aa84";
 /// Zephyr/NCS SMP 特征 UUID（读写 SMP 帧）。
-pub const SMP_CHAR_UUID: &str = "DA2E7828-FBCE-4E01-AE9E-261174997C48";
+pub const SMP_CHAR_UUID: &str = "da2e7828-fbce-4e01-ae9e-261174997c48";
 
 const DEFAULT_MTU: u16 = 23;
 const DEFAULT_WRITE_DELAY_MS: u64 = 2;

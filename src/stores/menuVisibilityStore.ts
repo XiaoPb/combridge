@@ -32,6 +32,13 @@ export const DEFAULT_MENU_VISIBILITY: MenuVisibilityPreferences = {
         threshold: true,
       },
     },
+    ota: {
+      visible: true,
+      tabs: {
+        upgrade: true,
+        history: true,
+      },
+    },
     protocol: {
       visible: false,
       tabs: {
@@ -61,6 +68,7 @@ export const DEFAULT_MENU_VISIBILITY: MenuVisibilityPreferences = {
     ble: true,
     dashboard: false,
     gh3036: true,
+    ota: true,
     protocol: false,
     waveform: true,
     system: true,

@@ -343,6 +343,7 @@ export interface HomeMenuVisibility {
   connection: MenuGroupVisibility;
   dashboard: MenuGroupVisibility;
   gh3036: MenuGroupVisibility;
+  ota: MenuGroupVisibility;
   protocol: MenuGroupVisibility;
   waveform: MenuGroupVisibility;
   system: MenuGroupVisibility;
@@ -354,6 +355,7 @@ export interface SidebarMenuVisibility {
   ble: boolean;
   dashboard: boolean;
   gh3036: boolean;
+  ota: boolean;
   protocol: boolean;
   waveform: boolean;
   system: boolean;

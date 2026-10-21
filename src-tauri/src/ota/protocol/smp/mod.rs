@@ -8,7 +8,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use mcumgr_toolkit::client::{FirmwareUpdateParams, FirmwareUpdateStep};
 use mcumgr_toolkit::MCUmgrClient;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use crate::device::ble::{BleManagerRef, BleMode};
 use crate::error::ComBridgeError;
@@ -93,27 +93,32 @@ impl OtaProtocol for SmpProtocol {
         let cancel = Arc::new(AtomicBool::new(false));
         let transport = SmpBleTransport::open(Arc::clone(&self.ble), address, cancel).await?;
 
+        // 闭包需 'static，设备地址转成拥有所有权的字符串带进去用于错误上下文。
+        let device = address.to_string();
         let app_info = tokio::task::spawn_blocking(move || -> Result<String, String> {
             let client = MCUmgrClient::new_from_transport(transport);
             client
                 .set_timeout(SMP_TIMEOUT)
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| format!("调节 SMP 超时失败（设备 {device}）: {e}"))?;
             client
                 .use_auto_frame_size()
-                .map_err(|e| e.to_string())?;
-            client.os_echo("ping").map_err(|e| e.to_string())?;
+                .map_err(|e| format!("协商 SMP 帧大小失败（设备 {device}）: {e}"))?;
+            client
+                .os_echo("ping")
+                .map_err(|e| format!("SMP 探测失败（设备 {device}）: {e}"))?;
             client
                 .os_application_info(None)
-                .map_err(|e| e.to_string())
+                .map_err(|e| format!("读取应用信息失败（设备 {device}）: {e}"))
         })
         .await
-        .map_err(|e| ComBridgeError::ota(format!("SMP 线程异常: {e}")))?
-        .map_err(ComBridgeError::ota)?;
-
-        self.ble
-            .unsubscribe_notify(address, SMP_CHAR_UUID)
-            .await
-            .ok();
+        .map_err(|e| {
+            error!("SMP 预检线程异常（设备 {address}）: {e}");
+            ComBridgeError::ota(format!("SMP 预检线程异常（设备 {address}）: {e}"))
+        })?
+        .map_err(|message| {
+            error!("SMP 预检失败（设备 {address}）: {message}");
+            ComBridgeError::ota(format!("SMP 预检失败（设备 {address}）: {message}"))
+        })?;
 
         info!(address = address, mode, mtu, "OTA 预检成功");
 
@@ -136,6 +141,8 @@ impl OtaProtocol for SmpProtocol {
         cancel: Arc<AtomicBool>,
         progress: OtaProgressFn,
     ) -> Result<(), ComBridgeError> {
+        info!(address = address, image_size = image.len(), "开始 SMP 升级");
+
         // 保证特征缓存存在，SmpBleTransport::open 的 subscribe_notify 依赖它。
         self.ble.discover_services(address).await?;
 
@@ -151,18 +158,19 @@ impl OtaProtocol for SmpProtocol {
             progress(stage, p, &message)
         };
 
-        // 闭包需 'static，先把 Copy 的选项拷出来。
+        // 闭包需 'static，先把 Copy 的选项与设备地址拷出来。
         let force_confirm = options.force_confirm;
         let upgrade_only = options.upgrade_only;
+        let device = address.to_string();
 
         let result = tokio::task::spawn_blocking(move || -> Result<(), String> {
             let client = MCUmgrClient::new_from_transport(transport);
             client
                 .set_timeout(SMP_TIMEOUT)
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| format!("调节 SMP 超时失败（设备 {device}）: {e}"))?;
             client
                 .use_auto_frame_size()
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| format!("协商 SMP 帧大小失败（设备 {device}）: {e}"))?;
 
             client
                 .firmware_update(
@@ -176,29 +184,31 @@ impl OtaProtocol for SmpProtocol {
                     },
                     Some(&mut progress_cb),
                 )
-                .map_err(|e| e.to_string())
+                .map_err(|e| format!("固件升级失败（设备 {device}）: {e}"))
         })
         .await
-        .map_err(|e| ComBridgeError::ota(format!("SMP 线程异常: {e}")))?;
-
-        // transport 的 Drop 也会退订；这里再显式退订一次，取消订阅是幂等操作。
-        self.ble
-            .unsubscribe_notify(address, SMP_CHAR_UUID)
-            .await
-            .ok();
+        .map_err(|e| {
+            error!("SMP 升级线程异常（设备 {address}）: {e}");
+            ComBridgeError::ota(format!("SMP 升级线程异常（设备 {address}）: {e}"))
+        })?;
 
         result.map_err(|message| {
+            error!("SMP 升级失败（设备 {address}）: {message}");
             if cancel.load(Ordering::Relaxed) {
-                ComBridgeError::ota("升级已取消")
+                ComBridgeError::ota(format!("升级已取消（设备 {address}）: {message}"))
             } else {
-                ComBridgeError::ota(message)
+                ComBridgeError::ota(format!("SMP 升级失败（设备 {address}）: {message}"))
             }
-        })
+        })?;
+
+        info!(address = address, "SMP 升级完成");
+
+        Ok(())
     }
 }
 
 /// 把 `mcumgr-toolkit` 的 8 个步骤映射为通用阶段；不要加 `_` 分支。
-pub fn map_step(step: FirmwareUpdateStep) -> (OtaStage, String) {
+fn map_step(step: FirmwareUpdateStep) -> (OtaStage, String) {
     match step {
         FirmwareUpdateStep::DetectingBootloader => {
             (OtaStage::Preparing, "正在探测 Bootloader".to_string())
@@ -213,19 +223,16 @@ pub fn map_step(step: FirmwareUpdateStep) -> (OtaStage, String) {
         FirmwareUpdateStep::QueryingDeviceState => {
             (OtaStage::Preparing, "正在查询设备镜像状态".to_string())
         }
-        FirmwareUpdateStep::UpdateInfo { .. } => (
-            OtaStage::Preparing,
-            "已获取当前版本信息".to_string(),
-        ),
+        FirmwareUpdateStep::UpdateInfo { .. } => {
+            (OtaStage::Preparing, "已获取当前版本信息".to_string())
+        }
         FirmwareUpdateStep::UploadingFirmware => {
             (OtaStage::Transferring, "正在上传固件".to_string())
         }
         FirmwareUpdateStep::ActivatingFirmware => {
             (OtaStage::Activating, "正在激活新固件".to_string())
         }
-        FirmwareUpdateStep::TriggeringReboot => {
-            (OtaStage::Rebooting, "正在重启设备".to_string())
-        }
+        FirmwareUpdateStep::TriggeringReboot => (OtaStage::Rebooting, "正在重启设备".to_string()),
     }
 }
 

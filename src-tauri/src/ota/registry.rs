@@ -117,11 +117,27 @@ mod tests {
 
     #[test]
     fn resolves_explicit_protocol() {
-        assert_eq!(registry().resolve(Some("smp")).expect("explicit").id(), "smp");
+        assert_eq!(
+            registry().resolve(Some("smp")).expect("explicit").id(),
+            "smp"
+        );
     }
 
     #[test]
     fn rejects_unknown_protocol() {
         assert!(registry().resolve(Some("unknown")).is_err());
+    }
+
+    #[test]
+    fn same_id_registration_replaces_previous() {
+        let mut registry = ProtocolRegistry::new();
+        let first: Arc<dyn OtaProtocol> = Arc::new(TestProtocol { id: "smp" });
+        let second: Arc<dyn OtaProtocol> = Arc::new(TestProtocol { id: "smp" });
+        registry.register(first);
+        registry.register(Arc::clone(&second));
+
+        let resolved = registry.resolve(Some("smp")).expect("resolved");
+        assert!(Arc::ptr_eq(&resolved, &second));
+        assert_eq!(registry.descriptors().len(), 1);
     }
 }

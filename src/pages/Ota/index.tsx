@@ -7,7 +7,16 @@ const OtaPage: React.FC = () => {
   const activeTab = usePageTabsStore((s) => s.otaActiveTab);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 16 }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        padding: 16,
+        overflowY: 'auto',
+      }}
+    >
       {activeTab === 'history' ? <HistoryTab /> : <UpgradeTab />}
     </div>
   );

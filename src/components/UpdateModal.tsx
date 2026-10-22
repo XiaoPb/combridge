@@ -3,14 +3,18 @@ import { listen } from '@tauri-apps/api/event';
 import { Alert, Button, Modal, Progress, Space, Typography } from 'antd';
 import { DownloadOutlined, FolderOpenOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
+  systemApi,
   updateApi,
   type DownloadProgress,
   type DownloadResult,
   type UpdateInfo,
 } from '../api/tauri';
+import './UpdateModal.css';
 
-const { Paragraph, Text } = Typography;
+const { Text } = Typography;
 
 interface UpdateModalProps {
   update: UpdateInfo | null;
@@ -85,6 +89,13 @@ export default function UpdateModal({ update, open, onClose }: UpdateModalProps)
     ? `${formatBytes(progress.downloaded)} / ${formatBytes(progress.total)}`
     : formatBytes(progress.downloaded);
 
+  const openLink = (url?: string) => {
+    if (!url) return;
+    void systemApi.openUrl(url).catch((err) => {
+      console.error('打开更新说明链接失败', url, err);
+    });
+  };
+
   return (
     <Modal
       open={open}
@@ -109,11 +120,26 @@ export default function UpdateModal({ update, open, onClose }: UpdateModalProps)
         </div>
 
         {update.body && (
-          <Paragraph
-            style={{ maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap', marginBottom: 0 }}
-          >
-            {update.body}
-          </Paragraph>
+          <div className="update-markdown">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                a: ({ href, children }) => (
+                  <a
+                    href={href}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      openLink(href);
+                    }}
+                  >
+                    {children}
+                  </a>
+                ),
+              }}
+            >
+              {update.body}
+            </ReactMarkdown>
+          </div>
         )}
 
         {state === 'downloading' && (

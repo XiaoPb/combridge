@@ -179,7 +179,7 @@ export const UpgradeTab: React.FC = () => {
           </Typography.Text>
           {validating && <Typography.Text type="secondary">{t('firmware.validating')}</Typography.Text>}
           {packageInfo && (
-            <Descriptions size="small" column={4} bordered>
+            <Descriptions size="small" column={2} bordered>
               <Descriptions.Item label={t('firmware.package')}>
                 {packageInfo.fileName}（{(packageInfo.packageSize / 1024).toFixed(1)} KB）
               </Descriptions.Item>

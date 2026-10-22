@@ -195,9 +195,9 @@ impl OtaProtocol for GoodixProtocol {
         cancel: Arc<AtomicBool>,
         progress: OtaProgressFn,
     ) -> Result<(), ComBridgeError> {
-        let transfer_options = build_transfer_options(options)?;
         let parsed = DfuImage::parse(image)
             .map_err(|e| ComBridgeError::ota(format!("解析 Goodix 固件失败: {e}")))?;
+        let transfer_options = build_transfer_options(options, &parsed)?;
 
         info!(
             address = address,
@@ -297,7 +297,19 @@ fn key_value(key: &str, value: String) -> OtaKeyValue {
     }
 }
 
-fn build_transfer_options(options: &OtaStartOptions) -> Result<TransferOptions, ComBridgeError> {
+/// Flash 模式：单区原地升级或双区后台拷贝。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BankMode {
+    /// 写入镜像加载地址（单区）。
+    Single,
+    /// 写入加载地址之后的另一个分区（双区）。
+    Dual,
+}
+
+fn build_transfer_options(
+    options: &OtaStartOptions,
+    image: &DfuImage,
+) -> Result<TransferOptions, ComBridgeError> {
     let route = match options
         .route
         .as_deref()
@@ -330,16 +342,39 @@ fn build_transfer_options(options: &OtaStartOptions) -> Result<TransferOptions, 
         }
     };
 
-    let target = match options
-        .target_address
+    let bank = match options
+        .bank_mode
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        None => TargetAddress::LoadAddress,
-        Some(value) => TargetAddress::Explicit(util::parse_hex_u32(value).ok_or_else(|| {
-            ComBridgeError::ota(format!("无效的 Goodix 写入地址: {value}（需为十六进制）"))
-        })?),
+        None | Some("dual") => BankMode::Dual,
+        Some("single") => BankMode::Single,
+        Some(other) => {
+            return Err(ComBridgeError::ota(format!(
+                "未知的 Goodix Flash 模式: {other}（可选 dual / single）"
+            )))
+        }
+    };
+
+    let explicit = options
+        .target_address
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    let target = match bank {
+        BankMode::Single => TargetAddress::LoadAddress,
+        BankMode::Dual => match explicit {
+            Some(value) => {
+                let address = util::parse_hex_u32(value).ok_or_else(|| {
+                    ComBridgeError::ota(format!("无效的 Goodix 写入地址: {value}（需为十六进制）"))
+                })?;
+                validate_dual_address(image, address)?;
+                TargetAddress::Explicit(address)
+            }
+            None => TargetAddress::Explicit(computed_dual_address(image)?),
+        },
     };
 
     Ok(TransferOptions {
@@ -349,6 +384,33 @@ fn build_transfer_options(options: &OtaStartOptions) -> Result<TransferOptions, 
         run_immediately: options.run_immediately.unwrap_or(true),
         control_command: None,
     })
+}
+
+/// 按镜像加载地址与 4 KiB 对齐的镜像大小计算双区写入地址。
+fn computed_dual_address(image: &DfuImage) -> Result<u32, ComBridgeError> {
+    package::dual_bank_address(image.boot_info().load_addr, image.len() as u32)
+        .ok_or_else(|| ComBridgeError::ota("无法计算双区写入地址（加载地址溢出）"))
+}
+
+/// 校验用户指定的双区写入地址：4 KiB 对齐、与加载地址不同，且分区不小于 4 KiB。
+fn validate_dual_address(image: &DfuImage, address: u32) -> Result<(), ComBridgeError> {
+    let load = image.boot_info().load_addr;
+    if address == load {
+        return Err(ComBridgeError::ota(format!(
+            "双区写入地址不能与镜像加载地址相同: 0x{load:08X}"
+        )));
+    }
+    if !address.is_multiple_of(package::PARTITION_ALIGN) {
+        return Err(ComBridgeError::ota(format!(
+            "Goodix 双区写入地址必须 4K 对齐: 0x{address:08X}"
+        )));
+    }
+    if address.abs_diff(load) < package::PARTITION_ALIGN {
+        return Err(ComBridgeError::ota(format!(
+            "Goodix 双区写入地址与加载地址 0x{load:08X} 的分区小于 4K"
+        )));
+    }
+    Ok(())
 }
 
 fn map_stage(stage: Stage) -> OtaStage {

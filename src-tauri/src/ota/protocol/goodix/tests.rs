@@ -19,6 +19,7 @@ use super::frame::fast::{opcode as fast, FastFrame};
 use super::mock::{fast_service_capabilities, v1_capabilities, v2_capabilities, MockTransport};
 use super::transport::{Channel, Transport};
 use super::util::bump_last_mac_byte;
+use crate::ota::types::OtaStartOptions;
 
 const APP_LOAD: u32 = 0x0001_0000;
 const APP_SIZE: u32 = 0x0000_2000;
@@ -244,6 +245,66 @@ fn invalid_firmware_is_rejected() {
     let data = vec![0xAA_u8; 128];
     assert!(DfuImage::parse(data).is_err());
     assert!(DfuImage::parse(Vec::new()).is_err());
+}
+
+// ----------------------------------------------------------------------
+// 升级选项：单区 / 双区
+// ----------------------------------------------------------------------
+
+fn build_options(
+    image: &DfuImage,
+    bank_mode: Option<&str>,
+    address: Option<&str>,
+) -> TargetAddress {
+    let options = OtaStartOptions {
+        bank_mode: bank_mode.map(str::to_string),
+        target_address: address.map(str::to_string),
+        ..OtaStartOptions::default()
+    };
+    super::build_transfer_options(&options, image)
+        .expect("options must build")
+        .target
+}
+
+#[test]
+fn default_bank_mode_is_dual_with_computed_address() {
+    let image = DfuImage::parse(firmware_bytes(APP_LOAD, 64)).expect("firmware must parse");
+    assert_eq!(
+        build_options(&image, None, None),
+        TargetAddress::Explicit(APP_LOAD + 0x1000)
+    );
+}
+
+#[test]
+fn single_bank_ignores_write_address() {
+    let image = DfuImage::parse(firmware_bytes(APP_LOAD, 64)).expect("firmware must parse");
+    assert_eq!(
+        build_options(&image, Some("single"), Some("0x00020000")),
+        TargetAddress::LoadAddress
+    );
+}
+
+#[test]
+fn dual_bank_accepts_explicit_aligned_address() {
+    let image = DfuImage::parse(firmware_bytes(APP_LOAD, 64)).expect("firmware must parse");
+    assert_eq!(
+        build_options(&image, Some("dual"), Some("0x00020000")),
+        TargetAddress::Explicit(0x0002_0000)
+    );
+}
+
+#[test]
+fn dual_bank_rejects_invalid_address() {
+    let image = DfuImage::parse(firmware_bytes(APP_LOAD, 64)).expect("firmware must parse");
+    let options = |mode: &str, address: &str| OtaStartOptions {
+        bank_mode: Some(mode.to_string()),
+        target_address: Some(address.to_string()),
+        ..OtaStartOptions::default()
+    };
+    // 未按 4K 对齐、与加载地址相同、未知模式。
+    assert!(super::build_transfer_options(&options("dual", "0x00011800"), &image).is_err());
+    assert!(super::build_transfer_options(&options("dual", "0x00010000"), &image).is_err());
+    assert!(super::build_transfer_options(&options("triple", "0x00012000"), &image).is_err());
 }
 
 #[test]

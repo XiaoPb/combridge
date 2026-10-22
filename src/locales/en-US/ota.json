@@ -50,6 +50,9 @@
   },
   "goodix": {
     "title": "Goodix DFU options",
+    "bankMode": "Flash mode",
+    "bankDual": "Dual bank (background copy)",
+    "bankSingle": "Single bank (in-place)",
     "route": "Protocol route",
     "routeAuto": "Auto (prefer basic service)",
     "routeNormal": "Basic service (a6ed0401)",
@@ -58,8 +61,8 @@
     "modeAuto": "Auto (fast on DFU V2)",
     "modeNormal": "Normal segmented transfer",
     "modeFast": "Fast streaming transfer",
-    "targetAddress": "Write address (optional)",
-    "targetPlaceholder": "e.g. 0x00010000; leave empty to use the image load address",
+    "targetAddress": "Write address (dual bank only)",
+    "targetPlaceholder": "Auto-calculated on a 4K partition after loading; editable",
     "runImmediately": "Reset and run after completion"
   },
   "options": {

@@ -50,6 +50,9 @@
   },
   "goodix": {
     "title": "Goodix DFU 选项",
+    "bankMode": "Flash 模式",
+    "bankDual": "双区（后台拷贝）",
+    "bankSingle": "单区（原地升级）",
     "route": "协议路由",
     "routeAuto": "自动（优先基础服务）",
     "routeNormal": "基础服务（a6ed0401）",
@@ -58,8 +61,8 @@
     "modeAuto": "自动（V2 使用快速传输）",
     "modeNormal": "普通分段传输",
     "modeFast": "快速流传输",
-    "targetAddress": "写入地址（可选）",
-    "targetPlaceholder": "如 0x00010000；留空使用镜像加载地址",
+    "targetAddress": "写入地址（仅双区可配置）",
+    "targetPlaceholder": "加载固件后按 4K 分区自动计算，可手动调整",
     "runImmediately": "完成后立即复位运行"
   },
   "options": {

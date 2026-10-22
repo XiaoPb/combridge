@@ -98,6 +98,9 @@ pub struct OtaPackageInfo {
     pub image_name: String,
     pub image_size: u64,
     pub image_sha256: String,
+    /// Goodix 双区写入地址（按加载地址 + 4K 对齐的镜像大小计算）；其他协议为 None。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dual_bank_address: Option<String>,
     /// 协议自定义展示字段（SMP 为应用名、目标板、SoC、MCUboot 版本等）。
     pub fields: Vec<OtaKeyValue>,
 }
@@ -113,6 +116,9 @@ pub struct OtaStartOptions {
     /// Goodix 传输模式：`auto` / `normal` / `fast`；SMP 忽略该字段。
     #[serde(default)]
     pub transfer_mode: Option<String>,
+    /// Goodix Flash 模式：`dual`（默认，后台拷贝）/ `single`（原地升级）；SMP 忽略该字段。
+    #[serde(default)]
+    pub bank_mode: Option<String>,
     /// Goodix 显式写入地址（十六进制字符串）；为空时使用镜像加载地址。
     #[serde(default)]
     pub target_address: Option<String>,

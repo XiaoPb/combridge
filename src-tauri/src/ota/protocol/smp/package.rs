@@ -145,6 +145,7 @@ pub fn validate(package: &mut ZipPackage) -> Result<FirmwareImage, ComBridgeErro
         image_name,
         image_size: image.len() as u64,
         image_sha256: hex_lower(&Sha256::digest(&image)),
+        dual_bank_address: None,
         fields,
     };
 

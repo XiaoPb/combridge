@@ -18,7 +18,22 @@ use super::firmware::DfuImage;
 
 /// 镜像上限，同时用于防 zip 炸弹。
 pub const MAX_IMAGE_BYTES: u64 = 16 * 1024 * 1024;
+/// Flash 分区与写入地址的 4 KiB 最小对齐粒度。
+pub const PARTITION_ALIGN: u32 = 0x1000;
 const PROTOCOL_ID: &str = "goodix";
+
+/// 双区写入地址：加载地址之后、按 4 KiB 对齐的镜像分区起始地址。
+///
+/// 分区大小取 `max(4 KiB, ceil(image_len / 4 KiB) * 4 KiB)`，结果再做 4 KiB 对齐，
+/// 保证双区升级的写入地址满足最小 Flash 分区约束。地址溢出时返回 `None`。
+pub fn dual_bank_address(load_addr: u32, image_len: u32) -> Option<u32> {
+    let partition = ceil_to_align(image_len.max(1))?;
+    ceil_to_align(load_addr.checked_add(partition)?)
+}
+
+fn ceil_to_align(value: u32) -> Option<u32> {
+    Some(value.checked_add(PARTITION_ALIGN - 1)? & !(PARTITION_ALIGN - 1))
+}
 
 /// 校验 Goodix zip 包并提取带 trailer 的完整 `.bin`。
 pub fn validate(package: &mut ZipPackage) -> Result<FirmwareImage, ComBridgeError> {
@@ -65,9 +80,8 @@ pub fn validate_image(path: &Path) -> Result<FirmwareImage, ComBridgeError> {
         ));
     }
 
-    let metadata = std::fs::metadata(path).map_err(|e| {
-        ComBridgeError::ota(format!("读取固件镜像失败 {}: {e}", path.display()))
-    })?;
+    let metadata = std::fs::metadata(path)
+        .map_err(|e| ComBridgeError::ota(format!("读取固件镜像失败 {}: {e}", path.display())))?;
     if !metadata.is_file() {
         return Err(ComBridgeError::ota("固件镜像路径不是文件"));
     }
@@ -133,6 +147,8 @@ fn build_image(
         image_name,
         image_size,
         image_sha256: hex_lower(&Sha256::digest(&image)),
+        dual_bank_address: dual_bank_address(boot.load_addr, image_size as u32)
+            .map(|address| format!("0x{address:08X}")),
         fields,
     };
 
@@ -285,6 +301,20 @@ mod tests {
         assert_eq!(firmware.image, data);
         assert_eq!(field(&firmware.info, "checksum"), Some("0x12345678"));
         assert_eq!(firmware.info.image_sha256.len(), 64);
+        assert_eq!(
+            firmware.info.dual_bank_address.as_deref(),
+            Some("0x00011000")
+        );
+    }
+
+    #[test]
+    fn dual_bank_address_is_aligned_and_at_least_4k() {
+        assert_eq!(dual_bank_address(0x0001_0000, 1), Some(0x0001_1000));
+        assert_eq!(dual_bank_address(0x0001_0000, 0x1000), Some(0x0001_1000));
+        assert_eq!(dual_bank_address(0x0001_0000, 0x1001), Some(0x0001_2000));
+        // 加载地址未对齐时，结果仍对齐到 4K。
+        assert_eq!(dual_bank_address(0x0001_0800, 0x10), Some(0x0001_2000));
+        assert_eq!(dual_bank_address(u32::MAX, 0x10), None);
     }
 
     #[test]

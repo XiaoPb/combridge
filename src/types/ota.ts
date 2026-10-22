@@ -30,6 +30,8 @@ export interface OtaPackageInfo {
   imageName: string;
   imageSize: number;
   imageSha256: string;
+  /** Goodix 双区写入地址（按加载地址 + 4K 对齐的镜像大小计算）；其他协议不存在。 */
+  dualBankAddress?: string;
   fields: OtaKeyValue[];
 }
 
@@ -50,7 +52,9 @@ export interface OtaStartOptions {
   route?: 'auto' | 'normal' | 'fastService';
   /** Goodix 传输模式：auto / normal / fast；SMP 忽略。 */
   transferMode?: 'auto' | 'normal' | 'fast';
-  /** Goodix 显式写入地址（十六进制）；为空时使用镜像加载地址。 */
+  /** Goodix Flash 模式：dual（默认，后台拷贝）/ single（原地升级）；SMP 忽略。 */
+  bankMode?: 'dual' | 'single';
+  /** Goodix 显式写入地址（十六进制）；仅双区模式可配置，为空时自动计算。 */
   targetAddress?: string;
   /** Goodix 完成后是否立即复位运行。 */
   runImmediately?: boolean;

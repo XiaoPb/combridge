@@ -2283,7 +2283,8 @@ interface OtaDeviceInfo {
 | options.upgradeOnly  | boolean | 是  | 禁止降级（SMP）                |
 | options.route        | string  | 否  | Goodix 路由：`auto` / `normal` / `fastService`，默认 `auto` |
 | options.transferMode | string  | 否  | Goodix 传输模式：`auto` / `normal` / `fast`，默认 `auto` |
-| options.targetAddress | string | 否  | Goodix 显式写入地址（十六进制），留空使用镜像加载地址 |
+| options.bankMode | string | 否 | Goodix Flash 模式：`dual`（默认，后台拷贝）/ `single`（原地升级） |
+| options.targetAddress | string | 否  | Goodix 双区写入地址（十六进制，4K 对齐），仅 `bankMode=dual` 生效；留空时按 `加载地址 + 4K 对齐的镜像大小` 自动计算 |
 | options.runImmediately | boolean | 否 | Goodix 完成后立即复位运行，默认 `true` |
 
 **返回**: `OtaStatus`
@@ -2716,7 +2717,7 @@ interface OtaStatus {
 ## 更新日志
 
 - **2026-10-21**: 新增 OTA 模块（`ota_list_protocols`、`ota_validate_package`、`ota_preflight`、`ota_start`、`ota_get_status`、`ota_cancel`）、`ota:progress` 事件与 OTA 类型定义
-- **2026-10-22**: OTA 新增 `goodix` 协议（Goodix GR5xx DFU）；`ota_start` 的 `options` 增加 `route`、`transferMode`、`targetAddress`、`runImmediately`（SMP 忽略）；Goodix 固件支持直接选择 `.bin` 镜像，`.zip` 仍可作为打包形式
+- **2026-10-22**: OTA 新增 `goodix` 协议（Goodix GR5xx DFU）；`ota_start` 的 `options` 增加 `route`、`transferMode`、`bankMode`、`targetAddress`、`runImmediately`（SMP 忽略）；Goodix 默认双区升级，写入地址按 4K 分区自动计算，单区模式忽略写入地址；Goodix 固件支持直接选择 `.bin` 镜像，`.zip` 仍可作为打包形式
 - **2026-04-13**: 全面重写 API 文档，新增 Dashboard、GH3036、Waveform、State、Preferences 模块；修复 BLE 事件类型命名（BleNotificationEvent → BleDataEvent，char\_uuid → characteristicUuid）；补充串口 export\_serial\_data 命令；补充系统模块 get\_window\_status、show\_main\_window 等命令
 - **2026-04-02**: 统一使用蛇形命名规范，修复 BLE 和 Serial 模块所有参数不匹配问题
 

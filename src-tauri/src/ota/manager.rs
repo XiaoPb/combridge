@@ -152,9 +152,10 @@ impl OtaManager {
         protocol: Option<&str>,
         address: &str,
     ) -> Result<OtaDeviceInfo, ComBridgeError> {
-        let _guard = self.op_lock.clone().try_lock_owned().map_err(|_| {
-            ComBridgeError::ota("设备通道正忙（可能正在预检或升级），请稍后再试")
-        })?;
+        let _guard =
+            self.op_lock.clone().try_lock_owned().map_err(|_| {
+                ComBridgeError::ota("设备通道正忙（可能正在预检或升级），请稍后再试")
+            })?;
         if self.inner.lock().running {
             return Err(ComBridgeError::ota("OTA 升级正在进行中，无法预检设备"));
         }
@@ -684,6 +685,7 @@ mod tests {
                 image_name: name.to_string(),
                 image_size: 4,
                 image_sha256: String::new(),
+                dual_bank_address: None,
                 fields: Vec::new(),
             },
             image: vec![0; 4],

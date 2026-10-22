@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Descriptions, Input, Progress, Select, Space, Steps, Switch, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Col, Descriptions, Input, Progress, Row, Select, Space, Steps, Switch, Tag, Typography } from 'antd';
 import { open } from '@tauri-apps/plugin-dialog';
 import { CloudUploadOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -20,6 +20,7 @@ export const UpgradeTab: React.FC = () => {
   const [upgradeOnly, setUpgradeOnly] = useState(true);
   const [route, setRoute] = useState<NonNullable<OtaStartOptions['route']>>('auto');
   const [transferMode, setTransferMode] = useState<NonNullable<OtaStartOptions['transferMode']>>('auto');
+  const [bankMode, setBankMode] = useState<NonNullable<OtaStartOptions['bankMode']>>('dual');
   const [targetAddress, setTargetAddress] = useState('');
   const [runImmediately, setRunImmediately] = useState(true);
 
@@ -43,6 +44,19 @@ export const UpgradeTab: React.FC = () => {
       preflight(address);
     }
   }, [address, running, preflight, selectedProtocol]);
+
+  // 固件加载后按分区的双区地址自动填充；单区显示镜像加载地址（只读）。
+  const loadAddress = packageInfo?.fields.find((item) => item.key === 'loadAddr')?.value;
+  useEffect(() => {
+    if (!packageInfo || running) {
+      return;
+    }
+    if (bankMode === 'single') {
+      setTargetAddress(loadAddress ?? '');
+    } else if (packageInfo.dualBankAddress) {
+      setTargetAddress(packageInfo.dualBankAddress);
+    }
+  }, [packageInfo, bankMode, loadAddress, running]);
 
   const pickPackage = async () => {
     const selected = await open({
@@ -68,7 +82,8 @@ export const UpgradeTab: React.FC = () => {
           upgradeOnly,
           route,
           transferMode,
-          targetAddress: targetAddress.trim() || undefined,
+          bankMode,
+          targetAddress: bankMode === 'dual' ? targetAddress.trim() || undefined : undefined,
           runImmediately,
         }
       : { forceConfirm, upgradeOnly };
@@ -164,7 +179,7 @@ export const UpgradeTab: React.FC = () => {
           </Typography.Text>
           {validating && <Typography.Text type="secondary">{t('firmware.validating')}</Typography.Text>}
           {packageInfo && (
-            <Descriptions size="small" column={1} bordered>
+            <Descriptions size="small" column={4} bordered>
               <Descriptions.Item label={t('firmware.package')}>
                 {packageInfo.fileName}（{(packageInfo.packageSize / 1024).toFixed(1)} KB）
               </Descriptions.Item>
@@ -187,43 +202,74 @@ export const UpgradeTab: React.FC = () => {
             </Descriptions>
           )}
           {isGoodix ? (
-            <Space direction="vertical" style={{ width: '100%' }} size={8}>
+            <Space direction="vertical" style={{ width: '100%' }} size={12}>
               <Typography.Text strong>{t('goodix.title')}</Typography.Text>
-              <Typography.Text type="secondary">{t('goodix.route')}</Typography.Text>
-              <Select
-                style={{ width: '100%' }}
-                value={route}
-                disabled={running}
-                onChange={setRoute}
-                options={[
-                  { value: 'auto', label: t('goodix.routeAuto') },
-                  { value: 'normal', label: t('goodix.routeNormal') },
-                  { value: 'fastService', label: t('goodix.routeFast') },
-                ]}
-              />
-              <Typography.Text type="secondary">{t('goodix.transferMode')}</Typography.Text>
-              <Select
-                style={{ width: '100%' }}
-                value={transferMode}
-                disabled={running}
-                onChange={setTransferMode}
-                options={[
-                  { value: 'auto', label: t('goodix.modeAuto') },
-                  { value: 'normal', label: t('goodix.modeNormal') },
-                  { value: 'fast', label: t('goodix.modeFast') },
-                ]}
-              />
-              <Typography.Text type="secondary">{t('goodix.targetAddress')}</Typography.Text>
-              <Input
-                placeholder={t('goodix.targetPlaceholder')}
-                value={targetAddress}
-                disabled={running}
-                onChange={(event) => setTargetAddress(event.target.value)}
-              />
-              <Space>
-                <Switch checked={runImmediately} onChange={setRunImmediately} disabled={running} />
-                <Typography.Text>{t('goodix.runImmediately')}</Typography.Text>
-              </Space>
+              <Row gutter={[16, 12]}>
+                <Col span={12}>
+                  <Space direction="vertical" style={{ width: '100%' }} size={4}>
+                    <Typography.Text type="secondary">{t('goodix.bankMode')}</Typography.Text>
+                    <Select
+                      style={{ width: '100%' }}
+                      value={bankMode}
+                      disabled={running}
+                      onChange={setBankMode}
+                      options={[
+                        { value: 'dual', label: t('goodix.bankDual') },
+                        { value: 'single', label: t('goodix.bankSingle') },
+                      ]}
+                    />
+                  </Space>
+                </Col>
+                <Col span={12}>
+                  <Space direction="vertical" style={{ width: '100%' }} size={4}>
+                    <Typography.Text type="secondary">{t('goodix.route')}</Typography.Text>
+                    <Select
+                      style={{ width: '100%' }}
+                      value={route}
+                      disabled={running}
+                      onChange={setRoute}
+                      options={[
+                        { value: 'auto', label: t('goodix.routeAuto') },
+                        { value: 'normal', label: t('goodix.routeNormal') },
+                        { value: 'fastService', label: t('goodix.routeFast') },
+                      ]}
+                    />
+                  </Space>
+                </Col>
+                <Col span={12}>
+                  <Space direction="vertical" style={{ width: '100%' }} size={4}>
+                    <Typography.Text type="secondary">{t('goodix.transferMode')}</Typography.Text>
+                    <Select
+                      style={{ width: '100%' }}
+                      value={transferMode}
+                      disabled={running}
+                      onChange={setTransferMode}
+                      options={[
+                        { value: 'auto', label: t('goodix.modeAuto') },
+                        { value: 'normal', label: t('goodix.modeNormal') },
+                        { value: 'fast', label: t('goodix.modeFast') },
+                      ]}
+                    />
+                  </Space>
+                </Col>
+                <Col span={12}>
+                  <Space direction="vertical" style={{ width: '100%' }} size={4}>
+                    <Typography.Text type="secondary">{t('goodix.targetAddress')}</Typography.Text>
+                    <Input
+                      placeholder={t('goodix.targetPlaceholder')}
+                      value={targetAddress}
+                      disabled={running || bankMode === 'single'}
+                      onChange={(event) => setTargetAddress(event.target.value)}
+                    />
+                  </Space>
+                </Col>
+                <Col span={12}>
+                  <Space size={8}>
+                    <Switch checked={runImmediately} onChange={setRunImmediately} disabled={running} />
+                    <Typography.Text>{t('goodix.runImmediately')}</Typography.Text>
+                  </Space>
+                </Col>
+              </Row>
             </Space>
           ) : (
             <>

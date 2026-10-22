@@ -36,8 +36,7 @@ impl Gh3036EfuseReader {
         Self::write_single(io, Self::EFUSE_MODE_ADDR, selected_mode).await?;
 
         let original_rden = Self::read_single(io, Self::EFUSE_RDEN_ADDR).await?;
-        if let Err(error) = Self::write_single(io, Self::EFUSE_RDEN_ADDR, original_rden | 1).await
-        {
+        if let Err(error) = Self::write_single(io, Self::EFUSE_RDEN_ADDR, original_rden | 1).await {
             let _ = Self::restore_rden(io, original_rden).await;
             return Err(error);
         }
@@ -114,10 +113,7 @@ impl Gh3036EfuseReader {
         Ok(bytes)
     }
 
-    async fn read_single<A: RegisterAccess + ?Sized>(
-        io: &A,
-        address: u16,
-    ) -> Result<u16, String> {
+    async fn read_single<A: RegisterAccess + ?Sized>(io: &A, address: u16) -> Result<u16, String> {
         let values = io.read_u16(address, 1).await?;
         values
             .into_iter()
@@ -133,8 +129,12 @@ impl Gh3036EfuseReader {
         io.write_u16(&[(address, value)]).await
     }
 
-    async fn restore_rden<A: RegisterAccess + ?Sized>(io: &A, original_rden: u16) -> Result<(), String> {
-        io.write_u16(&[(Self::EFUSE_RDEN_ADDR, original_rden)]).await
+    async fn restore_rden<A: RegisterAccess + ?Sized>(
+        io: &A,
+        original_rden: u16,
+    ) -> Result<(), String> {
+        io.write_u16(&[(Self::EFUSE_RDEN_ADDR, original_rden)])
+            .await
     }
 }
 
@@ -176,7 +176,6 @@ mod tests {
         fn writes(&self) -> Vec<(u16, u16)> {
             self.writes.lock().unwrap().clone()
         }
-
     }
 
     #[async_trait]
@@ -310,9 +309,9 @@ mod tests {
         assert_eq!(
             bytes,
             vec![
-                0x11, 0x11, 0x22, 0x22, 0x33, 0x33, 0x44, 0x44, 0x55, 0x55, 0x66, 0x66, 0x77,
-                0x77, 0x88, 0x88, 0x99, 0x99, 0xAA, 0xAA, 0xBB, 0xBB, 0xCC, 0xCC, 0xDD, 0xDD,
-                0xEE, 0xEE, 0xFF, 0xFF, 0x01, 0x00,
+                0x11, 0x11, 0x22, 0x22, 0x33, 0x33, 0x44, 0x44, 0x55, 0x55, 0x66, 0x66, 0x77, 0x77,
+                0x88, 0x88, 0x99, 0x99, 0xAA, 0xAA, 0xBB, 0xBB, 0xCC, 0xCC, 0xDD, 0xDD, 0xEE, 0xEE,
+                0xFF, 0xFF, 0x01, 0x00,
             ]
         );
     }
@@ -331,7 +330,10 @@ mod tests {
             (Gh3036EfuseReader::EFUSE_RDEN_ADDR, vec![0x0000]),
             (Gh3036EfuseReader::EFUSE_START_ADDR, vec![0x0000]),
             (Gh3036EfuseReader::EFUSE_DONE_ADDR, vec![1]),
-            (Gh3036EfuseReader::EFUSE_RDATA_ADDR, vec![0x1111, 0x2222, 0x3333]),
+            (
+                Gh3036EfuseReader::EFUSE_RDATA_ADDR,
+                vec![0x1111, 0x2222, 0x3333],
+            ),
         ]);
 
         let error = Gh3036EfuseReader::read_segment(&*io, 3).await.unwrap_err();

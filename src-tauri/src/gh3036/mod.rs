@@ -11,9 +11,9 @@
 //! - HR金标蓝牙监听器
 
 pub mod config_loader;
+pub mod csv_writer;
 pub mod efuse;
 pub mod factory_compute;
-pub mod csv_writer;
 pub mod factory_test;
 pub mod hr_ref_monitor;
 pub mod manager;
@@ -22,6 +22,7 @@ pub mod threshold_config;
 pub mod types;
 
 pub use config_loader::{ConfigLoader, RegisterItem};
+pub use efuse::{Gh3036EfuseReader, RegisterAccess};
 pub use factory_test::FactoryTestManager;
 pub use hr_ref_monitor::{
     get_hr_ref_monitor_collected_count, get_hr_ref_monitor_current_hr,
@@ -29,7 +30,6 @@ pub use hr_ref_monitor::{
     is_hr_ref_monitor_running, start_hr_ref_monitor, stop_hr_ref_monitor, HrRefMonitor,
     HrRefMonitorState,
 };
-pub use efuse::{Gh3036EfuseReader, RegisterAccess};
 pub use manager::{
     ChannelConfig, ChannelType, CsvConfig, Gh3036Manager, HrRefStatus, HrvRefStatus, RefDataStatus,
     Spo2RefStatus,

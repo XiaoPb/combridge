@@ -998,8 +998,8 @@ impl Gh3036Manager {
         let param_data = self
             .call_command(KEY_GH3X_REGS_READ_CMD, FMT_GH3X_REGS_READ_CMD, &data)
             .await?;
-        let value =
-            unpack(&param_data, RET_GH3X_REGS_READ_CMD).map_err(|e| format!("瑙ｅ寘澶辫触: {:?}", e))?;
+        let value = unpack(&param_data, RET_GH3X_REGS_READ_CMD)
+            .map_err(|e| format!("瑙ｅ寘澶辫触: {:?}", e))?;
 
         match value {
             UnpackValue::U16Array(arr) => Ok(arr),

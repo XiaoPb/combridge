@@ -1440,11 +1440,10 @@ mod tests {
         .await;
 
         let task_core = Arc::clone(&core);
-        let task = tokio::spawn(async move {
-            task_core
-                ._secure_request("SEND", "large", &[0; 400])
-                .await
-        });
+        let task =
+            tokio::spawn(
+                async move { task_core._secure_request("SEND", "large", &[0; 400]).await },
+            );
         let first = parse_frame(&rx.recv().await.unwrap());
 
         for _ in 0..3 {
@@ -1498,10 +1497,9 @@ mod tests {
 
     #[tokio::test]
     async fn secure_remote_failure_types_fail_the_live_request() {
-        for (response_type, expected) in [
-            (1, RpcError::CommandNotFound),
-            (3, RpcError::RemoteError),
-        ] {
+        for (response_type, expected) in
+            [(1, RpcError::CommandNotFound), (3, RpcError::RemoteError)]
+        {
             let core = Arc::new(RpcCore::new(RpcConfig {
                 timeout_ms: 100,
                 retry_count: 0,
@@ -1979,13 +1977,8 @@ mod tests {
 
         let mut builder = FrameBuilder::new();
         let telemetry_start = builder.build_frame("telemetry", &[0x20], false, false, 0, 0);
-        let secure_return = secure_control_frame_with_data(
-            "secure",
-            invoke_idx,
-            2,
-            None,
-            &[0x59, 0x2A],
-        );
+        let secure_return =
+            secure_control_frame_with_data("secure", invoke_idx, 2, None, &[0x59, 0x2A]);
         let telemetry_end = builder.build_frame("telemetry", &[0x21], false, true, 0, 0);
 
         core.process(&telemetry_start).await;

@@ -46,17 +46,20 @@ impl GhAgcInfo {
         let word1 = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
 
         let led_drv_fs = ((word0 >> 16) & 0xFF) as u8;
-        
-        Ok((Self {
-            gain_code: (word0 & 0x0F) as u8,
-            bg_cancel_range: ((word0 >> 4) & 0x03) as u8,
-            dc_cancel_range: ((word0 >> 6) & 0x03) as u8,
-            dc_cancel_code: ((word0 >> 8) & 0xFF) as u8,
-            led_drv0: ((word0 >> 24) & 0xFF) as u8,
-            led_drv1: (word1 & 0xFF) as u8,
-            bg_cancel_code: 0,
-            tia_gain: 0,
-        }, led_drv_fs))
+
+        Ok((
+            Self {
+                gain_code: (word0 & 0x0F) as u8,
+                bg_cancel_range: ((word0 >> 4) & 0x03) as u8,
+                dc_cancel_range: ((word0 >> 6) & 0x03) as u8,
+                dc_cancel_code: ((word0 >> 8) & 0xFF) as u8,
+                led_drv0: ((word0 >> 24) & 0xFF) as u8,
+                led_drv1: (word1 & 0xFF) as u8,
+                bg_cancel_code: 0,
+                tia_gain: 0,
+            },
+            led_drv_fs,
+        ))
     }
 
     /// 编码为传输格式（gh_agc_upload_t）
@@ -256,8 +259,7 @@ impl GhFuncFrame {
 
         let frame_cnt = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
         let timestamp = u64::from_le_bytes([
-            data[4], data[5], data[6], data[7],
-            data[8], data[9], data[10], data[11],
+            data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11],
         ]);
 
         let gsensor_data = GhGsensorData::from_bytes(&data[12..18])?;
@@ -275,7 +277,8 @@ impl GhFuncFrame {
 
         let mut offset = header_size;
         while offset + frame_data_size <= data.len() {
-            if let Ok(frame_data) = GhFrameData::from_bytes(&data[offset..offset + frame_data_size]) {
+            if let Ok(frame_data) = GhFrameData::from_bytes(&data[offset..offset + frame_data_size])
+            {
                 frames.push(frame_data);
             }
             offset += frame_data_size;

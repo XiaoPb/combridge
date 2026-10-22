@@ -42,8 +42,13 @@ impl CollectionSpec {
         };
 
         Self {
-            min_number: compute.and_then(|c| c.min_number).unwrap_or(defaults.min_number).max(1),
-            skip_number: compute.and_then(|c| c.skip_number).unwrap_or(defaults.skip_number),
+            min_number: compute
+                .and_then(|c| c.min_number)
+                .unwrap_or(defaults.min_number)
+                .max(1),
+            skip_number: compute
+                .and_then(|c| c.skip_number)
+                .unwrap_or(defaults.skip_number),
             timeout_ms: compute
                 .and_then(|c| c.timeout_ms)
                 .unwrap_or(defaults.timeout_ms),
@@ -233,11 +238,8 @@ fn mean(values: &[f64]) -> Option<f64> {
 
 pub fn population_stddev(values: &[f64]) -> Option<f64> {
     let mean = mean(values)?;
-    let variance = values
-        .iter()
-        .map(|v| (v - mean) * (v - mean))
-        .sum::<f64>()
-        / values.len() as f64;
+    let variance =
+        values.iter().map(|v| (v - mean) * (v - mean)).sum::<f64>() / values.len() as f64;
     let sigma = variance.sqrt();
     if sigma.is_finite() && sigma > 0.0 {
         Some(sigma)
@@ -261,7 +263,9 @@ struct Section {
 
 impl Section {
     fn process(&mut self, x: f64) -> f64 {
-        let y = self.b0 * x + self.b1 * self.x1 + self.b2 * self.x2 - self.a1 * self.y1 - self.a2 * self.y2;
+        let y = self.b0 * x + self.b1 * self.x1 + self.b2 * self.x2
+            - self.a1 * self.y1
+            - self.a2 * self.y2;
         self.x2 = self.x1;
         self.x1 = x;
         self.y2 = self.y1;
@@ -380,8 +384,8 @@ pub fn calculate_ipd_na(
     let raw = tail_slice(raw, min)?;
     let raw = raw.iter().map(|&v| v as f64).collect::<Vec<_>>();
     let raw_avg = mean(&raw)?;
-    let ipd = (raw_avg - adc.offset) / adc.full_scale * adc.vref * 1_000_000.0
-        / (adc.tia_ratio * gain_k);
+    let ipd =
+        (raw_avg - adc.offset) / adc.full_scale * adc.vref * 1_000_000.0 / (adc.tia_ratio * gain_k);
     if ipd.is_finite() {
         Some(ipd)
     } else {
@@ -403,7 +407,11 @@ fn led_current_sum_ma(led0: u8, led1: u8, led_fs: u8) -> f64 {
         / 10.0
 }
 
-fn choose_led_current(chip: ChipSeries, decoded: Option<f64>, configured: Option<f64>) -> Option<f64> {
+fn choose_led_current(
+    chip: ChipSeries,
+    decoded: Option<f64>,
+    configured: Option<f64>,
+) -> Option<f64> {
     match chip {
         ChipSeries::Gh3036 | ChipSeries::Gh3038 => decoded.or(configured),
         ChipSeries::Gh3220 => configured.or(decoded),
@@ -561,8 +569,8 @@ mod tests {
         let filtered = butterworth_high_pass_7(&values, 100.0, 0.5).unwrap();
         let tail = &filtered[filtered.len() - 100..];
         let mean = tail.iter().sum::<f64>() / tail.len() as f64;
-        let sigma = (tail.iter().map(|v| (v - mean) * (v - mean)).sum::<f64>() / tail.len() as f64)
-            .sqrt();
+        let sigma =
+            (tail.iter().map(|v| (v - mean) * (v - mean)).sum::<f64>() / tail.len() as f64).sqrt();
         assert!(mean.abs() < 1e-6);
         assert!(sigma < 1e-6);
     }
@@ -599,7 +607,10 @@ mod tests {
 
     #[test]
     fn raw_ctr_requires_positive_gain() {
-        assert_eq!(calculate_ipd_na(&[], &[8_388_608], 1, adc(), Some(0.0)), None);
+        assert_eq!(
+            calculate_ipd_na(&[], &[8_388_608], 1, adc(), Some(0.0)),
+            None
+        );
     }
 
     #[test]
@@ -653,6 +664,8 @@ mod tests {
         };
         let out = calculate_app_measurements("unknown", &samples, "gh3036", &compute());
         assert_eq!(out.len(), 2);
-        assert!(out.iter().all(|m| m.computed_value.is_none() && m.device_value.is_none()));
+        assert!(out
+            .iter()
+            .all(|m| m.computed_value.is_none() && m.device_value.is_none()));
     }
 }

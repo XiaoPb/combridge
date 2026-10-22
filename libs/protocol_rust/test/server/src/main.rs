@@ -6,12 +6,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gh_rpc::{
-    FrameDecoder, GhFuncFrame,
-    KEY_G, KEY_GH3X_GET_VERSION, KEY_GH3X_REGS_LIST_WRITE_CMD,
+    FrameDecoder, GhFuncFrame, KEY_G, KEY_GH3X_GET_VERSION, KEY_GH3X_REGS_LIST_WRITE_CMD,
     KEY_GH3X_REGS_READ_CMD, KEY_GH3X_REGS_WRITE_CMD,
 };
 use log::{error, info, warn, LevelFilter};
-use rpc::{InvokeContext, LogCallback, LogLevel, RpcCore, RpcConfig, SendFunction};
+use rpc::{InvokeContext, LogCallback, LogLevel, RpcConfig, RpcCore, SendFunction};
 use serialport::{SerialPort, SerialPortType};
 use tokio::sync::Mutex;
 
@@ -47,10 +46,7 @@ impl ServerState {
             frame_size: 128,
         };
 
-        let rpc_core = Arc::new(
-            RpcCore::new(config)
-                .with_logger(Arc::new(ServerLogger)),
-        );
+        let rpc_core = Arc::new(RpcCore::new(config).with_logger(Arc::new(ServerLogger)));
 
         Self {
             rpc_core,
@@ -73,7 +69,10 @@ impl ServerState {
                 Ok(())
             }
             Err(e) => {
-                warn!("无法打开串口 {}: {}, 将使用标准输入输出模式", SERIAL_PORT, e);
+                warn!(
+                    "无法打开串口 {}: {}, 将使用标准输入输出模式",
+                    SERIAL_PORT, e
+                );
                 self.serial_port = None;
                 Ok(())
             }
@@ -89,14 +88,21 @@ impl ServerState {
             let version_info = b"GH3X_v1.0.0_Server";
             ctx.set_response(version_info.to_vec());
 
-            info!("[{}] 返回版本信息: {:?}", ctx.topic, String::from_utf8_lossy(version_info));
+            info!(
+                "[{}] 返回版本信息: {:?}",
+                ctx.topic,
+                String::from_utf8_lossy(version_info)
+            );
         });
-        self.rpc_core.register(KEY_GH3X_GET_VERSION, handler).await?;
+        self.rpc_core
+            .register(KEY_GH3X_GET_VERSION, handler)
+            .await?;
 
         let handler = Arc::new(move |data: &[u8], size: usize, ctx: &mut InvokeContext| {
             info!("[{}] GH3X_RegsWriteCmd 调用, 数据长度: {}", ctx.topic, size);
 
-            let regs: Vec<u16> = data.chunks_exact(2)
+            let regs: Vec<u16> = data
+                .chunks_exact(2)
                 .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
                 .collect();
 
@@ -104,7 +110,9 @@ impl ServerState {
 
             ctx.set_response(vec![]);
         });
-        self.rpc_core.register(KEY_GH3X_REGS_WRITE_CMD, handler).await?;
+        self.rpc_core
+            .register(KEY_GH3X_REGS_WRITE_CMD, handler)
+            .await?;
 
         let handler = Arc::new(move |data: &[u8], size: usize, ctx: &mut InvokeContext| {
             info!("[{}] GH3X_RegsReadCmd 调用, 数据长度: {}", ctx.topic, size);
@@ -113,7 +121,10 @@ impl ServerState {
                 let reg_addr = u16::from_le_bytes([data[0], data[1]]);
                 let read_len = i32::from_le_bytes([data[2], data[3], data[4], data[5]]) as usize;
 
-                info!("[{}] 读取寄存器: 地址=0x{:04X}, 长度={}", ctx.topic, reg_addr, read_len);
+                info!(
+                    "[{}] 读取寄存器: 地址=0x{:04X}, 长度={}",
+                    ctx.topic, reg_addr, read_len
+                );
 
                 let mut response = Vec::with_capacity(read_len * 2);
                 for i in 0..read_len {
@@ -126,12 +137,18 @@ impl ServerState {
                 ctx.set_response(vec![]);
             }
         });
-        self.rpc_core.register(KEY_GH3X_REGS_READ_CMD, handler).await?;
+        self.rpc_core
+            .register(KEY_GH3X_REGS_READ_CMD, handler)
+            .await?;
 
         let handler = Arc::new(move |data: &[u8], size: usize, ctx: &mut InvokeContext| {
-            info!("[{}] GH3X_RegsListWriteCmd 调用, 数据长度: {}", ctx.topic, size);
+            info!(
+                "[{}] GH3X_RegsListWriteCmd 调用, 数据长度: {}",
+                ctx.topic, size
+            );
 
-            let regs: Vec<u16> = data.chunks_exact(2)
+            let regs: Vec<u16> = data
+                .chunks_exact(2)
                 .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
                 .collect();
 
@@ -139,7 +156,9 @@ impl ServerState {
 
             ctx.set_response(vec![]);
         });
-        self.rpc_core.register(KEY_GH3X_REGS_LIST_WRITE_CMD, handler).await?;
+        self.rpc_core
+            .register(KEY_GH3X_REGS_LIST_WRITE_CMD, handler)
+            .await?;
 
         let frame_decoder = self.frame_decoder.clone();
         let handler = Arc::new(move |data: &[u8], size: usize, ctx: &mut InvokeContext| {
@@ -191,8 +210,11 @@ impl ServerState {
                         for result in results {
                             match result {
                                 Ok(parse_result) => {
-                                    info!("解析帧成功: key={}, data_len={}",
-                                        parse_result.key, parse_result.param.len());
+                                    info!(
+                                        "解析帧成功: key={}, data_len={}",
+                                        parse_result.key,
+                                        parse_result.param.len()
+                                    );
                                 }
                                 Err(e) => {
                                     error!("解析帧失败: {:?}", e);
@@ -234,7 +256,8 @@ impl ServerState {
                 break;
             }
 
-            let bytes: Vec<u8> = line.split_whitespace()
+            let bytes: Vec<u8> = line
+                .split_whitespace()
                 .filter_map(|s| u8::from_str_radix(s, 16).ok())
                 .collect();
 
@@ -249,8 +272,12 @@ impl ServerState {
             for result in results {
                 match result {
                     Ok(parse_result) => {
-                        info!("解析帧成功: key={}, is_fin={}, data_len={}",
-                            parse_result.key, parse_result.is_fin, parse_result.param.len());
+                        info!(
+                            "解析帧成功: key={}, is_fin={}, data_len={}",
+                            parse_result.key,
+                            parse_result.is_fin,
+                            parse_result.param.len()
+                        );
                     }
                     Err(e) => {
                         error!("解析帧失败: {:?}", e);
@@ -264,12 +291,16 @@ impl ServerState {
 }
 
 fn print_frame_info(index: usize, frame: &GhFuncFrame) {
-    info!("  帧[{}]: cnt={}, ts={}, id={:?}, ch_num={}",
-        index, frame.frame_cnt, frame.timestamp, frame.id, frame.ch_num);
+    info!(
+        "  帧[{}]: cnt={}, ts={}, id={:?}, ch_num={}",
+        index, frame.frame_cnt, frame.timestamp, frame.id, frame.ch_num
+    );
 
     for (i, data) in frame.data.iter().enumerate() {
-        info!("    通道[{}]: ipd_pa={}, rawdata={}, flag={:?}",
-            i, data.ipd_pa, data.rawdata, data.flag);
+        info!(
+            "    通道[{}]: ipd_pa={}, rawdata={}, flag={:?}",
+            i, data.ipd_pa, data.rawdata, data.flag
+        );
     }
 }
 
@@ -284,8 +315,7 @@ fn list_available_ports() {
                 for port in ports {
                     let type_info = match port.port_type {
                         SerialPortType::UsbPort(info) => {
-                            format!("USB (VID:{:04x}, PID:{:04x})",
-                                info.vid, info.pid)
+                            format!("USB (VID:{:04x}, PID:{:04x})", info.vid, info.pid)
                         }
                         SerialPortType::BluetoothPort => "Bluetooth".to_string(),
                         SerialPortType::PciPort => "PCI".to_string(),
@@ -331,7 +361,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let serial_port = serial_port.clone();
             Box::pin(async move {
                 if let Some(ref port_mutex) = serial_port {
-                    if let Some(ref mut port) = *port_mutex.try_lock().map_err(|_| rpc::RpcError::SendFail)? {
+                    if let Some(ref mut port) =
+                        *port_mutex.try_lock().map_err(|_| rpc::RpcError::SendFail)?
+                    {
                         port.write_all(&data).map_err(|_| rpc::RpcError::SendFail)?;
                         port.flush().map_err(|_| rpc::RpcError::SendFail)?;
                         info!("发送 {} 字节响应数据", data.len());

@@ -5,8 +5,12 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use gh_rpc::{
+    FrameDecoder, GhFuncFrame, FMT_GH3X_GET_VERSION, FMT_GH3X_REGS_LIST_WRITE_CMD,
+    FMT_GH3X_REGS_READ_CMD, FMT_GH3X_REGS_WRITE_CMD, KEY_G, KEY_GH3X_GET_VERSION,
+    KEY_GH3X_REGS_LIST_WRITE_CMD, KEY_GH3X_REGS_READ_CMD, KEY_GH3X_REGS_WRITE_CMD,
+};
 use rpc::{InvokeContext, LogCallback, LogLevel, RpcConfig, RpcCore, RpcError, SendFunction};
-use gh_rpc::{FrameDecoder, GhFuncFrame, KEY_G, KEY_GH3X_GET_VERSION, KEY_GH3X_REGS_LIST_WRITE_CMD, KEY_GH3X_REGS_READ_CMD, KEY_GH3X_REGS_WRITE_CMD, FMT_GH3X_GET_VERSION, FMT_GH3X_REGS_LIST_WRITE_CMD, FMT_GH3X_REGS_READ_CMD, FMT_GH3X_REGS_WRITE_CMD};
 use tokio::sync::mpsc;
 
 #[derive(Debug, Default)]
@@ -51,52 +55,65 @@ struct TestLogger {
 
 impl TestLogger {
     fn new(prefix: &str) -> Self {
-        Self { prefix: prefix.to_string() }
+        Self {
+            prefix: prefix.to_string(),
+        }
     }
 }
 
 impl LogCallback for TestLogger {
     fn log(&self, level: LogLevel, context: &str, message: &str) {
         let timestamp = chrono::Local::now().format("%H:%M:%S%.3f");
-        println!("[{}][{}][{:?}][{}] {}", timestamp, self.prefix, level, context, message);
+        println!(
+            "[{}][{}][{:?}][{}] {}",
+            timestamp, self.prefix, level, context, message
+        );
     }
 }
 
 fn print_frame_info(index: usize, frame: &GhFuncFrame) {
-    println!("    帧[{}]: cnt={}, ts={}, id={:?}, ch_num={}",
-        index, frame.frame_cnt, frame.timestamp, frame.id, frame.ch_num);
+    println!(
+        "    帧[{}]: cnt={}, ts={}, id={:?}, ch_num={}",
+        index, frame.frame_cnt, frame.timestamp, frame.id, frame.ch_num
+    );
 }
 
-async fn setup_server(
-    server_core: &RpcCore,
-    frame_decoder: FrameDecoder,
-) -> Result<(), RpcError> {
+async fn setup_server(server_core: &RpcCore, frame_decoder: FrameDecoder) -> Result<(), RpcError> {
     println!("[Server] 注册命令处理器...");
 
     let handler = Arc::new(move |_data: &[u8], size: usize, ctx: &mut InvokeContext| {
         println!("[Server] GH3X_GetVersion 调用, 数据长度: {}", size);
         let version_info = b"GH3X_v1.0.0_Server";
         ctx.set_response(version_info.to_vec());
-        println!("[Server] 返回版本信息: {:?}", String::from_utf8_lossy(version_info));
+        println!(
+            "[Server] 返回版本信息: {:?}",
+            String::from_utf8_lossy(version_info)
+        );
     });
     server_core.register(KEY_GH3X_GET_VERSION, handler).await?;
 
     let handler = Arc::new(move |data: &[u8], size: usize, ctx: &mut InvokeContext| {
         println!("[Server] GH3X_RegsWriteCmd 调用, 数据长度: {}", size);
-        let regs: Vec<u16> = data.chunks_exact(2)
+        let regs: Vec<u16> = data
+            .chunks_exact(2)
             .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
             .collect();
         println!("[Server] 写入寄存器: {} 个", regs.len() / 2);
         ctx.set_response(vec![0x00]);
     });
-    server_core.register(KEY_GH3X_REGS_WRITE_CMD, handler).await?;
+    server_core
+        .register(KEY_GH3X_REGS_WRITE_CMD, handler)
+        .await?;
 
     let handler = Arc::new(move |data: &[u8], size: usize, ctx: &mut InvokeContext| {
         println!("[Server] GH3X_RegsReadCmd 调用, 数据长度: {}", size);
         if data.len() >= 6 {
             let reg_addr = u16::from_le_bytes([data[0], data[1]]);
             let read_len = i32::from_le_bytes([data[2], data[3], data[4], data[5]]) as usize;
-            println!("[Server] 读取寄存器: 地址=0x{:04X}, 长度={}", reg_addr, read_len);
+            println!(
+                "[Server] 读取寄存器: 地址=0x{:04X}, 长度={}",
+                reg_addr, read_len
+            );
 
             let mut response = Vec::with_capacity(read_len * 2);
             for i in 0..read_len {
@@ -109,24 +126,32 @@ async fn setup_server(
             ctx.set_response(vec![]);
         }
     });
-    server_core.register(KEY_GH3X_REGS_READ_CMD, handler).await?;
+    server_core
+        .register(KEY_GH3X_REGS_READ_CMD, handler)
+        .await?;
 
     let handler = Arc::new(move |data: &[u8], size: usize, ctx: &mut InvokeContext| {
         println!("[Server] GH3X_ChipCtrl 调用, 数据长度: {}", size);
-        println!("[Server] 芯片控制: 0x{:02X}", data.get(0).copied().unwrap_or(0));
+        println!(
+            "[Server] 芯片控制: 0x{:02X}",
+            data.get(0).copied().unwrap_or(0)
+        );
         ctx.set_response(vec![0x00]);
     });
     server_core.register("GH3X_ChipCtrl", handler).await?;
 
     let handler = Arc::new(move |data: &[u8], size: usize, ctx: &mut InvokeContext| {
         println!("[Server] GH3X_RegsListWriteCmd 调用, 数据长度: {}", size);
-        let regs: Vec<u16> = data.chunks_exact(2)
+        let regs: Vec<u16> = data
+            .chunks_exact(2)
             .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
             .collect();
         println!("[Server] 批量写入寄存器: {} 个", regs.len() / 2);
         ctx.set_response(vec![0x00]);
     });
-    server_core.register(KEY_GH3X_REGS_LIST_WRITE_CMD, handler).await?;
+    server_core
+        .register(KEY_GH3X_REGS_LIST_WRITE_CMD, handler)
+        .await?;
 
     let fd = frame_decoder.clone();
     let handler = Arc::new(move |data: &[u8], size: usize, ctx: &mut InvokeContext| {
@@ -173,7 +198,9 @@ async fn main() {
     let server_core = Arc::new(RpcCore::new(server_config).with_logger(server_logger));
     let frame_decoder = FrameDecoder::new();
 
-    setup_server(&server_core, frame_decoder).await.expect("Failed to setup server");
+    setup_server(&server_core, frame_decoder)
+        .await
+        .expect("Failed to setup server");
 
     let server_to_client_clone = server_to_client.clone();
     let server_send_fn: SendFunction = Arc::new(move |data: Vec<u8>| {
@@ -196,7 +223,11 @@ async fn main() {
             for result in results {
                 match result {
                     Ok(parse_result) => {
-                        println!("[Server] 解析成功: key={}, len={}", parse_result.key, parse_result.param.len());
+                        println!(
+                            "[Server] 解析成功: key={}, len={}",
+                            parse_result.key,
+                            parse_result.param.len()
+                        );
                     }
                     Err(e) => {
                         println!("[Server] 解析失败: {:?}", e);
@@ -236,7 +267,11 @@ async fn main() {
             for result in results {
                 match result {
                     Ok(parse_result) => {
-                        println!("[Client] 响应解析成功: key={}, len={}", parse_result.key, parse_result.param.len());
+                        println!(
+                            "[Client] 响应解析成功: key={}, len={}",
+                            parse_result.key,
+                            parse_result.param.len()
+                        );
                     }
                     Err(e) => {
                         println!("[Client] 响应解析失败: {:?}", e);
@@ -259,7 +294,10 @@ async fn main() {
         let test_name = "test_get_version";
         println!("\n>>> Running {}...", test_name);
 
-        match core.call(KEY_GH3X_GET_VERSION, FMT_GH3X_GET_VERSION, &[0]).await {
+        match core
+            .call(KEY_GH3X_GET_VERSION, FMT_GH3X_GET_VERSION, &[0])
+            .await
+        {
             Ok(response) => {
                 println!("    Version: {:?}", String::from_utf8_lossy(&response));
                 stats.record_pass(test_name);
@@ -280,7 +318,10 @@ async fn main() {
             data.extend_from_slice(&reg.to_le_bytes());
         }
 
-        match core.call(KEY_GH3X_REGS_WRITE_CMD, FMT_GH3X_REGS_WRITE_CMD, &data).await {
+        match core
+            .call(KEY_GH3X_REGS_WRITE_CMD, FMT_GH3X_REGS_WRITE_CMD, &data)
+            .await
+        {
             Ok(_) => {
                 println!("    Registers written successfully");
                 stats.record_pass(test_name);
@@ -299,12 +340,20 @@ async fn main() {
         data.extend_from_slice(&0x1000u16.to_le_bytes());
         data.extend_from_slice(&10i32.to_le_bytes());
 
-        match core.call(KEY_GH3X_REGS_READ_CMD, FMT_GH3X_REGS_READ_CMD, &data).await {
+        match core
+            .call(KEY_GH3X_REGS_READ_CMD, FMT_GH3X_REGS_READ_CMD, &data)
+            .await
+        {
             Ok(response) => {
-                let values: Vec<u16> = response.chunks_exact(2)
+                let values: Vec<u16> = response
+                    .chunks_exact(2)
                     .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
                     .collect();
-                println!("    Read {} registers: {:?}", values.len(), &values[..std::cmp::min(5, values.len())]);
+                println!(
+                    "    Read {} registers: {:?}",
+                    values.len(),
+                    &values[..std::cmp::min(5, values.len())]
+                );
                 stats.record_pass(test_name);
             }
             Err(e) => {
@@ -340,7 +389,14 @@ async fn main() {
 
         println!("    Writing {} register pairs ({} bytes)", 10, data.len());
 
-        match core.call(KEY_GH3X_REGS_LIST_WRITE_CMD, FMT_GH3X_REGS_LIST_WRITE_CMD, &data).await {
+        match core
+            .call(
+                KEY_GH3X_REGS_LIST_WRITE_CMD,
+                FMT_GH3X_REGS_LIST_WRITE_CMD,
+                &data,
+            )
+            .await
+        {
             Ok(_) => {
                 println!("    Single frame write completed successfully");
                 stats.record_pass(test_name);
@@ -363,7 +419,14 @@ async fn main() {
 
         println!("    Writing {} register pairs ({} bytes)", 100, data.len());
 
-        match core.call(KEY_GH3X_REGS_LIST_WRITE_CMD, FMT_GH3X_REGS_LIST_WRITE_CMD, &data).await {
+        match core
+            .call(
+                KEY_GH3X_REGS_LIST_WRITE_CMD,
+                FMT_GH3X_REGS_LIST_WRITE_CMD,
+                &data,
+            )
+            .await
+        {
             Ok(_) => {
                 println!("    Multi frame write completed successfully");
                 stats.record_pass(test_name);
@@ -413,13 +476,20 @@ async fn main() {
         core.set_send_function(send_fn).await;
 
         let start = std::time::Instant::now();
-        match core.call(KEY_GH3X_GET_VERSION, FMT_GH3X_GET_VERSION, &[0]).await {
+        match core
+            .call(KEY_GH3X_GET_VERSION, FMT_GH3X_GET_VERSION, &[0])
+            .await
+        {
             Ok(_) => {
                 stats.record_pass(test_name);
             }
             Err(e) => {
                 let elapsed = start.elapsed();
-                println!("    Expected timeout after {}ms, got: {:?}", elapsed.as_millis(), e);
+                println!(
+                    "    Expected timeout after {}ms, got: {:?}",
+                    elapsed.as_millis(),
+                    e
+                );
                 if matches!(e, RpcError::Timeout) {
                     println!("    Timeout mechanism verified");
                     stats.record_pass(test_name);

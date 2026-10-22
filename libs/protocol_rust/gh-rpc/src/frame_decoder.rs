@@ -3,8 +3,8 @@
 //! 用于解码G协议帧数据
 //! 数据格式：使用 varint 编码
 
-use crate::types::{DecodeError, GhFrameData, GhFrameDataFlag, GhFuncFrame, GhFuncFixIdx};
-use rpc::{LogCallback, LogLevel, PackHeader, NullLogger};
+use crate::types::{DecodeError, GhFrameData, GhFrameDataFlag, GhFuncFixIdx, GhFuncFrame};
+use rpc::{LogCallback, LogLevel, NullLogger, PackHeader};
 use std::sync::{Arc, Mutex};
 
 const MAX_CHANNELS: usize = 32;
@@ -110,14 +110,18 @@ impl DecoderState {
         Ok(result)
     }
 
-    fn decode_single_frame(&mut self, buffer: &[u8], logger: &dyn LogCallback) -> Result<DataFrame, DecodeError> {
+    fn decode_single_frame(
+        &mut self,
+        buffer: &[u8],
+        logger: &dyn LogCallback,
+    ) -> Result<DataFrame, DecodeError> {
         let mut frame = DataFrame::default();
         let start_pos = self.pos;
 
         let header_raw = self.read_varint(buffer)?;
         let header_value = zigzag_decode(header_raw) as u32;
         frame.pack_header = PackHeader::from_bits_truncate(header_value);
-        
+
         logger.log(LogLevel::Info, "decode", &format!(
             "pack_header: bits=0x{:08X}, rawdata_en={}, phy_value_en={}, gs_data_en={}, flags_en={}, alg_data_en={}, agc_info_en={}, timestamp_en={}, func_id_en={}, slot_cfg_en={}",
             header_value,
@@ -138,7 +142,15 @@ impl DecoderState {
                 frame.rawdata_size = MAX_CHANNELS;
             }
             frame.rawdata = self.read_i32_array(buffer, frame.rawdata_size)?;
-            logger.log(LogLevel::Debug, "decode", &format!("rawdata_size={}, data={:?}", frame.rawdata_size, &frame.rawdata[..std::cmp::min(5, frame.rawdata_size)]));
+            logger.log(
+                LogLevel::Debug,
+                "decode",
+                &format!(
+                    "rawdata_size={}, data={:?}",
+                    frame.rawdata_size,
+                    &frame.rawdata[..std::cmp::min(5, frame.rawdata_size)]
+                ),
+            );
         }
 
         if frame.pack_header.contains(PackHeader::PHY_VALUE_EN) {
@@ -147,7 +159,15 @@ impl DecoderState {
                 frame.phy_value_size = MAX_CHANNELS;
             }
             frame.phy_value = self.read_i32_array(buffer, frame.phy_value_size)?;
-            logger.log(LogLevel::Debug, "decode", &format!("phy_value_size={}, data={:?}", frame.phy_value_size, &frame.phy_value[..std::cmp::min(5, frame.phy_value_size)]));
+            logger.log(
+                LogLevel::Debug,
+                "decode",
+                &format!(
+                    "phy_value_size={}, data={:?}",
+                    frame.phy_value_size,
+                    &frame.phy_value[..std::cmp::min(5, frame.phy_value_size)]
+                ),
+            );
         }
 
         if frame.pack_header.contains(PackHeader::GS_DATA_EN) {
@@ -156,7 +176,14 @@ impl DecoderState {
                 frame.gs_data_size = MAX_GS_DATA;
             }
             frame.gs_data = self.read_i32_array(buffer, frame.gs_data_size)?;
-            logger.log(LogLevel::Debug, "decode", &format!("gs_data_size={}, data={:?}", frame.gs_data_size, frame.gs_data));
+            logger.log(
+                LogLevel::Debug,
+                "decode",
+                &format!(
+                    "gs_data_size={}, data={:?}",
+                    frame.gs_data_size, frame.gs_data
+                ),
+            );
         }
 
         if frame.pack_header.contains(PackHeader::FLAGS_EN) {
@@ -166,7 +193,15 @@ impl DecoderState {
             }
             let flags_i32 = self.read_i32_array(buffer, frame.flag_data_bits)?;
             frame.flags = flags_i32.iter().map(|&v| v as u32).collect();
-            logger.log(LogLevel::Debug, "decode", &format!("flag_data_bits={}, data={:?}", frame.flag_data_bits, &frame.flags[..std::cmp::min(5, frame.flags.len())]));
+            logger.log(
+                LogLevel::Debug,
+                "decode",
+                &format!(
+                    "flag_data_bits={}, data={:?}",
+                    frame.flag_data_bits,
+                    &frame.flags[..std::cmp::min(5, frame.flags.len())]
+                ),
+            );
         }
 
         if frame.pack_header.contains(PackHeader::ALG_DATA_EN) {
@@ -175,9 +210,20 @@ impl DecoderState {
                 frame.algo_data_bits = MAX_ALGO_DATA;
             }
             frame.algo_data = self.read_i32_array(buffer, frame.algo_data_bits)?;
-            logger.log(LogLevel::Info, "decode", &format!("algo_data_bits={}, algo_data={:?}", frame.algo_data_bits, frame.algo_data));
+            logger.log(
+                LogLevel::Info,
+                "decode",
+                &format!(
+                    "algo_data_bits={}, algo_data={:?}",
+                    frame.algo_data_bits, frame.algo_data
+                ),
+            );
         } else {
-            logger.log(LogLevel::Info, "decode", "ALG_DATA_EN not set in pack_header");
+            logger.log(
+                LogLevel::Info,
+                "decode",
+                "ALG_DATA_EN not set in pack_header",
+            );
         }
 
         if frame.pack_header.contains(PackHeader::AGC_INFO_EN) {
@@ -187,29 +233,56 @@ impl DecoderState {
             }
             frame.agc_info = self.read_i32_array(buffer, frame.agc_info_size)?;
             frame.agc_info_high = self.read_i32_array(buffer, frame.agc_info_size)?;
-            logger.log(LogLevel::Debug, "decode", &format!("agc_info_size={}", frame.agc_info_size));
+            logger.log(
+                LogLevel::Debug,
+                "decode",
+                &format!("agc_info_size={}", frame.agc_info_size),
+            );
         }
 
         if frame.pack_header.contains(PackHeader::TIMESTAMP_EN) {
             frame.timestamp = self.read_i32(buffer)?;
             frame.timestamp_high = self.read_i32(buffer)?;
-            logger.log(LogLevel::Debug, "decode", &format!("timestamp={}, timestamp_high={}", frame.timestamp, frame.timestamp_high));
+            logger.log(
+                LogLevel::Debug,
+                "decode",
+                &format!(
+                    "timestamp={}, timestamp_high={}",
+                    frame.timestamp, frame.timestamp_high
+                ),
+            );
         }
 
         frame.frame_id = self.read_i32(buffer)?;
-        logger.log(LogLevel::Debug, "decode", &format!("frame_id={}", frame.frame_id));
+        logger.log(
+            LogLevel::Debug,
+            "decode",
+            &format!("frame_id={}", frame.frame_id),
+        );
 
         if frame.pack_header.contains(PackHeader::FUNC_ID_EN) {
             frame.function_id = self.read_i32(buffer)?;
-            logger.log(LogLevel::Debug, "decode", &format!("function_id={}", frame.function_id));
+            logger.log(
+                LogLevel::Debug,
+                "decode",
+                &format!("function_id={}", frame.function_id),
+            );
         }
 
         if frame.pack_header.contains(PackHeader::SLOT_CFG_EN) {
             frame.slot_cfg = self.read_i32(buffer)?;
-            logger.log(LogLevel::Debug, "decode", &format!("slot_cfg={}", frame.slot_cfg));
+            logger.log(
+                LogLevel::Debug,
+                "decode",
+                &format!("slot_cfg={}", frame.slot_cfg),
+            );
         }
 
-        logger.log(LogLevel::Debug, "decode", &format!("frame decoded, consumed {} bytes", self.pos - start_pos));
+        logger.log(
+            LogLevel::Debug,
+            "decode",
+            &format!("frame decoded, consumed {} bytes", self.pos - start_pos),
+        );
         Ok(frame)
     }
 
@@ -228,7 +301,7 @@ impl DecoderState {
                 self.last_timestamp = data_frame.timestamp;
                 self.last_timestamp_high = data_frame.timestamp_high;
             } else {
-                let last_ts = (self.last_timestamp as u32 as u64) 
+                let last_ts = (self.last_timestamp as u32 as u64)
                     | ((self.last_timestamp_high as u32 as u64) << 32);
                 let diff_ts_low = data_frame.timestamp as i32;
                 let diff_ts_high = data_frame.timestamp_high as i32;
@@ -254,7 +327,9 @@ impl DecoderState {
             }
         }
 
-        if data_frame.pack_header.contains(PackHeader::PHY_VALUE_EN) && data_frame.phy_value_size > 0 {
+        if data_frame.pack_header.contains(PackHeader::PHY_VALUE_EN)
+            && data_frame.phy_value_size > 0
+        {
             if func_frame.ch_num == 0 {
                 func_frame.ch_num = data_frame.phy_value_size as u8;
             }
@@ -274,7 +349,8 @@ impl DecoderState {
                         func_frame.data[i].ipd_pa = data_frame.phy_value[i];
                         self.last_phy_value[i] = data_frame.phy_value[i];
                     } else {
-                        func_frame.data[i].ipd_pa = self.last_phy_value[i] + data_frame.phy_value[i];
+                        func_frame.data[i].ipd_pa =
+                            self.last_phy_value[i] + data_frame.phy_value[i];
                         self.last_phy_value[i] = func_frame.data[i].ipd_pa;
                     }
                 }
@@ -317,19 +393,21 @@ impl DecoderState {
             }
         }
 
-        if data_frame.pack_header.contains(PackHeader::AGC_INFO_EN) && data_frame.agc_info_size > 0 {
+        if data_frame.pack_header.contains(PackHeader::AGC_INFO_EN) && data_frame.agc_info_size > 0
+        {
             self.last_agc_size = data_frame.agc_info_size;
             for i in 0..data_frame.agc_info_size {
                 self.last_agc_info[i] = data_frame.agc_info[i];
                 self.last_agc_info_high[i] = data_frame.agc_info_high[i];
-                
+
                 if i < func_frame.data.len() {
                     let word0 = self.last_agc_info[i] as u32;
                     let word1 = self.last_agc_info_high[i] as u32;
                     let mut agc_bytes = [0u8; 8];
                     agc_bytes[0..4].copy_from_slice(&word0.to_le_bytes());
                     agc_bytes[4..8].copy_from_slice(&word1.to_le_bytes());
-                    let (agc_info, led_drv_fs) = crate::types::GhAgcInfo::from_bytes(&agc_bytes).unwrap_or_default();
+                    let (agc_info, led_drv_fs) =
+                        crate::types::GhAgcInfo::from_bytes(&agc_bytes).unwrap_or_default();
                     func_frame.data[i].agc_info = agc_info;
                     if i == 0 {
                         func_frame.led_drv_fs[0] = led_drv_fs;
@@ -344,7 +422,8 @@ impl DecoderState {
                     let mut agc_bytes = [0u8; 8];
                     agc_bytes[0..4].copy_from_slice(&word0.to_le_bytes());
                     agc_bytes[4..8].copy_from_slice(&word1.to_le_bytes());
-                    let (agc_info, led_drv_fs) = crate::types::GhAgcInfo::from_bytes(&agc_bytes).unwrap_or_default();
+                    let (agc_info, led_drv_fs) =
+                        crate::types::GhAgcInfo::from_bytes(&agc_bytes).unwrap_or_default();
                     func_frame.data[i].agc_info = agc_info;
                     if i == 0 {
                         func_frame.led_drv_fs[0] = led_drv_fs;
@@ -353,7 +432,8 @@ impl DecoderState {
             }
         }
 
-        if data_frame.pack_header.contains(PackHeader::ALG_DATA_EN) && data_frame.algo_data_bits > 0 {
+        if data_frame.pack_header.contains(PackHeader::ALG_DATA_EN) && data_frame.algo_data_bits > 0
+        {
             self.last_algo_data_size = data_frame.algo_data_bits;
             for i in 0..data_frame.algo_data_bits {
                 func_frame.algo_data.push(data_frame.algo_data[i]);
@@ -371,7 +451,11 @@ impl DecoderState {
         func_frame
     }
 
-    fn decode_frames_internal(&mut self, data: &[u8], logger: &dyn LogCallback) -> Result<Vec<GhFuncFrame>, DecodeError> {
+    fn decode_frames_internal(
+        &mut self,
+        data: &[u8],
+        logger: &dyn LogCallback,
+    ) -> Result<Vec<GhFuncFrame>, DecodeError> {
         let mut frames = Vec::new();
         self.reset();
         self.start_flag = true;
@@ -385,15 +469,23 @@ impl DecoderState {
         self.last_agc_info = [0; MAX_CHANNELS];
         self.last_agc_info_high = [0; MAX_CHANNELS];
 
-        logger.log(LogLevel::Debug, "decode", &format!("start decoding {} bytes", data.len()));
+        logger.log(
+            LogLevel::Debug,
+            "decode",
+            &format!("start decoding {} bytes", data.len()),
+        );
 
         while self.pos < data.len() {
-            logger.log(LogLevel::Debug, "decode", &format!("--- frame {} at pos {} ---", frames.len() + 1, self.pos));
-            
+            logger.log(
+                LogLevel::Debug,
+                "decode",
+                &format!("--- frame {} at pos {} ---", frames.len() + 1, self.pos),
+            );
+
             match self.decode_single_frame(data, logger) {
                 Ok(data_frame) => {
                     let func_frame = self.process_single_frame(&data_frame);
-                    
+
                     frames.push(func_frame);
                 }
                 Err(DecodeError::InsufficientData) => {

@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use rpc::{RpcCore, RpcConfig, RpcError, SendFunction, LogCallback, LogLevel, NullLogger};
+use rpc::{LogCallback, LogLevel, NullLogger, RpcConfig, RpcCore, RpcError, SendFunction};
 
 use crate::commands::*;
 use crate::frame_decoder::FrameDecoder;
@@ -75,39 +75,57 @@ impl CommandExecutor {
         let frame_decoder = self.frame_decoder.clone();
         let frame_callback = self.frame_callback.clone();
         let logger = self.logger.clone();
-        
-        let handler = Arc::new(move |data: &[u8], _size: usize, _ctx: &mut rpc::InvokeContext| {
-            let frame_decoder = frame_decoder.clone();
-            let frame_callback = frame_callback.clone();
-            let data = data.to_vec();
-            let logger = logger.clone();
-            
-            logger.log(LogLevel::Info, "G协议", &format!("收到数据 {} 字节: {:02X?}", data.len(), data));
-            
-            let unpacked = rpc::unpack_u8_array(&data);
-            logger.log(LogLevel::Debug, "G协议", &format!("解包后 {} 字节: {:02X?}", unpacked.len(), &unpacked[..std::cmp::min(20, unpacked.len())]));
-            
-            let rt = tokio::runtime::Handle::try_current();
-            if let Ok(rt) = rt {
-                rt.spawn(async move {
-                    let decoder = frame_decoder.lock().await;
-                    match decoder.decode_frames(&unpacked) {
-                        Ok(frames) => {
-                            logger.log(LogLevel::Debug, "G协议", &format!("解码成功, 共 {} 帧", frames.len()));
-                            if let Some(ref callback) = frame_callback {
-                                for frame in &frames {
-                                    callback(frame);
+
+        let handler = Arc::new(
+            move |data: &[u8], _size: usize, _ctx: &mut rpc::InvokeContext| {
+                let frame_decoder = frame_decoder.clone();
+                let frame_callback = frame_callback.clone();
+                let data = data.to_vec();
+                let logger = logger.clone();
+
+                logger.log(
+                    LogLevel::Info,
+                    "G协议",
+                    &format!("收到数据 {} 字节: {:02X?}", data.len(), data),
+                );
+
+                let unpacked = rpc::unpack_u8_array(&data);
+                logger.log(
+                    LogLevel::Debug,
+                    "G协议",
+                    &format!(
+                        "解包后 {} 字节: {:02X?}",
+                        unpacked.len(),
+                        &unpacked[..std::cmp::min(20, unpacked.len())]
+                    ),
+                );
+
+                let rt = tokio::runtime::Handle::try_current();
+                if let Ok(rt) = rt {
+                    rt.spawn(async move {
+                        let decoder = frame_decoder.lock().await;
+                        match decoder.decode_frames(&unpacked) {
+                            Ok(frames) => {
+                                logger.log(
+                                    LogLevel::Debug,
+                                    "G协议",
+                                    &format!("解码成功, 共 {} 帧", frames.len()),
+                                );
+                                if let Some(ref callback) = frame_callback {
+                                    for frame in &frames {
+                                        callback(frame);
+                                    }
                                 }
                             }
+                            Err(e) => {
+                                logger.log(LogLevel::Error, "G协议", &format!("解码失败: {:?}", e));
+                            }
                         }
-                        Err(e) => {
-                            logger.log(LogLevel::Error, "G协议", &format!("解码失败: {:?}", e));
-                        }
-                    }
-                });
-            }
-        });
-        
+                    });
+                }
+            },
+        );
+
         self.core.register(KEY_G, handler).await
     }
 

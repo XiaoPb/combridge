@@ -94,77 +94,84 @@ export const UpgradeTab: React.FC = () => {
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       {error && <Alert type="error" showIcon message={error} />}
 
-      {protocols.length > 1 && (
-        <Card size="small" title={t('protocol.title')}>
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Select
-              style={{ width: '100%' }}
-              value={selectedProtocol}
-              disabled={running}
-              onChange={(value) => void setProtocol(value)}
-              options={protocols.map((item) => ({
-                value: item.id,
-                label: `${item.name}（${item.id}）`,
-              }))}
-            />
-            <Typography.Text type="secondary">
-              {protocols.find((item) => item.id === selectedProtocol)?.description ?? ''}
-            </Typography.Text>
-          </Space>
-        </Card>
-      )}
+      <Row gutter={[16, 16]} style={{ width: '100%' }}>
+        {protocols.length > 1 && (
+          <Col span={12}>
+            <Card size="small" title={t('protocol.title')} style={{ height: '100%' }}>
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Select
+                  style={{ width: '100%' }}
+                  value={selectedProtocol}
+                  disabled={running}
+                  onChange={(value) => void setProtocol(value)}
+                  options={protocols.map((item) => ({
+                    value: item.id,
+                    label: `${item.name}（${item.id}）`,
+                  }))}
+                />
+                <Typography.Text type="secondary">
+                  {protocols.find((item) => item.id === selectedProtocol)?.description ?? ''}
+                </Typography.Text>
+              </Space>
+            </Card>
+          </Col>
+        )}
 
-      <Card
-        title={t('device.title')}
-        extra={
-          <Button
-            size="small"
-            icon={<ReloadOutlined />}
-            disabled={running}
-            onClick={() => {
-              void refreshStatus();
-              if (!running && address) {
-                void preflight(address);
-              }
-            }}
-          />
-        }
-      >
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Select
-            style={{ width: '100%' }}
-            placeholder={t('device.placeholder')}
-            value={address}
-            disabled={running}
-            onChange={setAddress}
-            options={connected.map((c) => ({
-              value: c.address,
-              label: c.name ? `${c.name} (${c.address})` : c.address,
-            }))}
-          />
-          {connected.length === 0 && <Alert type="warning" showIcon message={t('device.none')} />}
-          {deviceInfo && (
-            <Descriptions size="small" column={2}>
-              <Descriptions.Item label={t('device.protocol')}>
-                <Tag color="blue">{deviceInfo.protocol}</Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('device.mode')}>
-                <Tag color={deviceInfo.mode === 'native' ? 'green' : 'orange'}>
-                  {deviceInfo.mode ?? '-'}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('device.mtu')}>{deviceInfo.mtu ?? '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('device.version')}>{deviceInfo.version ?? '-'}</Descriptions.Item>
-              {deviceInfo.fields.map((item) => (
-                <Descriptions.Item key={item.key} label={t(`device.fields.${item.key}`, item.key)}>
-                  {item.value}
-                </Descriptions.Item>
-              ))}
-            </Descriptions>
-          )}
-          {preflighting && <Typography.Text type="secondary">{t('device.preflighting')}</Typography.Text>}
-        </Space>
-      </Card>
+        <Col span={protocols.length > 1 ? 12 : 24}>
+          <Card
+            title={t('device.title')}
+            style={{ height: '100%' }}
+            extra={
+              <Button
+                size="small"
+                icon={<ReloadOutlined />}
+                disabled={running}
+                onClick={() => {
+                  void refreshStatus();
+                  if (!running && address) {
+                    void preflight(address);
+                  }
+                }}
+              />
+            }
+          >
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Select
+                style={{ width: '100%' }}
+                placeholder={t('device.placeholder')}
+                value={address}
+                disabled={running}
+                onChange={setAddress}
+                options={connected.map((c) => ({
+                  value: c.address,
+                  label: c.name ? `${c.name} (${c.address})` : c.address,
+                }))}
+              />
+              {connected.length === 0 && <Alert type="warning" showIcon message={t('device.none')} />}
+              {deviceInfo && (
+                <Descriptions size="small" column={2}>
+                  <Descriptions.Item label={t('device.protocol')}>
+                    <Tag color="blue">{deviceInfo.protocol}</Tag>
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('device.mode')}>
+                    <Tag color={deviceInfo.mode === 'native' ? 'green' : 'orange'}>
+                      {deviceInfo.mode ?? '-'}
+                    </Tag>
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('device.mtu')}>{deviceInfo.mtu ?? '-'}</Descriptions.Item>
+                  <Descriptions.Item label={t('device.version')}>{deviceInfo.version ?? '-'}</Descriptions.Item>
+                  {deviceInfo.fields.map((item) => (
+                    <Descriptions.Item key={item.key} label={t(`device.fields.${item.key}`, item.key)}>
+                      {item.value}
+                    </Descriptions.Item>
+                  ))}
+                </Descriptions>
+              )}
+              {preflighting && <Typography.Text type="secondary">{t('device.preflighting')}</Typography.Text>}
+            </Space>
+          </Card>
+        </Col>
+      </Row>
 
       <Card title={t('firmware.title')}>
         <Space direction="vertical" style={{ width: '100%' }}>

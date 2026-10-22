@@ -10,7 +10,7 @@ on:
       - master
       - develop
     tags:
-      - 'v*'           # 推送 v1.0.0 这样的标签时触发
+      - 'v[0-9]+.[0-9]+.[0-9]+'   # 仅语义化版本标签（如 v1.0.0）触发发布
   pull_request:
     branches:
       - main
@@ -133,6 +133,32 @@ jobs:
       pull-requests: read
 
     steps:
+      # ============ 拉取完整提交历史与标签（生成变更日志所需） ============
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Extract tag version
+        id: tag_version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # ============ 校验标签与项目版本一致 ============
+      - name: Verify tag matches project version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.tag_version.outputs.VERSION }}"
+          TAURI_VERSION=$(sed -nE 's/^[[:space:]]*"version": "([^"]+)".*/\1/p' src-tauri/tauri.conf.json | head -n1)
+          NPM_VERSION=$(sed -nE 's/^[[:space:]]*"version": "([^"]+)".*/\1/p' package.json | head -n1)
+          CARGO_VERSION=$(sed -nE 's/^version = "([^"]+)".*/\1/p' src-tauri/Cargo.toml | head -n1)
+
+          if [ "${TAURI_VERSION}" != "${VERSION}" ] || [ "${NPM_VERSION}" != "${VERSION}" ] || [ "${CARGO_VERSION}" != "${VERSION}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} 与项目版本不一致（tauri.conf.json=${TAURI_VERSION}, package.json=${NPM_VERSION}, Cargo.toml=${CARGO_VERSION}）"
+            exit 1
+          fi
+          echo "版本 ${VERSION} 与 tag 一致"
+
       - name: Download all Tauri bundles
         uses: actions/download-artifact@v8
         with:
@@ -145,6 +171,120 @@ jobs:
           echo "Artifacts ready for release:"
           ls -la artifacts/
 
+      # ============ 生成详细发布说明 ============
+      - name: Generate release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${{ steps.tag_version.outputs.VERSION }}"
+          PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+          if [ -n "${PREV_TAG}" ]; then
+            RANGE="${PREV_TAG}..${TAG}"
+            COMPARE="[${PREV_TAG}...${TAG}](https://github.com/${GITHUB_REPOSITORY}/compare/${PREV_TAG}...${TAG})"
+          else
+            RANGE="${TAG}"
+            COMPARE="[${TAG}](https://github.com/${GITHUB_REPOSITORY}/commits/${TAG})"
+          fi
+
+          mkdir -p .release
+          for key in feat fix perf refactor build ci docs test style other; do
+            : > ".release/${key}.md"
+          done
+
+          # 按 conventional commit 前缀分类提交
+          while IFS=$'\t' read -r short subject; do
+            [ -z "${subject}" ] && continue
+            type=$(printf '%s' "${subject}" | sed -nE 's/^([a-z]+)(\([^)]*\))?!?:.*/\1/p')
+            case "${type}" in
+              feat|fix|perf|refactor|build|ci|docs|test|style) ;;
+              *) type=other ;;
+            esac
+            printf -- '- %s (`%s`)\n' "${subject}" "${short}" >> ".release/${type}.md"
+          done < <(git log --no-merges --pretty=format:'%h%x09%s%n' "${RANGE}")
+
+          CONTRIBUTORS="$(git log --no-merges --pretty='%an' "${RANGE}" | sort -u | tr '\n' ',' | sed 's/,/, /g; s/, $//')"
+          COMMIT_COUNT="$(git rev-list --count --no-merges "${RANGE}")"
+
+          # 安装包清单：文件名、平台、大小、SHA-256
+          mkdir -p .release
+          : > .release/assets.md
+          while IFS= read -r file; do
+            name="$(basename "${file}")"
+            lower="${name,,}"
+            case "${lower}" in
+              *.exe|*.msi) platform="Windows" ;;
+              *.dmg) platform="macOS" ;;
+              *.appimage|*.deb|*.rpm) platform="Linux" ;;
+              *) continue ;;
+            esac
+            size="$(du -h "${file}" | cut -f1)"
+            sha="$(sha256sum "${file}" | cut -d' ' -f1)"
+            printf -- '| `%s` | %s | %s | `%s` |\n' "${name}" "${platform}" "${size}" "${sha}" >> .release/assets.md
+          done < <(find artifacts -type f \( -iname '*.exe' -o -iname '*.msi' -o -iname '*.dmg' -o -iname '*.appimage' -o -iname '*.deb' -o -iname '*.rpm' \) | sort)
+
+          {
+            echo "## 版本信息"
+            echo ""
+            echo "| 项目 | 值 |"
+            echo "| --- | --- |"
+            echo "| 版本 | \`${TAG}\` |"
+            echo "| 提交 | \`${GITHUB_SHA::7}\` |"
+            echo "| 提交数量 | ${COMMIT_COUNT} |"
+            echo "| 构建时间 | $(date -u '+%Y-%m-%d %H:%M UTC') |"
+            echo "| 构建目标 | Windows x64 / macOS arm64 / Linux x64 |"
+            echo "| 运行环境 | Windows 10+ / macOS 11+ / Linux (webkit2gtk) |"
+            echo ""
+            echo "## 安装包"
+            echo ""
+            if [ -s .release/assets.md ]; then
+              echo "| 文件 | 平台 | 大小 | SHA-256 |"
+              echo "| --- | --- | --- | --- |"
+              cat .release/assets.md
+            else
+              echo "未找到构建产物。"
+            fi
+            echo ""
+            echo "## 变更内容"
+            echo ""
+            for key in feat fix perf refactor build ci docs test style other; do
+              if [ -s ".release/${key}.md" ]; then
+                case "${key}" in
+                  feat) title="新功能" ;;
+                  fix) title="问题修复" ;;
+                  perf) title="性能优化" ;;
+                  refactor) title="重构" ;;
+                  build) title="构建与依赖" ;;
+                  ci) title="CI/CD" ;;
+                  docs) title="文档" ;;
+                  test) title="测试" ;;
+                  style) title="代码风格" ;;
+                  *) title="其他改动" ;;
+                esac
+                echo "### ${title}"
+                echo ""
+                cat ".release/${key}.md"
+                echo ""
+              fi
+            done
+            echo "## 下载说明"
+            echo ""
+            echo "- Windows：\`.exe\` 安装包或 \`.msi\` 安装包"
+            echo "- macOS：\`.dmg\` 磁盘镜像"
+            echo "- Linux：\`.AppImage\` 或 \`.deb\` 安装包"
+            echo ""
+            echo "## 贡献者"
+            echo ""
+            echo "${CONTRIBUTORS}"
+            echo ""
+            echo "## 对比"
+            echo ""
+            echo "${COMPARE}"
+          } > release-notes.md
+
+          echo "----- release-notes.md -----"
+          cat release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -156,9 +296,9 @@ jobs:
             artifacts/**/*.deb
             artifacts/**/*.rpm
             artifacts/**/*.app
+          body_path: release-notes.md
           draft: false
           prerelease: false
-          generate_release_notes: true
-          name: Release ${{ github.ref_name }}
+          name: ComBridge ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

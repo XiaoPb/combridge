@@ -105,9 +105,16 @@ export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
           : { ...DEFAULT_DATA_ZOOM_STATE }
         : get().dataZoomState;
       const lineOffsets = Object.fromEntries(Object.entries(get().lineOffsets).filter(([column]) => csvData.columns.includes(column)));
-      const chartGroups = get().csvData === null
-        ? autoAssignChartGroups(csvData.columns, csvData.rows)
-        : preserveChartGroups(get().chartGroups, csvData.columns);
+      let chartGroups: IdentifiedChartGroupConfig[];
+      if (get().csvData === null) {
+        chartGroups = autoAssignChartGroups(csvData.columns, csvData.rows);
+      } else {
+        const preserved = preserveChartGroups(get().chartGroups, csvData.columns);
+        // 已有分组全部匹配不到新文件列名时，回退到按列名规则自动分配
+        chartGroups = preserved.some((group) => group.columns.length > 0)
+          ? preserved
+          : autoAssignChartGroups(csvData.columns, csvData.rows);
+      }
       set({ csvData, filePath, chartGroups, dataZoomState, lineOffsets, isLoading: false });
     } catch (err) {
       if (generation !== loadGeneration) return;

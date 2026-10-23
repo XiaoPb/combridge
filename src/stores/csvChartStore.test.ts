@@ -173,21 +173,22 @@ describe('CSV chart store isolation and load ordering', () => {
     expect(groups[0].yAxisMode).toBe('shared');
   });
 
-  it('keeps groups without matching columns when a new file has different headers', async () => {
-    const channelGroup = createChartGroup('图表1', ['CH0']);
+  it('falls back to auto-assignment when no configured column exists in the new file', async () => {
     useCsvChartStore.setState({
       csvData: result(['CH0'], [[1]]),
       filePath: 'old.csv',
-      chartGroups: [channelGroup],
+      chartGroups: [
+        createChartGroup('图表1', ['CH0']),
+        createChartGroup('图表3', ['TEMP']),
+      ],
     });
-    readCsvFile.mockResolvedValue(result(['OTHER'], [[1]]));
+    readCsvFile.mockResolvedValue(result(['CH1', 'ACC_X'], [[1, 2]]));
 
     await useCsvChartStore.getState().loadCsvFile('new.csv');
 
     const groups = useCsvChartStore.getState().chartGroups;
-    expect(groups).toHaveLength(1);
-    expect(groups[0]).toMatchObject({ id: channelGroup.id, name: '图表1', columns: [] });
-    expect(useCsvChartStore.getState().csvData?.columns).toEqual(['OTHER']);
+    expect(groups.map(group => group.name)).toEqual(['图表1', '图表2']);
+    expect(groups.map(group => group.columns)).toEqual([['CH1'], ['ACC_X']]);
   });
 
   it('does not auto-select known waveform columns whose values are all zero', async () => {

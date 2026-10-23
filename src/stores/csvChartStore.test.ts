@@ -149,6 +149,19 @@ describe('CSV chart store isolation and load ordering', () => {
     expect(accelerometerGroup.columns).toEqual(['ACC_X', 'ACC_X (2)']);
   });
 
+  it('recognizes equivalent channel and accelerometer names case-insensitively', async () => {
+    readCsvFile.mockResolvedValue(result(
+      ['accx', 'Acc_Y', 'z', 'CH0', 'ipd2', 'ipd_pa1', 'RawData3', 'ACC_X2', 'Rawdata4', 'CH4', 'other'],
+      [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]],
+    ));
+
+    await useCsvChartStore.getState().loadCsvFile('variants.csv');
+
+    const [channelGroup, accelerometerGroup] = useCsvChartStore.getState().chartGroups;
+    expect(accelerometerGroup.columns).toEqual(['accx', 'Acc_Y', 'z']);
+    expect(channelGroup.columns).toEqual(['CH0', 'ipd2', 'ipd_pa1', 'RawData3']);
+  });
+
   it('preserves configured groups and added charts when opening another CSV', async () => {
     const channelGroup = {
       ...createChartGroup('图表1', ['CH0', 'CH1']),

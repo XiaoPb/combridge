@@ -125,7 +125,7 @@
       "configPoint3": "No Header: enable when the first row is data; otherwise it is used as column names.",
       "configPoint4": "Show line statistics: display max, min, average and diff for each line on the chart.",
       "channelTitle": "Step 3 · Select channels",
-      "channelPoint1": "Each chart group selects its own columns; ACC_*/CH0-3 style names are auto-assigned on the first load, while later loads keep your configuration and skip channels missing from the new file. If no configured column matches at all, groups are auto-assigned again.",
+      "channelPoint1": "Each chart group selects its own columns; on the first load they are auto-assigned by name (ACC_X/accx/x, CH0-3, Ipd0-3, Rawdata0-3, ipd_pa0-3, case-insensitive). Later loads keep your configuration and skip channels missing from the new file; if nothing matches at all, groups are auto-assigned again.",
       "channelPoint2": "Y-axis mode: \"Independent\" gives each line its own axis; \"Shared\" uses one axis for all.",
       "channelPoint3": "Line offset: shift a line by sample points to align channels in time.",
       "channelPoint4": "Adjust chart height or click \"Add Chart\" for a new group; drag the zoom bar to inspect details, or export all charts as PNG."

@@ -44,6 +44,11 @@ export function createDefaultChartGroups(): IdentifiedChartGroupConfig[] {
   return [createChartGroup('图表1'), createChartGroup('图表2')];
 }
 
+// 加速度列：ACC_X / ACCX / X 等写法等效，且不区分大小写
+const ACC_COLUMN_PATTERN = /^(?:ACC_?)?[XYZ]$/i;
+// 通道列：CH0-3 / Ipd0-3 / Rawdata0-3 / ipd_pa0-3，不区分大小写
+const CHANNEL_COLUMN_PATTERN = /^(?:CH|IPD(?:_PA)?|RAWDATA)[0-3]$/i;
+
 function autoAssignChartGroups(columns: string[], rows: number[][]): IdentifiedChartGroupConfig[] {
   const accColumns: string[] = [];
   const chColumns: string[] = [];
@@ -56,8 +61,8 @@ function autoAssignChartGroups(columns: string[], rows: number[][]): IdentifiedC
   };
   columns.forEach((col) => {
     const baseColumn = col.replace(/ \(\d+\)$/, '');
-    if (/^ACC_?[XYZ]$/i.test(baseColumn) && hasNonZeroData(col)) accColumns.push(col);
-    else if (/^(?:CH|Ipd)[0-3]$/i.test(baseColumn) && hasNonZeroData(col)) chColumns.push(col);
+    if (ACC_COLUMN_PATTERN.test(baseColumn) && hasNonZeroData(col)) accColumns.push(col);
+    else if (CHANNEL_COLUMN_PATTERN.test(baseColumn) && hasNonZeroData(col)) chColumns.push(col);
   });
   return [createChartGroup('图表1', chColumns), createChartGroup('图表2', accColumns)];
 }

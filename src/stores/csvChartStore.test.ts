@@ -149,6 +149,47 @@ describe('CSV chart store isolation and load ordering', () => {
     expect(accelerometerGroup.columns).toEqual(['ACC_X', 'ACC_X (2)']);
   });
 
+  it('preserves configured groups and added charts when opening another CSV', async () => {
+    const channelGroup = {
+      ...createChartGroup('图表1', ['CH0', 'CH1']),
+      height: 420,
+      yAxisMode: 'shared' as const,
+    };
+    const addedGroup = createChartGroup('图表3', ['TEMP']);
+    useCsvChartStore.setState({
+      csvData: result(['CH0', 'CH1', 'TEMP'], [[1, 2, 3]]),
+      filePath: 'old.csv',
+      chartGroups: [channelGroup, addedGroup],
+    });
+    readCsvFile.mockResolvedValue(result(['CH0', 'TEMP', 'NEW'], [[1, 2, 3]]));
+
+    await useCsvChartStore.getState().loadCsvFile('new.csv');
+
+    const groups = useCsvChartStore.getState().chartGroups;
+    expect(groups.map(group => group.name)).toEqual(['图表1', '图表3']);
+    expect(groups.map(group => group.columns)).toEqual([['CH0'], ['TEMP']]);
+    expect(groups[0].id).toBe(channelGroup.id);
+    expect(groups[0].height).toBe(420);
+    expect(groups[0].yAxisMode).toBe('shared');
+  });
+
+  it('keeps groups without matching columns when a new file has different headers', async () => {
+    const channelGroup = createChartGroup('图表1', ['CH0']);
+    useCsvChartStore.setState({
+      csvData: result(['CH0'], [[1]]),
+      filePath: 'old.csv',
+      chartGroups: [channelGroup],
+    });
+    readCsvFile.mockResolvedValue(result(['OTHER'], [[1]]));
+
+    await useCsvChartStore.getState().loadCsvFile('new.csv');
+
+    const groups = useCsvChartStore.getState().chartGroups;
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ id: channelGroup.id, name: '图表1', columns: [] });
+    expect(useCsvChartStore.getState().csvData?.columns).toEqual(['OTHER']);
+  });
+
   it('does not auto-select known waveform columns whose values are all zero', async () => {
     readCsvFile.mockResolvedValue(result(
       ['Ipd0', 'Ipd1', 'Ipd2', 'Ipd3'],

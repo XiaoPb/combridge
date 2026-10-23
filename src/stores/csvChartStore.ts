@@ -62,6 +62,20 @@ function autoAssignChartGroups(columns: string[], rows: number[][]): IdentifiedC
   return [createChartGroup('图表1', chColumns), createChartGroup('图表2', accColumns)];
 }
 
+/**
+ * 打开新文件时保留已有的图表分组与通道配置，仅丢弃新文件中不存在的列名。
+ */
+function preserveChartGroups(
+  previous: IdentifiedChartGroupConfig[],
+  columns: string[],
+): IdentifiedChartGroupConfig[] {
+  const availableColumns = new Set(columns);
+  return previous.map((group) => ({
+    ...group,
+    columns: group.columns.filter((column) => availableColumns.has(column)),
+  }));
+}
+
 let loadGeneration = 0;
 
 export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
@@ -91,7 +105,10 @@ export const useCsvChartStore = create<CsvChartStore>((set, get) => ({
           : { ...DEFAULT_DATA_ZOOM_STATE }
         : get().dataZoomState;
       const lineOffsets = Object.fromEntries(Object.entries(get().lineOffsets).filter(([column]) => csvData.columns.includes(column)));
-      set({ csvData, filePath, chartGroups: autoAssignChartGroups(csvData.columns, csvData.rows), dataZoomState, lineOffsets, isLoading: false });
+      const chartGroups = get().csvData === null
+        ? autoAssignChartGroups(csvData.columns, csvData.rows)
+        : preserveChartGroups(get().chartGroups, csvData.columns);
+      set({ csvData, filePath, chartGroups, dataZoomState, lineOffsets, isLoading: false });
     } catch (err) {
       if (generation !== loadGeneration) return;
       set({ error: formatErrorMessage(err, i18n.t('waveform:errors.loadCsv')), isLoading: false });

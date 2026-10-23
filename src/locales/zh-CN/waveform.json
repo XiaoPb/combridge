@@ -100,6 +100,35 @@
     "perLineYAxis": "独立",
     "lineOffset": "采样点偏移",
     "offsetPoints": "点",
-    "noData": "请选择 CSV 文件"
+    "noData": "请选择 CSV 文件",
+    "guide": {
+      "open": "使用引导",
+      "title": "CSV 加载使用引导",
+      "gotIt": "知道了",
+      "emptyTitle": "开始加载 CSV 数据",
+      "emptySubtitle": "只需三步，即可把 CSV 数据可视化为可交互波形",
+      "step1Title": "加载文件",
+      "step1Desc": "点击「选择文件」选中 .csv 数据文件。",
+      "step2Title": "配置 CSV",
+      "step2Desc": "设置采样率、跳过信息行，按需开启无表头解析。",
+      "step3Title": "选择显示通道",
+      "step3Desc": "在图表分组中勾选通道列，调整 Y 轴与采样点偏移。",
+      "emptyAction": "选择 CSV 文件",
+      "detailAction": "查看完整引导",
+      "loadTitle": "第一步 · 加载文件",
+      "loadPoint1": "点击工具栏的「选择文件」，在系统文件对话框中选择 .csv 文件。",
+      "loadPoint2": "文件按当前解析配置读取；修改配置后点击「重新加载」重新解析。",
+      "loadPoint3": "加载完成后，下方会按自动识别结果生成波形图。",
+      "configTitle": "第二步 · 配置 CSV",
+      "configPoint1": "采样率（Hz）：用于时间轴换算，请填写数据的真实采样频率。",
+      "configPoint2": "跳过信息区域：文件开头存在设备信息等非数据行时，填写需要跳过的行数。",
+      "configPoint3": "无表头：首行就是数据时开启；否则首行将作为列名。",
+      "configPoint4": "显示线统计：在图表上显示每条线的最大值、最小值、平均值与差值。",
+      "channelTitle": "第三步 · 选择显示通道",
+      "channelPoint1": "每个图表分组可独立选择要显示的列；打开文件时会按 ACC_*/CH0-3 等命名自动分配。",
+      "channelPoint2": "Y 轴模式：「独立」为每条线使用独立 Y 轴，「共用」让所有线共享同一 Y 轴。",
+      "channelPoint3": "采样点偏移：按采样点平移某条线，用于对齐不同通道的时序。",
+      "channelPoint4": "可调整图表高度，点击「添加图表」新增分组；在图表底部拖动缩放查看局部，或「导出全部 PNG」保存图片。"
+    }
   }
 }

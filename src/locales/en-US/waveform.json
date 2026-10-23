@@ -100,6 +100,35 @@
     "perLineYAxis": "Independent",
     "lineOffset": "Line offset",
     "offsetPoints": "pts",
-    "noData": "Please select a CSV file"
+    "noData": "Please select a CSV file",
+    "guide": {
+      "open": "Guide",
+      "title": "CSV Loader Guide",
+      "gotIt": "Got it",
+      "emptyTitle": "Get started with CSV data",
+      "emptySubtitle": "Three steps to turn your CSV data into interactive waveforms",
+      "step1Title": "Load a file",
+      "step1Desc": "Click \"Select File\" and choose a .csv data file.",
+      "step2Title": "Configure CSV",
+      "step2Desc": "Set the sample rate, skip info rows, and enable no-header parsing if needed.",
+      "step3Title": "Select channels",
+      "step3Desc": "Pick columns in each chart group and adjust Y-axis mode and line offsets.",
+      "emptyAction": "Select CSV File",
+      "detailAction": "View full guide",
+      "loadTitle": "Step 1 · Load a file",
+      "loadPoint1": "Click \"Select File\" in the toolbar and choose a .csv file from the system dialog.",
+      "loadPoint2": "The file is read with the current parse configuration; click \"Reload\" after changing it.",
+      "loadPoint3": "Once loaded, charts are generated automatically from the detected columns.",
+      "configTitle": "Step 2 · Configure CSV",
+      "configPoint1": "Sample Rate (Hz): used for time-axis conversion; enter the real sampling frequency.",
+      "configPoint2": "Skip Info Rows: enter how many leading non-data rows (device info, etc.) to skip.",
+      "configPoint3": "No Header: enable when the first row is data; otherwise it is used as column names.",
+      "configPoint4": "Show line statistics: display max, min, average and diff for each line on the chart.",
+      "channelTitle": "Step 3 · Select channels",
+      "channelPoint1": "Each chart group selects its own columns; ACC_*/CH0-3 style names are auto-assigned on load.",
+      "channelPoint2": "Y-axis mode: \"Independent\" gives each line its own axis; \"Shared\" uses one axis for all.",
+      "channelPoint3": "Line offset: shift a line by sample points to align channels in time.",
+      "channelPoint4": "Adjust chart height or click \"Add Chart\" for a new group; drag the zoom bar to inspect details, or export all charts as PNG."
+    }
   }
 }

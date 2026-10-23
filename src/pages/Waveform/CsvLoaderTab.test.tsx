@@ -83,6 +83,31 @@ describe('CsvLoaderTab PNG export entry', () => {
     chartProps.lineOffsets = undefined;
   });
 
+  it('shows the three-step empty guide and opens the full guide modal', async () => {
+    render(<CsvLoaderTab />);
+
+    expect(screen.getByText('开始加载 CSV 数据')).toBeTruthy();
+    expect(screen.getByText('加载文件')).toBeTruthy();
+    expect(screen.getByText('配置 CSV')).toBeTruthy();
+    expect(screen.getByText('选择显示通道')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看完整引导' }));
+
+    expect(await screen.findByText('CSV 加载使用引导')).toBeTruthy();
+    expect(screen.getByText('第一步 · 加载文件')).toBeTruthy();
+    expect(screen.getByText('第二步 · 配置 CSV')).toBeTruthy();
+    expect(screen.getByText('第三步 · 选择显示通道')).toBeTruthy();
+  });
+
+  it('opens the guide from the toolbar button', async () => {
+    setCsvData();
+
+    render(<CsvLoaderTab />);
+    fireEvent.click(screen.getByRole('button', { name: /使用引导/ }));
+
+    expect(await screen.findByText('CSV 加载使用引导')).toBeTruthy();
+  });
+
   it('renders and toggles the line statistics switch after the no-header option', async () => {
     setCsvData();
 

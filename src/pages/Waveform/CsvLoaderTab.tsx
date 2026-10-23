@@ -1,11 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Card, Button, Switch, InputNumber, Space, Alert, Typography, Spin, Select, Radio } from 'antd';
-import { FileOutlined, FolderOpenOutlined, DownOutlined, RightOutlined, PlusOutlined, DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
+import {
+  FileOutlined,
+  FolderOpenOutlined,
+  DownOutlined,
+  RightOutlined,
+  PlusOutlined,
+  DeleteOutlined,
+  DownloadOutlined,
+  QuestionCircleOutlined,
+} from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useCsvChartStore } from '../../stores/csvChartStore';
 import MultiLineChart from './MultiLineChart';
 import type { MultiLineChartHandle } from './MultiLineChart';
 import { MAX_LINE_OFFSET_POINTS } from './multiLineChartModel';
+import { CsvEmptyGuide, CsvUsageGuideModal } from './CsvUsageGuide';
 
 const { Text } = Typography;
 const CsvMultiLineChart = MultiLineChart as React.ComponentType<
@@ -17,6 +27,7 @@ const CsvLoaderTab: React.FC = () => {
   const [configCollapsed, setConfigCollapsed] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   const chartRef = useRef<MultiLineChartHandle>(null);
 
   const {
@@ -167,6 +178,14 @@ const CsvLoaderTab: React.FC = () => {
                 {t('csvLoader.exportAllPng')}
               </Button>
             )}
+            <Button
+              type="text"
+              icon={<QuestionCircleOutlined />}
+              onClick={() => setGuideOpen(true)}
+              size="small"
+            >
+              {t('csvLoader.guide.open')}
+            </Button>
           </Space>
         </div>
 
@@ -351,21 +370,14 @@ const CsvLoaderTab: React.FC = () => {
             exportFilePath={filePath ?? undefined}
           />
         ) : (
-          <div
-            style={{
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            <FileOutlined style={{ fontSize: 48, marginBottom: 16 }} />
-            <Text type="secondary">{t('csvLoader.noData')}</Text>
-          </div>
+          <CsvEmptyGuide
+            onSelectFile={handleSelectFile}
+            onOpenGuide={() => setGuideOpen(true)}
+          />
         )}
       </div>
+
+      <CsvUsageGuideModal open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
   );
 };

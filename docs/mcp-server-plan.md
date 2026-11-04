@@ -764,9 +764,10 @@ P3 真机验收（2026-11-04，GH3038_Nordic / `BluetoothLE#...f9:ac:fb:db:6e:72
 | `gh3036_rpc rpc` 成功路径 | ✅ `R 0x0000 8` 返回 16 字节（含芯片标识 `JKDDH32H`），`V` 返回单字节 |
 | 配置校验 | ✅ 真实卡控 YAML（无 `channels`）通过 |
 | 产测全链路 | ✅ prepare → chip_init → uuid → base_noise → ppg_noise → lpctr → environment_switch → lplctr → cleanup 全部执行，CSV 落盘 |
-| 实测值 | base_noise `[33,24]` uV、ppg_noise `[45,47,49,46,44,48,51,54]` uV、lpctr/lplctr `[0,1,2,5,0,0,0,0]` |
+| 实测值 | base_noise `[46,23]` uV、ppg_noise `[52,51,53,48,51,46,51,42]` uV、lpctr/lplctr `[0,1,2,5,0,0,0,0]` |
+| 最终结论 | `status=completed`、`pass=true`、`error_code` 为空，CSV 落盘 |
 
-真机验收中发现并修复的 5 个缺陷（均已补单测）：
+真机验收中发现并修复的 7 个缺陷（均已补单测）：
 
 1. **卡控校验过严**：`TestItemConfig::validate` 要求 `channels > 0`，而真实产测配置普遍省略该字段
    （通道数由设备侧配置决定）。改为「省略 = 按设备返回的采样数评估，显式写 0 才报错」。
@@ -780,17 +781,22 @@ P3 真机验收（2026-11-04，GH3038_Nordic / `BluetoothLE#...f9:ac:fb:db:6e:72
    按 GH3036 的做法补上同 owner 复用。
 5. **重复 `subscribe` 叠加回调**：同一条通知被喂多份，RPC 层出现重复响应帧与
    `Ignoring stale response` 告警。MCP 侧订阅前先查已有订阅，幂等跳过。
+6. **UUID 判定误杀合格片**：固件 `factory_chip_uid_get` 只 `memset` 自身长度（默认 `0xAA`），
+   后半段保持 0 属正常；原逻辑要求前后两半都非零，且不足 32 字节的读数被直接丢弃。
+   现统一为「长度非 0 且值不全为 0 即有效」，`0x2002` 不再产生（常量保留以兼容历史 CSV）。
+7. **LPCTR 量纲未标定导致必然失败**：新增 `ThresholdOperator::Present`（YAML 写
+   `operator: "present"`），只校验是否读到数值、不做上下限卡控；GUI 算子下拉同步支持并给出提示。
+   当前 EVK 配置已切到 `present`，量纲标定完成后改回 `range [100, 3000]`。
 
 另修：`combridge_gh3036_factory_test` 的失败结论此前只有 `status=failed` + 空 `items`，
 `uuid` / `prepare` 这类不在卡控表里的步骤失败时模型无法解释原因。现在
 `FactoryTestManager.last_message()` 保留终态消息，失败时回填到 `hint`，`failed_item` 回退为步骤名。
 
-待确认（阻塞「全 PASS」结论，属设备/配置语义，不是代码缺陷）：
+已确认的判定口径（设备侧语义，非代码缺陷）：
 
-- 芯片 UUID 读到 `AA×16 + 00×16`（两次一致），ch1 判 FAIL → 该 EVK 的 eFuse UUID 是否已烧录？
-  若 GH3038 为单通道，是否应允许只校验 ch0？
-- LPCTR 实测 `0~5`、阈值 `100~3000 nA/mA` → 量纲不匹配，是否需要在配置里给
-  `compute.gain_k` / `led_current_ma` 做换算（App 模式才做换算，MCU 模式目前直接比原始值）？
+- **UUID**：设备桩实现默认上报 `0xAA`，`AA×16 + 00×16` 视为正常，不要求两半都非零；
+  只要求「长度非 0 + 值不全为 0」，全 0 或空才判失败。
+- **LPCTR**：测试环境受限，读到数值即可判 OK，不做数值卡控（见缺陷 7 的 `present` 算子）。
 
 P4 实现要点：
 

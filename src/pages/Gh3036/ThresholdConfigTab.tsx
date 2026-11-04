@@ -62,7 +62,7 @@ interface ThresholdFormValue {
 }
 
 const TEST_KEYS: TestKey[] = ['base_noise', 'ppg_noise', 'lpctr', 'lplctr'];
-const OPERATORS: ThresholdOperator[] = ['lt', 'le', 'gt', 'ge', 'eq', 'ne', 'range'];
+const OPERATORS: ThresholdOperator[] = ['lt', 'le', 'gt', 'ge', 'eq', 'ne', 'range', 'present'];
 const OPERATOR_SYMBOLS: Record<ThresholdOperator, string> = {
   lt: '<',
   le: '<=',
@@ -71,6 +71,7 @@ const OPERATOR_SYMBOLS: Record<ThresholdOperator, string> = {
   eq: '=',
   ne: '!=',
   range: '[]',
+  present: '+',
 };
 const PROJECT_NAME_PATTERN = /^[\u4e00-\u9fa5A-Za-z0-9_-]+$/;
 
@@ -133,6 +134,12 @@ const buildThreshold = (value: {
   description?: string;
 }): ThresholdConfig => {
   const operator = value.operator || 'lt';
+  if (operator === 'present') {
+    return {
+      operator,
+      description: value.description || undefined,
+    };
+  }
   if (operator === 'range') {
     return {
       operator,
@@ -150,6 +157,12 @@ const buildThreshold = (value: {
 const getThresholdFormValue = (threshold?: ThresholdConfig): Partial<TestFormValue> => {
   if (!threshold) {
     return {};
+  }
+  if (threshold.operator === 'present') {
+    return {
+      operator: threshold.operator,
+      description: threshold.description,
+    };
   }
   if (threshold.operator === 'range') {
     return {
@@ -360,6 +373,15 @@ const ThresholdConfigTab: React.FC = () => {
       <Form.Item noStyle shouldUpdate>
         {({ getFieldValue }) => {
           const operator = getFieldValue([...namePath, 'operator']);
+          if (operator === 'present') {
+            return (
+              <Col span={12}>
+                <Form.Item label={t('threshold.value')}>
+                  <Text type="secondary">{t('threshold.presentHint')}</Text>
+                </Form.Item>
+              </Col>
+            );
+          }
           if (operator === 'range') {
             return (
               <>

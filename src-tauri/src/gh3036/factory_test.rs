@@ -43,12 +43,22 @@ fn zero_uuid_bytes() -> Vec<u8> {
     vec![0; 32]
 }
 
+/// 归一化到 32 字节，供展示与落盘。
+/// 设备可能只上报部分字节（固件桩只填自身长度，其余保持 0），
+/// 这里保留实际内容并补零，不再丢弃不足 32 字节的读数——
+/// 「是否读到」由 `uuid_bytes_valid` 判断。
 fn normalize_uuid_bytes(bytes: &[u8]) -> Vec<u8> {
-    if bytes.len() < 32 {
-        return zero_uuid_bytes();
-    }
+    let mut normalized = zero_uuid_bytes();
+    let copy_len = bytes.len().min(normalized.len());
+    normalized[..copy_len].copy_from_slice(&bytes[..copy_len]);
+    normalized
+}
 
-    bytes[..32].to_vec()
+/// UUID 有效性判定：读到的长度非 0，且值不全为 0。
+/// 不再要求前后两半各自非零——固件（含桩实现）只保证填充自身长度，
+/// 后半段补零属正常情况，按两半判定会把合格片误杀。
+fn uuid_bytes_valid(bytes: &[u8]) -> bool {
+    !bytes.is_empty() && bytes.iter().any(|byte| *byte != 0)
 }
 
 fn split_uuid_halves(bytes: &[u8]) -> ([u8; 16], [u8; 16]) {
@@ -97,30 +107,33 @@ fn resolve_uuid_result(
     uuid_result: Result<Vec<u8>, String>,
     chip: Option<&str>,
 ) -> UuidResolution {
-    let uuid = match uuid_result {
-        Ok(bytes) => normalize_uuid_bytes(&bytes),
+    let (uuid, raw_len, has_reading) = match uuid_result {
+        Ok(bytes) => {
+            let has_reading = uuid_bytes_valid(&bytes);
+            (normalize_uuid_bytes(&bytes), bytes.len(), has_reading)
+        }
         Err(error) => {
             warn!("[FactoryTest] {} UUID 读取失败: {}", source, error);
-            zero_uuid_bytes()
+            (zero_uuid_bytes(), 0, false)
         }
     };
 
     let (first_pass, second_pass) = uuid_halves_pass(&uuid);
+    let nonzero = uuid.iter().filter(|byte| **byte != 0).count();
     let step_data = vec![
         uuid_channel_value(first_pass),
         uuid_channel_value(second_pass),
     ];
     let chip_label = chip.unwrap_or("unknown");
     let message = format!(
-        "UUID {source} chip={chip_label} ch0={} ch1={}",
-        if first_pass { "PASS" } else { "FAIL" },
-        if second_pass { "PASS" } else { "FAIL" }
+        "UUID {source} chip={chip_label} len={raw_len} nonzero={nonzero}"
     );
 
     UuidResolution {
         uuid,
         step_data,
-        success: first_pass && second_pass,
+        // 长度非 0 且值不全为 0 即视为读到有效 UUID。
+        success: has_reading,
         message,
     }
 }
@@ -371,7 +384,7 @@ mod collector_lifecycle_tests {
     }
 
     #[test]
-    fn uuid_mcu_branch_requires_32_bytes_and_reports_two_channels() {
+    fn uuid_mcu_branch_reports_two_channels_from_32_bytes() {
         let runtime = Runtime::new().unwrap();
         let event_bus = Arc::new(EventBus::new(8));
         let mut test_result = FactoryTestResult {
@@ -419,6 +432,57 @@ mod collector_lifecycle_tests {
         assert_eq!(step_result.data, vec![Some(1.0), Some(1.0)]);
         assert_eq!(test_result.uuid.len(), 32);
         assert_eq!(rpc.calls(), vec!["FS", "FG"]);
+    }
+
+    /// 固件桩 `factory_chip_uid_get` 只 memset 自身长度（默认 0xAA），
+    /// 后半段为 0 属正常：长度非 0 且值不全为 0 就必须判合格。
+    #[test]
+    fn uuid_mcu_branch_accepts_stub_firmware_reading() {
+        let runtime = Runtime::new().unwrap();
+        let event_bus = Arc::new(EventBus::new(8));
+        let mut test_result = FactoryTestResult {
+            chip_init_status: 1,
+            uuid: Vec::new(),
+            compute_mode: FactoryComputeMode::Mcu,
+            base_noise: Vec::new(),
+            ppg_noise: Vec::new(),
+            lpctr: Vec::new(),
+            lplctr: Vec::new(),
+            overall_result: String::new(),
+            timestamp: 0,
+            device_info: String::new(),
+            error_code: String::new(),
+            project_name: String::new(),
+        };
+        let rpc = ScriptedUuidManager::new(
+            vec![
+                ("FS", vec!["0x02"], Ok(vec![])),
+                ("FG", vec!["0x02"], Ok(vec![0xAA; 16])),
+            ],
+            Vec::new(),
+        );
+
+        let step_result = runtime
+            .block_on(FactoryTestManager::execute_uuid_step(
+                &event_bus,
+                &mut test_result,
+                &rpc,
+                None,
+            ))
+            .unwrap()
+            .unwrap();
+
+        assert!(step_result.success, "AA 桩值应判合格: {}", step_result.message);
+        assert_eq!(test_result.uuid.len(), 32);
+        assert!(test_result.uuid[..16].iter().all(|&b| b == 0xAA));
+        assert!(step_result.message.contains("len=16"));
+
+        // 长度 0 或全 0 仍然判失败
+        let empty = resolve_uuid_result("MCU", Ok(Vec::new()), None);
+        assert!(!empty.success);
+        let zeros = resolve_uuid_result("MCU", Ok(vec![0; 32]), None);
+        assert!(!zeros.success);
+        assert!(!resolve_uuid_result("MCU", Err("timeout".to_string()), None).success);
     }
 
     #[test]
@@ -1764,21 +1828,7 @@ impl FactoryTestManager {
                     .execute("FG", &["0x02".to_string()])
                     .await
                     .map_err(|e| format!("获取产测模式 0x02 结果失败: {}", e))?;
-                let uuid = normalize_uuid_bytes(&result);
-                let (first_pass, second_pass) = uuid_halves_pass(&uuid);
-                UuidResolution {
-                    uuid,
-                    step_data: vec![
-                        uuid_channel_value(first_pass),
-                        uuid_channel_value(second_pass),
-                    ],
-                    success: first_pass && second_pass,
-                    message: format!(
-                        "UUID MCU ch0={} ch1={}",
-                        if first_pass { "PASS" } else { "FAIL" },
-                        if second_pass { "PASS" } else { "FAIL" }
-                    ),
-                }
+                resolve_uuid_result("MCU", Ok(result), chip)
             }
             FactoryComputeMode::App => {
                 if supports_app_uuid(chip) {

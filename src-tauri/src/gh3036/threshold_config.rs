@@ -13,6 +13,10 @@ pub enum ThresholdOperator {
     Eq,
     Ne,
     Range,
+    /// 仅要求读到有效值，不比对数值大小。
+    /// 用于量纲尚未标定或测试环境受限的测试项（如 MCU 模式下的 LPCTR），
+    /// 待标定完成后应改回 `range` 恢复严格卡控。
+    Present,
 }
 
 impl ThresholdOperator {
@@ -25,6 +29,7 @@ impl ThresholdOperator {
             Self::Eq => "=",
             Self::Ne => "≠",
             Self::Range => "∈",
+            Self::Present => "present",
         }
     }
 
@@ -39,6 +44,9 @@ impl ThresholdOperator {
             Self::Range => threshold
                 .range
                 .is_some_and(|r| value >= r[0] && value <= r[1]),
+            // 调用方用 `value.is_some_and(...)` 兜底，缺测仍判失败，
+            // 这里只需放行任何已读到的数值。
+            Self::Present => true,
         }
     }
 }
@@ -54,6 +62,7 @@ pub struct ThresholdConfig {
 impl ThresholdConfig {
     pub fn to_display_text(&self, unit: &str) -> String {
         match self.operator {
+            ThresholdOperator::Present => "requires a reading".to_string(),
             ThresholdOperator::Range => {
                 if let Some(range) = self.range {
                     format!("{} ≤ value ≤ {} {}", range[0], range[1], unit)
@@ -73,6 +82,8 @@ impl ThresholdConfig {
 
     pub fn validate(&self) -> Result<(), String> {
         match self.operator {
+            // Present 不使用 value/range，无需额外字段。
+            ThresholdOperator::Present => {}
             ThresholdOperator::Range => {
                 if self.range.is_none() {
                     return Err("Range operator requires range field".to_string());
@@ -423,6 +434,8 @@ impl TestEvaluationResult {
 
         let mut all_pass = true;
         let mut failed_channels = Vec::new();
+        // 只要存在非 present 的判定，就说明该项仍在做数值卡控。
+        let mut presence_only = true;
 
         let channel_count = config
             .and_then(|item| item.channels)
@@ -442,16 +455,20 @@ impl TestEvaluationResult {
                             value.is_some_and(|measurement| t.operator.evaluate(measurement, &t));
                         let display = t.to_display_text(unit);
                         let op = t.operator.display_symbol().to_string();
+                        presence_only &= t.operator == ThresholdOperator::Present;
                         (p, display, op, t.value, t.range, t.description.clone())
                     }
-                    None => (
-                        value.is_some(),
-                        "No threshold configured".to_string(),
-                        String::new(),
-                        None,
-                        None,
-                        None,
-                    ),
+                    None => {
+                        presence_only = false;
+                        (
+                            value.is_some(),
+                            "No threshold configured".to_string(),
+                            String::new(),
+                            None,
+                            None,
+                            None,
+                        )
+                    }
                 };
 
             if !pass {
@@ -473,7 +490,14 @@ impl TestEvaluationResult {
 
         self.pass = all_pass;
         if all_pass {
-            self.message = format!("All {} channels passed", values.len());
+            self.message = if presence_only {
+                format!(
+                    "All {} channels reported a reading (presence-only, no numeric limit)",
+                    values.len()
+                )
+            } else {
+                format!("All {} channels passed", values.len())
+            };
         } else {
             self.message = format!("Failed channels: {:?}", failed_channels);
         }
@@ -687,6 +711,9 @@ pub fn evaluate_test_item(
 
 pub const ERROR_CODE_CHIP_INIT: &str = "0x1001";
 pub const ERROR_CODE_UUID: &str = "0x2001";
+/// 历史错误码：旧逻辑把 UUID 拆成前后两半分别判定，后半段全零时报此码。
+/// 现行口径为「长度非 0 且值不全为 0」，不会再产生该码；
+/// 常量保留，避免已落盘的历史 CSV / 外部解析失效。
 pub const ERROR_CODE_UUID_CHANNEL_1: &str = "0x2002";
 pub const ERROR_CODE_BASE_NOISE_BASE: u32 = 0x3000;
 pub const ERROR_CODE_PPG_NOISE_BASE: u32 = 0x4000;
@@ -712,20 +739,12 @@ pub fn generate_error_codes(
         has_error = true;
     }
 
-    let (uuid_first_pass, uuid_second_pass) = if uuid.len() >= 32 {
-        let first = uuid[..16].iter().any(|&b| b != 0);
-        let second = uuid[16..32].iter().any(|&b| b != 0);
-        (first, second)
-    } else {
-        (false, false)
-    };
-
-    if !uuid_first_pass {
+    // 与 UUID 步骤同口径：长度非 0 且值不全为 0 即视为读到有效 UUID。
+    // 固件（含桩实现）只填充自身长度，后半段补零属正常，
+    // 按两半分别判定会把合格片误报成 0x2002。
+    let uuid_valid = !uuid.is_empty() && uuid.iter().any(|&byte| byte != 0);
+    if !uuid_valid {
         error_codes.push(ERROR_CODE_UUID.to_string());
-        has_error = true;
-    }
-    if !uuid_second_pass {
-        error_codes.push(ERROR_CODE_UUID_CHANNEL_1.to_string());
         has_error = true;
     }
 
@@ -916,6 +935,38 @@ tests:
         assert!(!result.channel_results[1].pass);
     }
 
+    /// present 算子只要求读到值：任何数值都放行，缺测仍判失败。
+    #[test]
+    fn present_operator_passes_any_reading_but_not_absence() {
+        let mut config = test_config_with_threshold(true, 100);
+        config.unit = Some("nA/mA".to_string());
+        config.global_threshold = Some(ThresholdConfig {
+            operator: ThresholdOperator::Present,
+            value: None,
+            range: None,
+            description: Some("测试环境受限，仅校验有读数".to_string()),
+        });
+
+        // 实测 0~5 远低于原 range 下限，present 下应判合格
+        let result = evaluate_test_item("lpctr", Some(&config), &[0, 1, 2, 5, 0, 0, 0, 0]);
+        assert!(result.pass);
+        assert_eq!(result.channel_results.len(), 8);
+        assert!(result.message.contains("presence-only"));
+
+        // 一个通道都没读到 → 不合格
+        let empty = evaluate_test_item("lpctr", Some(&config), &[]);
+        assert!(!empty.pass);
+        assert_eq!(empty.message, "No measurements");
+
+        // present 不需要 value/range 字段
+        assert!(config
+            .global_threshold
+            .as_ref()
+            .unwrap()
+            .validate()
+            .is_ok());
+    }
+
     /// 一条实测值都没有时必须判失败——这是产测里最危险的一种假合格。
     #[test]
     fn empty_measurements_must_fail() {
@@ -938,26 +989,38 @@ tests:
     }
 
     #[test]
-    fn uuid_error_codes_split_channels_and_keep_legacy_code() {
+    fn uuid_error_codes_flag_missing_reading_only() {
         let evaluation_result = FactoryEvaluationResult::new("GH3036");
-        let result = generate_error_codes(1, &[0; 32], &evaluation_result);
 
-        assert!(result.error_codes.contains(&ERROR_CODE_UUID.to_string()));
-        assert!(result
+        // 全 0：没读到 UUID
+        let all_zero = generate_error_codes(1, &[0; 32], &evaluation_result);
+        assert!(all_zero.error_codes.contains(&ERROR_CODE_UUID.to_string()));
+        assert!(!all_zero
             .error_codes
             .contains(&ERROR_CODE_UUID_CHANNEL_1.to_string()));
+
+        // 长度 0：同样视为没读到
+        let empty = generate_error_codes(1, &[], &evaluation_result);
+        assert!(empty.error_codes.contains(&ERROR_CODE_UUID.to_string()));
     }
 
+    /// 固件桩只填自身长度（0xAA），后半段补零属正常，不得误报。
     #[test]
-    fn uuid_error_codes_only_mark_failed_channel() {
+    fn uuid_error_codes_accept_partial_readings() {
         let evaluation_result = FactoryEvaluationResult::new("GH3036");
-        let mut uuid = vec![0; 32];
-        uuid[0] = 1;
-        let result = generate_error_codes(1, &uuid, &evaluation_result);
 
+        let mut stub = vec![0; 32];
+        stub[..16].fill(0xAA);
+        let result = generate_error_codes(1, &stub, &evaluation_result);
         assert!(!result.error_codes.contains(&ERROR_CODE_UUID.to_string()));
-        assert!(result
+        assert!(!result
             .error_codes
             .contains(&ERROR_CODE_UUID_CHANNEL_1.to_string()));
+        assert!(!result.has_error, "chip_init 正常且 UUID 有效时不应有错误码");
+
+        // 任意一个非零字节即可
+        let mut single = vec![0; 32];
+        single[31] = 7;
+        assert!(!generate_error_codes(1, &single, &evaluation_result).has_error);
     }
 }

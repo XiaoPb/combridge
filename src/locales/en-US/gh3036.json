@@ -242,7 +242,9 @@
       "ge": "Greater than or equal",
       "eq": "Equal",
       "ne": "Not equal",
-      "range": "Within range"
-    }
+      "range": "Within range",
+      "present": "Any reading"
+    },
+    "presentHint": "This test only checks that a reading exists, with no numeric limits. Switch back to “Within range” once the unit is calibrated."
   }
 }

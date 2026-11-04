@@ -5,7 +5,7 @@
 | 文档版本 | v1.0 FINAL |
 | 日期 | 2026-11-04（§6.4 / §8.3~§8.6 / §9.0 随 P4、P5a、P5b 落地同步更新） |
 | 适用代码版本 | ComBridge v0.7.2（Tauri 2.0，后端 Rust 10,521 行） |
-| 状态 | 方案定稿；P0~P5 已实现（含设置页与 i18n），P6 待排期 |
+| 状态 | 方案定稿；P0~P5 已实现（含设置页与 i18n），P3 真机验收完成，P6 待排期 |
 | 决策人 | 产品 + 研发 |
 
 ---
@@ -701,7 +701,7 @@ L2 / L3 通过 MCP 的 **elicitation** 让客户端弹窗询问用户，而不�
 | P0 骨架 | ✅ 已完成 | `src-tauri/src/mcp/{mod,auth,ctx,server}.rs`；`rmcp = "=3.8.0"`；默认关闭，`%LOCALAPPDATA%\combridge\mcp.json` 开启 |
 | P1 串口闭环 | ✅ 已完成 | 新增 `mcp/{lease,serial_hub}.rs`；7 个工具（`about` + `ports` + 5 个 `serial_*`）；租约随 P1 一起落地（按 §9.2 建议提前） |
 | P2 设备与 BLE | ✅ 已完成 | 新增 `mcp/ble_hub.rs`；工具 `combridge_devices` / `combridge_ble_scan` / `combridge_ble_connect` / `combridge_ble_gatt`；BLE 连接租约资源名 `ble:<address>` |
-| P3 GH3036 与产测 | ✅ 已实现（真机验收待补） | 新增 `mcp/gh3036_job.rs`；工具 `combridge_gh3036_rpc` / `combridge_gh3036_factory_test`；`FactoryTestManager` 增加 CSV 路径访问器 |
+| P3 GH3036 与产测 | ✅ 已完成（真机已验收，见下） | 新增 `mcp/gh3036_job.rs`；工具 `combridge_gh3036_rpc` / `combridge_gh3036_factory_test`；`FactoryTestManager` 增加 CSV 路径与终态消息访问器 |
 | P4 其余业务域 | ✅ 已完成（OTA 真机烧录待验） | 新增 `mcp/{ota_confirm,logs}.rs`；工具 `combridge_waveform` / `combridge_protocol` / `combridge_ota`；`combridge_about` 增加 `action=logs`。**对外 16 个工具** |
 | P5 安全与产品化 | ✅ 已完成 | P5a 后端：`mcp/{audit,ratelimit,elicit}.rs`，审计 / 限流 / 熔断 / elicitation 全部收口在 `call_tool`。P5b 前端：系统页新增「集成」tab（`pages/System/McpIntegration.tsx` + `commands/mcp.rs`），开关/端口/档位当场生效、一键复制客户端配置、审计入口，中英文案齐备 |
 
@@ -753,6 +753,44 @@ P3 实现要点：
 - `FactoryTestManager` 新增 `csv_path_for_project` / `result_csv_path`，`Gh3036Manager` 暴露
   `factory_test_csv_path`，路径规则不再在 MCP 侧重写一遍。
 - 未实现：`threshold_validate` / `threshold_save`（属 GUI 侧编辑场景，MCP 目前只需 `threshold_get`）。
+
+P3 真机验收（2026-11-04，GH3038_Nordic / `BluetoothLE#...f9:ac:fb:db:6e:72`，服务 `0000190e`，
+写入 `00000004` / 通知 `00000003`，配置目录 `E:\Code\Goodix\l-evk-t2-gh3038-q\config\factory_config`）：
+
+| 验证项 | 结果 |
+|---|---|
+| `ble_scan` → `ble_connect` → `discover_services` → `subscribe` | ✅ 4 个服务，GH3036 私有服务特征与默认 UUID 一致 |
+| `gh3036_rpc init` / `set_channel(tx,rx)` | ✅ BLE 通道配置成功，`status` 回读一致 |
+| `gh3036_rpc rpc` 成功路径 | ✅ `R 0x0000 8` 返回 16 字节（含芯片标识 `JKDDH32H`），`V` 返回单字节 |
+| 配置校验 | ✅ 真实卡控 YAML（无 `channels`）通过 |
+| 产测全链路 | ✅ prepare → chip_init → uuid → base_noise → ppg_noise → lpctr → environment_switch → lplctr → cleanup 全部执行，CSV 落盘 |
+| 实测值 | base_noise `[33,24]` uV、ppg_noise `[45,47,49,46,44,48,51,54]` uV、lpctr/lplctr `[0,1,2,5,0,0,0,0]` |
+
+真机验收中发现并修复的 5 个缺陷（均已补单测）：
+
+1. **卡控校验过严**：`TestItemConfig::validate` 要求 `channels > 0`，而真实产测配置普遍省略该字段
+   （通道数由设备侧配置决定）。改为「省略 = 按设备返回的采样数评估，显式写 0 才报错」。
+2. **MCU 模式采集窗口丢失（回归）**：`run_hardware_test` 启动 TEST1 后立即 `S 0x40 1` 停止，
+   芯片来不及产出结果 → `FG` 返回空数组。改为启动后先等采集窗口（`compute.timeout_ms` 或默认 3s）、
+   停止后再留 1s 给芯片整理。
+3. **空数据被判合格（最危险）**：`channels=0` 时 `measurements.len() == channels` 恒真，
+   加上 `evaluate_channels` 对空数组 `channel_count=0` 不进入循环 → 「0 通道全部通过」的假 PASS。
+   现在空测量一律判失败（`No measurements`），MCU 侧同时要求实测非空。
+4. **同 owner 重复 `ble_connect` 被自己的租约挡住**：`BLE_BUSY` 指向自己，只能 force 抢占自己。
+   按 GH3036 的做法补上同 owner 复用。
+5. **重复 `subscribe` 叠加回调**：同一条通知被喂多份，RPC 层出现重复响应帧与
+   `Ignoring stale response` 告警。MCP 侧订阅前先查已有订阅，幂等跳过。
+
+另修：`combridge_gh3036_factory_test` 的失败结论此前只有 `status=failed` + 空 `items`，
+`uuid` / `prepare` 这类不在卡控表里的步骤失败时模型无法解释原因。现在
+`FactoryTestManager.last_message()` 保留终态消息，失败时回填到 `hint`，`failed_item` 回退为步骤名。
+
+待确认（阻塞「全 PASS」结论，属设备/配置语义，不是代码缺陷）：
+
+- 芯片 UUID 读到 `AA×16 + 00×16`（两次一致），ch1 判 FAIL → 该 EVK 的 eFuse UUID 是否已烧录？
+  若 GH3038 为单通道，是否应允许只校验 ch0？
+- LPCTR 实测 `0~5`、阈值 `100~3000 nA/mA` → 量纲不匹配，是否需要在配置里给
+  `compute.gain_k` / `led_current_ma` 做换算（App 模式才做换算，MCU 模式目前直接比原始值）？
 
 P4 实现要点：
 

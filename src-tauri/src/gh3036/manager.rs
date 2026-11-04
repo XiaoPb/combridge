@@ -1591,6 +1591,11 @@ impl Gh3036Manager {
             .map(|p| p.display().to_string())
     }
 
+    /// 最近一次产测的终态消息（MCP 用来解释失败原因）。
+    pub fn factory_test_last_message(&self) -> Option<String> {
+        self.factory_test_manager.last_message()
+    }
+
     pub fn validate_threshold_config(&self) -> super::ThresholdConfigValidation {
         self.factory_test_manager.validate_threshold_config()
     }

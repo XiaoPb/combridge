@@ -1617,23 +1617,47 @@ regex=true 时 pattern 为正则，否则为子串匹配；默认只匹配 since
 
         match action.as_str() {
             "connect" => {
-                let lease = self
-                    .ctx
-                    .leases
-                    .acquire(&resource, &req.owner, req.ttl_s, req.force)
-                    .map_err(|e| match e {
-                        AcquireError::Busy(info) => tool_err_full(
-                            "BLE_BUSY",
-                            format!(
-                                "{} 的租约被 {} 持有（lease={}，{} 过期）",
-                                req.address, info.current_owner, info.lease_id, info.expires_at
+                // 同一 owner 已持有租约时直接复用：否则同一客户端「连一次、再连一次」
+                // （或断线后重连）会被自己的租约挡住，只能 force 抢占自己。
+                let existing = if req.force {
+                    None
+                } else {
+                    self.ctx
+                        .leases
+                        .current(&resource)
+                        .filter(|l| l.owner == req.owner)
+                };
+                let lease = match existing {
+                    Some(lease) => {
+                        tracing::info!(
+                            "[MCP] 复用 BLE 租约 {} -> {} (lease={})",
+                            req.address,
+                            req.owner,
+                            lease.lease_id
+                        );
+                        lease
+                    }
+                    None => self
+                        .ctx
+                        .leases
+                        .acquire(&resource, &req.owner, req.ttl_s, req.force)
+                        .map_err(|e| match e {
+                            AcquireError::Busy(info) => tool_err_full(
+                                "BLE_BUSY",
+                                format!(
+                                    "{} 的租约被 {} 持有（lease={}，{} 过期）",
+                                    req.address,
+                                    info.current_owner,
+                                    info.lease_id,
+                                    info.expires_at
+                                ),
+                                Some(
+                                    "等租约过期后重试；或用 force=true 重新调用 combridge_ble_connect 抢占",
+                                ),
+                                true,
                             ),
-                            Some(
-                                "等租约过期后重试；或用 force=true 重新调用 combridge_ble_connect 抢占",
-                            ),
-                            true,
-                        ),
-                    })?;
+                        })?,
+                };
 
                 match self.ctx.ble.connect(&req.address).await {
                     Ok(conn) => {
@@ -1827,12 +1851,23 @@ subscribe（需 lease_id）/ unsubscribe（需 lease_id）/ notifications（游�
             }
             "subscribe" => {
                 require_lease()?;
-                let cb: crate::device::ble::NotifyCallback = Arc::new(|_a, _c, _d| {});
-                self.ctx
+                // 重复订阅会在后端叠加回调：同一条通知被喂多份，
+                // RPC 侧还会看到重复响应帧（stale response 告警）。
+                if !self
+                    .ctx
                     .ble
-                    .subscribe_notify(&req.address, &req.char_uuid, cb)
+                    .get_subscriptions(&req.address)
                     .await
-                    .map_err(|e| mcp_err(format!("订阅失败: {e}")))?;
+                    .iter()
+                    .any(|c| c == &req.char_uuid)
+                {
+                    let cb: crate::device::ble::NotifyCallback = Arc::new(|_a, _c, _d| {});
+                    self.ctx
+                        .ble
+                        .subscribe_notify(&req.address, &req.char_uuid, cb)
+                        .await
+                        .map_err(|e| mcp_err(format!("订阅失败: {e}")))?;
+                }
                 // 清空旧通知，游标从此刻起算
                 let cursor = self.ctx.ble_hub.reset_to_now(&req.address, &req.char_uuid);
                 resp.next_cursor = Some(cursor);
@@ -2087,7 +2122,10 @@ action=rpc 执行一条 RPC（command_key 取自 catalog，params 按命令定�
                         tool_err_full(
                             "GH3036_RPC_FAILED",
                             format!("RPC {key} 执行失败: {e}"),
-                            Some("检查通道是否已配置且设备在线；参数格式见 action=catalog"),
+                            Some(
+                                "检查通道是否已配置且设备在线；BLE 通道首次使用需先 discover_services \
+并订阅通知特征；参数格式见 action=catalog",
+                            ),
                             true,
                         )
                     })?;
@@ -2964,7 +3002,7 @@ impl ComBridgeMcp {
         let result = self.ctx.gh3036.factory_test_get_result();
         let evaluation = self.ctx.gh3036.get_evaluation_result();
         let csv_path = self.ctx.gh3036.factory_test_csv_path();
-        super::gh3036_job::build_summary(
+        let mut summary = super::gh3036_job::build_summary(
             job,
             status,
             step,
@@ -2972,7 +3010,21 @@ impl ComBridgeMcp {
             evaluation.as_ref(),
             csv_path,
             None,
-        )
+        );
+        // 失败时补上终态消息：UUID/准备步骤这类不在卡控表里的失败
+        // 在 items 里没有对应项，只靠 status=failed 模型无法解释原因。
+        if matches!(
+            status,
+            FactoryTestStatus::Failed | FactoryTestStatus::Stopped
+        ) {
+            if summary.hint.is_none() {
+                summary.hint = self.ctx.gh3036.factory_test_last_message();
+            }
+            if summary.failed_item.is_none() {
+                summary.failed_item = Some(super::gh3036_job::step_str(step));
+            }
+        }
+        summary
     }
 
     /// 危险操作前的用户确认（标准档），研发档跳过。

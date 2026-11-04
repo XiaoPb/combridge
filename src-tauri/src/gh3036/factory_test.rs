@@ -32,6 +32,13 @@ use super::types::{
 };
 use crate::service::EventBus;
 
+/// MCU 模式下的默认采集窗口：启动 TEST1 后至少跑这么久芯片才会给出结果。
+/// 卡控配置里写了 `compute.timeout_ms` 时以配置为准。
+const MCU_COLLECT_MS: u64 = 3_000;
+
+/// 停止 TEST1 后留给芯片整理结果的时间。
+const MCU_SETTLE_MS: u64 = 1_000;
+
 fn zero_uuid_bytes() -> Vec<u8> {
     vec![0; 32]
 }
@@ -129,6 +136,9 @@ pub struct FactoryTestManager {
     threshold_config: Mutex<Option<FactoryThresholdConfig>>,
     evaluation_result: Arc<Mutex<Option<FactoryEvaluationResult>>>,
     frame_collector: Arc<Mutex<FactoryFrameCollector>>,
+    /// 最近一次终态消息（失败原因/完成说明）。
+    /// 进度事件只在 EventBus 上广播一次，MCP 事后查询拿不到，故留一份快照。
+    last_message: Arc<Mutex<Option<String>>>,
 }
 
 #[cfg(test)]
@@ -785,7 +795,13 @@ impl FactoryTestManager {
             threshold_config: Mutex::new(None),
             evaluation_result: Arc::new(Mutex::new(None)),
             frame_collector: Arc::new(Mutex::new(FactoryFrameCollector::default())),
+            last_message: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /// 最近一次产测的终态消息（失败原因或完成说明）。
+    pub fn last_message(&self) -> Option<String> {
+        self.last_message.lock().clone()
     }
 
     pub fn set_config_dir(&self, dir: PathBuf) {
@@ -1102,6 +1118,8 @@ impl FactoryTestManager {
         let threshold_config = self.threshold_config.lock().clone();
         let evaluation_result_clone = self.evaluation_result.clone();
         let frame_collector = self.frame_collector.clone();
+        let last_message = self.last_message.clone();
+        *last_message.lock() = None;
 
         let thread_handle = thread::spawn(move || {
             info!("[FactoryTest] 产测流程线程启动");
@@ -1382,6 +1400,7 @@ impl FactoryTestManager {
                     terminal_status,
                     terminal_step,
                 );
+                *last_message.lock() = Some(message.clone());
                 Self::publish_progress_static(
                     &event_bus,
                     terminal_step,
@@ -1986,6 +2005,23 @@ impl FactoryTestManager {
             }
         }
 
+        // MCU 模式下结果由芯片侧计算，必须让 TEST1 跑满采集窗口再停。
+        // 启动后立即停止会让 FG 返回空数组，从而把「没测到」误判成合格。
+        if test_result.compute_mode == FactoryComputeMode::Mcu {
+            let collect_ms = item
+                .and_then(|config| config.compute.as_ref())
+                .and_then(|compute| compute.timeout_ms)
+                .unwrap_or(MCU_COLLECT_MS);
+            Self::publish_progress_static(
+                event_bus,
+                step,
+                FactoryTestStatus::Running,
+                progress_start + 0.02,
+                &format!("采集数据中 ({}ms)", collect_ms),
+            );
+            tokio::time::sleep(Duration::from_millis(collect_ms)).await;
+        }
+
         let stop_result = manager
             .execute_rpc("S", &["0x40".to_string(), "1".to_string()])
             .await;
@@ -2043,8 +2079,7 @@ impl FactoryTestManager {
             )));
         }
 
-        tokio::time::sleep(Duration::from_secs(3)).await;
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_millis(MCU_SETTLE_MS)).await;
         let measurements = match manager.execute_rpc("FG", &[format!("0x{mode:02X}")]).await {
             Ok(bytes) => {
                 let outcome = resolve_mcu_hardware_result(Ok(bytes), channels);
@@ -2052,7 +2087,14 @@ impl FactoryTestManager {
             }
             Err(_) => failed(),
         };
-        let success = measurements.len() == channels
+        // 空结果永远不能算合格：channels=0（由设备决定通道数）时
+        // 过去的 `len() == channels` 会让「一条都没测到」判 PASS。
+        let channels_ok = if channels == 0 {
+            !measurements.is_empty()
+        } else {
+            measurements.len() == channels
+        };
+        let success = channels_ok
             && measurements
                 .iter()
                 .all(|measurement| measurement.device_value.is_some());

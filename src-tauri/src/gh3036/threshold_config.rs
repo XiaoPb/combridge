@@ -176,8 +176,12 @@ impl TestItemConfig {
             }
         }
 
-        if test_name != "chip_uid" && self.channels.is_none_or(|channels| channels == 0) {
-            return Err(format!("{} channels must be greater than 0", test_name));
+        // channels 可省略：真实产测配置常由设备侧配置决定通道数，
+        // 运行期会退化为「按设备返回的采样数评估」。显式写 0 仍视为填错。
+        if test_name != "chip_uid" && self.channels == Some(0) {
+            return Err(format!(
+                "{test_name} channels cannot be 0（省略该字段表示由设备返回的通道数决定）"
+            ));
         }
 
         if let Some(compute) = &self.compute {
@@ -409,6 +413,14 @@ impl TestEvaluationResult {
         }
 
         let unit = self.unit.as_deref().unwrap_or("");
+        // 没有任何实测值绝不能判合格：channels 省略时通道数由实测长度决定，
+        // 空数组曾导致「0 通道全部通过」的假合格。
+        if values.is_empty() {
+            self.pass = false;
+            self.message = "No measurements".to_string();
+            return;
+        }
+
         let mut all_pass = true;
         let mut failed_channels = Vec::new();
 
@@ -845,6 +857,76 @@ tests:
         )
         .unwrap();
         assert!(config.validate().is_ok());
+    }
+
+    /// 真实产测配置（Goodix l-evk-t2-gh3038-q）不写 channels：通道数由设备侧配置决定，
+    /// 校验不能因此拒掉整份配置。
+    #[test]
+    fn config_without_channels_is_valid() {
+        let config = FactoryThresholdConfig::from_yaml(
+            r#"
+project: GH3036
+version: "1.0"
+description: GH3036
+global: { default_operator: lt, fail_action: stop }
+tests:
+  base_noise:
+    enabled: true
+    unit: uV
+    global_threshold: { operator: lt, value: 95 }
+  ppg_noise:
+    enabled: true
+    unit: uV
+    global_threshold: { operator: lt, value: 280 }
+  lpctr:
+    enabled: true
+    unit: nA/mA
+    global_threshold: { operator: range, range: [100, 3000] }
+  lplctr:
+    enabled: true
+    unit: nA/mA
+    global_threshold: { operator: range, range: [0, 6] }
+"#,
+        )
+        .unwrap();
+
+        assert!(config.validate().is_ok());
+    }
+
+    /// 省略 channels 表示「按设备返回的通道数」，但显式写 0 仍是填错。
+    #[test]
+    fn explicit_zero_channels_is_rejected() {
+        let mut config = test_config(8);
+        config.channels = Some(0);
+        let err = config.validate("base_noise").unwrap_err();
+        assert!(err.contains("cannot be 0"), "unexpected: {err}");
+    }
+
+    /// channels 省略时按实测通道数评估，不因缺少该字段漏判。
+    #[test]
+    fn evaluation_without_channels_uses_measured_length() {
+        let mut config = test_config_with_threshold(true, 100);
+        config.channels = None;
+
+        let result = evaluate_test_item("base_noise", Some(&config), &[10, 999]);
+
+        assert_eq!(result.channel_results.len(), 2);
+        assert!(!result.pass, "超阈值通道必须判失败");
+        assert!(result.channel_results[0].pass);
+        assert!(!result.channel_results[1].pass);
+    }
+
+    /// 一条实测值都没有时必须判失败——这是产测里最危险的一种假合格。
+    #[test]
+    fn empty_measurements_must_fail() {
+        let mut config = test_config_with_threshold(true, 100);
+        config.channels = None;
+
+        let result = evaluate_test_item("base_noise", Some(&config), &[]);
+
+        assert!(!result.pass, "空测量不能判合格");
+        assert!(result.channel_results.is_empty());
+        assert_eq!(result.message, "No measurements");
     }
 
     #[test]

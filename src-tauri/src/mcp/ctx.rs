@@ -10,10 +10,12 @@ use serde_json::Value;
 use tracing::warn;
 
 use crate::device::{BleManagerRef, SerialManagerRef};
+use crate::gh3036::Gh3036ManagerRef;
 use crate::service::EventBus;
 use crate::state::AppStateRef;
 
 use super::ble_hub::BleHub;
+use super::gh3036_job::FactoryJob;
 use super::lease::LeaseManager;
 use super::serial_hub::SerialHub;
 
@@ -36,6 +38,10 @@ pub struct McpContext {
     pub ble_hub: Arc<BleHub>,
     /// 由 MCP 打开的端口（GUI 打开的端口 MCP 不允许 close）
     pub opened_by_mcp: RwLock<HashSet<String>>,
+    /// GH3036 协议管理器（单芯片会话，资源名固定为 `gh3036`）
+    pub gh3036: Gh3036ManagerRef,
+    /// 最近一次 MCP 发起的产测 job（用于超时降级后的续等）
+    pub factory_job: RwLock<Option<FactoryJob>>,
 }
 
 impl McpContext {
@@ -47,6 +53,7 @@ impl McpContext {
         let ble = app.state::<BleManagerRef>().inner().clone();
         let app_state = app.state::<AppStateRef>().inner().clone();
         let event_bus = app.state::<Arc<EventBus>>().inner().clone();
+        let gh3036 = app.state::<Gh3036ManagerRef>().inner().clone();
 
         Self {
             app_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -63,6 +70,8 @@ impl McpContext {
             serial_hub: Arc::new(SerialHub::new()),
             ble_hub: Arc::new(BleHub::new()),
             opened_by_mcp: RwLock::new(HashSet::new()),
+            gh3036,
+            factory_job: RwLock::new(None),
         }
     }
 

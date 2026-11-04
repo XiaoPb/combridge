@@ -2672,18 +2672,42 @@ impl FactoryTestManager {
         }))
     }
 
-    fn save_result_to_csv(result: &FactoryTestResult, project_name: &str) -> Result<(), String> {
+    /// 产测结果 CSV 的落盘路径（与 [`Self::save_result_to_csv`] 保持一致）。
+    ///
+    /// 供 MCP 等调用方在拿到产测结果后回传文件位置，避免重复实现路径规则。
+    pub fn csv_path_for_project(project_name: &str) -> Result<std::path::PathBuf, String> {
         let exe_dir = std::env::current_exe()
             .ok()
             .and_then(|exe_path| exe_path.parent().map(|p| p.to_path_buf()))
             .ok_or("获取可执行文件目录失败")?;
 
-        let output_dir = exe_dir.join("data").join("factory");
-        std::fs::create_dir_all(&output_dir).map_err(|e| format!("创建输出目录失败: {}", e))?;
-
         let today = Local::now().format("%Y-%m-%d").to_string();
-        let file_name = format!("factory_{}_{}.csv", project_name, today);
-        let file_path = output_dir.join(&file_name);
+        Ok(exe_dir
+            .join("data")
+            .join("factory")
+            .join(format!("factory_{}_{}.csv", project_name, today)))
+    }
+
+    /// 最近一次产测结果的 CSV 路径；无结果时为 `None`。
+    pub fn result_csv_path(&self) -> Option<std::path::PathBuf> {
+        let project = {
+            let guard = self.result.lock();
+            let result = guard.as_ref()?;
+            if result.project_name.is_empty() {
+                "unknown".to_string()
+            } else {
+                result.project_name.clone()
+            }
+        };
+        Self::csv_path_for_project(&project).ok()
+    }
+
+    fn save_result_to_csv(result: &FactoryTestResult, project_name: &str) -> Result<(), String> {
+        let file_path = Self::csv_path_for_project(project_name)?;
+        if let Some(parent) = file_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("创建输出目录失败: {}", e))?;
+        }
 
         let file_exists = file_path.exists();
 

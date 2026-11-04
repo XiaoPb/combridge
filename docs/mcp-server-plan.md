@@ -447,7 +447,11 @@ combridge-mcp --print-config                     # 输出客户端 JSON 配置
 
 模型的错误恢复能力完全取决于 `hint` 质量。错误码必须稳定可枚举，**不允许**直接把 `Serial(Os { code: 5, ... })` 透出。
 
-错误码清单（初版）：`PORT_BUSY` / `PORT_NOT_FOUND` / `PORT_NOT_OPEN` / `LEASE_EXPIRED` / `DEVICE_DISCONNECTED` / `TIMEOUT` / `INVALID_PARAM` / `CONFIRM_REQUIRED` / `TIER_BLOCKED` / `HW_ERROR` / `JOB_NOT_FOUND` / `RATE_LIMITED`。
+错误码清单（初版）：`PORT_BUSY` / `PORT_NOT_FOUND` / `PORT_NOT_OPEN` / `PORT_NOT_OWNED` / `LEASE_EXPIRED` / `DEVICE_DISCONNECTED` / `TIMEOUT` / `INVALID_ARGUMENT` / `CONFIRM_REQUIRED` / `TIER_BLOCKED` / `HW_ERROR` / `JOB_NOT_FOUND` / `RATE_LIMITED`；
+GH3036 域另有 `GH3036_BUSY` / `GH3036_INIT_FAILED` / `GH3036_RPC_FAILED` / `GH3036_CHANNEL_FAILED` / `CHANNEL_NOT_CONFIGURED` / `CONFIG_INVALID` / `CONFIG_NOT_LOADED` / `FACTORY_TEST_FAILED` / `FACTORY_TEST_STATE`。
+
+**实现约束（踩过）**：错误必须是 `isError: true` 的工具结果，不能抛 `Err(ErrorData)` —— 后者是 JSON-RPC 协议错误，
+客户端会渲染成 "internal error"，模型读不到 `message`，`hint` 等于白写。
 
 ---
 
@@ -594,7 +598,7 @@ L2 / L3 通过 MCP 的 **elicitation** 让客户端弹窗询问用户，而不�
 | P0 骨架 | ✅ 已完成 | `src-tauri/src/mcp/{mod,auth,ctx,server}.rs`；`rmcp = "=3.8.0"`；默认关闭，`%LOCALAPPDATA%\combridge\mcp.json` 开启 |
 | P1 串口闭环 | ✅ 已完成 | 新增 `mcp/{lease,serial_hub}.rs`；7 个工具（`about` + `ports` + 5 个 `serial_*`）；租约随 P1 一起落地（按 §9.2 建议提前） |
 | P2 设备与 BLE | ✅ 已完成 | 新增 `mcp/ble_hub.rs`；工具 `combridge_devices` / `combridge_ble_scan` / `combridge_ble_connect` / `combridge_ble_gatt`；BLE 连接租约资源名 `ble:<address>` |
-| P3 GH3036 与产测 | 待开始 | — |
+| P3 GH3036 与产测 | ✅ 已实现（真机验收待补） | 新增 `mcp/gh3036_job.rs`；工具 `combridge_gh3036_rpc` / `combridge_gh3036_factory_test`；`FactoryTestManager` 增加 CSV 路径访问器 |
 | P4 其余业务域 | 待开始 | — |
 | P5 安全与产品化 | 部分前置 | 租约已在 P1 完成；两档策略的 UI 与 elicitation 待 P5 |
 
@@ -629,6 +633,23 @@ rmcp 文档明确：协议错误在客户端被渲染为不透明提示（如 "T
 **模型读不到 message**，等于错误信息全丢。现已统一改为 `isError: true` 的工具结果，按 §6.6 输出
 `{code, message, hint, retryable}`。已落地错误码：`PORT_BUSY` / `BLE_BUSY` / `LEASE_INVALID` /
 `PORT_NOT_OWNED` / `SERIAL_ERROR` / `INVALID_ARGUMENT` / `ERROR`。
+
+P3 实现要点：
+
+- 工具收敛为 2 个（对应 §5.2 的 #12、#14）：`combridge_gh3036_rpc`（status / init / set_channel / catalog / rpc）
+  与 `combridge_gh3036_factory_test`（run / status / continue / stop / validate_config / threshold_get）。
+  `catalog` 保留为独立 action 而非并入 `about` —— 14 条命令 + 14 个版本类型的参数说明体积不小，
+  只在模型确实要发 RPC 时才拉取。
+- **租约采用「自动获取 + 同 owner 复用」**：GH3036 没有「打开设备」这一步，若照搬串口的显式 attach，
+  `factory_test(action=run)` 会变成两次往返。规则是：不带 `lease_id` 时自动获取；若已被**同一 owner** 持有则直接复用；
+  不同 owner 返回 `GH3036_BUSY`，`force=true` 抢占。这是 D2「一次调用出结果」的前提。
+- **`run` 的三个出口**：`completed` / `failed` 返回结论；`waiting_environment_switch` **立即返回**并给 hint
+  （等下去没有意义，必须人工换环境），不做无谓超时；超过 `max_wait_s` 返回 `running` + `job_id` 供 `action=status` 续等。
+- **前置校验前移**：`run` 之前先校验卡控配置与 TX/RX 通道，缺什么直接给 `CONFIG_INVALID` /
+  `CHANNEL_NOT_CONFIGURED` + 修复 hint，而不是等线程跑起来在中间步骤失败。
+- `FactoryTestManager` 新增 `csv_path_for_project` / `result_csv_path`，`Gh3036Manager` 暴露
+  `factory_test_csv_path`，路径规则不再在 MCP 侧重写一遍。
+- 未实现：`threshold_validate` / `threshold_save`（属 GUI 侧编辑场景，MCP 目前只需 `threshold_get`）。
 
 ### 9.1 阶段划分
 

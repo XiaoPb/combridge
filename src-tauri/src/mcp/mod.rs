@@ -14,6 +14,7 @@
 pub mod auth;
 pub mod ble_hub;
 pub mod ctx;
+pub mod gh3036_job;
 pub mod lease;
 pub mod serial_hub;
 pub mod server;

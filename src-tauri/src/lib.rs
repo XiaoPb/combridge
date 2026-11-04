@@ -4,6 +4,7 @@ pub mod dashboard;
 pub mod device;
 pub mod error;
 pub mod gh3036;
+pub mod mcp;
 pub mod ota;
 pub mod protocol;
 pub mod service;
@@ -250,6 +251,21 @@ pub fn run() {
 
             info!("启动系统监控");
             commands::system::start_system_monitor();
+
+            // MCP Server（默认关闭；需 %LOCALAPPDATA%\combridge\mcp.json 中 enabled=true）
+            {
+                let mcp_settings = mcp::McpSettings::load();
+                if mcp_settings.enabled {
+                    let handle_for_mcp = app.handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(e) = mcp::start(handle_for_mcp, mcp_settings).await {
+                            error!("[MCP] 启动失败（不影响主程序）: {}", e);
+                        }
+                    });
+                } else {
+                    info!("[MCP] 未启用（%LOCALAPPDATA%\\combridge\\mcp.json 中 enabled=false）");
+                }
+            }
 
             info!("Tauri setup hook 执行完成");
             Ok(())

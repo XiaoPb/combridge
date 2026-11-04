@@ -585,6 +585,25 @@ L2 / L3 通过 MCP 的 **elicitation** 让客户端弹窗询问用户，而不�
 
 ## 9. 执行计划
 
+### 9.0 实施进度
+
+> 分支 `feat/mcp-server`，随代码同步更新。
+
+| 阶段 | 状态 | 落地位置 / 说明 |
+|---|---|---|
+| P0 骨架 | ✅ 已完成 | `src-tauri/src/mcp/{mod,auth,ctx,server}.rs`；`rmcp = "=3.8.0"`；默认关闭，`%LOCALAPPDATA%\combridge\mcp.json` 开启 |
+| P1 串口闭环 | ✅ 已完成 | 新增 `mcp/{lease,serial_hub}.rs`；7 个工具（`about` + `ports` + 5 个 `serial_*`）；租约随 P1 一起落地（按 §9.2 建议提前） |
+| P2 设备与 BLE | 待开始 | — |
+| P3 GH3036 与产测 | 待开始 | — |
+| P4 其余业务域 | 待开始 | — |
+| P5 安全与产品化 | 部分前置 | 租约已在 P1 完成；两档策略的 UI 与 elicitation 待 P5 |
+
+P1 实现要点（与本文档契约的对应）：
+
+- `combridge_serial_read`：游标 = hub 内单调递增的累计字节数；`since` 省略表示"从缓冲区最旧处"；缓冲上限 1MB，被裁剪时返回 `truncated=true`；broadcast 消费滞后时返回 `lagged=true`。
+- `combridge_serial_expect`：`since` 省略表示"从此刻起只看新数据"；服务端阻塞等待，命中即返回；超时返回 `matched=false` 与已收到的全部文本；端口中途断开返回 `disconnected=true`。
+- 租约：`combridge_serial_open` 返回 `lease_id`，`write` / `close` 强制校验；`PORT_BUSY` 回传当前占用者与过期时间，`force=true` 可抢占。GUI 打开的端口 MCP 可读可写（持租约），但不允许 `close`。
+
 ### 9.1 阶段划分
 
 | 阶段 | 内容 | 人力 | 交付物 | 验收 |

@@ -13,6 +13,8 @@
 
 pub mod auth;
 pub mod ctx;
+pub mod lease;
+pub mod serial_hub;
 pub mod server;
 
 use std::sync::Arc;
@@ -154,6 +156,8 @@ pub async fn start(app: tauri::AppHandle, settings: McpSettings) -> Result<McpSt
     let token = generate_token();
     let tier = settings.tier.clone();
     let ctx = Arc::new(ctx::McpContext::from_app(&app, tier.clone()));
+    // 订阅 EventBus 广播：串口数据 → hub（游标/等待），端口断开 → 清理
+    ctx.serial_hub.spawn_subscription(Arc::clone(&ctx.event_bus));
     let mcp_server = server::ComBridgeMcp::new(ctx);
 
     let service =

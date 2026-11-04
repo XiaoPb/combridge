@@ -3,7 +3,8 @@
 //! 工具实现通过 ctx 访问硬件与状态，**直接调 Manager，不走 `#[tauri::command]` 层**
 //! （command 层的 `State<'_, T>` 无法在 MCP handler 内构造，且 DTO 命名面向前端）。
 
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::{Arc, RwLock};
 
 use serde_json::Value;
 use tracing::warn;
@@ -11,6 +12,9 @@ use tracing::warn;
 use crate::device::{BleManagerRef, SerialManagerRef};
 use crate::service::EventBus;
 use crate::state::AppStateRef;
+
+use super::lease::LeaseManager;
+use super::serial_hub::SerialHub;
 
 pub struct McpContext {
     /// ComBridge 应用版本
@@ -23,6 +27,12 @@ pub struct McpContext {
     pub ble: BleManagerRef,
     pub app_state: AppStateRef,
     pub event_bus: Arc<EventBus>,
+    /// 设备租约（P1：串口端口）
+    pub leases: Arc<LeaseManager>,
+    /// 串口数据订阅 hub（游标 + 阻塞等待）
+    pub serial_hub: Arc<SerialHub>,
+    /// 由 MCP 打开的端口（GUI 打开的端口 MCP 不允许 close）
+    pub opened_by_mcp: RwLock<HashSet<String>>,
 }
 
 impl McpContext {
@@ -46,6 +56,9 @@ impl McpContext {
             ble,
             app_state,
             event_bus,
+            leases: Arc::new(LeaseManager::new()),
+            serial_hub: Arc::new(SerialHub::new()),
+            opened_by_mcp: RwLock::new(HashSet::new()),
         }
     }
 

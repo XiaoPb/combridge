@@ -34,7 +34,10 @@
     "ota": {
       "name": "OTA Upgrade",
       "description": "Upgrade NCS firmware over Nordic SMP",
-      "tabs": { "upgrade": "Firmware Upgrade", "history": "History" }
+      "tabs": {
+        "upgrade": "Firmware Upgrade",
+        "history": "History"
+      }
     },
     "protocol": {
       "name": "Protocol Management",
@@ -58,7 +61,8 @@
       "tabs": {
         "info": "System Info",
         "logs": "System Logs",
-        "settings": "Preferences"
+        "settings": "Preferences",
+        "integration": "Integration"
       }
     }
   }

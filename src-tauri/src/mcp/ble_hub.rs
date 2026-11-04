@@ -154,8 +154,8 @@ impl BleHub {
         guard.retain(|k, _| !k.starts_with(&prefix));
     }
 
-    /// 订阅 EventBus 的 `ble:data`。
-    pub fn spawn_subscription(self: &Arc<Self>, bus: Arc<EventBus>) {
+    /// 订阅 EventBus 的 `ble:data`。返回任务句柄，服务重启时需 abort。
+    pub fn spawn_subscription(self: &Arc<Self>, bus: Arc<EventBus>) -> tokio::task::JoinHandle<()> {
         let hub = Arc::clone(self);
         let mut rx = bus.subscribe_channel();
         tokio::spawn(async move {
@@ -172,7 +172,7 @@ impl BleHub {
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 }
             }
-        });
+        })
     }
 
     fn handle_event(&self, event: &Event) {

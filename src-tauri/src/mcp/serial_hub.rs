@@ -300,7 +300,9 @@ impl SerialHub {
     }
 
     /// 订阅 EventBus 广播并持续喂给 hub。应在 MCP 启动时调用一次。
-    pub fn spawn_subscription(self: &Arc<Self>, bus: Arc<EventBus>) {
+    ///
+    /// 返回任务句柄：服务重启时必须 abort，否则每重启一次就多一个消费者。
+    pub fn spawn_subscription(self: &Arc<Self>, bus: Arc<EventBus>) -> tokio::task::JoinHandle<()> {
         let hub = Arc::clone(self);
         let mut rx = bus.subscribe_channel();
         tokio::spawn(async move {
@@ -328,7 +330,7 @@ impl SerialHub {
                     }
                 }
             }
-        });
+        })
     }
 
     fn handle_event(&self, event: &Event) {

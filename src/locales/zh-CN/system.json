@@ -62,7 +62,8 @@
   "tab": {
     "info": "信息",
     "logs": "日志",
-    "settings": "设置"
+    "settings": "设置",
+    "integration": "集成"
   },
   "logViewer": {
     "title": "系统日志",
@@ -105,5 +106,78 @@
     "Europe/Paris": "巴黎时间 (UTC+1/+2)",
     "Europe/Berlin": "柏林时间 (UTC+1/+2)",
     "UTC": "协调世界时 (UTC)"
+  },
+  "mcp": {
+    "title": {
+      "service": "MCP 服务",
+      "client": "客户端接入",
+      "security": "安全与审计"
+    },
+    "status": {
+      "running": "运行中",
+      "stopped": "已停止",
+      "failed": "启动失败"
+    },
+    "label": {
+      "enable": "启用 MCP 服务",
+      "enableHint": "仅监听 127.0.0.1，且必须携带 Bearer Token 才能访问",
+      "port": "监听端口",
+      "portHint": "端口被占用时自动回退到随机端口",
+      "tier": "安全档位",
+      "tierDev": "研发档（dev）",
+      "tierStandard": "标准档（standard）",
+      "tierDevDesc": "写设备、产测、烧录不弹确认，只记审计。适合内部联调。",
+      "tierStandardDesc": "同一批操作会先请客户端弹窗确认，被拒绝或无法确认时返回 CONFIRM_REQUIRED。",
+      "url": "服务地址",
+      "token": "访问令牌",
+      "tokenHint": "每次启动轮换。贴进过工单或聊天记录后，点轮换即可让旧客户端失效。",
+      "toolCount": "工具数量",
+      "uptime": "启动时间",
+      "configPath": "配置文件",
+      "client": "客户端",
+      "snippet": "配置片段"
+    },
+    "button": {
+      "apply": "保存并应用",
+      "rotate": "轮换令牌",
+      "copied": "已复制",
+      "copySnippet": "复制配置片段",
+      "openAudit": "打开审计目录"
+    },
+    "message": {
+      "applied": "配置已应用",
+      "applyFailed": "应用配置失败",
+      "rotated": "令牌已轮换，旧客户端需重新配置",
+      "rotateFailed": "轮换令牌失败",
+      "loadFailed": "读取 MCP 状态失败",
+      "copyFailed": "复制失败",
+      "openFailed": "打开目录失败"
+    },
+    "client": {
+      "claudeCode": "Claude Code（命令行）",
+      "claudeDesktop": "Claude Desktop",
+      "cursor": "Cursor",
+      "generic": "通用 JSON"
+    },
+    "clientPath": {
+      "claudeCode": "在终端执行下面这条命令即可",
+      "claudeDesktop": "写入 claude_desktop_config.json 的 mcpServers",
+      "cursor": "写入 ~/.cursor/mcp.json",
+      "generic": "适用于任何支持 Streamable HTTP 的 MCP 客户端"
+    },
+    "security": {
+      "tierDev": "研发档：AI 可直接写设备、跑产测、烧固件，全部事后可审计。",
+      "tierStandard": "标准档：上述不可逆操作前会请求用户确认，拒绝即中止；OTA 另有一次性 confirm_token 作为第二道门。",
+      "auditHint": "每次工具调用写一行 JSONL：工具名、参数摘要（不落原文）、结果码、耗时。保留 30 天。",
+      "auditRecords": "今日 {{count}} 条",
+      "noAuditFile": "今日还没有调用记录"
+    },
+    "notice": {
+      "disabled": "服务未启用，AI 客户端暂时无法连接",
+      "portFallback": "配置端口被占用，实际监听 {{port}}",
+      "restartClient": "改完客户端配置后需重启客户端才会生效",
+      "noToken": "服务未运行，启动后这里会显示令牌",
+      "portChangeRestarts": "改端口会重启服务并轮换令牌，已配置的客户端需要重新粘贴新配置"
+    }
   }
 }

@@ -2,6 +2,7 @@ import React from 'react';
 import SystemInfo from './SystemInfo';
 import LogViewer from './LogViewer';
 import SystemSettings from './SystemSettings';
+import McpIntegration from './McpIntegration';
 import { usePageTabsStore } from '../../stores/pageTabsStore';
 
 const SystemPage: React.FC = () => {
@@ -13,6 +14,8 @@ const SystemPage: React.FC = () => {
         return <LogViewer />;
       case 'settings':
         return <SystemSettings />;
+      case 'integration':
+        return <McpIntegration />;
       case 'info':
       default:
         return <SystemInfo />;

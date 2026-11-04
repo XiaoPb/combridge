@@ -28,8 +28,11 @@ use super::serial_hub::SerialHub;
 pub struct McpContext {
     /// ComBridge 应用版本
     pub app_version: String,
-    /// 安全档位："dev" | "standard"
-    pub tier: String,
+    /// 安全档位："dev" | "standard"。
+    ///
+    /// 用共享 cell 而不是启动时的字符串快照：切档位不该重启服务 ——
+    /// 重启会换 token，等于逼用户把所有客户端配置重贴一遍。
+    pub tier: Arc<RwLock<String>>,
     /// 服务启动时间（毫秒时间戳）
     pub started_at: u64,
     pub serial: SerialManagerRef,
@@ -66,7 +69,7 @@ pub struct McpContext {
 
 impl McpContext {
     /// 从 Tauri AppHandle 提取各 Manager。必须在 `setup` 之后调用。
-    pub fn from_app(app: &tauri::AppHandle, tier: String) -> Self {
+    pub fn from_app(app: &tauri::AppHandle, tier: Arc<RwLock<String>>) -> Self {
         use tauri::Manager;
 
         let serial = app.state::<SerialManagerRef>().inner().clone();
@@ -89,9 +92,14 @@ impl McpContext {
             }
         };
 
+        let tier_name = tier
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+
         Self {
             app_version: env!("CARGO_PKG_VERSION").to_string(),
-            tier: tier.clone(),
+            tier: Arc::clone(&tier),
             started_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -111,9 +119,14 @@ impl McpContext {
             ota,
             ota_confirm: OtaConfirmStore::new(),
             audit,
-            limiter: RateLimiter::for_tier(&tier),
+            limiter: RateLimiter::for_tier(&tier_name),
             breaker: PortBreaker::new(),
         }
+    }
+
+    /// 当前档位名（读共享 cell，热切换后立刻生效）。
+    pub fn tier_name(&self) -> String {
+        self.tier.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// 当前已连接设备快照（序列化为 JSON，避免依赖内部 Device 类型字段）。

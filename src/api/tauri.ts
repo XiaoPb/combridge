@@ -375,6 +375,46 @@ export interface Preferences {
   menuVisibility?: MenuVisibilityPreferences;
 }
 
+export interface McpStatus {
+  /** 配置文件里的启用意图 */
+  enabled: boolean;
+  /** 实际是否在监听 */
+  running: boolean;
+  /** 生效档位 */
+  tier: string;
+  /** 配置档位 */
+  configTier: string;
+  configPort: number;
+  /** 实际监听端口（未运行为 0） */
+  port: number;
+  url: string;
+  token: string;
+  startedAt: number;
+  /** 配置端口被占用、实际换了端口 */
+  portFallback: boolean;
+  toolCount: number;
+  configPath: string;
+  dataDir: string;
+  auditDir: string | null;
+  auditFile: string | null;
+  auditRecords: number;
+  lastError: string | null;
+}
+
+export const mcpApi = {
+  async getStatus(): Promise<McpStatus> {
+    return tauriInvoke<McpStatus>('get_mcp_status');
+  },
+
+  async applySettings(enabled: boolean, port: number, tier: string): Promise<McpStatus> {
+    return tauriInvoke<McpStatus>('apply_mcp_settings', { enabled, port, tier });
+  },
+
+  async rotateToken(): Promise<McpStatus> {
+    return tauriInvoke<McpStatus>('rotate_mcp_token');
+  },
+};
+
 export const preferencesApi = {
   async get(): Promise<Preferences> {
     return invoke<Preferences>('get_preferences');

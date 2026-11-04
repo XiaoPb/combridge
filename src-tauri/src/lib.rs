@@ -263,6 +263,9 @@ pub fn run() {
                         }
                     });
                 } else {
+                    // 上次运行的 endpoint 文件必须清掉：残留的 URL + 旧 token
+                    // 会让客户端以为服务还在（实际只会拿到 401）
+                    mcp::clear_stale_endpoint();
                     info!("[MCP] 未启用（%LOCALAPPDATA%\\combridge\\mcp.json 中 enabled=false）");
                 }
             }
@@ -326,6 +329,9 @@ pub fn run() {
             commands::update::open_update_installer,
             commands::system::open_url,
             commands::system::show_in_folder,
+            commands::mcp::get_mcp_status,
+            commands::mcp::apply_mcp_settings,
+            commands::mcp::rotate_mcp_token,
             commands::system::show_main_window,
             commands::system::get_window_status,
             #[cfg(feature = "devtools")]

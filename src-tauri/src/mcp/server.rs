@@ -1089,7 +1089,8 @@ impl OtaResponse {
     }
 }
 
-#[tool_router]
+// 路由函数对外可见：设置页要报工具数量，不必凭空造一个 McpContext 只为了数一遍
+#[tool_router(vis = "pub(crate)")]
 impl ComBridgeMcp {
     #[tool(
         name = "combridge_about",
@@ -1125,7 +1126,7 @@ action=logs 读取日志尾部（默认 100 行），工具返回错误且看不
             return Ok(Json(AboutResponse {
                 action: "logs".to_string(),
                 app_version: self.ctx.app_version.clone(),
-                tier: self.ctx.tier.clone(),
+                tier: self.ctx.tier_name(),
                 started_at: self.ctx.started_at,
                 connected_devices: Vec::new(),
                 tool_domains: Vec::new(),
@@ -1148,7 +1149,7 @@ action=logs 读取日志尾部（默认 100 行），工具返回错误且看不
         Ok(Json(AboutResponse {
             action: "summary".to_string(),
             app_version: self.ctx.app_version.clone(),
-            tier: self.ctx.tier.clone(),
+            tier: self.ctx.tier_name(),
             started_at: self.ctx.started_at,
             connected_devices,
             tool_domains: vec![
@@ -2984,7 +2985,7 @@ impl ComBridgeMcp {
         risk: &str,
         detail: impl Into<String>,
     ) -> Result<(), CallToolResult> {
-        if !needs_user_confirmation(&self.ctx.tier) {
+        if !needs_user_confirmation(&self.ctx.tier_name()) {
             return Ok(());
         }
         let detail = detail.into();
@@ -3026,7 +3027,7 @@ impl ComBridgeMcp {
         };
         logger.record(&audit::AuditEntry {
             ts: audit::now_millis(),
-            tier: self.ctx.tier.clone(),
+            tier: self.ctx.tier_name(),
             tool: tool.to_string(),
             args: audit::digest_args(args),
             result_code: code.to_string(),

@@ -147,6 +147,15 @@ impl AuditLogger {
     }
 }
 
+/// 当日审计文件路径（文件可能尚未创建；设置页展示与行数统计用）。
+pub fn today_file_path() -> Option<PathBuf> {
+    let dir = AuditLogger::resolve_dir()?;
+    Some(dir.join(format!(
+        "mcp-audit-{}.jsonl",
+        chrono::Local::now().format("%Y-%m-%d")
+    )))
+}
+
 /// 删除超过 `days` 天的审计文件（按文件名里的日期判断，不依赖 mtime）。
 fn prune_older_than(dir: &Path, days: i64) {
     let cutoff = chrono::Local::now().date_naive() - chrono::Days::new(days.max(0) as u64);

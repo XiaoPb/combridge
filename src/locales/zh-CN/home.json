@@ -34,7 +34,10 @@
     "ota": {
       "name": "OTA 升级",
       "description": "通过 Nordic SMP 协议升级 NCS 设备固件",
-      "tabs": { "upgrade": "固件升级", "history": "升级记录" }
+      "tabs": {
+        "upgrade": "固件升级",
+        "history": "升级记录"
+      }
     },
     "protocol": {
       "name": "协议管理",
@@ -58,7 +61,8 @@
       "tabs": {
         "info": "系统信息",
         "logs": "系统日志",
-        "settings": "偏好设置"
+        "settings": "偏好设置",
+        "integration": "集成"
       }
     }
   }

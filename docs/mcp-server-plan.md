@@ -3,9 +3,9 @@
 | 项 | 内容 |
 |---|---|
 | 文档版本 | v1.0 FINAL |
-| 日期 | 2026-11-04（§6.4 / §8.3~§8.5 / §9.0 随 P4、P5a 落地同步更新） |
+| 日期 | 2026-11-04（§6.4 / §8.3~§8.6 / §9.0 随 P4、P5a、P5b 落地同步更新） |
 | 适用代码版本 | ComBridge v0.7.2（Tauri 2.0，后端 Rust 10,521 行） |
-| 状态 | 方案定稿；P0~P4 与 P5 后端已实现，P5 前端 / P6 待排期 |
+| 状态 | 方案定稿；P0~P5 已实现（含设置页与 i18n），P6 待排期 |
 | 决策人 | 产品 + 研发 |
 
 ---
@@ -655,6 +655,39 @@ L2 / L3 通过 MCP 的 **elicitation** 让客户端弹窗询问用户，而不�
 - 端口熔断只统计 `SERIAL_ERROR`（真实硬件错误），**不统计 `TIMEOUT`** —— `expect` 超时是正常业务结果，
   把它算失败会让熔断在正常调试中频繁误触发。熔断期间返回 `PORT_SUSPENDED` + 剩余秒数。
 
+### 8.6 设置页「集成」（P5b）
+
+系统页新增第 4 个 tab「集成」（`pages/System/McpIntegration.tsx`，默认可见），三块内容：
+
+| 区块 | 内容 |
+|---|---|
+| MCP 服务 | 启用开关、监听端口、安全档位、保存并应用；状态标签（运行中 / 已停止 / 启动失败）、实际地址、工具数量、启动时间、配置文件路径 |
+| 客户端接入 | 打码显示的 token（可显示/复制/轮换）、客户端选择（Claude Code CLI / Claude Desktop / Cursor / 通用 JSON）、可直接粘贴的配置片段 |
+| 安全与审计 | 两档语义说明、当日审计路径与条数、打开审计目录 |
+
+**生效语义（关键设计）**：
+
+| 改动 | 生效方式 | 代价 |
+|---|---|---|
+| 启用 / 停用 | 起停服务（`mcp::start` / `mcp::stop`） | 换 token，客户端需重配 |
+| 端口 | 重启服务 | 换 token，且客户端 URL 也要改（界面会提前警告） |
+| 档位 | **热切换**（`mcp::switch_tier`） | 无：不重启、不换 token，仅更新共享 tier cell 与限流速率 |
+
+档位做成热切换是刻意的：研发 ↔ 标准是这一页最常被点的开关，若走重启，每切一次都要把所有客户端配置重贴一遍。
+实现上 `McpContext.tier` 是 `Arc<RwLock<String>>` 而非启动时的字符串快照，`RateLimiter.per_sec` 为原子量，
+所以切换是"改一个值 + 改一个速率"，正在跑的会话不受影响。
+
+**运维细节**：
+
+- 停服 / 未启用时会删除 `mcp-endpoint.json` —— 留着等于对外发一个已失效的 token。
+- 启动失败只影响 MCP 本身：配置已落盘，界面用 `enabled=true & running=false + last_error` 表达"开关开着但没起来"，
+  不会假装成功。
+- 端口被占用时自动回退随机端口，界面用 `portFallback` 明确提示实际端口（否则用户按配置端口配客户端必然连不上）。
+
+**验证**：面板的 5 条行为（打码、开关即时应用、启动失败呈现、片段可复制、打开审计目录）由
+`pages/System/McpIntegration.test.tsx` 覆盖；配置片段的字段与 `Bearer` 前缀由 `utils/mcpSnippet.test.ts` 覆盖；
+中英文案 key 一致性由 `i18n/mcpKeys.test.ts` 覆盖。**未验证**：真机点击路径（自动化测试用 mock 替换了 IPC）。
+
 ---
 
 ## 9. 执行计划
@@ -670,7 +703,7 @@ L2 / L3 通过 MCP 的 **elicitation** 让客户端弹窗询问用户，而不�
 | P2 设备与 BLE | ✅ 已完成 | 新增 `mcp/ble_hub.rs`；工具 `combridge_devices` / `combridge_ble_scan` / `combridge_ble_connect` / `combridge_ble_gatt`；BLE 连接租约资源名 `ble:<address>` |
 | P3 GH3036 与产测 | ✅ 已实现（真机验收待补） | 新增 `mcp/gh3036_job.rs`；工具 `combridge_gh3036_rpc` / `combridge_gh3036_factory_test`；`FactoryTestManager` 增加 CSV 路径访问器 |
 | P4 其余业务域 | ✅ 已完成（OTA 真机烧录待验） | 新增 `mcp/{ota_confirm,logs}.rs`；工具 `combridge_waveform` / `combridge_protocol` / `combridge_ota`；`combridge_about` 增加 `action=logs`。**对外 16 个工具** |
-| P5 安全与产品化 | 后端已完成（UI / i18n 待做） | 新增 `mcp/{audit,ratelimit,elicit}.rs`；审计 / 限流 / 熔断 / elicitation 全部收口在 `call_tool`；余下为设置页「集成」与中英文案 |
+| P5 安全与产品化 | ✅ 已完成 | P5a 后端：`mcp/{audit,ratelimit,elicit}.rs`，审计 / 限流 / 熔断 / elicitation 全部收口在 `call_tool`。P5b 前端：系统页新增「集成」tab（`pages/System/McpIntegration.tsx` + `commands/mcp.rs`），开关/端口/档位当场生效、一键复制客户端配置、审计入口，中英文案齐备 |
 
 P1 实现要点（与本文档契约的对应）：
 

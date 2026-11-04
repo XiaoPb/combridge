@@ -301,6 +301,7 @@ const HomePage: React.FC = () => {
         { key: 'info', label: t('modules.system.tabs.info'), icon: <InfoCircleOutlined /> },
         { key: 'logs', label: t('modules.system.tabs.logs'), icon: <LogsIcon /> },
         { key: 'settings', label: t('modules.system.tabs.settings'), icon: <SettingsIcon /> },
+        { key: 'integration', label: t('modules.system.tabs.integration'), icon: <CodeOutlined /> },
       ],
     },
   ];
@@ -334,7 +335,7 @@ const HomePage: React.FC = () => {
       case '/system': {
         const tab = getFirstVisibleTab('system');
         if (tab) {
-          setSystemActiveTab(tab as 'info' | 'logs' | 'settings');
+          setSystemActiveTab(tab as 'info' | 'logs' | 'settings' | 'integration');
         }
         break;
       }

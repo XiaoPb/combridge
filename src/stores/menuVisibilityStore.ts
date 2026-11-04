@@ -59,6 +59,7 @@ export const DEFAULT_MENU_VISIBILITY: MenuVisibilityPreferences = {
         info: false,
         logs: false,
         settings: true,
+        integration: true,
       },
     },
   },

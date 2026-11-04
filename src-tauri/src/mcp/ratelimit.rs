@@ -8,6 +8,7 @@
 //! 3. **端口熔断**：同一端口连续 5 次硬件错误 → 暂停 30s。避免"坏线缆 + 重试循环"把日志刷爆。
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
@@ -36,7 +37,8 @@ pub enum Reject {
 
 /// 令牌桶 + 并发计数。
 pub struct RateLimiter {
-    per_sec: f64,
+    /// f64 的 bit 表示（原子量里没有 f64，用 to_bits/from_bits 包装）
+    per_sec: AtomicU64,
     state: Mutex<Bucket>,
     inflight: Mutex<HashMap<String, usize>>,
 }
@@ -46,12 +48,20 @@ struct Bucket {
     last: Instant,
 }
 
+fn qps_for(tier: &str) -> f64 {
+    if tier == "dev" {
+        20.0
+    } else {
+        5.0
+    }
+}
+
 impl RateLimiter {
     /// 按档位构造：研发档 20 QPS，标准档 5 QPS。
     pub fn for_tier(tier: &str) -> Self {
-        let qps = if tier == "dev" { 20.0 } else { 5.0 };
+        let qps = qps_for(tier);
         Self {
-            per_sec: qps,
+            per_sec: AtomicU64::new(qps.to_bits()),
             state: Mutex::new(Bucket {
                 tokens: qps, // 允许一次性打完一秒的额度，避免刚启动就被判超限
                 last: Instant::now(),
@@ -60,20 +70,30 @@ impl RateLimiter {
         }
     }
 
+    fn per_sec(&self) -> f64 {
+        f64::from_bits(self.per_sec.load(Ordering::Relaxed))
+    }
+
+    /// 切换档位时改速率，不重建限流器（重建会丢失在飞计数与现有令牌）。
+    pub fn retune(&self, tier: &str) {
+        self.per_sec.store(qps_for(tier).to_bits(), Ordering::Relaxed);
+    }
+
     /// 取一个令牌；不足时返回需要等待的毫秒数。
     pub fn try_acquire(&self) -> Result<(), Reject> {
+        let per_sec = self.per_sec();
         let mut bucket = self.state.lock();
         let now = Instant::now();
         let elapsed = now.duration_since(bucket.last).as_secs_f64();
         bucket.last = now;
-        bucket.tokens = (bucket.tokens + elapsed * self.per_sec).min(self.per_sec);
+        bucket.tokens = (bucket.tokens + elapsed * per_sec).min(per_sec);
 
         if bucket.tokens >= 1.0 {
             bucket.tokens -= 1.0;
             Ok(())
         } else {
             let missing = 1.0 - bucket.tokens;
-            let wait_ms = (missing / self.per_sec * 1000.0).ceil() as u64;
+            let wait_ms = (missing / per_sec * 1000.0).ceil() as u64;
             Err(Reject::Qps {
                 retry_after_ms: wait_ms.max(1),
             })

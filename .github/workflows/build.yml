@@ -133,12 +133,15 @@ jobs:
           path: src-tauri/target/${{ matrix.target }}/release/bundle/
           retention-days: 7
 
-  # 发布任务：仅在推送标签时执行
+  # 发布任务：推送标签时执行
+  # 用 !cancelled() 而不是默认的"依赖全部成功"：单个平台的 runner 出问题（排队被平台取消、
+  # 偶发拉取失败）不该拖住整次发布 —— 手上有哪个平台的安装包就先发哪个，缺哪个会在
+  # 附件的平台列里体现出来。真正一个包都没构建出来时，下面的守卫步骤会失败。
   release:
     name: Create GitHub Release
     needs: build-tauri
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
 
     permissions:
       contents: write
@@ -182,6 +185,19 @@ jobs:
         run: |
           echo "Artifacts ready for release:"
           ls -la artifacts/
+
+      # ============ 守卫：一个安装包都没有就别发空 Release ============
+      - name: Ensure at least one installer exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          COUNT=$(find artifacts -type f \( -iname '*.exe' -o -iname '*.msi' -o -iname '*.dmg' \
+            -o -iname '*.appimage' -o -iname '*.deb' -o -iname '*.rpm' \) | wc -l)
+          echo "安装包数量：${COUNT}"
+          if [ "${COUNT}" -eq 0 ]; then
+            echo "::error::没有任何平台构建出安装包，取消发布"
+            exit 1
+          fi
 
       # ============ 生成详细发布说明 ============
       - name: Generate release notes
@@ -233,7 +249,12 @@ jobs:
             size="$(du -h "${file}" | cut -f1)"
             sha="$(sha256sum "${file}" | cut -d' ' -f1)"
             printf -- '| `%s` | %s | %s | `%s` |\n' "${name}" "${platform}" "${size}" "${sha}" >> .release/assets.md
+            echo "${platform}" >> .release/platforms.txt
           done < <(find artifacts -type f \( -iname '*.exe' -o -iname '*.msi' -o -iname '*.dmg' -o -iname '*.appimage' -o -iname '*.deb' -o -iname '*.rpm' \) | sort)
+
+          # 实际构建出的平台列表：某个平台的 runner 没跑成时，这里会如实少一项
+          TARGETS="$(sort -u .release/platforms.txt 2>/dev/null | paste -sd'/' - | sed 's|/| / |g')"
+          [ -z "${TARGETS}" ] && TARGETS="无"
 
           {
             echo "## 版本信息"
@@ -244,7 +265,7 @@ jobs:
             echo "| 提交 | \`${GITHUB_SHA::7}\` |"
             echo "| 提交数量 | ${COMMIT_COUNT} |"
             echo "| 构建时间 | $(date -u '+%Y-%m-%d %H:%M UTC') |"
-            echo "| 构建目标 | Windows x64 / macOS arm64 / Linux x64 |"
+            echo "| 构建目标 | ${TARGETS} |"
             echo "| 运行环境 | Windows 10+ / macOS 11+ / Linux (webkit2gtk) |"
             echo ""
             echo "## 安装包"

@@ -37,6 +37,15 @@ const maskToken = (token: string) => (token.length <= 8 ? '•••••••
 
 const displayTime = (ms: number) => (ms > 0 ? new Date(ms).toLocaleString() : '—');
 
+/** 自动接入状态的标签色；未知值按"未写入"处理，避免界面漏出原始 key */
+const WIRE_TAG_COLOR: Record<string, string> = {
+  wired: 'green',
+  missing: 'default',
+  stale: 'orange',
+  noClient: 'default',
+  failed: 'red',
+};
+
 const McpIntegration: React.FC = () => {
   const { t } = useTranslation('system');
 
@@ -44,6 +53,7 @@ const McpIntegration: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [rotating, setRotating] = useState(false);
+  const [writing, setWriting] = useState(false);
   const [showToken, setShowToken] = useState(false);
   const [client, setClient] = useState<McpClientKind>('claudeCode');
 
@@ -114,8 +124,39 @@ const McpIntegration: React.FC = () => {
     }
   };
 
-  /** 打开审计目录：优先审计目录，其次数据目录；两者都不存在时明确提示而不是静默失败 */
-  const openAuditDir = async () => {
+  /** 切换自动接入。开启时后端会立刻写一次，关闭只是不再维护已有条目 */
+  const handleAutoWire = async (checked: boolean) => {
+    setWriting(true);
+    try {
+      const result = await mcpApi.setAutoWire(checked);
+      adopt(result);
+      message.success(t('mcp.message.applied'));
+    } catch (err) {
+      message.error(formatErrorMessage(err, t('mcp.message.wireFailed')));
+    } finally {
+      setWriting(false);
+    }
+  };
+
+  /** 手动重写一次客户端配置：客户端重置过配置、或自动接入关着时的兜底 */
+  const handleWire = async () => {
+    setWriting(true);
+    try {
+      const result = await mcpApi.wireClient();
+      adopt(result);
+      if (result.clientWireState === 'noClient') {
+        message.warning(t('mcp.autoWire.noClient'));
+      } else {
+        message.success(t('mcp.message.wired'));
+      }
+    } catch (err) {
+      message.error(formatErrorMessage(err, t('mcp.message.wireFailed')));
+    } finally {
+      setWriting(false);
+    }
+  };
+
+  /** 打开审计目录：优先审计目录，其次数据目录；两者都不存在时明确提示而不是静默失败 */  const openAuditDir = async () => {
     const target = status?.auditDir || status?.dataDir;
     if (!target) {
       message.error(t('mcp.message.openFailed'));
@@ -139,6 +180,10 @@ const McpIntegration: React.FC = () => {
 
   const url = status?.url ?? `http://127.0.0.1:${port}/mcp`;
   const token = status?.token ?? '';
+  // 后端给的是稳定标识；未知值归到"未写入"，界面不能出现 mcp.autoWire.xxx 这种原始 key
+  const wireState = status?.clientWireState && status.clientWireState in WIRE_TAG_COLOR
+    ? status.clientWireState
+    : 'missing';
 
   const snippet = useMemo(() => {
     const built = buildMcpSnippet(client, url, token);
@@ -269,6 +314,55 @@ const McpIntegration: React.FC = () => {
             }
           >
             <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+              <div>
+                <Space align="center" style={{ justifyContent: 'space-between', width: '100%' }}>
+                  <Space orientation="vertical" size={0}>
+                    <Text>{t('mcp.autoWire.label')}</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {t('mcp.autoWire.hint')}
+                    </Text>
+                  </Space>
+                  <Switch
+                    checked={status?.autoWire ?? false}
+                    loading={writing}
+                    onChange={handleAutoWire}
+                  />
+                </Space>
+                <Space wrap style={{ marginTop: 8 }}>
+                  <Tag color={WIRE_TAG_COLOR[wireState] ?? 'default'}>
+                    {t(`mcp.autoWire.${wireState}`)}
+                  </Tag>
+                  {status?.clientConfigPath && (
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {status.clientConfigPath}
+                    </Text>
+                  )}
+                  <Button
+                    size="small"
+                    icon={<SyncOutlined />}
+                    loading={writing}
+                    disabled={!status?.running}
+                    onClick={handleWire}
+                  >
+                    {t('mcp.autoWire.rewrite')}
+                  </Button>
+                </Space>
+                {status?.clientWireDetail && (
+                  <div>
+                    <Text type="warning" style={{ fontSize: 12 }}>
+                      {status.clientWireDetail}
+                    </Text>
+                  </div>
+                )}
+                {wireState === 'noClient' && (
+                  <div>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {t('mcp.autoWire.noClientHint')}
+                    </Text>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <Text>{t('mcp.label.token')}</Text>
                 <Space.Compact style={{ width: '100%', marginTop: 4 }}>

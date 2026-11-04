@@ -151,7 +151,9 @@
       "rotateFailed": "Failed to rotate token",
       "loadFailed": "Failed to read MCP status",
       "copyFailed": "Copy failed",
-      "openFailed": "Failed to open folder"
+      "openFailed": "Failed to open folder",
+      "wired": "Client config written — open a new session to use it",
+      "wireFailed": "Failed to write client config"
     },
     "client": {
       "claudeCode": "Claude Code (CLI)",
@@ -164,6 +166,17 @@
       "claudeDesktop": "Add to mcpServers in claude_desktop_config.json",
       "cursor": "Write to ~/.cursor/mcp.json",
       "generic": "For any MCP client supporting Streamable HTTP"
+    },
+    "autoWire": {
+      "label": "Auto-wire local client",
+      "hint": "On start, writes this service into ~/.workbuddy/mcp.json and pre-approves it — you only need a new session",
+      "wired": "Written — open a new session",
+      "missing": "Not in the client config yet",
+      "stale": "Config does not match the running service",
+      "noClient": "No local client detected",
+      "failed": "Write failed",
+      "noClientHint": "~/.workbuddy not found (WorkBuddy not installed or never launched). Use the snippet below to configure manually",
+      "rewrite": "Write again"
     },
     "security": {
       "tierDev": "Dev tier: the AI may write to devices, run factory tests and flash firmware; all actions are audited.",

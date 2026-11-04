@@ -48,6 +48,14 @@ pub struct McpStatusView {
     pub audit_file: Option<String>,
     /// 当日审计记录条数
     pub audit_records: u64,
+    /// 是否在启动时自动接入本地 MCP 客户端
+    pub auto_wire: bool,
+    /// 客户端配置文件路径（未检测到客户端为空串）
+    pub client_config_path: String,
+    /// 自动接入状态：`wired` | `missing` | `stale` | `noClient` | `failed`
+    pub client_wire_state: String,
+    /// 该状态的原因说明（如"地址不一致：…"）
+    pub client_wire_detail: Option<String>,
     /// 上次启动失败原因（命令层临时状态，见 `LAST_ERROR`）
     pub last_error: Option<String>,
 }
@@ -76,10 +84,12 @@ async fn collect_status() -> McpStatusView {
         .as_ref()
         .and_then(|p| count_lines(p).ok())
         .unwrap_or(0);
+    let wire = compose_wire(&settings, runtime.as_ref());
 
     compose_status(
         &settings,
         runtime.as_ref(),
+        &wire,
         audit_dir.as_deref(),
         audit_file.as_deref(),
         audit_records,
@@ -88,11 +98,37 @@ async fn collect_status() -> McpStatusView {
     )
 }
 
+/// 检查自动接入状态。运行中按实际 url+token 比对，未运行则一律视为残留。
+fn compose_wire(settings: &McpSettings, runtime: Option<&mcp::RuntimeInfo>) -> ClientWireView {
+    let report = match runtime {
+        Some(info) => mcp::client_wire::inspect(Some((
+            &mcp::endpoint_url(info.port),
+            info.token.as_str(),
+        ))),
+        None => mcp::client_wire::inspect(None),
+    };
+    ClientWireView {
+        auto_wire: settings.auto_wire,
+        config_path: report.config_path.map(|p| p.display().to_string()),
+        state: report.state.as_str().to_string(),
+        detail: report.detail,
+    }
+}
+
+/// 自动接入状态（拼进视图的中间结构，避免给 `compose_status` 再加四个参数）。
+struct ClientWireView {
+    auto_wire: bool,
+    config_path: Option<String>,
+    state: String,
+    detail: Option<String>,
+}
+
 /// 纯函数形式的视图组装：把 IO 与拼接分开，才能覆盖"未运行 / 运行中 / 端口回退"三种组合。
 #[allow(clippy::too_many_arguments)]
 fn compose_status(
     settings: &McpSettings,
     runtime: Option<&mcp::RuntimeInfo>,
+    wire: &ClientWireView,
     audit_dir: Option<&std::path::Path>,
     audit_file: Option<&std::path::Path>,
     audit_records: u64,
@@ -102,11 +138,7 @@ fn compose_status(
     let running = runtime.is_some();
     // 未运行时 port=0，界面据此判断"没有实际监听"，不要拿配置端口冒充
     let port = runtime.map(|r| r.port).unwrap_or(0);
-    let url = if running {
-        format!("http://127.0.0.1:{port}/mcp")
-    } else {
-        format!("http://127.0.0.1:{}/mcp", settings.port)
-    };
+    let url = mcp::endpoint_url(if running { port } else { settings.port });
 
     McpStatusView {
         enabled: settings.enabled,
@@ -131,6 +163,10 @@ fn compose_status(
         audit_dir: audit_dir.map(|p| p.display().to_string()),
         audit_file: audit_file.map(|p| p.display().to_string()),
         audit_records,
+        auto_wire: wire.auto_wire,
+        client_config_path: wire.config_path.clone().unwrap_or_default(),
+        client_wire_state: wire.state.clone(),
+        client_wire_detail: wire.detail.clone(),
         last_error,
     }
 }
@@ -168,11 +204,13 @@ pub async fn apply_mcp_settings(
     };
 
     // 保留已持久化的 token：改端口/档位不应顺带作废所有客户端的 Bearer 配置
+    let current = McpSettings::load();
     let settings = McpSettings {
         enabled,
         port,
         tier: tier.to_string(),
-        token: McpSettings::load().token,
+        token: current.token,
+        auto_wire: current.auto_wire,
     };
     settings.save().map_err(ComBridgeError::ConfigError)?;
 
@@ -221,6 +259,50 @@ pub async fn rotate_mcp_token(app: tauri::AppHandle) -> Result<McpStatusView, Co
     Ok(collect_status().await)
 }
 
+/// 立即把当前运行地址写进本地 MCP 客户端配置。
+///
+/// 兜底场景：客户端升级把配置重置了、用户手工删掉了那一条、或 `auto_wire` 关闭后
+/// 想临时写一次。
+#[tauri::command]
+pub async fn wire_mcp_client() -> Result<McpStatusView, ComBridgeError> {
+    let Some(info) = mcp::runtime_info().await else {
+        return Err(ComBridgeError::ConfigError(
+            "MCP 未运行，先启用服务".to_string(),
+        ));
+    };
+    match mcp::client_wire::wire(&mcp::endpoint_url(info.port), &info.token) {
+        Ok(Some(path)) => {
+            set_last_error(None);
+            tracing::info!("[MCP] 手动接入客户端: {}", path.display());
+        }
+        Ok(None) => set_last_error(Some(
+            "未检测到本机 MCP 客户端配置目录（默认 ~/.workbuddy）".to_string(),
+        )),
+        Err(e) => set_last_error(Some(format!("写客户端配置失败: {e}"))),
+    }
+    Ok(collect_status().await)
+}
+
+/// 开关「启动时自动接入客户端」。
+///
+/// 关闭时**不删**已写入的配置：那是用户此刻正在用的东西，删掉等于顺手把它的
+/// 客户端弄坏。要清理请直接停用服务（停服会撤掉指向死端口的条目）。
+#[tauri::command]
+pub async fn set_mcp_auto_wire(enabled: bool) -> Result<McpStatusView, ComBridgeError> {
+    let mut settings = McpSettings::load();
+    settings.auto_wire = enabled;
+    settings.save().map_err(ComBridgeError::ConfigError)?;
+    if enabled {
+        if let Some(info) = mcp::runtime_info().await {
+            match mcp::client_wire::wire(&mcp::endpoint_url(info.port), &info.token) {
+                Ok(_) => set_last_error(None),
+                Err(e) => set_last_error(Some(format!("写客户端配置失败: {e}"))),
+            }
+        }
+    }
+    Ok(collect_status().await)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -232,6 +314,16 @@ mod tests {
             port,
             tier: tier.to_string(),
             token: None,
+            auto_wire: true,
+        }
+    }
+
+    fn wire(state: &str) -> ClientWireView {
+        ClientWireView {
+            auto_wire: true,
+            config_path: Some("C:/Users/me/.workbuddy/mcp.json".to_string()),
+            state: state.to_string(),
+            detail: None,
         }
     }
 
@@ -247,7 +339,7 @@ mod tests {
 
     #[test]
     fn stopped_view_has_no_token_and_no_port() {
-        let view = compose_status(&settings(false, 47821, "standard"), None, None, None, 0, 16, None);
+        let view = compose_status(&settings(false, 47821, "standard"), None, &wire("noClient"), None, None, 0, 16, None);
         assert!(!view.running);
         assert!(!view.enabled);
         // 未运行时不能拿配置端口冒充实际端口：UI 靠 port==0 区分
@@ -262,7 +354,7 @@ mod tests {
     #[test]
     fn running_view_reports_actual_port() {
         let rt = runtime(47821, false);
-        let view = compose_status(&settings(true, 47821, "dev"), Some(&rt), None, None, 3, 16, None);
+        let view = compose_status(&settings(true, 47821, "dev"), Some(&rt), &wire("wired"), None, None, 3, 16, None);
         assert!(view.running);
         assert_eq!(view.port, 47821);
         assert_eq!(view.url, "http://127.0.0.1:47821/mcp");
@@ -274,7 +366,7 @@ mod tests {
     fn port_fallback_is_surfaced() {
         // 配置 47821，实际落在 51xxx：URL 必须跟着实际端口走，否则用户配了也连不上
         let rt = runtime(51234, true);
-        let view = compose_status(&settings(true, 47821, "dev"), Some(&rt), None, None, 0, 16, None);
+        let view = compose_status(&settings(true, 47821, "dev"), Some(&rt), &wire("wired"), None, None, 0, 16, None);
         assert!(view.port_fallback);
         assert_eq!(view.url, "http://127.0.0.1:51234/mcp");
         assert_eq!(view.config_port, 47821);
@@ -285,6 +377,7 @@ mod tests {
         let view = compose_status(
             &settings(true, 47821, "dev"),
             None,
+            &wire("stale"),
             None,
             None,
             0,
@@ -295,5 +388,30 @@ mod tests {
         assert!(view.enabled);
         assert!(!view.running);
         assert_eq!(view.last_error.as_deref(), Some("端口绑定失败"));
+    }
+
+    #[test]
+    fn wire_state_reaches_the_view() {
+        let rt = runtime(47821, false);
+        let mut wiring = wire("stale");
+        wiring.detail = Some("token 与当前运行的不一致".to_string());
+        let view = compose_status(
+            &settings(true, 47821, "dev"),
+            Some(&rt),
+            &wiring,
+            None,
+            None,
+            0,
+            16,
+            None,
+        );
+        // 界面要靠这三个字段回答"我要不要再手动配一遍客户端"
+        assert!(view.auto_wire);
+        assert_eq!(view.client_wire_state, "stale");
+        assert_eq!(
+            view.client_wire_detail.as_deref(),
+            Some("token 与当前运行的不一致")
+        );
+        assert!(view.client_config_path.ends_with("mcp.json"));
     }
 }

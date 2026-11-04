@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """把 localhost 上的 ComBridge MCP Server 接到 MCP 客户端（以 WorkBuddy 为例）。
 
+> **通常不需要手动跑这个脚本。** 服务启动时会自己写这两份文件
+> （`src-tauri/src/mcp/client_wire.rs`，设置页「集成」里的「自动接入客户端」开关控制），
+> 用户侧只需要开个新会话。此脚本保留作兜底：其它机器、或客户端装在非默认目录时。
+
 做的事只有两件，都是写文件：
   1. `<configDir>/mcp.json`           —— 加入（或更新）一条 `combridge` 的 http server
   2. `<configDir>/mcp-approvals.json` —— 预置信任记录，省掉客户端里"点 Trust"这一步

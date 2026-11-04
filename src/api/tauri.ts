@@ -398,6 +398,13 @@ export interface McpStatus {
   auditDir: string | null;
   auditFile: string | null;
   auditRecords: number;
+  /** 启动时自动写入本地 MCP 客户端配置 */
+  autoWire: boolean;
+  /** 客户端 mcp.json 路径（未检测到客户端为空串） */
+  clientConfigPath: string;
+  /** 自动接入状态：wired | missing | stale | noClient | failed */
+  clientWireState: string;
+  clientWireDetail: string | null;
   lastError: string | null;
 }
 
@@ -412,6 +419,15 @@ export const mcpApi = {
 
   async rotateToken(): Promise<McpStatus> {
     return tauriInvoke<McpStatus>('rotate_mcp_token');
+  },
+
+  /** 立即把当前地址写进客户端配置（自动接入关闭时的兜底） */
+  async wireClient(): Promise<McpStatus> {
+    return tauriInvoke<McpStatus>('wire_mcp_client');
+  },
+
+  async setAutoWire(enabled: boolean): Promise<McpStatus> {
+    return tauriInvoke<McpStatus>('set_mcp_auto_wire', { enabled });
   },
 };
 

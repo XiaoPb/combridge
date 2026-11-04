@@ -151,7 +151,9 @@
       "rotateFailed": "轮换令牌失败",
       "loadFailed": "读取 MCP 状态失败",
       "copyFailed": "复制失败",
-      "openFailed": "打开目录失败"
+      "openFailed": "打开目录失败",
+      "wired": "已写入客户端配置，开个新会话即可使用",
+      "wireFailed": "写入客户端配置失败"
     },
     "client": {
       "claudeCode": "Claude Code（命令行）",
@@ -164,6 +166,17 @@
       "claudeDesktop": "写入 claude_desktop_config.json 的 mcpServers",
       "cursor": "写入 ~/.cursor/mcp.json",
       "generic": "适用于任何支持 Streamable HTTP 的 MCP 客户端"
+    },
+    "autoWire": {
+      "label": "自动接入客户端",
+      "hint": "启动时把服务写进 ~/.workbuddy/mcp.json 并预置信任记录，你只需要开个新会话",
+      "wired": "已写入，开新会话即可用",
+      "missing": "配置里还没有这一条",
+      "stale": "配置与当前服务不一致",
+      "noClient": "未检测到本地客户端",
+      "failed": "写入失败",
+      "noClientHint": "没找到 ~/.workbuddy（WorkBuddy 未安装或从未启动过），可用下面的片段手动配置",
+      "rewrite": "重新写入"
     },
     "security": {
       "tierDev": "研发档：AI 可直接写设备、跑产测、烧固件，全部事后可审计。",

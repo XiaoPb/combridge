@@ -14,6 +14,7 @@
 pub mod audit;
 pub mod auth;
 pub mod ble_hub;
+pub mod client_wire;
 pub mod ctx;
 pub mod elicit;
 pub mod gh3036_job;
@@ -51,6 +52,11 @@ pub struct McpSettings {
     /// 外部 MCP 客户端把 Bearer 写在配置里，应用一重启就 401。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
+    /// 启动时自动把本机服务写进本地 MCP 客户端配置（默认开）。
+    ///
+    /// 用户侧于是只需要"开个新会话"：写 `mcp.json` 与预置信任记录都在启动时做掉。
+    /// 关掉它的场景：想自己管理客户端配置，或不希望程序碰用户目录下的文件。
+    pub auto_wire: bool,
 }
 
 impl Default for McpSettings {
@@ -60,6 +66,7 @@ impl Default for McpSettings {
             port: DEFAULT_PORT,
             tier: "standard".to_string(),
             token: None,
+            auto_wire: true,
         }
     }
 }
@@ -252,6 +259,8 @@ pub async fn stop() -> bool {
     };
     shutdown(server).await;
     remove_endpoint_file();
+    // 配置里留一条指向无人监听的地址，客户端每次开会话都要先失败一次 —— 一并撤掉
+    client_wire::unwire_on_stop();
     info!("[MCP] 已停止");
     true
 }
@@ -305,6 +314,14 @@ async fn bind_listener(preferred_port: u16) -> Result<tokio::net::TcpListener, S
     }
 }
 
+/// 客户端应连接的地址。
+///
+/// 单独抽出来是因为它同时被三处消费：endpoint 文件、自动接入客户端、设置页展示。
+/// 三处各写一份 `format!` 迟早会漂移。
+pub fn endpoint_url(port: u16) -> String {
+    format!("http://127.0.0.1:{port}/mcp")
+}
+
 /// 写入 endpoint 发现文件，供客户端 / 设置页读取。
 fn write_endpoint_file(
     port: u16,
@@ -318,7 +335,7 @@ fn write_endpoint_file(
         std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
     }
     let endpoint = serde_json::json!({
-        "url": format!("http://127.0.0.1:{port}/mcp"),
+        "url": endpoint_url(port),
         "token": token,
         "pid": std::process::id(),
         "app_version": env!("CARGO_PKG_VERSION"),
@@ -338,9 +355,13 @@ fn remove_endpoint_file() {
     }
 }
 
-/// 启动时清理上一次运行残留的 endpoint 文件（本次未启用/启动失败时调用）。
+/// 启动时清理上一次运行残留的痕迹（本次未启用/启动失败时调用）。
+///
+/// 除了 endpoint 文件，客户端配置里那条 `combridge` 也要撤：它指向一个没人监听的
+/// 端口，留着会让客户端每次开会话都先失败一次。信任记录保留，重新启用后不必再信任。
 pub fn clear_stale_endpoint() {
     remove_endpoint_file();
+    client_wire::unwire_on_stop();
 }
 
 /// 启动 MCP Server（应在 tokio 运行时内调用；`app` 用于提取各业务 Manager）。
@@ -414,6 +435,12 @@ pub async fn start(app: tauri::AppHandle, mut settings: McpSettings) -> Result<M
     });
 
     let endpoint_path = write_endpoint_file(port, &token, &tier)?;
+
+    // 自动接入本机 MCP 客户端：用户侧只剩"开个新会话"这一步。
+    // 失败只记日志 —— 服务本身只依赖 endpoint 文件，与客户端配置无关。
+    if settings.auto_wire {
+        client_wire::wire_on_start(&endpoint_url(port), &token);
+    }
 
     *guard = Some(RunningServer {
         port,
@@ -493,14 +520,17 @@ mod tests {
             port: 47821,
             tier: "standard".to_string(),
             token: Some("abc".to_string()),
+            auto_wire: true,
         })
         .unwrap();
         assert!(json.contains("\"token\":\"abc\""));
-        // 旧配置文件没有 token 字段，必须还能读
+        // 旧配置文件没有 token / autoWire 字段，必须还能读
         let legacy: McpSettings =
             serde_json::from_str(r#"{"enabled":true,"port":47821,"tier":"dev"}"#).unwrap();
         assert!(legacy.token.is_none());
         assert_eq!(legacy.tier, "dev");
+        // 旧文件缺字段时默认开启自动接入：这是"零操作"的默认体验
+        assert!(legacy.auto_wire);
     }
 
     #[tokio::test]

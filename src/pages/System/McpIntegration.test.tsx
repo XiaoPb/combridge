@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   getStatus: vi.fn(),
   applySettings: vi.fn(),
   rotateToken: vi.fn(),
+  wireClient: vi.fn(),
+  setAutoWire: vi.fn(),
   showInFolder: vi.fn(async () => undefined),
 }));
 
@@ -21,6 +23,8 @@ vi.mock('../../api/tauri', () => ({
     getStatus: mocks.getStatus,
     applySettings: mocks.applySettings,
     rotateToken: mocks.rotateToken,
+    wireClient: mocks.wireClient,
+    setAutoWire: mocks.setAutoWire,
   },
   systemApi: { showInFolder: mocks.showInFolder },
 }));
@@ -47,6 +51,10 @@ const baseStatus = (): McpStatus => ({
   auditDir: 'C:/log',
   auditFile: 'C:/log/mcp-audit-2026-11-04.jsonl',
   auditRecords: 42,
+  autoWire: true,
+  clientConfigPath: 'C:/Users/me/.workbuddy/mcp.json',
+  clientWireState: 'wired',
+  clientWireDetail: null,
   lastError: null,
 });
 
@@ -69,6 +77,11 @@ beforeEach(() => {
     configTier: tier,
   }));
   mocks.rotateToken.mockResolvedValue({ ...baseStatus(), token: 'newtoken' });
+  mocks.wireClient.mockResolvedValue(baseStatus());
+  mocks.setAutoWire.mockImplementation(async (enabled: boolean) => ({
+    ...baseStatus(),
+    autoWire: enabled,
+  }));
 });
 
 afterEach(() => {
@@ -91,7 +104,8 @@ describe('MCP integration panel', () => {
     render(<McpIntegration />);
     await flush();
 
-    fireEvent.click(screen.getByRole('switch'));
+    // 页面现在有两个开关（服务、自动接入），第一个是服务总开关
+    fireEvent.click(screen.getAllByRole('switch')[0]);
 
     await waitFor(() => expect(mocks.applySettings).toHaveBeenCalledTimes(1));
     expect(mocks.applySettings).toHaveBeenCalledWith(false, 47821, 'dev');
@@ -124,6 +138,54 @@ describe('MCP integration panel', () => {
 
     fireEvent.click(screen.getByText('mcp.button.rotate'));
     await waitFor(() => expect(mocks.rotateToken).toHaveBeenCalledTimes(1));
+  });
+
+  it('reports the auto-wire state and rewrites the client config on demand', async () => {
+    render(<McpIntegration />);
+    await flush();
+
+    expect(screen.getByText('mcp.autoWire.wired')).toBeTruthy();
+    expect(screen.getByText('C:/Users/me/.workbuddy/mcp.json')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('mcp.autoWire.rewrite'));
+    await waitFor(() => expect(mocks.wireClient).toHaveBeenCalledTimes(1));
+  });
+
+  it('turning auto-wire off just stops maintaining the entry', async () => {
+    render(<McpIntegration />);
+    await flush();
+
+    // 第二个开关是自动接入
+    fireEvent.click(screen.getAllByRole('switch')[1]);
+    await waitFor(() => expect(mocks.setAutoWire).toHaveBeenCalledWith(false));
+  });
+
+  it('explains how to configure by hand when no client is detected', async () => {
+    mocks.getStatus.mockResolvedValue({
+      ...baseStatus(),
+      clientWireState: 'noClient',
+      clientConfigPath: '',
+    });
+
+    render(<McpIntegration />);
+    await flush();
+
+    expect(screen.getByText('mcp.autoWire.noClient')).toBeTruthy();
+    expect(screen.getByText('mcp.autoWire.noClientHint')).toBeTruthy();
+  });
+
+  it('shows why the written config is stale', async () => {
+    mocks.getStatus.mockResolvedValue({
+      ...baseStatus(),
+      clientWireState: 'stale',
+      clientWireDetail: 'token 与当前运行的不一致',
+    });
+
+    render(<McpIntegration />);
+    await flush();
+
+    expect(screen.getByText('mcp.autoWire.stale')).toBeTruthy();
+    expect(screen.getByText('token 与当前运行的不一致')).toBeTruthy();
   });
 
   it('opens the audit folder rather than a not-yet-created file', async () => {

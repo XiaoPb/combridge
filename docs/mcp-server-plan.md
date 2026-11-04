@@ -3,9 +3,9 @@
 | 项 | 内容 |
 |---|---|
 | 文档版本 | v1.0 FINAL |
-| 日期 | 2026-11-04 |
+| 日期 | 2026-11-04（§6.4 / §9.0 随 P4 落地同步更新） |
 | 适用代码版本 | ComBridge v0.7.2（Tauri 2.0，后端 Rust 10,521 行） |
-| 状态 | 方案定稿，可进入执行 |
+| 状态 | 方案定稿；P0~P4 已实现，P5/P6 待排期 |
 | 决策人 | 产品 + 研发 |
 
 ---
@@ -301,7 +301,11 @@ combridge-mcp --print-config                     # 输出客户端 JSON 配置
 | 17 | `combridge_ota` | list_protocols / validate / preflight / start / status / cancel | **L3** |
 | 18 | `combridge_logs` | **新增**（读日志尾部） | L0 |
 
-> 表中 18 行，其中 `about` 吸收 `catalog` 与 `logs` 的子命令后，对外实际 **16 个工具**（`catalog` / `logs` 作为 `about` 的 `action` 保留，避免模型记不住）。
+> 表中 18 行，落地后对外实际 **16 个工具**：`catalog` 并入 `combridge_gh3036_rpc(action="catalog")`，
+> `logs` 并入 `combridge_about(action="logs")`（都是"模型记不住第 17 个工具"的取舍）。
+> 已实现清单（`tools/list` 实测 16 个）：`about` / `ports` / `serial_open` / `serial_close` / `serial_write` /
+> `serial_read` / `serial_expect` / `devices` / `ble_scan` / `ble_connect` / `ble_gatt` / `gh3036_rpc` /
+> `gh3036_factory_test` / `waveform` / `protocol` / `ota`。
 
 **阈值配置**合并进 `combridge_gh3036_factory_test` 的 `action="threshold_*"`，不单独开工具 —— 它与产测共用同一份 YAML 与校验逻辑。
 
@@ -414,19 +418,44 @@ combridge-mcp --print-config                     # 输出客户端 JSON 配置
 
 ```jsonc
 // 第一次调用：只做前置检查，不烧录
-{ "action": "start", "package_path": "D:/fw.zip", "protocol": "goodix" }
+{ "action": "start", "firmware_path": "D:/fw.zip", "address": "AA:BB:CC:DD:EE:FF", "protocol": "goodix" }
 // 返回
 {
   "dry_run": true,
-  "plan": { "protocol": "goodix", "target": "AA:BB:CC:DD:EE:FF", "image_size": 245760, "est_seconds": 68 },
-  "warnings": ["目标电量未读取"],
-  "confirm_token": "ota_9f2c"   // 需在下次调用原样带回
+  "plan": {
+    "protocol": "goodix",
+    "target": "AA:BB:CC:DD:EE:FF",
+    "image_name": "app.bin",
+    "image_size": 245760,
+    "image_sha256": "…",
+    "est_seconds": 68,            // 8s 固定开销 + 镜像 / 12KB/s，仅作量级参考
+    "device": { "version": "1.0.7", … }   // 预检成功才有
+  },
+  "package": { … },
+  "warnings": ["设备预检未通过：…"],       // 非阻断，如实回传
+  "confirm_token": "ota_9f2c1b04",        // 需在下次调用原样带回
+  "confirm_expires_in": 300
 }
 // 第二次调用：带 confirm 才真正执行
-{ "action": "start", "package_path": "D:/fw.zip", "protocol": "goodix", "confirm": "ota_9f2c" }
+{ "action": "start", "firmware_path": "D:/fw.zip", "address": "AA:BB:CC:DD:EE:FF", "confirm": "ota_9f2c1b04" }
 ```
 
-`confirm` 一次性有效、5 分钟过期、绑定包路径 hash。**没有正确 `confirm` 时，`start` 永远只做 dry-run**，这不是提示词层面的约定，而是代码里的硬门。
+`confirm` **一次性有效、5 分钟过期、绑定「目标设备 + 固件路径 + 镜像 sha256 + 协议」**。
+**没有正确 `confirm` 时，`start` 永远只做 dry-run** —— 这不是提示词层面的约定，而是代码里的硬门
+（`mcp/ota_confirm.rs`）。
+
+实现要点（P4）：
+
+- **判定顺序固定**：先校验固件包（本地只读）→ 再预检设备（非破坏性）→ 最后才看令牌。
+  包已经损坏时，即使令牌有效也走不到烧录。
+- **漏带 vs 带错**：不带 `confirm` 是正常 dry-run（返回 200 + plan）；
+  带了但无效则返回 `isError` 的 `CONFIRM_INVALID` / `CONFIRM_EXPIRED` / `CONFIRM_MISMATCH`，
+  **并在错误负载里直接附上新的 `confirm_token`** —— 省掉"重跑一遍拿令牌"的往返，模型照着换一个即可。
+- **令牌不被误消费**：参数不一致（换设备 / 换包）时令牌保持有效，只有校验通过才核销。
+- **档位硬门**：标准档（`standard`）在真正执行前被 `TIER_BLOCKED` 拦下。
+  计划里标准档是「dry-run + elicitation 双确认」，但 elicitation 属 P5；
+  在它落地之前宁可拒绝执行，也不留一条无确认的烧录路径。
+- `est_seconds` 是量级参考，不承诺精度；真实进度以 `action=status` 的 `stage/percent` 为准。
 
 ### 6.5 `combridge_ble_gatt`
 
@@ -449,6 +478,11 @@ combridge-mcp --print-config                     # 输出客户端 JSON 配置
 
 错误码清单（初版）：`PORT_BUSY` / `PORT_NOT_FOUND` / `PORT_NOT_OPEN` / `PORT_NOT_OWNED` / `LEASE_EXPIRED` / `DEVICE_DISCONNECTED` / `TIMEOUT` / `INVALID_ARGUMENT` / `CONFIRM_REQUIRED` / `TIER_BLOCKED` / `HW_ERROR` / `JOB_NOT_FOUND` / `RATE_LIMITED`；
 GH3036 域另有 `GH3036_BUSY` / `GH3036_INIT_FAILED` / `GH3036_RPC_FAILED` / `GH3036_CHANNEL_FAILED` / `CHANNEL_NOT_CONFIGURED` / `CONFIG_INVALID` / `CONFIG_NOT_LOADED` / `FACTORY_TEST_FAILED` / `FACTORY_TEST_STATE`。
+
+P4 新增（已落地）：`CONFIRM_INVALID` / `CONFIRM_EXPIRED` / `CONFIRM_MISMATCH` / `PACKAGE_INVALID` /
+`OTA_ERROR` / `OTA_NOT_RUNNING` / `BUFFER_NOT_FOUND` / `BUFFER_EXISTS` / `PARSER_INVALID` /
+`PROTOCOL_NOT_FOUND` / `PROTOCOL_ERROR` / `LOG_NOT_FOUND` / `LOG_READ_FAILED`。
+`CONFIRM_REQUIRED` 保留给 P5 的 elicitation（"用户点了 decline"），当前实现是"漏带令牌=静默 dry-run"。
 
 **实现约束（踩过）**：错误必须是 `isError: true` 的工具结果，不能抛 `Err(ErrorData)` —— 后者是 JSON-RPC 协议错误，
 客户端会渲染成 "internal error"，模型读不到 `message`，`hint` 等于白写。
@@ -599,7 +633,7 @@ L2 / L3 通过 MCP 的 **elicitation** 让客户端弹窗询问用户，而不�
 | P1 串口闭环 | ✅ 已完成 | 新增 `mcp/{lease,serial_hub}.rs`；7 个工具（`about` + `ports` + 5 个 `serial_*`）；租约随 P1 一起落地（按 §9.2 建议提前） |
 | P2 设备与 BLE | ✅ 已完成 | 新增 `mcp/ble_hub.rs`；工具 `combridge_devices` / `combridge_ble_scan` / `combridge_ble_connect` / `combridge_ble_gatt`；BLE 连接租约资源名 `ble:<address>` |
 | P3 GH3036 与产测 | ✅ 已实现（真机验收待补） | 新增 `mcp/gh3036_job.rs`；工具 `combridge_gh3036_rpc` / `combridge_gh3036_factory_test`；`FactoryTestManager` 增加 CSV 路径访问器 |
-| P4 其余业务域 | 待开始 | — |
+| P4 其余业务域 | ✅ 已完成（OTA 真机烧录待验） | 新增 `mcp/{ota_confirm,logs}.rs`；工具 `combridge_waveform` / `combridge_protocol` / `combridge_ota`；`combridge_about` 增加 `action=logs`。**对外 16 个工具** |
 | P5 安全与产品化 | 部分前置 | 租约已在 P1 完成；两档策略的 UI 与 elicitation 待 P5 |
 
 P1 实现要点（与本文档契约的对应）：
@@ -650,6 +684,47 @@ P3 实现要点：
 - `FactoryTestManager` 新增 `csv_path_for_project` / `result_csv_path`，`Gh3036Manager` 暴露
   `factory_test_csv_path`，路径规则不再在 MCP 侧重写一遍。
 - 未实现：`threshold_validate` / `threshold_save`（属 GUI 侧编辑场景，MCP 目前只需 `threshold_get`）。
+
+P4 实现要点：
+
+- 工具收敛为 3 个（对应 §5.2 的 #15~#17）：`combridge_waveform`（list / create / remove /
+  configure_parser / parse / read / clear / status）、`combridge_protocol`（list / get / load / unload /
+  enable / disable / bind / unbind / bound）、`combridge_ota`（protocols / validate / preflight / start /
+  status / cancel）。§5.2 里的 `combridge_logs` 按计划并入 `combridge_about(action="logs")`，
+  `combridge_gh3036_catalog` 已在 P3 并入 `gh3036_rpc(action="catalog")` —— 至此 **16 个工具全部落地**。
+- **波形与 GUI 共用同一份 `WaveformManager`**：MCP `parse` 写入的行，GUI 波形面板立刻可见，反过来也一样。
+  `parse` 按行处理并返回 `accepted/rejected` 与最多 5 条失败原因 —— 一段串口数据里混进一行坏数据不该让整段失败。
+- **协议插件按 9 个 action 直连 `PluginManager`**，不经过 `#[tauri::command]`：command 层返回 `PluginInfo`
+  含 `PathBuf`，且失败用 `ErrorResponse` 包装。MCP 侧转换出扁平的 `PluginView`（path 转字符串、
+  state 转稳定小写枚举），错误统一 `PROTOCOL_ERROR` + 恢复提示。
+- **OTA 的 dry-run / confirm 硬门**见 §6.4。`mcp/ota_confirm.rs` 只做一件事：
+  签发、校验、核销令牌（一次性 / 5 分钟 / 绑定设备+路径+sha256），单测覆盖 7 个边界。
+- **日志尾读**先问 `LoggerService::log_path()`（尊重用户在设置里改过的日志路径），
+  找不到再回退到 `<exe>/log/` 里最新的 `.log`；只读尾部 256KB 窗口，避免整文件读入。
+  这条在冒烟中踩到了：dev 构建的 `log_config.json` 指向 `E:\Tools\ComBridge\log\...`，
+  最初按目录扫描拿到的是几个月前的旧日志，改为先问 LoggerService 后才对上。
+- **L3 档位硬门提前落地**：`require_dev_tier` 已挂在 `gh3036_factory_test` 的 run/continue 与
+  `ota` 的真实执行路径上。标准档返回 `TIER_BLOCKED`（不是静默降级），
+  待 P5 的 elicitation 到位后改为「双确认」而非「拒绝」。
+
+P4 冒烟结果（2026-11-04，`npm run tauri dev` + `127.0.0.1:47821`，tier=dev）：
+
+| 验证项 | 结果 |
+|---|---|
+| `tools/list` | ✅ **16 个**，与 §5.2 收敛后的清单一致 |
+| `about(summary)` | ✅ `tool_domains` 含 waveform/protocol/ota，`planned` 已空 |
+| `about(logs)` | ✅ 定位到 LoggerService 当前文件，返回真实运行日志（含本次 MCP 会话） |
+| `waveform` 全链路 | ✅ create → configure_parser(delimiter) → parse(3 行成功 / 1 行失败并给行号) → read(3×3 数值) → status → clear(保留列名) → list → remove |
+| `waveform` 缺参 | ✅ `INVALID_ARGUMENT` + "action=read 缺少必填参数 buffer_id" |
+| `protocol` 生命周期 | ✅ 真实 Lua 插件 load（识别 3 个 hook）→ list → enable → bind → bound → unbind → disable → unload → list 为空 |
+| `protocol` 异常 | ✅ 不存在插件 `PROTOCOL_NOT_FOUND`；脚本路径不存在 `INVALID_ARGUMENT` |
+| `ota(protocols)` | ✅ 返回 smp / goodix 两个协议 |
+| `ota(validate/start)` 包不存在 | ✅ `PACKAGE_INVALID`，不进入 dry-run 之外的任何分支 |
+| `ota(status)` / `cancel` 未运行 | ✅ `idle` / `OTA_NOT_RUNNING` |
+| `ota(start)` 缺 address | ✅ `INVALID_ARGUMENT` |
+
+**未验证**：真实固件包下的 dry-run → confirm → 烧录链路（仓库内无固件样本）；
+标准档运行时拦截（`tier_allows_l3` 有单测，但未在 standard 档下实跑）。
 
 ### 9.1 阶段划分
 

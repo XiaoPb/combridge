@@ -3,12 +3,18 @@
 //! P0：`combridge_about`。
 //! P1：串口域 —— `combridge_ports` / `combridge_serial_open` / `combridge_serial_close` /
 //! `combridge_serial_write` / `combridge_serial_read` / `combridge_serial_expect`。
+//! P2：设备与 BLE —— `combridge_devices` / `combridge_ble_scan` / `combridge_ble_connect` /
+//! `combridge_ble_gatt`。
+//! P3：GH3036 —— `combridge_gh3036_rpc` / `combridge_gh3036_factory_test`。
+//! P4：其余业务域 —— `combridge_waveform` / `combridge_protocol` / `combridge_ota`，
+//! 以及 `combridge_about` 的 `action=logs`。
 //!
 //! 设计约定（docs/mcp-server-plan.md §5、§6）：
 //! - 工具名 `combridge_` / `serial_` 前缀，域内不做 1:1 命令映射
 //! - 独占资源操作必须持有效租约（`lease_id`），PORT_BUSY 时返回占用者信息
 //! - 读类工具（ports/read/expect）不需要租约：数据经 hub 对所有人可见
 //! - 注解：只读工具标 `read_only_hint = true`，写/关设备标 `destructive_hint = true`
+//! - L3（OTA / 产测）在标准档一律拒绝，待 P5 的 elicitation 落地后改为双确认
 
 use rmcp::ServerHandler;
 use rmcp::handler::server::wrapper::{Json, Parameters};
@@ -23,10 +29,29 @@ use crate::device::serial::serial_config::{
     BaudRate, DataBits, FlowControl, Parity, SerialPortConfig, StopBits,
 };
 use crate::gh3036::{ChannelConfig, ChannelType, FactoryTestStatus, FactoryTestStep};
+use crate::ota::{
+    OtaDeviceInfo, OtaPackageInfo, OtaProtocolDescriptor, OtaStage, OtaStartOptions, OtaState,
+    OtaStatusDto,
+};
+use crate::protocol::{PluginInfo, PluginState};
+use crate::waveform::{ParserConfig, ParserType, WaveformBufferConfig};
+
+/// `combridge_about` 的入参。
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AboutRequest {
+    /// 动作：`summary`（默认，服务概况）| `logs`（读日志尾部，用于自查失败原因）
+    #[serde(default)]
+    pub action: Option<String>,
+    /// `logs`：返回行数，默认 100，上限 500
+    #[serde(default)]
+    pub lines: Option<usize>,
+}
 
 /// `combridge_about` 的返回结构。
 #[derive(Debug, Serialize, schemars::JsonSchema)]
 pub struct AboutResponse {
+    /// 实际执行的 action
+    pub action: String,
     /// ComBridge 应用版本
     pub app_version: String,
     /// 安全档位："dev"（研发档）| "standard"（标准档）
@@ -39,6 +64,10 @@ pub struct AboutResponse {
     pub tool_domains: Vec<String>,
     /// 尚未实现的工具域（调用无效，仅作能力预告）
     pub planned_tool_domains: Vec<String>,
+    /// `logs`：读取的日志文件（绝对路径）
+    pub log_file: Option<String>,
+    /// `logs`：日志尾部内容（每项一行）
+    pub log_lines: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -780,17 +809,341 @@ pub struct FactoryTestExtraResponse {
     pub threshold_yaml: Option<String>,
 }
 
+// ---------------------------------------------------------------------------
+// combridge_waveform（P4）
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct WaveformRequest {
+    /// 动作：list | create | remove | configure_parser | parse | read | clear | status
+    pub action: String,
+    /// 缓冲 ID（除 list 外均必填）
+    #[serde(default)]
+    pub buffer_id: Option<String>,
+    /// create：环形缓冲容量（保留最近 N 行），默认 1000
+    #[serde(default)]
+    pub capacity: Option<usize>,
+    /// create：列名，默认 CH0..CH4
+    #[serde(default)]
+    pub column_names: Option<Vec<String>>,
+    /// configure_parser：解析器配置
+    #[serde(default)]
+    pub parser: Option<ParserSpec>,
+    /// parse：待解析文本，可含多行（每行一条样本，如 "1.2,3.4,5.6"）
+    #[serde(default)]
+    pub data: Option<String>,
+    /// read：读取最近多少行，默认 200，上限 5000
+    #[serde(default)]
+    pub rows: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ParserSpec {
+    /// "delimiter"（按分隔符切分）| "regex"（按正则捕获组）
+    pub parser_type: String,
+    /// delimiter 模式的分隔符，默认 ","
+    #[serde(default)]
+    pub delimiter: Option<String>,
+    /// regex 模式的表达式（每行首个匹配的捕获组作为一行数据）
+    #[serde(default)]
+    pub pattern: Option<String>,
+    /// 列名，省略则沿用缓冲已有列名
+    #[serde(default)]
+    pub column_names: Option<Vec<String>>,
+    /// 去除首尾空白，默认 true
+    #[serde(default)]
+    pub trim_whitespace: Option<bool>,
+}
+
+#[derive(Debug, Default, Serialize, schemars::JsonSchema)]
+pub struct WaveformResponse {
+    pub action: String,
+    /// list：全部缓冲 ID
+    pub buffers: Vec<String>,
+    pub buffer_id: Option<String>,
+    /// 列名（与 rows 每行长度对齐）
+    pub columns: Vec<String>,
+    /// read：最近 N 行数据
+    pub rows: Vec<Vec<f64>>,
+    /// 缓冲内当前总行数
+    pub row_count: usize,
+    pub column_count: usize,
+    /// 环形缓冲容量
+    pub capacity: Option<usize>,
+    /// 已配置的解析器类型：delimiter | regex
+    pub parser_type: Option<String>,
+    /// parse：成功写入的行数
+    pub accepted: Option<usize>,
+    /// parse：解析失败被丢弃的行数
+    pub rejected: Option<usize>,
+    /// parse：前若干条失败原因（最多 5 条）
+    pub errors: Vec<String>,
+}
+
+impl WaveformResponse {
+    fn new(action: &str) -> Self {
+        Self {
+            action: action.to_string(),
+            ..Default::default()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// combridge_protocol（P4）
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ProtocolRequest {
+    /// 动作：list | get | load | unload | enable | disable | bind | unbind | bound
+    pub action: String,
+    /// 插件 ID（除 list 外均必填）
+    #[serde(default)]
+    pub plugin_id: Option<String>,
+    /// load：Lua 脚本绝对路径
+    #[serde(default)]
+    pub path: Option<String>,
+    /// bind / unbind / bound：设备 ID
+    #[serde(default)]
+    pub device_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct PluginView {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub description: Option<String>,
+    pub author: Option<String>,
+    /// Lua 脚本绝对路径
+    pub path: String,
+    /// 状态：unloaded | loaded | enabled | disabled | error
+    pub state: String,
+    /// 插件声明的 hook 列表
+    pub hooks: Vec<String>,
+    /// 已绑定设备 ID
+    pub bound_devices: Vec<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Default, Serialize, schemars::JsonSchema)]
+pub struct ProtocolResponse {
+    pub action: String,
+    /// list / bound：插件列表
+    pub plugins: Vec<PluginView>,
+    /// get / load：单个插件详情
+    pub plugin: Option<PluginView>,
+    /// 状态变更类动作的结果说明
+    pub message: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// combridge_ota（P4，L3 高危）
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct OtaRequest {
+    /// 动作：protocols | validate | preflight | start | status | cancel
+    pub action: String,
+    /// 协议 ID（省略时用默认协议），见 action=protocols
+    #[serde(default)]
+    pub protocol: Option<String>,
+    /// 目标设备 BLE 地址（preflight / start 必填，如 "AA:BB:CC:DD:EE:FF"）
+    #[serde(default)]
+    pub address: Option<String>,
+    /// 固件包路径（.zip 包或裸固件镜像；validate / start 必填）
+    #[serde(default)]
+    pub firmware_path: Option<String>,
+    /// start：dry-run 返回的 confirm_token。**不带它调用 start 不会烧录**，只做前置检查
+    #[serde(default)]
+    pub confirm: Option<String>,
+    /// start：dry-run 时是否预检设备（连设备读版本），默认 true
+    #[serde(default)]
+    pub check_device: Option<bool>,
+    /// 跳过设备侧二次确认（少数协议支持），默认 false
+    #[serde(default)]
+    pub force_confirm: Option<bool>,
+    /// 仅升级（不清除原有配置），默认 false
+    #[serde(default)]
+    pub upgrade_only: Option<bool>,
+    /// Goodix 路由：auto | normal | fastService
+    #[serde(default)]
+    pub route: Option<String>,
+    /// Goodix 传输模式：auto | normal | fast
+    #[serde(default)]
+    pub transfer_mode: Option<String>,
+    /// Goodix Flash 模式：dual（默认双区）| single（原地升级）
+    #[serde(default)]
+    pub bank_mode: Option<String>,
+    /// Goodix 显式写入地址（十六进制字符串）
+    #[serde(default)]
+    pub target_address: Option<String>,
+    /// 完成后是否立即复位运行，默认 true
+    #[serde(default)]
+    pub run_immediately: Option<bool>,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct OtaProtocolView {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+pub struct OtaKeyValueView {
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct OtaPackageView {
+    pub path: String,
+    pub file_name: String,
+    pub package_size: u64,
+    pub protocol: String,
+    pub image_name: String,
+    pub image_size: u64,
+    pub image_sha256: String,
+    /// Goodix 双区写入地址（按加载地址 + 4K 对齐的镜像大小计算）
+    pub dual_bank_address: Option<String>,
+    /// 协议自定义展示字段（SMP 的应用名 / 目标板 / SoC / MCUboot 版本等）
+    pub fields: Vec<OtaKeyValueView>,
+}
+
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+pub struct OtaDeviceView {
+    pub address: String,
+    pub protocol: String,
+    pub name: Option<String>,
+    pub mode: Option<String>,
+    pub mtu: Option<u16>,
+    pub version: Option<String>,
+    pub fields: Vec<OtaKeyValueView>,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct OtaStatusView {
+    /// idle | running | success | failed | cancelled
+    pub state: String,
+    /// idle | unpacking | validating | preparing | transferring | activating | rebooting | completed | failed
+    pub stage: String,
+    pub protocol: Option<String>,
+    pub address: Option<String>,
+    pub firmware_path: Option<String>,
+    pub current: u64,
+    pub total: u64,
+    pub percent: f64,
+    pub message: String,
+    pub error: Option<String>,
+    pub updated_at: u64,
+}
+
+/// dry-run 的执行计划。确认前模型可据此判断是否该问用户。
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct OtaPlanView {
+    pub protocol: String,
+    pub target: String,
+    pub firmware_path: String,
+    pub image_name: String,
+    pub image_size: u64,
+    pub image_sha256: String,
+    /// 传输耗时粗估（秒）= 8s 固定开销 + 镜像大小 / 12KB/s
+    pub est_seconds: u64,
+    /// 目标设备信息（预检成功时填充）
+    pub device: Option<OtaDeviceView>,
+}
+
+#[derive(Debug, Default, Serialize, schemars::JsonSchema)]
+pub struct OtaResponse {
+    pub action: String,
+    /// 本次调用是否只做前置检查（true = 未烧录）
+    pub dry_run: Option<bool>,
+    /// action=protocols
+    pub protocols: Vec<OtaProtocolView>,
+    /// action=validate / start 的固件包信息
+    pub package: Option<OtaPackageView>,
+    /// action=preflight 的设备信息
+    pub device: Option<OtaDeviceView>,
+    /// action=start（dry-run）的执行计划
+    pub plan: Option<OtaPlanView>,
+    /// action=start（dry-run）签发的确认令牌；带回 confirm 才会真正烧录
+    pub confirm_token: Option<String>,
+    /// 令牌剩余有效秒数
+    pub confirm_expires_in: Option<u64>,
+    /// 前置检查发现的非阻断问题（如设备预检失败）
+    pub warnings: Vec<String>,
+    /// action=status / start（真实执行）的进度
+    pub status: Option<OtaStatusView>,
+}
+
+impl OtaResponse {
+    fn new(action: &str) -> Self {
+        Self {
+            action: action.to_string(),
+            ..Default::default()
+        }
+    }
+}
+
 #[tool_router]
 impl ComBridgeMcp {
     #[tool(
         name = "combridge_about",
         description = "获取 ComBridge 服务概况：应用版本、安全档位、已连接设备快照与可用工具域。\
-首次连接时调用一次即可；设备状态变化后可重新调用获取最新快照。",
+首次连接时调用一次即可；设备状态变化后可重新调用获取最新快照。\
+action=logs 读取日志尾部（默认 100 行），工具返回错误且看不出原因时用它自查。",
         annotations(read_only_hint = true)
     )]
-    async fn about(&self) -> ToolR<AboutResponse> {
+    async fn about(&self, Parameters(req): Parameters<AboutRequest>) -> ToolR<AboutResponse> {
+        let action = req
+            .action
+            .as_deref()
+            .unwrap_or("summary")
+            .to_lowercase();
+
+        if action == "logs" {
+            let lines = req.lines.unwrap_or(100).clamp(1, 500);
+            let path = super::logs::active_log_file().ok_or_else(|| {
+                tool_err_full(
+                    "LOG_NOT_FOUND",
+                    format!(
+                        "未找到日志文件（预期目录：{}）",
+                        super::logs::log_dir()
+                            .map(|d| d.display().to_string())
+                            .unwrap_or_else(|| "<不可确定>".to_string())
+                    ),
+                    Some("确认应用以文件日志模式启动；或将 log.level 调到 info 后复现问题"),
+                    false,
+                )
+            })?;
+            let tail = super::logs::tail_lines(&path, lines)
+                .map_err(|e| tool_err("LOG_READ_FAILED", e))?;
+            return Ok(Json(AboutResponse {
+                action: "logs".to_string(),
+                app_version: self.ctx.app_version.clone(),
+                tier: self.ctx.tier.clone(),
+                started_at: self.ctx.started_at,
+                connected_devices: Vec::new(),
+                tool_domains: Vec::new(),
+                planned_tool_domains: Vec::new(),
+                log_file: Some(path.display().to_string()),
+                log_lines: tail,
+            }));
+        }
+
+        if action != "summary" {
+            return Err(tool_err_full(
+                "INVALID_ARGUMENT",
+                format!("未知 action: {action}"),
+                Some("支持 summary（默认）| logs"),
+                false,
+            ));
+        }
+
         let connected_devices = self.ctx.connected_devices().await;
         Ok(Json(AboutResponse {
+            action: "summary".to_string(),
             app_version: self.ctx.app_version.clone(),
             tier: self.ctx.tier.clone(),
             started_at: self.ctx.started_at,
@@ -800,12 +1153,13 @@ impl ComBridgeMcp {
                 "ble".to_string(),
                 "devices".to_string(),
                 "gh3036".to_string(),
-            ],
-            planned_tool_domains: vec![
                 "waveform".to_string(),
                 "protocol".to_string(),
                 "ota".to_string(),
             ],
+            planned_tool_domains: Vec::new(),
+            log_file: None,
+            log_lines: Vec::new(),
         }))
     }
 
@@ -1724,6 +2078,7 @@ action=threshold_get 取当前卡控配置 YAML。run/continue/stop 需要 GH303
 
         match action.as_str() {
             "run" => {
+                self.require_dev_tier("产测执行")?;
                 let lease = self.acquire_gh3036_lease(&owner, req.lease_id.as_deref(), req.force, req.ttl_s)?;
                 self.ensure_gh3036_initialized()?;
 
@@ -1836,6 +2191,7 @@ action=threshold_get 取当前卡控配置 YAML。run/continue/stop 需要 GH303
                 Ok(Json(summary))
             }
             "continue" => {
+                self.require_dev_tier("产测继续")?;
                 let lease = self.acquire_gh3036_lease(&owner, req.lease_id.as_deref(), req.force, req.ttl_s)?;
                 self.ctx.gh3036.factory_test_continue().map_err(|e| {
                     tool_err_full(
@@ -1913,6 +2269,520 @@ action=threshold_get 取当前卡控配置 YAML。run/continue/stop 需要 GH303
                 "INVALID_ARGUMENT",
                 format!("未知 action: {other}"),
                 Some("支持 run | status | continue | stop | validate_config | threshold_get"),
+                false,
+            )),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // P4：波形
+    // -----------------------------------------------------------------------
+
+    #[tool(
+        name = "combridge_waveform",
+        description = "波形数据缓冲（与 GUI 的波形面板共用同一份实例）。\
+action=list 列出缓冲 ID；create 新建（buffer_id，可选 capacity / column_names）；\
+configure_parser 设置解析器（parser.parser_type=delimiter 按分隔符，regex 按正则捕获组）；\
+parse 把文本解析成数值行追加（data 可含多行，每行一条样本）；read 读取最近 N 行；\
+clear 清空；status 查看行数与列名；remove 删除缓冲。\
+典型用法：create → configure_parser → parse(串口收到的整段文本) → read 取值。",
+        annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = false)
+    )]
+    async fn waveform(
+        &self,
+        Parameters(req): Parameters<WaveformRequest>,
+    ) -> ToolR<WaveformResponse> {
+        let action = req.action.to_lowercase();
+
+        match action.as_str() {
+            "list" => {
+                let mut resp = WaveformResponse::new("list");
+                resp.buffers = self.ctx.waveform.list_buffers();
+                Ok(Json(resp))
+            }
+            "create" => {
+                let buffer_id = require_arg(req.buffer_id.as_deref(), "buffer_id", "create")?;
+                let config = WaveformBufferConfig {
+                    capacity: req.capacity.unwrap_or(1000).clamp(1, 1_000_000),
+                    column_names: req.column_names.unwrap_or_else(default_columns),
+                };
+                self.ctx
+                    .waveform
+                    .create_buffer(&buffer_id, config.clone())
+                    .map_err(|e| {
+                        tool_err_full(
+                            "BUFFER_EXISTS",
+                            e.to_string(),
+                            Some("换一个 buffer_id，或先 action=remove 删除同名缓冲"),
+                            false,
+                        )
+                    })?;
+                let status = self
+                    .ctx
+                    .waveform
+                    .get_status(&buffer_id)
+                    .map_err(|e| tool_err("INVALID_ARGUMENT", e.to_string()))?;
+                Ok(Json(WaveformResponse {
+                    action: "create".to_string(),
+                    buffer_id: Some(buffer_id),
+                    columns: status.column_names,
+                    row_count: status.row_count,
+                    column_count: status.column_count,
+                    capacity: Some(status.capacity),
+                    ..Default::default()
+                }))
+            }
+            "remove" => {
+                let buffer_id = require_arg(req.buffer_id.as_deref(), "buffer_id", "remove")?;
+                self.ctx.waveform.remove_buffer(&buffer_id);
+                Ok(Json(WaveformResponse {
+                    action: "remove".to_string(),
+                    buffer_id: Some(buffer_id),
+                    ..Default::default()
+                }))
+            }
+            "configure_parser" => {
+                let buffer_id =
+                    require_arg(req.buffer_id.as_deref(), "buffer_id", "configure_parser")?;
+                let spec = req.parser.ok_or_else(|| {
+                    tool_err_full(
+                        "INVALID_ARGUMENT",
+                        "configure_parser 需要 parser 参数",
+                        Some("如 {\"parser_type\":\"delimiter\",\"delimiter\":\",\"}"),
+                        false,
+                    )
+                })?;
+                let config = build_parser_config(spec)?;
+                self.ctx
+                    .waveform
+                    .configure_parser(&buffer_id, config)
+                    .map_err(|e| tool_err("PARSER_INVALID", e.to_string()))?;
+                let status = self
+                    .ctx
+                    .waveform
+                    .get_status(&buffer_id)
+                    .map_err(|e| tool_err("INVALID_ARGUMENT", e.to_string()))?;
+                Ok(Json(WaveformResponse {
+                    action: "configure_parser".to_string(),
+                    buffer_id: Some(buffer_id),
+                    columns: status.column_names,
+                    row_count: status.row_count,
+                    column_count: status.column_count,
+                    capacity: Some(status.capacity),
+                    parser_type: status.parser_type.map(parser_type_str),
+                    ..Default::default()
+                }))
+            }
+            "parse" => {
+                let buffer_id = require_arg(req.buffer_id.as_deref(), "buffer_id", "parse")?;
+                let data = req.data.ok_or_else(|| {
+                    tool_err_full(
+                        "INVALID_ARGUMENT",
+                        "parse 需要 data 参数",
+                        Some("把串口收到的整段文本传进来，多行会自动按行解析"),
+                        false,
+                    )
+                })?;
+
+                // 缓冲必须先存在：解析结果无处安放时早失败，避免"解析成功但没写进去"
+                self.ctx
+                    .waveform
+                    .get_status(&buffer_id)
+                    .map_err(|e| {
+                        tool_err_full(
+                            "BUFFER_NOT_FOUND",
+                            e.to_string(),
+                            Some("先用 action=create 创建该缓冲，或 action=list 查看现有 ID"),
+                            false,
+                        )
+                    })?;
+
+                let mut accepted = 0usize;
+                let mut rejected = 0usize;
+                let mut errors: Vec<String> = Vec::new();
+                for (idx, line) in data.lines().enumerate() {
+                    let line = line.trim_end_matches('\r');
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    match self.ctx.waveform.parse_and_store(&buffer_id, line) {
+                        Ok(()) => accepted += 1,
+                        Err(e) => {
+                            rejected += 1;
+                            if errors.len() < 5 {
+                                errors.push(format!("第 {} 行: {e}", idx + 1));
+                            }
+                        }
+                    }
+                }
+
+                let after = self
+                    .ctx
+                    .waveform
+                    .get_status(&buffer_id)
+                    .map_err(|e| tool_err("INVALID_ARGUMENT", e.to_string()))?;
+                Ok(Json(WaveformResponse {
+                    action: "parse".to_string(),
+                    buffer_id: Some(buffer_id),
+                    columns: after.column_names,
+                    row_count: after.row_count,
+                    column_count: after.column_count,
+                    capacity: Some(after.capacity),
+                    parser_type: after.parser_type.map(parser_type_str),
+                    accepted: Some(accepted),
+                    rejected: Some(rejected),
+                    errors,
+                    ..Default::default()
+                }))
+            }
+            "read" => {
+                let buffer_id = require_arg(req.buffer_id.as_deref(), "buffer_id", "read")?;
+                let rows = req.rows.unwrap_or(200).clamp(1, 5000);
+                let data = self.ctx.waveform.read_data(&buffer_id, rows).map_err(|e| {
+                    tool_err_full(
+                        "BUFFER_NOT_FOUND",
+                        e.to_string(),
+                        Some("先用 action=list 确认 buffer_id"),
+                        false,
+                    )
+                })?;
+                let status = self
+                    .ctx
+                    .waveform
+                    .get_status(&buffer_id)
+                    .map_err(|e| tool_err("INVALID_ARGUMENT", e.to_string()))?;
+                Ok(Json(WaveformResponse {
+                    action: "read".to_string(),
+                    buffer_id: Some(buffer_id),
+                    column_count: data.columns.len(),
+                    columns: data.columns,
+                    rows: data.rows,
+                    row_count: status.row_count,
+                    capacity: Some(status.capacity),
+                    parser_type: status.parser_type.map(parser_type_str),
+                    ..Default::default()
+                }))
+            }
+            "clear" => {
+                let buffer_id = require_arg(req.buffer_id.as_deref(), "buffer_id", "clear")?;
+                self.ctx.waveform.clear_buffer(&buffer_id).map_err(|e| {
+                    tool_err_full(
+                        "BUFFER_NOT_FOUND",
+                        e.to_string(),
+                        Some("先用 action=list 确认 buffer_id"),
+                        false,
+                    )
+                })?;
+                let after = self
+                    .ctx
+                    .waveform
+                    .get_status(&buffer_id)
+                    .map_err(|e| tool_err("INVALID_ARGUMENT", e.to_string()))?;
+                Ok(Json(WaveformResponse {
+                    action: "clear".to_string(),
+                    buffer_id: Some(buffer_id),
+                    columns: after.column_names,
+                    row_count: after.row_count,
+                    column_count: after.column_count,
+                    capacity: Some(after.capacity),
+                    parser_type: after.parser_type.map(parser_type_str),
+                    ..Default::default()
+                }))
+            }
+            "status" => {
+                let buffer_id = require_arg(req.buffer_id.as_deref(), "buffer_id", "status")?;
+                let status = self.ctx.waveform.get_status(&buffer_id).map_err(|e| {
+                    tool_err_full(
+                        "BUFFER_NOT_FOUND",
+                        e.to_string(),
+                        Some("先用 action=list 确认 buffer_id"),
+                        false,
+                    )
+                })?;
+                Ok(Json(WaveformResponse {
+                    action: "status".to_string(),
+                    buffer_id: Some(buffer_id),
+                    columns: status.column_names,
+                    row_count: status.row_count,
+                    column_count: status.column_count,
+                    capacity: Some(status.capacity),
+                    parser_type: status.parser_type.map(parser_type_str),
+                    ..Default::default()
+                }))
+            }
+            other => Err(tool_err_full(
+                "INVALID_ARGUMENT",
+                format!("未知 action: {other}"),
+                Some(
+                    "支持 list | create | remove | configure_parser | parse | read | clear | status",
+                ),
+                false,
+            )),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // P4：协议插件（Lua）
+    // -----------------------------------------------------------------------
+
+    #[tool(
+        name = "combridge_protocol",
+        description = "Lua 协议插件管理。action=list 列出已装插件与状态；get 看单个插件；\
+load 从脚本路径加载（path 为 Lua 文件绝对路径）；unload 卸载；enable/disable 启停；\
+bind/unbind 把插件绑定到设备（device_id）；bound 查某设备已绑定的插件。\
+禁用（disable）只是停止响应事件，插件仍占用脚本与 hook 注册；彻底移除用 unload。",
+        annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = false)
+    )]
+    async fn protocol(
+        &self,
+        Parameters(req): Parameters<ProtocolRequest>,
+    ) -> ToolR<ProtocolResponse> {
+        let action = req.action.to_lowercase();
+
+        match action.as_str() {
+            "list" => {
+                let plugins = self
+                    .ctx
+                    .protocols
+                    .list_protocols()
+                    .map_err(|e| tool_err("PROTOCOL_ERROR", format!("列出插件失败: {e}")))?;
+                Ok(Json(ProtocolResponse {
+                    action: "list".to_string(),
+                    plugins: plugins.iter().map(plugin_view).collect(),
+                    plugin: None,
+                    message: None,
+                }))
+            }
+            "get" => {
+                let plugin_id = require_arg(req.plugin_id.as_deref(), "plugin_id", "get")?;
+                let info = self.ctx.protocols.get_plugin(&plugin_id).map_err(|e| {
+                    tool_err_full(
+                        "PROTOCOL_NOT_FOUND",
+                        e.to_string(),
+                        Some("先用 action=list 查看已加载的插件 ID"),
+                        false,
+                    )
+                })?;
+                Ok(Json(ProtocolResponse {
+                    action: "get".to_string(),
+                    plugins: Vec::new(),
+                    plugin: Some(plugin_view(&info)),
+                    message: None,
+                }))
+            }
+            "load" => {
+                let plugin_id = require_arg(req.plugin_id.as_deref(), "plugin_id", "load")?;
+                let path = require_arg(req.path.as_deref(), "path", "load")?;
+                let path_buf = std::path::PathBuf::from(&path);
+                if !path_buf.exists() {
+                    return Err(tool_err_full(
+                        "INVALID_ARGUMENT",
+                        format!("脚本文件不存在: {path}"),
+                        Some("传入 Lua 脚本的绝对路径（Windows 路径注意反斜杠转义）"),
+                        false,
+                    ));
+                }
+                let info = self
+                    .ctx
+                    .protocols
+                    .load_plugin(&plugin_id, path_buf)
+                    .map_err(|e| {
+                        tool_err_full(
+                            "PROTOCOL_ERROR",
+                            format!("加载插件失败: {e}"),
+                            Some("检查 Lua 语法、require 依赖与 manifest 中的 name/version"),
+                            false,
+                        )
+                    })?;
+                Ok(Json(ProtocolResponse {
+                    action: "load".to_string(),
+                    plugins: Vec::new(),
+                    plugin: Some(plugin_view(&info)),
+                    message: Some(format!("插件 {plugin_id} 已加载")),
+                }))
+            }
+            "unload" => {
+                let plugin_id = require_arg(req.plugin_id.as_deref(), "plugin_id", "unload")?;
+                self.ctx.protocols.unload_plugin(&plugin_id).map_err(|e| {
+                    tool_err_full(
+                        "PROTOCOL_ERROR",
+                        format!("卸载插件失败: {e}"),
+                        Some("插件可能正在处理事件，稍后重试"),
+                        true,
+                    )
+                })?;
+                Ok(Json(ProtocolResponse {
+                    action: "unload".to_string(),
+                    message: Some(format!("插件 {plugin_id} 已卸载")),
+                    ..Default::default()
+                }))
+            }
+            "enable" | "disable" => {
+                let plugin_id =
+                    require_arg(req.plugin_id.as_deref(), "plugin_id", action.as_str())?;
+                if action == "enable" {
+                    self.ctx
+                        .protocols
+                        .enable_plugin(&plugin_id)
+                        .map_err(|e| tool_err("PROTOCOL_ERROR", format!("启用插件失败: {e}")))?;
+                } else {
+                    self.ctx
+                        .protocols
+                        .disable_plugin(&plugin_id)
+                        .map_err(|e| tool_err("PROTOCOL_ERROR", format!("禁用插件失败: {e}")))?;
+                }
+                let info = self
+                    .ctx
+                    .protocols
+                    .get_plugin(&plugin_id)
+                    .map_err(|e| tool_err("PROTOCOL_ERROR", e.to_string()))?;
+                Ok(Json(ProtocolResponse {
+                    action: action.clone(),
+                    plugin: Some(plugin_view(&info)),
+                    message: Some(format!("插件 {plugin_id} 已{}", if action == "enable" { "启用" } else { "禁用" })),
+                    ..Default::default()
+                }))
+            }
+            "bind" => {
+                let plugin_id = require_arg(req.plugin_id.as_deref(), "plugin_id", "bind")?;
+                let device_id = require_arg(req.device_id.as_deref(), "device_id", "bind")?;
+                self.ctx
+                    .protocols
+                    .bind_protocol(&plugin_id, &device_id)
+                    .map_err(|e| {
+                        tool_err_full(
+                            "PROTOCOL_ERROR",
+                            format!("绑定失败: {e}"),
+                            Some("设备 ID 来自 combridge_devices；插件需先 load 且 enable"),
+                            false,
+                        )
+                    })?;
+                Ok(Json(ProtocolResponse {
+                    action: "bind".to_string(),
+                    message: Some(format!("插件 {plugin_id} 已绑定到 {device_id}")),
+                    ..Default::default()
+                }))
+            }
+            "unbind" => {
+                let plugin_id = require_arg(req.plugin_id.as_deref(), "plugin_id", "unbind")?;
+                let device_id = require_arg(req.device_id.as_deref(), "device_id", "unbind")?;
+                self.ctx
+                    .protocols
+                    .unbind_protocol(&plugin_id, &device_id)
+                    .map_err(|e| tool_err("PROTOCOL_ERROR", format!("解绑失败: {e}")))?;
+                Ok(Json(ProtocolResponse {
+                    action: "unbind".to_string(),
+                    message: Some(format!("插件 {plugin_id} 已与 {device_id} 解绑")),
+                    ..Default::default()
+                }))
+            }
+            "bound" => {
+                let device_id = require_arg(req.device_id.as_deref(), "device_id", "bound")?;
+                let plugins = self
+                    .ctx
+                    .protocols
+                    .get_bound_plugins(&device_id)
+                    .map_err(|e| tool_err("PROTOCOL_ERROR", format!("查询绑定关系失败: {e}")))?;
+                Ok(Json(ProtocolResponse {
+                    action: "bound".to_string(),
+                    plugins: plugins.iter().map(plugin_view).collect(),
+                    ..Default::default()
+                }))
+            }
+            other => Err(tool_err_full(
+                "INVALID_ARGUMENT",
+                format!("未知 action: {other}"),
+                Some("支持 list | get | load | unload | enable | disable | bind | unbind | bound"),
+                false,
+            )),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // P4：OTA（L3，默认 dry-run + confirm 硬门）
+    // -----------------------------------------------------------------------
+
+    #[tool(
+        name = "combridge_ota",
+        description = "BLE OTA 固件升级（L3 高危，默认只做前置检查）。\
+action=protocols 列出可用升级协议；validate 只校验固件包（不连设备）；preflight 只预检设备；\
+action=start **不带 confirm 时永远只做 dry-run**：校验包 + 预检设备，返回 plan、warnings 与 confirm_token，\
+不会烧录。把该 token 原样放到 confirm 再调用一次 start 才真正执行（令牌一次性、5 分钟过期、\
+绑定目标设备+固件路径+镜像 sha256）。action=status 查进度（state/stage/percent）；action=cancel 中止。\
+标准档（standard）下 start 会被 TIER_BLOCKED 拒绝，请在 GUI 中操作或改用研发档。",
+        annotations(read_only_hint = false, destructive_hint = true, idempotent_hint = false)
+    )]
+    async fn ota(&self, Parameters(req): Parameters<OtaRequest>) -> ToolR<OtaResponse> {
+        let action = req.action.to_lowercase();
+
+        match action.as_str() {
+            "protocols" => {
+                let mut resp = OtaResponse::new("protocols");
+                resp.protocols = self
+                    .ctx
+                    .ota
+                    .list_protocols()
+                    .into_iter()
+                    .map(ota_protocol_view)
+                    .collect();
+                Ok(Json(resp))
+            }
+            "validate" => {
+                let path = require_arg(req.firmware_path.as_deref(), "firmware_path", "validate")?;
+                let info = self
+                    .ctx
+                    .ota
+                    .validate_package(req.protocol.as_deref(), &path)
+                    .await
+                    .map_err(|e| {
+                        tool_err_full(
+                            "PACKAGE_INVALID",
+                            format!("固件包校验失败: {e}"),
+                            Some("确认路径存在、协议匹配（见 action=protocols）；.zip 包需含协议要求的镜像"),
+                            false,
+                        )
+                    })?;
+                let mut resp = OtaResponse::new("validate");
+                resp.package = Some(ota_package_view(&info));
+                Ok(Json(resp))
+            }
+            "preflight" => {
+                let address = require_arg(req.address.as_deref(), "address", "preflight")?;
+                let info = self
+                    .ctx
+                    .ota
+                    .preflight(req.protocol.as_deref(), &address)
+                    .await
+                    .map_err(|e| map_ota_error(e, "预检设备失败"))?;
+                let mut resp = OtaResponse::new("preflight");
+                resp.device = Some(ota_device_view(&info));
+                Ok(Json(resp))
+            }
+            "start" => self.ota_start(req).await,
+            "status" => {
+                let status = self.ctx.ota.status();
+                let mut resp = OtaResponse::new("status");
+                resp.status = Some(ota_status_view(&status));
+                Ok(Json(resp))
+            }
+            "cancel" => {
+                self.ctx.ota.cancel().map_err(|e| {
+                    tool_err_full(
+                        "OTA_NOT_RUNNING",
+                        e.to_string(),
+                        Some("action=status 确认当前是否有升级在跑"),
+                        false,
+                    )
+                })?;
+                let status = self.ctx.ota.status();
+                let mut resp = OtaResponse::new("cancel");
+                resp.status = Some(ota_status_view(&status));
+                Ok(Json(resp))
+            }
+            other => Err(tool_err_full(
+                "INVALID_ARGUMENT",
+                format!("未知 action: {other}"),
+                Some("支持 protocols | validate | preflight | start | status | cancel"),
                 false,
             )),
         }
@@ -2035,6 +2905,388 @@ impl ComBridgeMcp {
             None,
         )
     }
+
+    /// L3 操作（OTA 烧录、产测执行）的档位门。
+    ///
+    /// 计划里标准档应是「dry-run + elicitation 双确认」，但 elicitation 属 P5。
+    /// 在它落地之前，标准档一律拒绝执行 —— 宁可少一个能力，也不留一条无确认的烧录路径。
+    fn require_dev_tier(&self, what: &str) -> Result<(), CallToolResult> {
+        if tier_allows_l3(&self.ctx.tier) {
+            return Ok(());
+        }
+        Err(tool_err_full(
+            "TIER_BLOCKED",
+            format!("当前为标准档（standard），{what} 仅研发档（dev）可用"),
+            Some("把 %LOCALAPPDATA%\\combridge\\mcp.json 的 tier 改为 \"dev\" 后重启应用；标准档请改用 dry-run / validate 或 GUI 操作"),
+            false,
+        ))
+    }
+
+    /// `combridge_ota(action=start)`：dry-run 与真实执行的分流点。
+    ///
+    /// 判定顺序刻意固定：**先校验参数与固件包，再判令牌** ——
+    /// 这样即使令牌有效、包却已经损坏（换了文件），也不会走到烧录。
+    async fn ota_start(&self, req: OtaRequest) -> ToolR<OtaResponse> {
+        let address = require_arg(req.address.as_deref(), "address", "start")?;
+        let firmware_path =
+            require_arg(req.firmware_path.as_deref(), "firmware_path", "start")?;
+
+        // 1) 固件包校验（本地，只读）
+        let package = self
+            .ctx
+            .ota
+            .validate_package(req.protocol.as_deref(), &firmware_path)
+            .await
+            .map_err(|e| {
+                tool_err_full(
+                    "PACKAGE_INVALID",
+                    format!("固件包校验失败: {e}"),
+                    Some("先用 action=validate 单独排查；确认包路径与协议匹配"),
+                    false,
+                )
+            })?;
+
+        // 2) 设备预检（连设备，非破坏性）。失败不阻断 dry-run，但要如实告警：
+        //    模型需要的正是这条信息去提示用户"设备还没连上"。
+        let mut warnings: Vec<String> = Vec::new();
+        let device = if req.check_device.unwrap_or(true) {
+            match self
+                .ctx
+                .ota
+                .preflight(req.protocol.as_deref(), &address)
+                .await
+            {
+                Ok(info) => Some(info),
+                Err(e) => {
+                    warnings.push(format!("设备预检未通过：{e}"));
+                    None
+                }
+            }
+        } else {
+            warnings.push("已跳过设备预检（check_device=false），目标设备状态未知".to_string());
+            None
+        };
+
+        let protocol_id = package.protocol.clone();
+        let plan = OtaPlanView {
+            protocol: protocol_id.clone(),
+            target: address.clone(),
+            firmware_path: firmware_path.clone(),
+            image_name: package.image_name.clone(),
+            image_size: package.image_size,
+            image_sha256: package.image_sha256.clone(),
+            est_seconds: 8 + package.image_size.div_ceil(12 * 1024),
+            device: device.as_ref().map(ota_device_view),
+        };
+
+        // 3) 令牌校验：不带 confirm = 正常 dry-run；带了但无效 = 明确报错并给新令牌
+        let Some(token) = req.confirm.as_deref() else {
+            return Ok(Json(self.issue_ota_dry_run(
+                &address,
+                &firmware_path,
+                package,
+                plan,
+                warnings,
+            )));
+        };
+
+        {
+            let normalized_protocol = Some(protocol_id.as_str());
+            if let Err(e) = self.ctx.ota_confirm.consume(
+                token,
+                normalized_protocol,
+                &address,
+                &firmware_path,
+                &package.image_sha256,
+            ) {
+                let fresh = self.ctx.ota_confirm.issue(
+                    Some(protocol_id.clone()),
+                    &address,
+                    &firmware_path,
+                    &package.image_sha256,
+                );
+                let mut payload = serde_json::json!({
+                    "code": e.code(),
+                    "message": e.describe(),
+                    "hint": "确认没有烧录。核对 plan 与目标设备后，用返回的新 confirm_token 重新调用 start",
+                    "retryable": true,
+                    "dry_run": true,
+                    "confirm_token": fresh.token,
+                    "confirm_expires_in": fresh.remaining_secs(),
+                });
+                if let Some(p) = payload.as_object_mut() {
+                    p.insert("plan".to_string(), serde_json::to_value(&plan).unwrap_or_default());
+                }
+                return Err(CallToolResult::error(vec![ContentBlock::text(
+                    payload.to_string(),
+                )]));
+            }
+        }
+
+        // 4) 令牌有效：档位门 → 真正烧录
+        self.require_dev_tier("OTA 固件烧录")?;
+
+        let options = OtaStartOptions {
+            force_confirm: req.force_confirm.unwrap_or(false),
+            upgrade_only: req.upgrade_only.unwrap_or(false),
+            route: req.route.clone(),
+            transfer_mode: req.transfer_mode.clone(),
+            bank_mode: req.bank_mode.clone(),
+            target_address: req.target_address.clone(),
+            run_immediately: req.run_immediately.or(Some(true)),
+        };
+
+        let status = self
+            .ctx
+            .ota
+            .start(
+                Some(protocol_id.clone()),
+                address,
+                firmware_path,
+                options,
+            )
+            .await
+            .map_err(|e| map_ota_error(e, "启动升级失败"))?;
+
+        let mut resp = OtaResponse::new("start");
+        resp.dry_run = Some(false);
+        resp.status = Some(ota_status_view(&status));
+        resp.warnings = warnings;
+        Ok(Json(resp))
+    }
+
+    /// 签发 dry-run 响应（含新令牌）。
+    ///
+    /// 令牌里固定写**已解析的协议 ID**（`package.protocol`），而不是调用方原样传入的字符串 ——
+    /// 否则 `protocol="GOODIX"` 这类大小写差异会让正确令牌在确认时被判为不一致。
+    fn issue_ota_dry_run(
+        &self,
+        address: &str,
+        firmware_path: &str,
+        package: OtaPackageInfo,
+        plan: OtaPlanView,
+        warnings: Vec<String>,
+    ) -> OtaResponse {
+        let pending = self.ctx.ota_confirm.issue(
+            Some(package.protocol.clone()),
+            address,
+            firmware_path,
+            &package.image_sha256,
+        );
+        OtaResponse {
+            action: "start".to_string(),
+            dry_run: Some(true),
+            protocols: Vec::new(),
+            package: Some(ota_package_view(&package)),
+            device: plan.device.clone(),
+            plan: Some(plan),
+            confirm_token: Some(pending.token.clone()),
+            confirm_expires_in: Some(pending.remaining_secs()),
+            warnings,
+            status: None,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// P4 视图转换与参数辅助
+// ---------------------------------------------------------------------------
+
+/// 必填参数校验，失败信息里带上 action，模型才知道是哪一步缺参数。
+fn require_arg(
+    value: Option<&str>,
+    name: &str,
+    action: &str,
+) -> Result<String, CallToolResult> {
+    match value {
+        Some(v) if !v.trim().is_empty() => Ok(v.to_string()),
+        _ => Err(tool_err_full(
+            "INVALID_ARGUMENT",
+            format!("action={action} 缺少必填参数 {name}"),
+            None,
+            false,
+        )),
+    }
+}
+
+fn default_columns() -> Vec<String> {
+    (0..5).map(|i| format!("CH{i}")).collect()
+}
+
+/// L3（不可逆的硬件写操作）是否放行。
+///
+/// 抽成自由函数是为了能单测档位语义 —— `require_dev_tier` 需要整个 `McpContext`，
+/// 而档位判定本身只依赖字符串，没必要为了测试去造一堆 Manager。
+fn tier_allows_l3(tier: &str) -> bool {
+    tier == "dev"
+}
+
+/// 把工具参数里的解析器描述转成 `ParserConfig`，并做模式相关的必填校验。
+fn build_parser_config(spec: ParserSpec) -> Result<ParserConfig, CallToolResult> {
+    let parser_type = match spec.parser_type.to_ascii_lowercase().as_str() {
+        "delimiter" => ParserType::Delimiter,
+        "regex" => ParserType::Regex,
+        other => {
+            return Err(tool_err_full(
+                "INVALID_ARGUMENT",
+                format!("未知 parser_type: {other}"),
+                Some("支持 delimiter | regex"),
+                false,
+            ))
+        }
+    };
+
+    if parser_type == ParserType::Delimiter && spec.delimiter.is_none() {
+        // 默认逗号，与 GUI 一致
+    }
+    if parser_type == ParserType::Regex && spec.pattern.is_none() {
+        return Err(tool_err_full(
+            "INVALID_ARGUMENT",
+            "regex 解析器需要 pattern",
+            Some("如 {\"parser_type\":\"regex\",\"pattern\":\"CH0=(\\\\d+)\"}"),
+            false,
+        ));
+    }
+
+    Ok(ParserConfig {
+        parser_type,
+        delimiter: spec.delimiter.or_else(|| Some(",".to_string())),
+        pattern: spec.pattern,
+        column_names: spec.column_names.unwrap_or_else(default_columns),
+        trim_whitespace: spec.trim_whitespace.unwrap_or(true),
+    })
+}
+
+fn parser_type_str(t: ParserType) -> String {
+    match t {
+        ParserType::Delimiter => "delimiter".to_string(),
+        ParserType::Regex => "regex".to_string(),
+    }
+}
+
+fn plugin_state_str(state: PluginState) -> String {
+    match state {
+        PluginState::Unloaded => "unloaded",
+        PluginState::Loaded => "loaded",
+        PluginState::Enabled => "enabled",
+        PluginState::Disabled => "disabled",
+        PluginState::Error => "error",
+    }
+    .to_string()
+}
+
+fn plugin_view(info: &PluginInfo) -> PluginView {
+    PluginView {
+        id: info.id.clone(),
+        name: info.name.clone(),
+        version: info.version.clone(),
+        description: info.description.clone(),
+        author: info.author.clone(),
+        path: info.path.display().to_string(),
+        state: plugin_state_str(info.state),
+        hooks: info.hooks.clone(),
+        bound_devices: info.bound_devices.clone(),
+        error: info.error_message.clone(),
+    }
+}
+
+fn ota_protocol_view(p: OtaProtocolDescriptor) -> OtaProtocolView {
+    OtaProtocolView {
+        id: p.id,
+        name: p.name,
+        description: p.description,
+    }
+}
+
+fn ota_kv_view(items: &[crate::ota::OtaKeyValue]) -> Vec<OtaKeyValueView> {
+    items
+        .iter()
+        .map(|kv| OtaKeyValueView {
+            key: kv.key.clone(),
+            value: kv.value.clone(),
+        })
+        .collect()
+}
+
+fn ota_package_view(p: &OtaPackageInfo) -> OtaPackageView {
+    OtaPackageView {
+        path: p.path.clone(),
+        file_name: p.file_name.clone(),
+        package_size: p.package_size,
+        protocol: p.protocol.clone(),
+        image_name: p.image_name.clone(),
+        image_size: p.image_size,
+        image_sha256: p.image_sha256.clone(),
+        dual_bank_address: p.dual_bank_address.clone(),
+        fields: ota_kv_view(&p.fields),
+    }
+}
+
+fn ota_device_view(d: &OtaDeviceInfo) -> OtaDeviceView {
+    OtaDeviceView {
+        address: d.address.clone(),
+        protocol: d.protocol.clone(),
+        name: d.name.clone(),
+        mode: d.mode.clone(),
+        mtu: d.mtu,
+        version: d.version.clone(),
+        fields: ota_kv_view(&d.fields),
+    }
+}
+
+fn ota_state_str(state: OtaState) -> String {
+    match state {
+        OtaState::Idle => "idle",
+        OtaState::Running => "running",
+        OtaState::Success => "success",
+        OtaState::Failed => "failed",
+        OtaState::Cancelled => "cancelled",
+    }
+    .to_string()
+}
+
+fn ota_stage_str(stage: OtaStage) -> String {
+    match stage {
+        OtaStage::Idle => "idle",
+        OtaStage::Unpacking => "unpacking",
+        OtaStage::Validating => "validating",
+        OtaStage::Preparing => "preparing",
+        OtaStage::Transferring => "transferring",
+        OtaStage::Activating => "activating",
+        OtaStage::Rebooting => "rebooting",
+        OtaStage::Completed => "completed",
+        OtaStage::Failed => "failed",
+    }
+    .to_string()
+}
+
+fn ota_status_view(s: &OtaStatusDto) -> OtaStatusView {
+    OtaStatusView {
+        state: ota_state_str(s.state),
+        stage: ota_stage_str(s.stage),
+        protocol: s.protocol.clone(),
+        address: s.address.clone(),
+        firmware_path: s.firmware_path.clone(),
+        current: s.current,
+        total: s.total,
+        percent: s.percent,
+        message: s.message.clone(),
+        error: s.error.clone(),
+        updated_at: s.updated_at,
+    }
+}
+
+/// OTA 域错误统一出口：把协议层的原始错误包成模型能照着做的提示。
+fn map_ota_error(e: impl std::fmt::Display, what: &str) -> CallToolResult {
+    tool_err_full(
+        "OTA_ERROR",
+        format!("{what}: {e}"),
+        Some(
+            "确认目标设备已通过 combridge_ble_connect 连接（地址见 combridge_ble_scan）；\
+若提示通道正忙，说明另有预检/升级在进行，可 action=status 查看",
+        ),
+        false,
+    )
 }
 
 #[tool_handler]
@@ -2042,7 +3294,7 @@ impl ServerHandler for ComBridgeMcp {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_instructions(
-                "ComBridge 串口/BLE/GH3036 调试工具的 MCP 服务。\
+                "ComBridge 串口/BLE/GH3036/OTA 调试工具的 MCP 服务。\
 【串口】combridge_ports 发现端口 → combridge_serial_open 打开并获取租约 → combridge_serial_write 发送 → \
 combridge_serial_expect 等待响应（或 combridge_serial_read 游标读取）→ combridge_serial_close 释放。\
 写/关操作需携带 combridge_serial_open 返回的 lease_id；端口被其他客户端占用时返回 PORT_BUSY。\
@@ -2051,6 +3303,10 @@ combridge_ble_gatt 发现服务/读写/订阅；combridge_ble_gatt(action=notifi
 【GH3036】combridge_gh3036_rpc(action=set_channel) 先绑通道 → action=rpc 执行命令（命令键见 action=catalog）；\
 combridge_gh3036_factory_test(action=run) 一次调用直接产出产测结论（pass/failed_item/csv_path），\
 只有超时才返回 status=running 需用 action=status 续等；停在待切换环境时用 action=continue。\
+【数据】combridge_waveform 把串口文本解析为数值行（create → configure_parser → parse → read）；\
+combridge_protocol 管理 Lua 协议插件；combridge_about(action=logs) 读日志尾部用于自查。\
+【OTA】combridge_ota(action=start) 默认只做 dry-run 并返回 confirm_token，\
+把令牌放进 confirm 再调一次才真正烧录（一次性、5 分钟、绑定设备+包+镜像 sha256）；标准档返回 TIER_BLOCKED。\
 工具失败时返回 isError=true 的结构化错误 {code, message, hint, retryable}：先读 hint 再决定是否重试。",
             )
             .with_server_info(
@@ -2111,6 +3367,15 @@ mod tests {
                 ComBridgeMcp::gh3036_factory_test_tool_attr().name.to_string(),
                 "combridge_gh3036_factory_test",
             ),
+            (
+                ComBridgeMcp::waveform_tool_attr().name.to_string(),
+                "combridge_waveform",
+            ),
+            (
+                ComBridgeMcp::protocol_tool_attr().name.to_string(),
+                "combridge_protocol",
+            ),
+            (ComBridgeMcp::ota_tool_attr().name.to_string(), "combridge_ota"),
         ];
         for (actual, expected) in names {
             assert_eq!(actual, expected);
@@ -2157,6 +3422,90 @@ mod tests {
         let schema = serde_json::to_string(&*ft.input_schema).unwrap();
         assert!(schema.contains("max_wait_s"));
         assert!(schema.contains("config_dir"));
+
+        // P4 域
+        let wf = ComBridgeMcp::waveform_tool_attr();
+        let schema = serde_json::to_string(&*wf.input_schema).unwrap();
+        assert!(schema.contains("buffer_id"));
+        assert!(schema.contains("parser"));
+        assert!(schema.contains("rows"));
+
+        let proto = ComBridgeMcp::protocol_tool_attr();
+        let schema = serde_json::to_string(&*proto.input_schema).unwrap();
+        assert!(schema.contains("plugin_id"));
+        assert!(schema.contains("device_id"));
+
+        let ota = ComBridgeMcp::ota_tool_attr();
+        let schema = serde_json::to_string(&*ota.input_schema).unwrap();
+        for field in ["confirm", "firmware_path", "address", "bank_mode"] {
+            assert!(schema.contains(field), "OTA schema 缺少 {field}");
+        }
+
+        // about 的 logs 子命令（P4）
+        let about = ComBridgeMcp::about_tool_attr();
+        let schema = serde_json::to_string(&*about.input_schema).unwrap();
+        assert!(schema.contains("action"));
+        assert!(schema.contains("lines"));
+    }
+
+    #[test]
+    fn test_parser_config_built_from_spec() {
+        let cfg = build_parser_config(ParserSpec {
+            parser_type: "delimiter".to_string(),
+            delimiter: Some(";".to_string()),
+            pattern: None,
+            column_names: Some(vec!["A".to_string(), "B".to_string()]),
+            trim_whitespace: None,
+        })
+        .unwrap();
+        assert_eq!(cfg.parser_type, ParserType::Delimiter);
+        assert_eq!(cfg.delimiter.as_deref(), Some(";"));
+        assert!(cfg.trim_whitespace);
+        assert_eq!(cfg.column_names.len(), 2);
+
+        // regex 缺 pattern 直接拒绝
+        assert!(build_parser_config(ParserSpec {
+            parser_type: "regex".to_string(),
+            delimiter: None,
+            pattern: None,
+            column_names: None,
+            trim_whitespace: None,
+        })
+        .is_err());
+
+        // 未知类型
+        assert!(build_parser_config(ParserSpec {
+            parser_type: "csv".to_string(),
+            delimiter: None,
+            pattern: None,
+            column_names: None,
+            trim_whitespace: None,
+        })
+        .is_err());
+    }
+
+    #[test]
+    fn test_require_arg() {
+        assert_eq!(require_arg(Some("COM3"), "port", "open").unwrap(), "COM3");
+        assert!(require_arg(None, "port", "open").is_err());
+        assert!(require_arg(Some("   "), "port", "open").is_err());
+    }
+
+    /// 标准档必须拦住 L3：这是 OTA 烧录与产测执行唯一的档位保护。
+    #[test]
+    fn test_tier_gate_blocks_standard() {
+        assert!(tier_allows_l3("dev"));
+        assert!(!tier_allows_l3("standard"));
+        assert!(!tier_allows_l3(""));
+        assert!(!tier_allows_l3("DEV"));
+    }
+
+    #[test]
+    fn test_ota_view_maps_state() {
+        let view = ota_status_view(&OtaStatusDto::idle());
+        assert_eq!(view.state, "idle");
+        assert_eq!(view.stage, "idle");
+        assert_eq!(view.percent, 0.0);
     }
 
     #[test]

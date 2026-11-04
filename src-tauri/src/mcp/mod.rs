@@ -16,6 +16,8 @@ pub mod ble_hub;
 pub mod ctx;
 pub mod gh3036_job;
 pub mod lease;
+pub mod logs;
+pub mod ota_confirm;
 pub mod serial_hub;
 pub mod server;
 

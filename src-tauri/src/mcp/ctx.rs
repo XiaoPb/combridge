@@ -9,14 +9,18 @@ use std::sync::{Arc, RwLock};
 use serde_json::Value;
 use tracing::warn;
 
+use crate::commands::waveform::WaveformManager;
 use crate::device::{BleManagerRef, SerialManagerRef};
 use crate::gh3036::Gh3036ManagerRef;
+use crate::ota::OtaManager;
+use crate::protocol::PluginManager;
 use crate::service::EventBus;
 use crate::state::AppStateRef;
 
 use super::ble_hub::BleHub;
 use super::gh3036_job::FactoryJob;
 use super::lease::LeaseManager;
+use super::ota_confirm::OtaConfirmStore;
 use super::serial_hub::SerialHub;
 
 pub struct McpContext {
@@ -42,6 +46,14 @@ pub struct McpContext {
     pub gh3036: Gh3036ManagerRef,
     /// 最近一次 MCP 发起的产测 job（用于超时降级后的续等）
     pub factory_job: RwLock<Option<FactoryJob>>,
+    /// 波形缓冲（与 GUI 共用同一份实例，MCP 写入的数据 GUI 立即可见）
+    pub waveform: Arc<WaveformManager>,
+    /// Lua 协议插件管理器
+    pub protocols: Arc<PluginManager>,
+    /// OTA 升级管理器
+    pub ota: Arc<OtaManager>,
+    /// OTA dry-run 签发的确认令牌（L3 硬门）
+    pub ota_confirm: OtaConfirmStore,
 }
 
 impl McpContext {
@@ -54,6 +66,9 @@ impl McpContext {
         let app_state = app.state::<AppStateRef>().inner().clone();
         let event_bus = app.state::<Arc<EventBus>>().inner().clone();
         let gh3036 = app.state::<Gh3036ManagerRef>().inner().clone();
+        let waveform = app.state::<Arc<WaveformManager>>().inner().clone();
+        let protocols = app.state::<Arc<PluginManager>>().inner().clone();
+        let ota = app.state::<Arc<OtaManager>>().inner().clone();
 
         Self {
             app_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -72,6 +87,10 @@ impl McpContext {
             opened_by_mcp: RwLock::new(HashSet::new()),
             gh3036,
             factory_job: RwLock::new(None),
+            waveform,
+            protocols,
+            ota,
+            ota_confirm: OtaConfirmStore::new(),
         }
     }
 

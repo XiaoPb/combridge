@@ -5,7 +5,7 @@ import enUS from 'antd/locale/en_US';
 import { lazy, Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
-import { MainLayout, ErrorBoundary, UpdateModal } from './components';
+import { MainLayout, ErrorBoundary, UpdateModal, McpConfirmModal } from './components';
 import { updateApi, type UpdateInfo } from './api/tauri';
 import { useTheme } from './hooks';
 import { useConfigStore } from './stores/configStore';
@@ -252,6 +252,8 @@ function AppContent() {
           open={updateModalOpen}
           onClose={() => setUpdateModalOpen(false)}
         />
+        {/* MCP 危险操作确认：客户端不支持 elicitation 时由本机窗口兜底 */}
+        <McpConfirmModal />
         <Routes>
           <Route
             path="/spo2-ref"

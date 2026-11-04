@@ -32,16 +32,33 @@ use super::types::{
 };
 use crate::service::EventBus;
 
+/// MCU 模式下的默认采集窗口：启动 TEST1 后至少跑这么久芯片才会给出结果。
+/// 卡控配置里写了 `compute.timeout_ms` 时以配置为准。
+const MCU_COLLECT_MS: u64 = 3_000;
+
+/// 停止 TEST1 后留给芯片整理结果的时间。
+const MCU_SETTLE_MS: u64 = 1_000;
+
 fn zero_uuid_bytes() -> Vec<u8> {
     vec![0; 32]
 }
 
+/// 归一化到 32 字节，供展示与落盘。
+/// 设备可能只上报部分字节（固件桩只填自身长度，其余保持 0），
+/// 这里保留实际内容并补零，不再丢弃不足 32 字节的读数——
+/// 「是否读到」由 `uuid_bytes_valid` 判断。
 fn normalize_uuid_bytes(bytes: &[u8]) -> Vec<u8> {
-    if bytes.len() < 32 {
-        return zero_uuid_bytes();
-    }
+    let mut normalized = zero_uuid_bytes();
+    let copy_len = bytes.len().min(normalized.len());
+    normalized[..copy_len].copy_from_slice(&bytes[..copy_len]);
+    normalized
+}
 
-    bytes[..32].to_vec()
+/// UUID 有效性判定：读到的长度非 0，且值不全为 0。
+/// 不再要求前后两半各自非零——固件（含桩实现）只保证填充自身长度，
+/// 后半段补零属正常情况，按两半判定会把合格片误杀。
+fn uuid_bytes_valid(bytes: &[u8]) -> bool {
+    !bytes.is_empty() && bytes.iter().any(|byte| *byte != 0)
 }
 
 fn split_uuid_halves(bytes: &[u8]) -> ([u8; 16], [u8; 16]) {
@@ -90,30 +107,31 @@ fn resolve_uuid_result(
     uuid_result: Result<Vec<u8>, String>,
     chip: Option<&str>,
 ) -> UuidResolution {
-    let uuid = match uuid_result {
-        Ok(bytes) => normalize_uuid_bytes(&bytes),
+    let (uuid, raw_len, has_reading) = match uuid_result {
+        Ok(bytes) => {
+            let has_reading = uuid_bytes_valid(&bytes);
+            (normalize_uuid_bytes(&bytes), bytes.len(), has_reading)
+        }
         Err(error) => {
             warn!("[FactoryTest] {} UUID 读取失败: {}", source, error);
-            zero_uuid_bytes()
+            (zero_uuid_bytes(), 0, false)
         }
     };
 
     let (first_pass, second_pass) = uuid_halves_pass(&uuid);
+    let nonzero = uuid.iter().filter(|byte| **byte != 0).count();
     let step_data = vec![
         uuid_channel_value(first_pass),
         uuid_channel_value(second_pass),
     ];
     let chip_label = chip.unwrap_or("unknown");
-    let message = format!(
-        "UUID {source} chip={chip_label} ch0={} ch1={}",
-        if first_pass { "PASS" } else { "FAIL" },
-        if second_pass { "PASS" } else { "FAIL" }
-    );
+    let message = format!("UUID {source} chip={chip_label} len={raw_len} nonzero={nonzero}");
 
     UuidResolution {
         uuid,
         step_data,
-        success: first_pass && second_pass,
+        // 长度非 0 且值不全为 0 即视为读到有效 UUID。
+        success: has_reading,
         message,
     }
 }
@@ -129,6 +147,9 @@ pub struct FactoryTestManager {
     threshold_config: Mutex<Option<FactoryThresholdConfig>>,
     evaluation_result: Arc<Mutex<Option<FactoryEvaluationResult>>>,
     frame_collector: Arc<Mutex<FactoryFrameCollector>>,
+    /// 最近一次终态消息（失败原因/完成说明）。
+    /// 进度事件只在 EventBus 上广播一次，MCP 事后查询拿不到，故留一份快照。
+    last_message: Arc<Mutex<Option<String>>>,
 }
 
 #[cfg(test)]
@@ -361,7 +382,7 @@ mod collector_lifecycle_tests {
     }
 
     #[test]
-    fn uuid_mcu_branch_requires_32_bytes_and_reports_two_channels() {
+    fn uuid_mcu_branch_reports_two_channels_from_32_bytes() {
         let runtime = Runtime::new().unwrap();
         let event_bus = Arc::new(EventBus::new(8));
         let mut test_result = FactoryTestResult {
@@ -409,6 +430,61 @@ mod collector_lifecycle_tests {
         assert_eq!(step_result.data, vec![Some(1.0), Some(1.0)]);
         assert_eq!(test_result.uuid.len(), 32);
         assert_eq!(rpc.calls(), vec!["FS", "FG"]);
+    }
+
+    /// 固件桩 `factory_chip_uid_get` 只 memset 自身长度（默认 0xAA），
+    /// 后半段为 0 属正常：长度非 0 且值不全为 0 就必须判合格。
+    #[test]
+    fn uuid_mcu_branch_accepts_stub_firmware_reading() {
+        let runtime = Runtime::new().unwrap();
+        let event_bus = Arc::new(EventBus::new(8));
+        let mut test_result = FactoryTestResult {
+            chip_init_status: 1,
+            uuid: Vec::new(),
+            compute_mode: FactoryComputeMode::Mcu,
+            base_noise: Vec::new(),
+            ppg_noise: Vec::new(),
+            lpctr: Vec::new(),
+            lplctr: Vec::new(),
+            overall_result: String::new(),
+            timestamp: 0,
+            device_info: String::new(),
+            error_code: String::new(),
+            project_name: String::new(),
+        };
+        let rpc = ScriptedUuidManager::new(
+            vec![
+                ("FS", vec!["0x02"], Ok(vec![])),
+                ("FG", vec!["0x02"], Ok(vec![0xAA; 16])),
+            ],
+            Vec::new(),
+        );
+
+        let step_result = runtime
+            .block_on(FactoryTestManager::execute_uuid_step(
+                &event_bus,
+                &mut test_result,
+                &rpc,
+                None,
+            ))
+            .unwrap()
+            .unwrap();
+
+        assert!(
+            step_result.success,
+            "AA 桩值应判合格: {}",
+            step_result.message
+        );
+        assert_eq!(test_result.uuid.len(), 32);
+        assert!(test_result.uuid[..16].iter().all(|&b| b == 0xAA));
+        assert!(step_result.message.contains("len=16"));
+
+        // 长度 0 或全 0 仍然判失败
+        let empty = resolve_uuid_result("MCU", Ok(Vec::new()), None);
+        assert!(!empty.success);
+        let zeros = resolve_uuid_result("MCU", Ok(vec![0; 32]), None);
+        assert!(!zeros.success);
+        assert!(!resolve_uuid_result("MCU", Err("timeout".to_string()), None).success);
     }
 
     #[test]
@@ -785,7 +861,13 @@ impl FactoryTestManager {
             threshold_config: Mutex::new(None),
             evaluation_result: Arc::new(Mutex::new(None)),
             frame_collector: Arc::new(Mutex::new(FactoryFrameCollector::default())),
+            last_message: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /// 最近一次产测的终态消息（失败原因或完成说明）。
+    pub fn last_message(&self) -> Option<String> {
+        self.last_message.lock().clone()
     }
 
     pub fn set_config_dir(&self, dir: PathBuf) {
@@ -1102,6 +1184,8 @@ impl FactoryTestManager {
         let threshold_config = self.threshold_config.lock().clone();
         let evaluation_result_clone = self.evaluation_result.clone();
         let frame_collector = self.frame_collector.clone();
+        let last_message = self.last_message.clone();
+        *last_message.lock() = None;
 
         let thread_handle = thread::spawn(move || {
             info!("[FactoryTest] 产测流程线程启动");
@@ -1382,6 +1466,7 @@ impl FactoryTestManager {
                     terminal_status,
                     terminal_step,
                 );
+                *last_message.lock() = Some(message.clone());
                 Self::publish_progress_static(
                     &event_bus,
                     terminal_step,
@@ -1745,21 +1830,7 @@ impl FactoryTestManager {
                     .execute("FG", &["0x02".to_string()])
                     .await
                     .map_err(|e| format!("获取产测模式 0x02 结果失败: {}", e))?;
-                let uuid = normalize_uuid_bytes(&result);
-                let (first_pass, second_pass) = uuid_halves_pass(&uuid);
-                UuidResolution {
-                    uuid,
-                    step_data: vec![
-                        uuid_channel_value(first_pass),
-                        uuid_channel_value(second_pass),
-                    ],
-                    success: first_pass && second_pass,
-                    message: format!(
-                        "UUID MCU ch0={} ch1={}",
-                        if first_pass { "PASS" } else { "FAIL" },
-                        if second_pass { "PASS" } else { "FAIL" }
-                    ),
-                }
+                resolve_uuid_result("MCU", Ok(result), chip)
             }
             FactoryComputeMode::App => {
                 if supports_app_uuid(chip) {
@@ -1986,6 +2057,23 @@ impl FactoryTestManager {
             }
         }
 
+        // MCU 模式下结果由芯片侧计算，必须让 TEST1 跑满采集窗口再停。
+        // 启动后立即停止会让 FG 返回空数组，从而把「没测到」误判成合格。
+        if test_result.compute_mode == FactoryComputeMode::Mcu {
+            let collect_ms = item
+                .and_then(|config| config.compute.as_ref())
+                .and_then(|compute| compute.timeout_ms)
+                .unwrap_or(MCU_COLLECT_MS);
+            Self::publish_progress_static(
+                event_bus,
+                step,
+                FactoryTestStatus::Running,
+                progress_start + 0.02,
+                &format!("采集数据中 ({}ms)", collect_ms),
+            );
+            tokio::time::sleep(Duration::from_millis(collect_ms)).await;
+        }
+
         let stop_result = manager
             .execute_rpc("S", &["0x40".to_string(), "1".to_string()])
             .await;
@@ -2043,8 +2131,7 @@ impl FactoryTestManager {
             )));
         }
 
-        tokio::time::sleep(Duration::from_secs(3)).await;
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_millis(MCU_SETTLE_MS)).await;
         let measurements = match manager.execute_rpc("FG", &[format!("0x{mode:02X}")]).await {
             Ok(bytes) => {
                 let outcome = resolve_mcu_hardware_result(Ok(bytes), channels);
@@ -2052,7 +2139,14 @@ impl FactoryTestManager {
             }
             Err(_) => failed(),
         };
-        let success = measurements.len() == channels
+        // 空结果永远不能算合格：channels=0（由设备决定通道数）时
+        // 过去的 `len() == channels` 会让「一条都没测到」判 PASS。
+        let channels_ok = if channels == 0 {
+            !measurements.is_empty()
+        } else {
+            measurements.len() == channels
+        };
+        let success = channels_ok
             && measurements
                 .iter()
                 .all(|measurement| measurement.device_value.is_some());
@@ -2672,18 +2766,41 @@ impl FactoryTestManager {
         }))
     }
 
-    fn save_result_to_csv(result: &FactoryTestResult, project_name: &str) -> Result<(), String> {
+    /// 产测结果 CSV 的落盘路径（与 [`Self::save_result_to_csv`] 保持一致）。
+    ///
+    /// 供 MCP 等调用方在拿到产测结果后回传文件位置，避免重复实现路径规则。
+    pub fn csv_path_for_project(project_name: &str) -> Result<std::path::PathBuf, String> {
         let exe_dir = std::env::current_exe()
             .ok()
             .and_then(|exe_path| exe_path.parent().map(|p| p.to_path_buf()))
             .ok_or("获取可执行文件目录失败")?;
 
-        let output_dir = exe_dir.join("data").join("factory");
-        std::fs::create_dir_all(&output_dir).map_err(|e| format!("创建输出目录失败: {}", e))?;
-
         let today = Local::now().format("%Y-%m-%d").to_string();
-        let file_name = format!("factory_{}_{}.csv", project_name, today);
-        let file_path = output_dir.join(&file_name);
+        Ok(exe_dir
+            .join("data")
+            .join("factory")
+            .join(format!("factory_{}_{}.csv", project_name, today)))
+    }
+
+    /// 最近一次产测结果的 CSV 路径；无结果时为 `None`。
+    pub fn result_csv_path(&self) -> Option<std::path::PathBuf> {
+        let project = {
+            let guard = self.result.lock();
+            let result = guard.as_ref()?;
+            if result.project_name.is_empty() {
+                "unknown".to_string()
+            } else {
+                result.project_name.clone()
+            }
+        };
+        Self::csv_path_for_project(&project).ok()
+    }
+
+    fn save_result_to_csv(result: &FactoryTestResult, project_name: &str) -> Result<(), String> {
+        let file_path = Self::csv_path_for_project(project_name)?;
+        if let Some(parent) = file_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("创建输出目录失败: {}", e))?;
+        }
 
         let file_exists = file_path.exists();
 

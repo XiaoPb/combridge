@@ -1,14 +1,24 @@
 [source.crates-io]
-replace-with = 'rsproxy-sparse'
+replace-with = 'tuna-sparse'
 
-[source.rsproxy]
-registry = "https://rsproxy.cn/crates.io-index"
+# 原代理 rsproxy.cn 当前不可达（SSL 握手失败），暂时切换到清华镜像，恢复后可切回
+#[source.rsproxy]
+#registry = "https://rsproxy.cn/crates.io-index"
+#
+#[source.rsproxy-sparse]
+#registry = "sparse+https://rsproxy.cn/index/"
+#
+#[registries.rsproxy]
+#index = "https://rsproxy.cn/crates.io-index"
 
-[source.rsproxy-sparse]
-registry = "sparse+https://rsproxy.cn/index/"
+[source.tuna]
+registry = "https://mirrors.tuna.tsinghua.edu.cn/crates.io-index"
 
-[registries.rsproxy]
-index = "https://rsproxy.cn/crates.io-index"
+[source.tuna-sparse]
+registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"
+
+[http]
+check-revoke = false
 
 [net]
 git-fetch-with-cli = true

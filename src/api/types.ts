@@ -259,7 +259,16 @@ export interface FactoryTestProgressEvent {
   message: string;
 }
 
-export type ThresholdOperator = 'lt' | 'le' | 'gt' | 'ge' | 'eq' | 'ne' | 'range';
+export type ThresholdOperator =
+  | 'lt'
+  | 'le'
+  | 'gt'
+  | 'ge'
+  | 'eq'
+  | 'ne'
+  | 'range'
+  /** 仅要求读到有效值，不比对数值（量纲未标定时的临时策略） */
+  | 'present';
 
 export interface ThresholdConfig {
   operator: ThresholdOperator;

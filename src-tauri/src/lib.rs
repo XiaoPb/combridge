@@ -4,6 +4,7 @@ pub mod dashboard;
 pub mod device;
 pub mod error;
 pub mod gh3036;
+pub mod mcp;
 pub mod ota;
 pub mod protocol;
 pub mod service;
@@ -251,6 +252,24 @@ pub fn run() {
             info!("启动系统监控");
             commands::system::start_system_monitor();
 
+            // MCP Server（默认关闭；需 %LOCALAPPDATA%\combridge\mcp.json 中 enabled=true）
+            {
+                let mcp_settings = mcp::McpSettings::load();
+                if mcp_settings.enabled {
+                    let handle_for_mcp = app.handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(e) = mcp::start(handle_for_mcp, mcp_settings).await {
+                            error!("[MCP] 启动失败（不影响主程序）: {}", e);
+                        }
+                    });
+                } else {
+                    // 上次运行的 endpoint 文件必须清掉：残留的 URL + 旧 token
+                    // 会让客户端以为服务还在（实际只会拿到 401）
+                    mcp::clear_stale_endpoint();
+                    info!("[MCP] 未启用（%LOCALAPPDATA%\\combridge\\mcp.json 中 enabled=false）");
+                }
+            }
+
             info!("Tauri setup hook 执行完成");
             Ok(())
         })
@@ -310,6 +329,14 @@ pub fn run() {
             commands::update::open_update_installer,
             commands::system::open_url,
             commands::system::show_in_folder,
+            commands::mcp::get_mcp_status,
+            commands::mcp::apply_mcp_settings,
+            commands::mcp::rotate_mcp_token,
+            commands::mcp::wire_mcp_client,
+            commands::mcp::set_mcp_auto_wire,
+            commands::mcp::list_mcp_confirm_requests,
+            commands::mcp::resolve_mcp_confirm,
+            commands::mcp::revoke_mcp_confirm_grants,
             commands::system::show_main_window,
             commands::system::get_window_status,
             #[cfg(feature = "devtools")]

@@ -1584,6 +1584,18 @@ impl Gh3036Manager {
         self.factory_test_manager.get_result()
     }
 
+    /// 最近一次产测结果的 CSV 落盘路径（供 MCP 回传给调用方）。
+    pub fn factory_test_csv_path(&self) -> Option<String> {
+        self.factory_test_manager
+            .result_csv_path()
+            .map(|p| p.display().to_string())
+    }
+
+    /// 最近一次产测的终态消息（MCP 用来解释失败原因）。
+    pub fn factory_test_last_message(&self) -> Option<String> {
+        self.factory_test_manager.last_message()
+    }
+
     pub fn validate_threshold_config(&self) -> super::ThresholdConfigValidation {
         self.factory_test_manager.validate_threshold_config()
     }

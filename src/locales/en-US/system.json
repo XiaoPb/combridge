@@ -62,7 +62,8 @@
   "tab": {
     "info": "Info",
     "logs": "Logs",
-    "settings": "Settings"
+    "settings": "Settings",
+    "integration": "Integration"
   },
   "logViewer": {
     "title": "System Logs",
@@ -105,5 +106,110 @@
     "Europe/Paris": "Paris Time (UTC+1/+2)",
     "Europe/Berlin": "Berlin Time (UTC+1/+2)",
     "UTC": "Coordinated Universal Time (UTC)"
+  },
+  "mcp": {
+    "title": {
+      "service": "MCP Service",
+      "client": "Client Setup",
+      "security": "Security & Audit"
+    },
+    "status": {
+      "running": "Running",
+      "stopped": "Stopped",
+      "failed": "Failed to start"
+    },
+    "label": {
+      "enable": "Enable MCP service",
+      "enableHint": "Binds to 127.0.0.1 only; every request needs a Bearer token",
+      "port": "Listen port",
+      "portHint": "Falls back to a random port when this one is taken",
+      "tier": "Security tier",
+      "tierDev": "Developer (dev)",
+      "tierStandard": "Standard",
+      "tierDevDesc": "Device writes, factory tests and flashing run without confirmation; everything is audited.",
+      "tierStandardDesc": "Asks you before writing to devices, running factory tests or flashing. Uses the client's elicitation dialog when supported, otherwise a ComBridge window. Denied or unanswerable calls return CONFIRM_REQUIRED.",
+      "url": "Endpoint",
+      "token": "Access token",
+      "tokenHint": "Fixed once generated, so a client only needs configuring once. Rotate it if it was ever pasted into a ticket or chat.",
+      "toolCount": "Tools",
+      "uptime": "Started at",
+      "configPath": "Config file",
+      "client": "Client",
+      "snippet": "Snippet"
+    },
+    "button": {
+      "apply": "Save and apply",
+      "rotate": "Rotate token",
+      "copied": "Copied",
+      "copySnippet": "Copy snippet",
+      "openAudit": "Open audit folder"
+    },
+    "message": {
+      "applied": "Settings applied",
+      "applyFailed": "Failed to apply settings",
+      "rotated": "Token rotated — old clients must be reconfigured",
+      "rotateFailed": "Failed to rotate token",
+      "loadFailed": "Failed to read MCP status",
+      "copyFailed": "Copy failed",
+      "openFailed": "Failed to open folder",
+      "wired": "Client config written — open a new session to use it",
+      "wireFailed": "Failed to write client config"
+    },
+    "client": {
+      "claudeCode": "Claude Code (CLI)",
+      "claudeDesktop": "Claude Desktop",
+      "cursor": "Cursor",
+      "generic": "Generic JSON"
+    },
+    "clientPath": {
+      "claudeCode": "Run this in a terminal",
+      "claudeDesktop": "Add to mcpServers in claude_desktop_config.json",
+      "cursor": "Write to ~/.cursor/mcp.json",
+      "generic": "For any MCP client supporting Streamable HTTP"
+    },
+    "autoWire": {
+      "label": "Auto-wire local client",
+      "hint": "On start, writes this service into ~/.workbuddy/mcp.json and pre-approves it — you only need a new session",
+      "wired": "Written — open a new session",
+      "missing": "Not in the client config yet",
+      "stale": "Config does not match the running service",
+      "noClient": "No local client detected",
+      "failed": "Write failed",
+      "noClientHint": "~/.workbuddy not found (WorkBuddy not installed or never launched). Use the snippet below to configure manually",
+      "rewrite": "Write again"
+    },
+    "security": {
+      "tierDev": "Dev tier: the AI may write to devices, run factory tests and flash firmware; all actions are audited.",
+      "tierStandard": "Standard: irreversible actions ask for confirmation first (ComBridge window when the client lacks elicitation); denial aborts. OTA additionally requires a one-shot confirm_token.",
+      "auditHint": "One JSONL line per tool call: tool name, argument digest (never raw payload), result code, duration. Kept 30 days.",
+      "auditRecords": "{{count}} today",
+      "noAuditFile": "No calls recorded today"
+    },
+    "notice": {
+      "disabled": "Service is off — AI clients cannot connect",
+      "portFallback": "Configured port was taken; listening on {{port}}",
+      "restartClient": "Restart the client after editing its config",
+      "noToken": "Service is not running; the token appears here once started",
+      "portChangeRestarts": "Changing the port restarts the service — clients configured with the old URL must be updated"
+    },
+    "confirm": {
+      "title": "ComBridge needs your confirmation",
+      "source": "Requested by {{tool}}",
+      "accept": "Confirm",
+      "decline": "Cancel",
+      "remember": "Allow \"{{risk}}\" on {{target}} for this session",
+      "rememberHint": "Valid for {{minutes}} minutes; revoke anytime in Settings → Integration",
+      "remaining": "Auto-cancels in {{seconds}}s",
+      "queued": "{{count}} more waiting"
+    },
+    "grant": {
+      "title": "Temporary allowances",
+      "empty": "No temporary allowances",
+      "hint": "These actions skip the confirmation dialog. They expire after 30 minutes and reset when the service restarts.",
+      "revoke": "Revoke all",
+      "revoked": "Revoked {{count}} allowances",
+      "remaining": "{{minutes}} min left",
+      "failed": "Revoke failed"
+    }
   }
 }

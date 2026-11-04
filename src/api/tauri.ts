@@ -375,6 +375,110 @@ export interface Preferences {
   menuVisibility?: MenuVisibilityPreferences;
 }
 
+export interface McpStatus {
+  /** 配置文件里的启用意图 */
+  enabled: boolean;
+  /** 实际是否在监听 */
+  running: boolean;
+  /** 生效档位 */
+  tier: string;
+  /** 配置档位 */
+  configTier: string;
+  configPort: number;
+  /** 实际监听端口（未运行为 0） */
+  port: number;
+  url: string;
+  token: string;
+  startedAt: number;
+  /** 配置端口被占用、实际换了端口 */
+  portFallback: boolean;
+  toolCount: number;
+  configPath: string;
+  dataDir: string;
+  auditDir: string | null;
+  auditFile: string | null;
+  auditRecords: number;
+  /** 启动时自动写入本地 MCP 客户端配置 */
+  autoWire: boolean;
+  /** 客户端 mcp.json 路径（未检测到客户端为空串） */
+  clientConfigPath: string;
+  /** 自动接入状态：wired | missing | stale | noClient | failed */
+  clientWireState: string;
+  clientWireDetail: string | null;
+  /** 当前生效的临时放行（本机确认通道里的"本次会话内允许"） */
+  confirmGrants: McpConfirmGrant[];
+  lastError: string | null;
+}
+
+/** 一条等待用户确认的危险操作 */
+export interface McpConfirmRequest {
+  id: string;
+  /** 发起的工具名 */
+  tool: string;
+  /** 风险标签，如"串口写入" */
+  risk: string;
+  /** 授权范围（人读），如"COM3" */
+  scopeLabel: string;
+  /** 具体内容 */
+  detail: string;
+  /** 是否展示"本次会话内放行"勾选框 */
+  grantable: boolean;
+  /** 勾选后的有效期（秒） */
+  grantTtlSecs: number;
+  createdAt: number;
+  deadlineAt: number;
+  remainingMs: number;
+}
+
+/** 一条已生效的临时放行 */
+export interface McpConfirmGrant {
+  tool: string;
+  scope: string;
+  scopeLabel: string;
+  risk: string;
+  grantedAt: number;
+  expiresAt: number;
+  remainingSecs: number;
+}
+
+export const mcpApi = {
+  async getStatus(): Promise<McpStatus> {
+    return tauriInvoke<McpStatus>('get_mcp_status');
+  },
+
+  async applySettings(enabled: boolean, port: number, tier: string): Promise<McpStatus> {
+    return tauriInvoke<McpStatus>('apply_mcp_settings', { enabled, port, tier });
+  },
+
+  async rotateToken(): Promise<McpStatus> {
+    return tauriInvoke<McpStatus>('rotate_mcp_token');
+  },
+
+  /** 立即把当前地址写进客户端配置（自动接入关闭时的兜底） */
+  async wireClient(): Promise<McpStatus> {
+    return tauriInvoke<McpStatus>('wire_mcp_client');
+  },
+
+  async setAutoWire(enabled: boolean): Promise<McpStatus> {
+    return tauriInvoke<McpStatus>('set_mcp_auto_wire', { enabled });
+  },
+
+  /** 补拉待确认请求（事件丢失时的兜底） */
+  async listConfirms(): Promise<McpConfirmRequest[]> {
+    return tauriInvoke<McpConfirmRequest[]>('list_mcp_confirm_requests');
+  },
+
+  /** 应答一条确认请求；`remember` 只在允许"本次会话内放行"时生效 */
+  async resolveConfirm(id: string, accepted: boolean, remember = false): Promise<boolean> {
+    return tauriInvoke<boolean>('resolve_mcp_confirm', { id, accepted, remember });
+  },
+
+  /** 撤销全部临时放行 */
+  async revokeGrants(): Promise<number> {
+    return tauriInvoke<number>('revoke_mcp_confirm_grants');
+  },
+};
+
 export const preferencesApi = {
   async get(): Promise<Preferences> {
     return invoke<Preferences>('get_preferences');

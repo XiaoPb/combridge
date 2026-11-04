@@ -130,7 +130,7 @@
       "tierStandardDesc": "同一批操作会先请客户端弹窗确认，被拒绝或无法确认时返回 CONFIRM_REQUIRED。",
       "url": "服务地址",
       "token": "访问令牌",
-      "tokenHint": "每次启动轮换。贴进过工单或聊天记录后，点轮换即可让旧客户端失效。",
+      "tokenHint": "生成后固定不变，客户端配置一次即可长期有效。贴进过工单或聊天记录后，点轮换即可让旧客户端失效。",
       "toolCount": "工具数量",
       "uptime": "启动时间",
       "configPath": "配置文件",
@@ -177,7 +177,7 @@
       "portFallback": "配置端口被占用，实际监听 {{port}}",
       "restartClient": "改完客户端配置后需重启客户端才会生效",
       "noToken": "服务未运行，启动后这里会显示令牌",
-      "portChangeRestarts": "改端口会重启服务并轮换令牌，已配置的客户端需要重新粘贴新配置"
+      "portChangeRestarts": "改端口会重启服务，监听地址随之变化，已配置的客户端需要改成新 URL"
     }
   }
 }

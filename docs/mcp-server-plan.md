@@ -199,7 +199,7 @@ uuid = { version = "1", features = ["v4"] }   # 已有，用于 lease_id / job_i
 
 ```
 1. 读设置：MCP 是否启用（默认 false）→ 未启用则直接返回
-2. 生成 32 字节随机 token（每次启动轮换）
+2. 取持久化 token：配置文件里有就复用，没有才生成 32 字节随机值并立刻落盘
 3. 构造 McpContext：从 AppHandle 取各 Manager 的 Arc 句柄
 4. 绑定 127.0.0.1:47821（失败则回退 0 端口自动分配）
 5. 挂载 StreamableHttpService 于 /mcp，加 auth + Host 校验中间件
@@ -592,7 +592,7 @@ OTA、产测可能跑数分钟，多数 MCP 客户端有 60s 超时。
 |---|---|
 | 绑定 | 仅 `127.0.0.1`，**禁止** `0.0.0.0`（`axum::serve` 前显式校验） |
 | Host 校验 | 校验 `Host` 头为 `127.0.0.1` / `localhost`，防 DNS rebinding |
-| 认证 | 启动生成 32 字节随机 token，`Authorization: Bearer`；每次启动轮换 |
+| 认证 | 32 字节随机 token，`Authorization: Bearer`；**持久化**（首次生成后固定，`rotate` 才作废） |
 | 文件权限 | endpoint 文件仅当前用户可读（Windows ACL / Unix 0600） |
 | 会话 | Streamable HTTP 会话绑定 token，会话闲置 30 分钟回收 |
 
@@ -669,8 +669,9 @@ L2 / L3 通过 MCP 的 **elicitation** 让客户端弹窗询问用户，而不�
 
 | 改动 | 生效方式 | 代价 |
 |---|---|---|
-| 启用 / 停用 | 起停服务（`mcp::start` / `mcp::stop`） | 换 token，客户端需重配 |
-| 端口 | 重启服务 | 换 token，且客户端 URL 也要改（界面会提前警告） |
+| 启用 / 停用 | 起停服务（`mcp::start` / `mcp::stop`） | 无：token 已持久化，客户端配置不变 |
+| 端口 | 重启服务 | 客户端 URL 要改（origin 变了，客户端的信任记录也需重写，界面会提前警告） |
+| 轮换 token | 重启服务 | 换 token，客户端需重配 |
 | 档位 | **热切换**（`mcp::switch_tier`） | 无：不重启、不换 token，仅更新共享 tier cell 与限流速率 |
 
 档位做成热切换是刻意的：研发 ↔ 标准是这一页最常被点的开关，若走重启，每切一次都要把所有客户端配置重贴一遍。
@@ -687,6 +688,30 @@ L2 / L3 通过 MCP 的 **elicitation** 让客户端弹窗询问用户，而不�
 **验证**：面板的 5 条行为（打码、开关即时应用、启动失败呈现、片段可复制、打开审计目录）由
 `pages/System/McpIntegration.test.tsx` 覆盖；配置片段的字段与 `Bearer` 前缀由 `utils/mcpSnippet.test.ts` 覆盖；
 中英文案 key 一致性由 `i18n/mcpKeys.test.ts` 覆盖。**未验证**：真机点击路径（自动化测试用 mock 替换了 IPC）。
+
+### 8.7 客户端接入（token 持久化 + 信任预置）
+
+**token 生命周期改为持久化**。早期每次 `start` 现生成，导致外部客户端把 Bearer 写进配置后，应用一重启就 401 ——
+等于要求用户每重启一次重贴一次配置，集成做不下去。现在 `McpSettings.token` 落盘在
+`%LOCALAPPDATA%\combridge\mcp.json`，首次生成后复用；作废旧凭据的唯一入口是设置页「轮换 token」
+（置空后重启服务重新生成）。安全边界从"重启即失效"变为"能读到该用户数据目录即可用"，
+与 endpoint 文件同权限等级；风险与取舍记录在此，便于后续评审。
+
+**客户端侧只有两处需要写文件**（`scripts/mcp/wire_client.py` 一把做完）：
+
+| 文件 | 内容 | 为什么 |
+|---|---|---|
+| `<configDir>/mcp.json` | `{"mcpServers":{"combridge":{"type":"http","url":…,"headers":{"Authorization":"Bearer …"}}}}` | 客户端按此加载 server |
+| `<configDir>/mcp-approvals.json` | `{"<sha256(origin)>::<serverName>": <ts>}` | 省掉首次连接的「Trust」点击 |
+
+信任键的构造与客户端一致：`sha256(origin)` 而非完整 URL（token 在 header 里，不影响哈希），
+所以**换 token 不必重新信任**，但**改端口会变 origin → 需重跑脚本**。
+
+**绕不开的一步**：MCP 连接在会话启动时建立，运行中的会话不会热加载新 server。
+所以写入配置后必须开一个新会话 —— 这是客户端行为，服务端无法代劳。
+
+**验证**（用写出的配置原样连接，而非另起一套参数）：`initialize` 返回 `serverInfo.name=combridge`、
+`tools/list` 16 个工具；错误 token 返回 `401`。token 持久化经一次应用重启核对：`started_at` 变化、token 不变。
 
 ---
 
@@ -879,7 +904,8 @@ elicitation 正向路径（2026-11-04，`scripts/mcp/elicit_probe.py`，声明 `
 注意脚本必须**边读 SSE 边回应**——用 `urlopen().read()` 一次性读完会在等待客户端回应时死锁。
 
 **仍未验证**：WorkBuddy / Claude Desktop 这类带 UI 的客户端上，弹窗的渲染与点击路径
-（客户端侧实现已确认存在，接入受 token 轮换与「需新会话建立连接」限制，见 §8.6）。
+（客户端侧实现已确认存在；token 已持久化、信任记录可预置，剩下唯一的阻塞是「需新会话建立连接」，
+见 §8.7。**这一步本质上需要一次人工点击** —— 点击正是被测对象）。
 
 
 ### 9.1 阶段划分

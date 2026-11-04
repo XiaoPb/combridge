@@ -130,7 +130,7 @@
       "tierStandardDesc": "Those operations ask the client for user confirmation first; declined or unavailable returns CONFIRM_REQUIRED.",
       "url": "Endpoint",
       "token": "Access token",
-      "tokenHint": "Rotated on every start. Rotate again if it ever pasted into a ticket or chat.",
+      "tokenHint": "Fixed once generated, so a client only needs configuring once. Rotate it if it was ever pasted into a ticket or chat.",
       "toolCount": "Tools",
       "uptime": "Started at",
       "configPath": "Config file",
@@ -177,7 +177,7 @@
       "portFallback": "Configured port was taken; listening on {{port}}",
       "restartClient": "Restart the client after editing its config",
       "noToken": "Service is not running; the token appears here once started",
-      "portChangeRestarts": "Changing the port restarts the service and rotates the token — configured clients must be updated"
+      "portChangeRestarts": "Changing the port restarts the service — clients configured with the old URL must be updated"
     }
   }
 }

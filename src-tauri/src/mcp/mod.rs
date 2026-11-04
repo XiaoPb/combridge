@@ -45,6 +45,12 @@ pub struct McpSettings {
     pub port: u16,
     /// 安全档位："dev"（研发档）| "standard"（标准档）
     pub tier: String,
+    /// 持久化的 Bearer token（首次生成后复用，`rotate` 才显式作废）。
+    ///
+    /// 早期每次 `start` 都现生成，结果是**客户端配置一次就废一次**：
+    /// 外部 MCP 客户端把 Bearer 写在配置里，应用一重启就 401。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 impl Default for McpSettings {
@@ -53,6 +59,7 @@ impl Default for McpSettings {
             enabled: false,
             port: DEFAULT_PORT,
             tier: "standard".to_string(),
+            token: None,
         }
     }
 }
@@ -110,6 +117,34 @@ impl McpSettings {
             "standard" => Some("standard"),
             _ => None,
         }
+    }
+
+    /// 配置里可用的 token（空值与空白视为未设置）。
+    fn usable_token(&self) -> Option<&str> {
+        self.token
+            .as_deref()
+            .map(str::trim)
+            .filter(|token| !token.is_empty())
+    }
+
+    /// 取当前 token；没有则生成并**立刻落盘**，让下次启动复用同一个值。
+    ///
+    /// 客户端（WorkBuddy / Claude Desktop / Cursor）把 Bearer 写在各自的配置文件里，
+    /// 每次启动换 token 等于要求用户每重启一次就重贴一遍配置 —— 集成做不下去。
+    /// 作废旧凭据的入口保留在设置页的「轮换 token」。
+    pub fn ensure_token(&mut self) -> String {
+        if let Some(token) = self.usable_token().map(str::to_string) {
+            info!("[MCP] 复用已持久化的 token（客户端配置无需变更）");
+            return token;
+        }
+        let token = generate_token();
+        self.token = Some(token.clone());
+        info!("[MCP] 生成新 token 并落盘（首次启动或已轮换）");
+        if let Err(e) = self.save() {
+            // 落盘失败不阻断服务启动：本次用新 token，下次启动会再生成一个
+            warn!("[MCP] token 落盘失败，下次启动将重新生成: {e}");
+        }
+        token
     }
 }
 
@@ -312,7 +347,7 @@ pub fn clear_stale_endpoint() {
 ///
 /// 已在运行时先停旧的再起新的（设置页改端口 / 档位走这条路，无需重启应用）。
 /// 失败仅影响 MCP 功能本身，不影响 App 主流程 —— 调用方需吞掉错误只记日志。
-pub async fn start(app: tauri::AppHandle, settings: McpSettings) -> Result<McpStartInfo, String> {
+pub async fn start(app: tauri::AppHandle, mut settings: McpSettings) -> Result<McpStartInfo, String> {
     if !settings.enabled {
         return Err("MCP 未启用".to_string());
     }
@@ -328,11 +363,13 @@ pub async fn start(app: tauri::AppHandle, settings: McpSettings) -> Result<McpSt
         shutdown(prev).await;
     }
 
-    let token = generate_token();
+    // 复用已落盘的 token；首次运行才生成。客户端配置一次即可长期有效。
+    let token = settings.ensure_token();
     {
         let mut guard = tier_cell().write().unwrap_or_else(|e| e.into_inner());
         *guard = tier.clone();
     }
+
     let ctx = Arc::new(ctx::McpContext::from_app(&app, Arc::clone(tier_cell())));
     // 订阅 EventBus 广播：串口数据 → hub（游标/等待），端口断开 → 清理
     let serial_sub = ctx.serial_hub.spawn_subscription(Arc::clone(&ctx.event_bus));
@@ -424,6 +461,46 @@ mod tests {
         assert!(!settings.enabled, "默认必须是关闭的");
         assert_eq!(settings.port, DEFAULT_PORT);
         assert_eq!(settings.tier, "standard");
+        assert!(settings.token.is_none(), "未生成前不写 token");
+    }
+
+    #[test]
+    fn ensure_token_reuses_persisted_value() {
+        // 已有 token 必须原样返回：这是"客户端配置一次即长期有效"的前提
+        let settings = McpSettings {
+            token: Some("fixed-token".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(settings.usable_token(), Some("fixed-token"));
+        // 空白值视为未设置（手工编辑配置留下的空串不能当成有效 token）
+        let blank = McpSettings {
+            token: Some("   ".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(blank.usable_token(), None);
+        assert_eq!(McpSettings::default().usable_token(), None);
+        // 新生成的 token 仍是 64 位十六进制（32 字节熵）
+        let generated = generate_token();
+        assert_eq!(generated.len(), 64);
+        assert!(generated.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(generated, generate_token());
+    }
+
+    #[test]
+    fn settings_serde_keeps_token_and_tolerates_legacy_file() {
+        let json = serde_json::to_string(&McpSettings {
+            enabled: true,
+            port: 47821,
+            tier: "standard".to_string(),
+            token: Some("abc".to_string()),
+        })
+        .unwrap();
+        assert!(json.contains("\"token\":\"abc\""));
+        // 旧配置文件没有 token 字段，必须还能读
+        let legacy: McpSettings =
+            serde_json::from_str(r#"{"enabled":true,"port":47821,"tier":"dev"}"#).unwrap();
+        assert!(legacy.token.is_none());
+        assert_eq!(legacy.tier, "dev");
     }
 
     #[tokio::test]

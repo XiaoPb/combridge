@@ -167,10 +167,12 @@ pub async fn apply_mcp_settings(
         return Err(ComBridgeError::ConfigError(format!("未知的档位: {tier}")));
     };
 
+    // 保留已持久化的 token：改端口/档位不应顺带作废所有客户端的 Bearer 配置
     let settings = McpSettings {
         enabled,
         port,
         tier: tier.to_string(),
+        token: McpSettings::load().token,
     };
     settings.save().map_err(ComBridgeError::ConfigError)?;
 
@@ -201,15 +203,17 @@ pub async fn apply_mcp_settings(
 
 /// 轮换 token（强制重启服务）。
 ///
-/// 场景：token 被贴进过聊天记录 / 工单。重启会换新 token，旧客户端随即失效。
+/// 场景：token 被贴进过聊天记录 / 工单。清掉落盘值后由 `start` 重新生成，
+/// 旧客户端携带的 Bearer 随即失效，需要重新取一次 token。
 #[tauri::command]
 pub async fn rotate_mcp_token(app: tauri::AppHandle) -> Result<McpStatusView, ComBridgeError> {
-    let settings = McpSettings::load();
+    let mut settings = McpSettings::load();
     if !settings.enabled {
         return Err(ComBridgeError::ConfigError(
             "MCP 当前未启用，无需轮换 token".to_string(),
         ));
     }
+    settings.token = None;
     match mcp::start(app, settings).await {
         Ok(_) => set_last_error(None),
         Err(e) => set_last_error(Some(e)),
@@ -227,6 +231,7 @@ mod tests {
             enabled,
             port,
             tier: tier.to_string(),
+            token: None,
         }
     }
 

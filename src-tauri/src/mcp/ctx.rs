@@ -19,6 +19,7 @@ use crate::state::AppStateRef;
 
 use super::audit::AuditLogger;
 use super::ble_hub::BleHub;
+use super::confirm::ConfirmBroker;
 use super::gh3036_job::FactoryJob;
 use super::lease::LeaseManager;
 use super::ota_confirm::OtaConfirmStore;
@@ -59,6 +60,8 @@ pub struct McpContext {
     pub ota: Arc<OtaManager>,
     /// OTA dry-run 签发的确认令牌（L3 硬门）
     pub ota_confirm: OtaConfirmStore,
+    /// 待确认请求表：客户端不支持 elicitation 时，确认框由本机窗口弹出
+    pub confirm: Arc<ConfirmBroker>,
     /// 审计写入器；目录不可确定时为 None（启动时已记告警）
     pub audit: Option<Arc<AuditLogger>>,
     /// QPS + 并发限流（按档位）
@@ -92,10 +95,7 @@ impl McpContext {
             }
         };
 
-        let tier_name = tier
-            .read()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone();
+        let tier_name = tier.read().unwrap_or_else(|e| e.into_inner()).clone();
 
         Self {
             app_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -118,6 +118,7 @@ impl McpContext {
             protocols,
             ota,
             ota_confirm: OtaConfirmStore::new(),
+            confirm: Arc::new(ConfirmBroker::new(app.clone())),
             audit,
             limiter: RateLimiter::for_tier(&tier_name),
             breaker: PortBreaker::new(),

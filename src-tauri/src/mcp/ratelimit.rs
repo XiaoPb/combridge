@@ -76,7 +76,8 @@ impl RateLimiter {
 
     /// 切换档位时改速率，不重建限流器（重建会丢失在飞计数与现有令牌）。
     pub fn retune(&self, tier: &str) {
-        self.per_sec.store(qps_for(tier).to_bits(), Ordering::Relaxed);
+        self.per_sec
+            .store(qps_for(tier).to_bits(), Ordering::Relaxed);
     }
 
     /// 取一个令牌；不足时返回需要等待的毫秒数。

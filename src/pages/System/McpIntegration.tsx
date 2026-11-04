@@ -54,6 +54,7 @@ const McpIntegration: React.FC = () => {
   const [applying, setApplying] = useState(false);
   const [rotating, setRotating] = useState(false);
   const [writing, setWriting] = useState(false);
+  const [revoking, setRevoking] = useState(false);
   const [showToken, setShowToken] = useState(false);
   const [client, setClient] = useState<McpClientKind>('claudeCode');
 
@@ -156,8 +157,21 @@ const McpIntegration: React.FC = () => {
     }
   };
 
-  /** 打开审计目录：优先审计目录，其次数据目录；两者都不存在时明确提示而不是静默失败 */  const openAuditDir = async () => {
-    const target = status?.auditDir || status?.dataDir;
+  /** 撤销全部临时放行：用户勾过"本次会话内允许"之后想立刻收回 */
+  const handleRevokeGrants = async () => {
+    setRevoking(true);
+    try {
+      const count = await mcpApi.revokeGrants();
+      message.success(t('mcp.grant.revoked', { count }));
+      await load();
+    } catch (err) {
+      message.error(formatErrorMessage(err, t('mcp.grant.failed')));
+    } finally {
+      setRevoking(false);
+    }
+  };
+
+  /** 打开审计目录：优先审计目录，其次数据目录；两者都不存在时明确提示而不是静默失败 */  const openAuditDir = async () => {    const target = status?.auditDir || status?.dataDir;
     if (!target) {
       message.error(t('mcp.message.openFailed'));
       return;
@@ -457,6 +471,49 @@ const McpIntegration: React.FC = () => {
                   {t('mcp.button.openAudit')}
                 </Button>
               </Space>
+
+              {/* 临时放行：本机确认通道里勾了"本次会话内允许"的操作 */}
+              <div
+                style={{
+                  borderTop: '1px solid var(--ant-color-split, #f0f0f0)',
+                  paddingTop: 10,
+                }}
+              >
+                <Space size={8} wrap style={{ marginBottom: 6 }}>
+                  <Text strong style={{ fontSize: 13 }}>
+                    {t('mcp.grant.title')}
+                  </Text>
+                  {(status?.confirmGrants?.length ?? 0) > 0 && (
+                    <Button
+                      size="small"
+                      danger
+                      loading={revoking}
+                      onClick={handleRevokeGrants}
+                    >
+                      {t('mcp.grant.revoke')}
+                    </Button>
+                  )}
+                </Space>
+                {(status?.confirmGrants?.length ?? 0) === 0 ? (
+                  <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 0 }}>
+                    {t('mcp.grant.empty')}
+                  </Paragraph>
+                ) : (
+                  <Space wrap>
+                    {status?.confirmGrants.map((grant) => (
+                      <Tag key={`${grant.tool}:${grant.scope}`} color="gold">
+                        {grant.risk} @ {grant.scopeLabel} ·{' '}
+                        {t('mcp.grant.remaining', {
+                          minutes: Math.max(1, Math.ceil(grant.remainingSecs / 60)),
+                        })}
+                      </Tag>
+                    ))}
+                  </Space>
+                )}
+                <Paragraph type="secondary" style={{ fontSize: 12, margin: '6px 0 0' }}>
+                  {t('mcp.grant.hint')}
+                </Paragraph>
+              </div>
             </Space>
           </Card>
         </Col>

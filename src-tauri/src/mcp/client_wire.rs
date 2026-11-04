@@ -148,8 +148,8 @@ fn read_json_object(path: &Path) -> Result<Option<Map<String, Value>>, String> {
     if !path.exists() {
         return Ok(None);
     }
-    let text = std::fs::read_to_string(path)
-        .map_err(|e| format!("读取 {} 失败: {e}", path.display()))?;
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("读取 {} 失败: {e}", path.display()))?;
     if text.trim().is_empty() {
         return Ok(None);
     }
@@ -229,7 +229,10 @@ pub fn unwire_in(dir: &Path) -> Result<bool, String> {
     Ok(true)
 }
 
-fn state_in(dir: &Path, current: Option<(&str, &str)>) -> Result<(WireState, Option<String>), String> {
+fn state_in(
+    dir: &Path,
+    current: Option<(&str, &str)>,
+) -> Result<(WireState, Option<String>), String> {
     let mcp_path = dir.join("mcp.json");
     let Some(root) = read_json_object(&mcp_path)? else {
         return Ok((WireState::Missing, None));
@@ -308,7 +311,10 @@ fn now_millis() -> u64 {
 /// 放在服务启动链路里调用：成功是静默的，失败也只是少一次自动接入。
 pub fn wire_on_start(url: &str, token: &str) {
     match wire(url, token) {
-        Ok(Some(path)) => info!("[MCP] 客户端配置已就绪（开新会话即可使用）: {}", path.display()),
+        Ok(Some(path)) => info!(
+            "[MCP] 客户端配置已就绪（开新会话即可使用）: {}",
+            path.display()
+        ),
         Ok(None) => {
             info!("[MCP] 未检测到本机 MCP 客户端配置目录，跳过自动接入");
         }
@@ -353,7 +359,10 @@ mod tests {
             &std::fs::read_to_string(dir.path().join("mcp-approvals.json")).unwrap(),
         )
         .unwrap();
-        assert!(approvals.get(approval_key(URL)).is_some(), "必须预置信任记录");
+        assert!(
+            approvals.get(approval_key(URL)).is_some(),
+            "必须预置信任记录"
+        );
     }
 
     #[test]
@@ -421,7 +430,9 @@ mod tests {
         )
         .unwrap();
         // 旧键留着无妨；新 origin 必须有新键，否则客户端会再问一次
-        assert!(approvals.get(approval_key("http://127.0.0.1:50000/mcp")).is_some());
+        assert!(approvals
+            .get(approval_key("http://127.0.0.1:50000/mcp"))
+            .is_some());
     }
 
     #[test]
@@ -443,10 +454,16 @@ mod tests {
     #[test]
     fn inspect_reports_each_state() {
         let dir = tmp();
-        assert_eq!(state_in(dir.path(), Some((URL, TOKEN))).unwrap().0, WireState::Missing);
+        assert_eq!(
+            state_in(dir.path(), Some((URL, TOKEN))).unwrap().0,
+            WireState::Missing
+        );
 
         wire_in(dir.path(), URL, TOKEN).unwrap();
-        assert_eq!(state_in(dir.path(), Some((URL, TOKEN))).unwrap().0, WireState::Wired);
+        assert_eq!(
+            state_in(dir.path(), Some((URL, TOKEN))).unwrap().0,
+            WireState::Wired
+        );
         // token 变了 → 配置过期
         assert_eq!(
             state_in(dir.path(), Some((URL, "other"))).unwrap().0,

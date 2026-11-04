@@ -125,9 +125,7 @@ fn resolve_uuid_result(
         uuid_channel_value(second_pass),
     ];
     let chip_label = chip.unwrap_or("unknown");
-    let message = format!(
-        "UUID {source} chip={chip_label} len={raw_len} nonzero={nonzero}"
-    );
+    let message = format!("UUID {source} chip={chip_label} len={raw_len} nonzero={nonzero}");
 
     UuidResolution {
         uuid,
@@ -472,7 +470,11 @@ mod collector_lifecycle_tests {
             .unwrap()
             .unwrap();
 
-        assert!(step_result.success, "AA 桩值应判合格: {}", step_result.message);
+        assert!(
+            step_result.success,
+            "AA 桩值应判合格: {}",
+            step_result.message
+        );
         assert_eq!(test_result.uuid.len(), 32);
         assert!(test_result.uuid[..16].iter().all(|&b| b == 0xAA));
         assert!(step_result.message.contains("len=16"));
@@ -2797,8 +2799,7 @@ impl FactoryTestManager {
     fn save_result_to_csv(result: &FactoryTestResult, project_name: &str) -> Result<(), String> {
         let file_path = Self::csv_path_for_project(project_name)?;
         if let Some(parent) = file_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("创建输出目录失败: {}", e))?;
+            std::fs::create_dir_all(parent).map_err(|e| format!("创建输出目录失败: {}", e))?;
         }
 
         let file_exists = file_path.exists();

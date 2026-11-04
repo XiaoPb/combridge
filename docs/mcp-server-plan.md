@@ -596,7 +596,7 @@ OTA、产测可能跑数分钟，多数 MCP 客户端有 60s 超时。
 | 文件权限 | endpoint 文件仅当前用户可读（Windows ACL / Unix 0600） |
 | 会话 | Streamable HTTP 会话绑定 token，会话闲置 30 分钟回收 |
 
-### 8.3 确认机制（elicitation）
+### 8.3 确认机制（elicitation → 本机窗口兜底）
 
 L2 / L3 通过 MCP 的 **elicitation** 让客户端弹窗询问用户，而不是依赖模型自律：
 
@@ -606,7 +606,7 @@ L2 / L3 通过 MCP 的 **elicitation** 让客户端弹窗询问用户，而不�
 用户 → 客户端 → 服务端: accept / decline
 ```
 
-标准档下 decline 直接返回 `CONFIRM_REQUIRED`，不重试。同时前端（GUI）也弹一次确认框作双保险（L3）。
+标准档下 decline 直接返回 `CONFIRM_REQUIRED`，不重试。
 
 **实现（P5a，`mcp/elicit.rs`）**：
 
@@ -619,6 +619,35 @@ L2 / L3 通过 MCP 的 **elicitation** 让客户端弹窗询问用户，而不�
 - 覆盖范围：`serial_write`、`ble_gatt`（write / subscribe / unsubscribe / mtu）、`gh3036_rpc`（rpc / init / set_channel）、
   `gh3036_factory_test`（run / continue / stop）、`ota`（真实烧录那一次）。
   L3 因此变成**双确认**：先拿 dry-run 令牌（机器可校验），再由用户点确认（人可判断）。
+
+#### 8.3.1 本机窗口兜底（P5c，2026-11-04 实测后新增）
+
+**问题**：elicitation 需要**客户端在 `initialize` 里声明 `elicitation` 能力**。实测 WorkBuddy Connector 5.9.3
+声明的是 `ClientCapabilities { experimental: None, extensions: None, roots: None, sampling: None, elicitation: None }`，
+服务端在发出 `elicitation/create` 之前就被 rmcp 短路（`CapabilityNotSupported`，`duration_ms=0`）。
+结果是标准档的 L3 工具在这类桌面宿主上**恒拒绝** —— 安全上正确，但"人工确认"落不了地。
+
+**方案**：ComBridge 自己就是本机 GUI 进程，确认框改由**本机窗口**弹出，不经过 MCP 协议：
+
+```text
+MCP handler ──emit(mcp-confirm-request)──▶ 前端 McpConfirmModal
+     ▲                                            │
+     └──────── oneshot ◀── resolve_mcp_confirm ────┘
+```
+
+- **通道选择**：先看 `peer.peer_info().capabilities.elicitation`，有就走客户端弹窗；没有再落本机窗口。
+  用户明确拒绝时不改用本机窗口再问一遍（同一票不该被追问两次）。
+- **授权粒度**：弹窗里可勾"本次会话内允许对 `<目标>` 执行 `<操作>`"。授权表按 `(tool, scope)` 记账，
+  scope 为端口名 / 蓝牙地址 / 产测 owner；`GRANT_TTL = 30 min`，服务重启即清空。
+  命中授权时 `Decision::Granted`，日志标 `session-grant`，不再打扰。
+  **OTA 烧录不参与授权**（`grantable=false`）：每次烧录都得有人点。
+- **UI 前置**：发事件前 `unminimize + show + set_focus`，否则用户不知道有人在等确认。
+- **fail-closed 不变**：无 GUI、事件发不出、窗口已关、120s 无人应答、停服丢弃 —— 全部按拒绝处理，
+  `CONFIRM_REQUIRED` 的文案会写明是"客户端不支持 + 本机窗口不可用"还是"等待超时"。
+- **可见性**：设置页「安全与审计」列出当前临时放行（风险 / 目标 / 剩余分钟），可一键全部撤销。
+- 事件名：`mcp-confirm-request`（请求）、`mcp-confirm-settled`（应答/超时后收起）。
+  前端启动时另调 `list_mcp_confirm_requests` 补拉，防"窗口刚起来、事件已发过"的竞态。
+
 
 ### 8.4 审计
 
@@ -921,9 +950,43 @@ elicitation 正向路径（2026-11-04，`scripts/mcp/elicit_probe.py`，声明 `
 `requestedSchema` 是 `type=object` + 单个 `confirm: boolean`（required），符合规范对 elicitation schema 的要求。
 注意脚本必须**边读 SSE 边回应**——用 `urlopen().read()` 一次性读完会在等待客户端回应时死锁。
 
-**仍未验证**：WorkBuddy / Claude Desktop 这类带 UI 的客户端上，弹窗的渲染与点击路径
-（客户端侧实现已确认存在；token 已持久化、信任记录可预置，剩下唯一的阻塞是「需新会话建立连接」，
-见 §8.7。**这一步本质上需要一次人工点击** —— 点击正是被测对象）。
+**UI 客户端 elicitation（WorkBuddy Connector 5.9.3，2026-11-04 23:40，v0.7.2 / tier=standard）**：
+
+| 项 | 结果 |
+|---|---|
+| 弹窗渲染 | ❌ 无弹窗 —— 客户端 `initialize` 的 `capabilities.elicitation` 为 `None`，服务端在发 `elicitation/create` 之前即拒绝 |
+| 点确认 → 工具继续执行 | ⛔ 未能验证（前置的弹窗不存在） |
+| 点拒绝 → `CONFIRM_REQUIRED`「用户未确认：用户拒绝」 | ⛔ 未能验证（同上） |
+
+实测证据：
+
+- 客户端以 `client_info name="WorkBuddy Connector" version="5.9.3"`、协议 `2025-11-25` 握手，
+  `ClientCapabilities { experimental: None, extensions: None, roots: None, sampling: None, elicitation: None }`
+  （服务端日志 `combridge_system_2026-11-04-23-36-49.log`）。
+- `combridge_gh3036_factory_test {"action":"stop"}` 返回 `CONFIRM_REQUIRED`「无法向用户确认：客户端未声明 elicitation 能力」，
+  `duration_ms=0`（审计 `mcp-audit-2026-11-04.jsonl`）——服务端根本没发 `elicitation/create`，属能力探测阶段的短路。
+- 连接本身正常：`doConnect OK server=combridge elapsed=170ms` → `status=connected`；同会话 `combridge_about` 返回 0.7.2 / standard。
+- 客户端进程环境带 `CODEBUDDY_HOST_CAPABILITIES=elicitation.form`，说明宿主具备表单式确认能力，
+  但 MCP 客户端层没有把它写进 `initialize` 的 `capabilities`。**属客户端侧能力缺口，服务端行为正确。**
+- 客户端内没有任何开关可开启该声明（已检索 `~/.workbuddy` 配置）。
+
+结论：标准档的「强制人工确认」在 WorkBuddy Connector 5.9.3 上无法通过 MCP elicitation 落地。
+对这类未声明能力的客户端，L3 工具等效于 **fail-closed**（恒拒绝），需客户端补齐 `capabilities.elicitation`
+后才能验证弹窗与点击路径。服务端侧 4 条用例（上表）不受影响。
+
+**处置（P5c，2026-11-04）：加本机窗口通道**（设计见 §8.3.1）。客户端能力缺口不再阻塞这条产品路径：
+
+| 场景 | 通道 | 结果 |
+|---|---|---|
+| 客户端声明 `elicitation`（脚本客户端 / 未来的 WorkBuddy） | 客户端弹窗 | 上表 4 条用例照旧 |
+| 客户端未声明（WorkBuddy Connector 5.9.3） | ComBridge 窗口 `McpConfirmModal` | 弹窗出现 → 点确认继续执行 / 点取消中止 |
+| 两条都不可用（窗口关闭 / 事件发不出） | —— | `CONFIRM_REQUIRED`，文案写明两种原因 |
+| 用户勾了「本次会话内允许」后再次同类操作 | 会话内授权（30 min） | 直接放行，日志 `通道 session-grant` |
+| OTA 真实烧录 | 客户端弹窗或 ComBridge 窗口 | **不接受**会话内授权，每次都要点 |
+
+这同时修掉了原设计里"每次写都要点、产测要点三次"的体验问题：授权按 `(tool, scope)` 记账，
+scope 是端口名 / 蓝牙地址 / 产测 owner，所以"信任 COM3"不会顺带信任 COM4，也不会跨工具生效。
+
 
 
 ### 9.1 阶段划分

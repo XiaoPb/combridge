@@ -213,7 +213,9 @@ mod tests {
             Err(ConfirmError::Mismatch("目标设备"))
         ));
         // 换了地址被拒后，原令牌仍可用于正确参数
-        assert!(s.consume(&p.token, None, "AA:BB", "D:/fw.zip", "sha").is_ok());
+        assert!(s
+            .consume(&p.token, None, "AA:BB", "D:/fw.zip", "sha")
+            .is_ok());
     }
 
     #[test]

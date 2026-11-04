@@ -9,11 +9,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
 /// 校验 Bearer Token；通过则放行，否则 401。
-pub async fn bearer_auth(
-    State(expected): State<String>,
-    request: Request,
-    next: Next,
-) -> Response {
+pub async fn bearer_auth(State(expected): State<String>, request: Request, next: Next) -> Response {
     let provided = request
         .headers()
         .get(header::AUTHORIZATION)
@@ -25,7 +21,10 @@ pub async fn bearer_auth(
         Some(token) if constant_time_eq(token.as_bytes(), expected.as_bytes()) => {
             next.run(request).await
         }
-        _ => (StatusCode::UNAUTHORIZED, "invalid or missing bearer token\n")
+        _ => (
+            StatusCode::UNAUTHORIZED,
+            "invalid or missing bearer token\n",
+        )
             .into_response(),
     }
 }

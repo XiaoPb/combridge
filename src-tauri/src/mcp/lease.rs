@@ -90,10 +90,7 @@ impl LeaseManager {
     ) -> Result<Lease, AcquireError> {
         let ttl_secs = ttl_secs.clamp(1, MAX_TTL_SECS);
         let now = now_millis();
-        let mut inner = self
-            .inner
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
 
         // 先清理该资源上已过期的租约
         let expired_lease_id = match inner.leases.get(resource) {
@@ -135,7 +132,9 @@ impl LeaseManager {
             lease.lease_id,
             ttl_secs
         );
-        inner.leases.insert(resource.to_string(), LeaseSlot::Active(lease.clone()));
+        inner
+            .leases
+            .insert(resource.to_string(), LeaseSlot::Active(lease.clone()));
         Ok(lease)
     }
 
@@ -143,13 +142,12 @@ impl LeaseManager {
     /// 过期或无效时返回 Err，并附带当前占用者信息（若有）。
     pub fn validate(&self, resource: &str, lease_id: &str) -> Result<(), String> {
         let now = now_millis();
-        let mut inner = self
-            .inner
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
 
         let Some(slot) = inner.leases.get(resource) else {
-            return Err(format!("资源 {resource} 当前无租约（可能已被释放或从未获取）"));
+            return Err(format!(
+                "资源 {resource} 当前无租约（可能已被释放或从未获取）"
+            ));
         };
         let LeaseSlot::Active(lease) = slot else {
             return Err(format!("资源 {resource} 租约槽位异常"));
@@ -169,10 +167,7 @@ impl LeaseManager {
 
     /// 释放租约。仅持有者本人可释放；不存在时静默成功（幂等）。
     pub fn release(&self, resource: &str, lease_id: &str) {
-        let mut inner = self
-            .inner
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
         if let Some(LeaseSlot::Active(lease)) = inner.leases.get(resource) {
             if lease.lease_id == lease_id {
                 inner.leases.remove(resource);
@@ -184,10 +179,7 @@ impl LeaseManager {
     /// 查询资源当前租约（无则 None）。
     pub fn current(&self, resource: &str) -> Option<Lease> {
         let now = now_millis();
-        let inner = self
-            .inner
-            .read()
-            .unwrap_or_else(|e| e.into_inner());
+        let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
         match inner.leases.get(resource) {
             Some(LeaseSlot::Active(lease)) if lease.expires_at > now => Some(lease.clone()),
             _ => None,
@@ -197,10 +189,7 @@ impl LeaseManager {
     /// 当前全部有效租约（供 `combridge_devices` 展示）。
     pub fn list(&self) -> Vec<Lease> {
         let now = now_millis();
-        let inner = self
-            .inner
-            .read()
-            .unwrap_or_else(|e| e.into_inner());
+        let inner = self.inner.read().unwrap_or_else(|e| e.into_inner());
         let mut out: Vec<Lease> = inner
             .leases
             .values()
@@ -215,10 +204,7 @@ impl LeaseManager {
 
     /// 系统级强制释放（不校验持有者），如端口意外断开时调用。
     pub fn revoke(&self, resource: &str) {
-        let mut inner = self
-            .inner
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
         if inner.leases.remove(resource).is_some() {
             tracing::info!("[MCP-Lease] 系统强制释放租约: {}", resource);
         }
@@ -226,10 +212,7 @@ impl LeaseManager {
 
     /// 释放全部租约（App 退出时调用）。
     pub fn release_all(&self) {
-        let mut inner = self
-            .inner
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut inner = self.inner.write().unwrap_or_else(|e| e.into_inner());
         inner.leases.clear();
     }
 }

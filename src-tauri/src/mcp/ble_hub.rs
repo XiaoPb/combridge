@@ -58,10 +58,7 @@ impl BleHub {
             return;
         }
         let key = bucket_key(address, char_uuid);
-        let mut guard = self
-            .buckets
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut guard = self.buckets.write().unwrap_or_else(|e| e.into_inner());
         let bucket = guard.entry(key).or_default();
         bucket.chunks.push_back(data.to_vec());
         bucket.buffered += data.len();
@@ -79,10 +76,7 @@ impl BleHub {
     /// 游标读取。
     pub fn snapshot_since(&self, address: &str, char_uuid: &str, since: u64) -> NotifyOut {
         let key = bucket_key(address, char_uuid);
-        let guard = self
-            .buckets
-            .read()
-            .unwrap_or_else(|e| e.into_inner());
+        let guard = self.buckets.read().unwrap_or_else(|e| e.into_inner());
         let Some(bucket) = guard.get(&key) else {
             return NotifyOut {
                 data: Vec::new(),
@@ -123,20 +117,14 @@ impl BleHub {
     /// 当前游标（用于"只看新通知"的起点）。
     pub fn current_cursor(&self, address: &str, char_uuid: &str) -> u64 {
         let key = bucket_key(address, char_uuid);
-        let guard = self
-            .buckets
-            .read()
-            .unwrap_or_else(|e| e.into_inner());
+        let guard = self.buckets.read().unwrap_or_else(|e| e.into_inner());
         guard.get(&key).map(|b| b.total_written).unwrap_or(0)
     }
 
     /// 清空某桶并推进基线（重新订阅时调用，避免旧通知污染）。
     pub fn reset_to_now(&self, address: &str, char_uuid: &str) -> u64 {
         let key = bucket_key(address, char_uuid);
-        let mut guard = self
-            .buckets
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut guard = self.buckets.write().unwrap_or_else(|e| e.into_inner());
         let bucket = guard.entry(key).or_default();
         bucket.chunks.clear();
         bucket.buffered = 0;
@@ -147,10 +135,7 @@ impl BleHub {
     /// 断开设备时清理该地址下所有桶。
     pub fn remove_address(&self, address: &str) {
         let prefix = format!("{address}|");
-        let mut guard = self
-            .buckets
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut guard = self.buckets.write().unwrap_or_else(|e| e.into_inner());
         guard.retain(|k, _| !k.starts_with(&prefix));
     }
 

@@ -334,6 +334,9 @@ pub fn run() {
             commands::mcp::rotate_mcp_token,
             commands::mcp::wire_mcp_client,
             commands::mcp::set_mcp_auto_wire,
+            commands::mcp::list_mcp_confirm_requests,
+            commands::mcp::resolve_mcp_confirm,
+            commands::mcp::revoke_mcp_confirm_grants,
             commands::system::show_main_window,
             commands::system::get_window_status,
             #[cfg(feature = "devtools")]

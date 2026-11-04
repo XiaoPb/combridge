@@ -16,7 +16,9 @@ use std::time::Duration;
 use serde::Serialize;
 use tokio::sync::Notify;
 
-use crate::service::event_bus::{topics, Event, EventBus, SerialDataEvent, SerialDisconnectedEvent};
+use crate::service::event_bus::{
+    topics, Event, EventBus, SerialDataEvent, SerialDisconnectedEvent,
+};
 
 /// 单端口接收缓冲上限（字节）
 const PORT_BUFFER_LIMIT: usize = 1024 * 1024;
@@ -89,10 +91,7 @@ impl SerialHub {
     }
 
     fn with_stream<R>(&self, port: &str, f: impl FnOnce(&mut PortStream) -> R) -> R {
-        let mut guard = self
-            .ports
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut guard = self.ports.write().unwrap_or_else(|e| e.into_inner());
         f(guard.entry(port.to_string()).or_default())
     }
 
@@ -178,10 +177,7 @@ impl SerialHub {
     /// 端口关闭时标记并清理数据（保留游标基线，重开后继续单调递增）。
     /// 同时唤醒所有等待者以便其感知连接断开。
     pub fn remove_port(&self, port: &str) {
-        let mut guard = self
-            .ports
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut guard = self.ports.write().unwrap_or_else(|e| e.into_inner());
         let stream = guard.entry(port.to_string()).or_default();
         stream.closed = true;
         stream.chunks.clear();
@@ -335,12 +331,10 @@ impl SerialHub {
 
     fn handle_event(&self, event: &Event) {
         match event.topic.as_str() {
-            topics::SERIAL_DATA => {
-                match rmp_serde::from_slice::<SerialDataEvent>(&event.payload) {
-                    Ok(data_event) => self.feed(&data_event.device_id, &data_event.data),
-                    Err(e) => tracing::error!("[MCP-SerialHub] msgpack 解码失败: {}", e),
-                }
-            }
+            topics::SERIAL_DATA => match rmp_serde::from_slice::<SerialDataEvent>(&event.payload) {
+                Ok(data_event) => self.feed(&data_event.device_id, &data_event.data),
+                Err(e) => tracing::error!("[MCP-SerialHub] msgpack 解码失败: {}", e),
+            },
             topics::SERIAL_DISCONNECTED => {
                 if let Ok(disconnected) =
                     serde_json::from_slice::<SerialDisconnectedEvent>(&event.payload)
@@ -465,18 +459,13 @@ mod tests {
             hub2.feed("COM3", b"ERROR: timeout\r\n");
         });
         let out = hub
-            .wait_for_match(
-                "COM3",
-                0,
-                Duration::from_secs(2),
-                |text| {
-                    if text.contains("ERROR") {
-                        Some("ERROR".to_string())
-                    } else {
-                        None
-                    }
-                },
-            )
+            .wait_for_match("COM3", 0, Duration::from_secs(2), |text| {
+                if text.contains("ERROR") {
+                    Some("ERROR".to_string())
+                } else {
+                    None
+                }
+            })
             .await;
         assert!(out.matched);
         assert_eq!(out.matched_text, "ERROR");

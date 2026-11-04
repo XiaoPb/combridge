@@ -16,9 +16,9 @@
 //! - 注解：只读工具标 `read_only_hint = true`，写/关设备标 `destructive_hint = true`
 //! - L3（OTA / 产测）在标准档一律拒绝，待 P5 的 elicitation 落地后改为双确认
 
-use rmcp::ServerHandler;
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerConfig};
+use rmcp::ServerHandler;
 use rmcp::{schemars, tool, tool_handler, tool_router};
 use rmcp::{Peer, RoleServer};
 use serde::{Deserialize, Serialize};
@@ -518,7 +518,11 @@ fn map_baud(b: u32) -> Result<BaudRate, CallToolResult> {
         230400 => BaudRate::B230400,
         460800 => BaudRate::B460800,
         921600 => BaudRate::B921600,
-        _ => return Err(mcp_err(format!("不支持的波特率: {b}（支持 1200~921600 标准值）"))),
+        _ => {
+            return Err(mcp_err(format!(
+                "不支持的波特率: {b}（支持 1200~921600 标准值）"
+            )))
+        }
     })
 }
 
@@ -554,7 +558,11 @@ fn map_flow(s: &str) -> Result<FlowControl, CallToolResult> {
         "none" | "" => FlowControl::None,
         "software" => FlowControl::Software,
         "hardware" => FlowControl::Hardware,
-        other => return Err(mcp_err(format!("不支持的流控: {other}（none/software/hardware）"))),
+        other => {
+            return Err(mcp_err(format!(
+                "不支持的流控: {other}（none/software/hardware）"
+            )))
+        }
     })
 }
 
@@ -566,9 +574,7 @@ fn encode_bytes(bytes: &[u8], encoding: &str) -> Result<String, CallToolResult> 
             .map(|b| format!("{b:02X}"))
             .collect::<Vec<_>>()
             .join(" ")),
-        other => Err(mcp_err(format!(
-            "未知编码: {other}（支持 text | hex）"
-        ))),
+        other => Err(mcp_err(format!("未知编码: {other}（支持 text | hex）"))),
     }
 }
 
@@ -590,9 +596,7 @@ fn decode_bytes(data: &str, encoding: &str) -> Result<Vec<u8>, CallToolResult> {
                 })
                 .collect()
         }
-        other => Err(mcp_err(format!(
-            "未知编码: {other}（支持 text | hex）"
-        ))),
+        other => Err(mcp_err(format!("未知编码: {other}（支持 text | hex）"))),
     }
 }
 
@@ -1100,11 +1104,7 @@ action=logs 读取日志尾部（默认 100 行），工具返回错误且看不
         annotations(read_only_hint = true)
     )]
     async fn about(&self, Parameters(req): Parameters<AboutRequest>) -> ToolR<AboutResponse> {
-        let action = req
-            .action
-            .as_deref()
-            .unwrap_or("summary")
-            .to_lowercase();
+        let action = req.action.as_deref().unwrap_or("summary").to_lowercase();
 
         if action == "logs" {
             let lines = req.lines.unwrap_or(100).clamp(1, 500);
@@ -1210,7 +1210,11 @@ action=logs 读取日志尾部（默认 100 行），工具返回错误且看不
         description = "打开串口并获取租约。返回 lease_id（写/关操作必须携带）与数据游标 cursor。\
 若端口已被打开（GUI 或其他会话），仍会返回租约与游标（already_open=true），此模式下可读但 close 会被拒绝；\
 若租约被其他 AI 客户端持有且 force=false，返回 PORT_BUSY 及占用者信息。",
-        annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = false)
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false
+        )
     )]
     async fn combridge_serial_open(
         &self,
@@ -1308,12 +1312,14 @@ action=logs 读取日志尾部（默认 100 行），工具返回错误且看不
         self.ctx
             .leases
             .validate(&req.port_name, &req.lease_id)
-            .map_err(|e| tool_err_full(
-                "LEASE_INVALID",
-                e,
-                Some("先调用 combridge_serial_open 获取该端口的 lease_id"),
-                false,
-            ))?;
+            .map_err(|e| {
+                tool_err_full(
+                    "LEASE_INVALID",
+                    e,
+                    Some("先调用 combridge_serial_open 获取该端口的 lease_id"),
+                    false,
+                )
+            })?;
 
         let opened_by_mcp = self
             .ctx
@@ -1366,12 +1372,14 @@ encoding=text 原样发送；encoding=hex 发送二进制（如 \"AA BB 01\"）�
         self.ctx
             .leases
             .validate(&req.port_name, &req.lease_id)
-            .map_err(|e| tool_err_full(
-                "LEASE_INVALID",
-                e,
-                Some("先调用 combridge_serial_open 获取该端口的 lease_id"),
-                false,
-            ))?;
+            .map_err(|e| {
+                tool_err_full(
+                    "LEASE_INVALID",
+                    e,
+                    Some("先调用 combridge_serial_open 获取该端口的 lease_id"),
+                    false,
+                )
+            })?;
 
         let mut payload = decode_bytes(&req.data, &req.encoding)?;
         if req.append_crlf {
@@ -1384,7 +1392,9 @@ encoding=text 原样发送；encoding=hex 发送二进制（如 \"AA BB 01\"）�
         // 标准档：写设备前必须由用户点确认（研发档跳过）
         self.confirm_if_needed(
             &peer,
+            "combridge_serial_write",
             "串口写入",
+            &req.port_name,
             format!(
                 "即将向 {} 写入 {} 字节：{}",
                 req.port_name,
@@ -1473,10 +1483,7 @@ regex=true 时 pattern 为正则，否则为子串匹配；默认只匹配 since
             })
         } else {
             let pat = pattern.clone();
-            Box::new(move |text: &str| {
-                text.find(&pat)
-                    .map(|i| text[i..i + pat.len()].to_string())
-            })
+            Box::new(move |text: &str| text.find(&pat).map(|i| text[i..i + pat.len()].to_string()))
         };
 
         let start = std::time::Instant::now();
@@ -1566,7 +1573,11 @@ regex=true 时 pattern 为正则，否则为子串匹配；默认只匹配 since
         Parameters(req): Parameters<BleScanRequest>,
     ) -> ToolR<BleScanResponse> {
         let found = if req.stop {
-            self.ctx.ble.stop_scan().await.map_err(|e| mcp_err(format!("停止扫描失败: {e}")))?
+            self.ctx
+                .ble
+                .stop_scan()
+                .await
+                .map_err(|e| mcp_err(format!("停止扫描失败: {e}")))?
         } else {
             self.ctx
                 .ble
@@ -1681,12 +1692,14 @@ regex=true 时 pattern 为正则，否则为子串匹配；默认只匹配 since
                 self.ctx
                     .leases
                     .validate(&resource, &req.lease_id)
-                    .map_err(|e| tool_err_full(
-                    "LEASE_INVALID",
-                    e,
-                    Some("先调用 combridge_ble_connect 获取该地址的 lease_id"),
-                    false,
-                ))?;
+                    .map_err(|e| {
+                        tool_err_full(
+                            "LEASE_INVALID",
+                            e,
+                            Some("先调用 combridge_ble_connect 获取该地址的 lease_id"),
+                            false,
+                        )
+                    })?;
                 self.ctx
                     .ble
                     .disconnect(&req.address)
@@ -1753,12 +1766,14 @@ subscribe（需 lease_id）/ unsubscribe（需 lease_id）/ notifications（游�
             self.ctx
                 .leases
                 .validate(&resource, &req.lease_id)
-                .map_err(|e| tool_err_full(
-                    "LEASE_INVALID",
-                    e,
-                    Some("先调用 combridge_ble_connect 获取该地址的 lease_id"),
-                    false,
-                ))
+                .map_err(|e| {
+                    tool_err_full(
+                        "LEASE_INVALID",
+                        e,
+                        Some("先调用 combridge_ble_connect 获取该地址的 lease_id"),
+                        false,
+                    )
+                })
         };
 
         let mut resp = BleGattResponse {
@@ -1775,7 +1790,10 @@ subscribe（需 lease_id）/ unsubscribe（需 lease_id）/ notifications（游�
         };
 
         // 标准档：只有会改设备状态的动作才要确认（discover/read/notifications/rssi 免确认）
-        if matches!(action.as_str(), "write" | "subscribe" | "unsubscribe" | "mtu") {
+        if matches!(
+            action.as_str(),
+            "write" | "subscribe" | "unsubscribe" | "mtu"
+        ) {
             let detail = match action.as_str() {
                 "write" => format!(
                     "即将向 {} 的特征 {} 写入 {} 字符：{}",
@@ -1785,9 +1803,19 @@ subscribe（需 lease_id）/ unsubscribe（需 lease_id）/ notifications（游�
                     req.data.chars().take(64).collect::<String>()
                 ),
                 "mtu" => format!("即将把 {} 的 MTU 协商为 {}", req.address, req.mtu),
-                _ => format!("即将对 {} 的特征 {} 执行 {action}", req.address, req.char_uuid),
+                _ => format!(
+                    "即将对 {} 的特征 {} 执行 {action}",
+                    req.address, req.char_uuid
+                ),
             };
-            self.confirm_if_needed(&peer, "BLE 设备写入", detail).await?;
+            self.confirm_if_needed(
+                &peer,
+                "combridge_ble_gatt",
+                "BLE 设备写入",
+                &req.address,
+                detail,
+            )
+            .await?;
         }
 
         match action.as_str() {
@@ -1802,7 +1830,10 @@ subscribe（需 lease_id）/ unsubscribe（需 lease_id）/ notifications（游�
             }
             "discover_characteristics" => {
                 if req.service_uuid.trim().is_empty() {
-                    return Err(tool_err("INVALID_ARGUMENT", "discover_characteristics 需要 service_uuid"));
+                    return Err(tool_err(
+                        "INVALID_ARGUMENT",
+                        "discover_characteristics 需要 service_uuid",
+                    ));
                 }
                 let chars = self
                     .ctx
@@ -1935,7 +1966,11 @@ action=set_channel 配置 TX/RX 通道（serial 传串口名，ble 传地址+特
 action=rpc 执行一条 RPC（command_key 取自 catalog，params 按命令定义顺序传，十六进制值可带 0x 前缀）。\
 首次调用会自动获取 GH3036 租约并在返回中给出 lease_id；同一 owner 再次调用沿用该租约，\
 其他 owner 占用时返回 GH3036_BUSY（force=true 可抢占）。",
-        annotations(read_only_hint = false, destructive_hint = true, idempotent_hint = false)
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false
+        )
     )]
     async fn gh3036_rpc(
         &self,
@@ -1977,20 +2012,37 @@ action=rpc 执行一条 RPC（command_key 取自 catalog，params 按命令定�
                     req.device_id.clone().unwrap_or_default()
                 ),
             };
-            self.confirm_if_needed(&peer, "GH3036 写入", detail).await?;
+            // GH3036 是单芯片会话，按 owner 授权：同一轮联调不该每次 RPC 都点确认
+            self.confirm_if_needed(&peer, "combridge_gh3036_rpc", "GH3036 写入", &owner, detail)
+                .await?;
         }
 
         match action.as_str() {
             "status" => {
-                resp.tx_channel = self.ctx.gh3036.get_tx_channel().as_ref().map(to_channel_view);
-                resp.rx_channel = self.ctx.gh3036.get_rx_channel().as_ref().map(to_channel_view);
+                resp.tx_channel = self
+                    .ctx
+                    .gh3036
+                    .get_tx_channel()
+                    .as_ref()
+                    .map(to_channel_view);
+                resp.rx_channel = self
+                    .ctx
+                    .gh3036
+                    .get_rx_channel()
+                    .as_ref()
+                    .map(to_channel_view);
                 let (status, step) = self.ctx.gh3036.factory_test_status();
                 resp.factory_status = Some(super::gh3036_job::status_str(status));
                 resp.factory_step = Some(super::gh3036_job::step_str(step));
                 resp.lease_id = self.ctx.leases.current(GH3036_RESOURCE).map(|l| l.lease_id);
             }
             "init" => {
-                let lease = self.acquire_gh3036_lease(&owner, req.lease_id.as_deref(), req.force, req.ttl_s)?;
+                let lease = self.acquire_gh3036_lease(
+                    &owner,
+                    req.lease_id.as_deref(),
+                    req.force,
+                    req.ttl_s,
+                )?;
                 resp.lease_id = Some(lease.lease_id);
                 if !self.ctx.gh3036.is_initialized() {
                     self.ctx.gh3036.initialize().map_err(|e| {
@@ -2003,15 +2055,33 @@ action=rpc 执行一条 RPC（command_key 取自 catalog，params 按命令定�
                     })?;
                 }
                 resp.initialized = true;
-                resp.tx_channel = self.ctx.gh3036.get_tx_channel().as_ref().map(to_channel_view);
-                resp.rx_channel = self.ctx.gh3036.get_rx_channel().as_ref().map(to_channel_view);
+                resp.tx_channel = self
+                    .ctx
+                    .gh3036
+                    .get_tx_channel()
+                    .as_ref()
+                    .map(to_channel_view);
+                resp.rx_channel = self
+                    .ctx
+                    .gh3036
+                    .get_rx_channel()
+                    .as_ref()
+                    .map(to_channel_view);
             }
             "set_channel" => {
-                let lease = self.acquire_gh3036_lease(&owner, req.lease_id.as_deref(), req.force, req.ttl_s)?;
+                let lease = self.acquire_gh3036_lease(
+                    &owner,
+                    req.lease_id.as_deref(),
+                    req.force,
+                    req.ttl_s,
+                )?;
                 resp.lease_id = Some(lease.lease_id);
                 self.ensure_gh3036_initialized()?;
 
-                let channel_type = req.channel_type.clone().unwrap_or_else(|| "serial".to_string());
+                let channel_type = req
+                    .channel_type
+                    .clone()
+                    .unwrap_or_else(|| "serial".to_string());
                 let ch_type = match channel_type.to_lowercase().as_str() {
                     "serial" => ChannelType::Serial,
                     "ble" => ChannelType::Ble,
@@ -2038,12 +2108,16 @@ action=rpc 执行一条 RPC（command_key 取自 catalog，params 按命令定�
                 };
                 let direction = req.direction.clone().unwrap_or_else(|| "both".to_string());
                 match direction.to_lowercase().as_str() {
-                    "tx" => self.ctx.gh3036.configure_tx_channel(config).map_err(|e| {
-                        tool_err("GH3036_CHANNEL_FAILED", e)
-                    })?,
-                    "rx" => self.ctx.gh3036.configure_rx_channel(config).map_err(|e| {
-                        tool_err("GH3036_CHANNEL_FAILED", e)
-                    })?,
+                    "tx" => self
+                        .ctx
+                        .gh3036
+                        .configure_tx_channel(config)
+                        .map_err(|e| tool_err("GH3036_CHANNEL_FAILED", e))?,
+                    "rx" => self
+                        .ctx
+                        .gh3036
+                        .configure_rx_channel(config)
+                        .map_err(|e| tool_err("GH3036_CHANNEL_FAILED", e))?,
                     "both" => {
                         self.ctx
                             .gh3036
@@ -2062,8 +2136,18 @@ action=rpc 执行一条 RPC（command_key 取自 catalog，params 按命令定�
                     }
                 }
 
-                resp.tx_channel = self.ctx.gh3036.get_tx_channel().as_ref().map(to_channel_view);
-                resp.rx_channel = self.ctx.gh3036.get_rx_channel().as_ref().map(to_channel_view);
+                resp.tx_channel = self
+                    .ctx
+                    .gh3036
+                    .get_tx_channel()
+                    .as_ref()
+                    .map(to_channel_view);
+                resp.rx_channel = self
+                    .ctx
+                    .gh3036
+                    .get_rx_channel()
+                    .as_ref()
+                    .map(to_channel_view);
             }
             "catalog" => {
                 resp.commands = crate::gh3036::get_rpc_commands()
@@ -2096,11 +2180,26 @@ action=rpc 执行一条 RPC（command_key 取自 catalog，params 按命令定�
                         description: v.description,
                     })
                     .collect();
-                resp.tx_channel = self.ctx.gh3036.get_tx_channel().as_ref().map(to_channel_view);
-                resp.rx_channel = self.ctx.gh3036.get_rx_channel().as_ref().map(to_channel_view);
+                resp.tx_channel = self
+                    .ctx
+                    .gh3036
+                    .get_tx_channel()
+                    .as_ref()
+                    .map(to_channel_view);
+                resp.rx_channel = self
+                    .ctx
+                    .gh3036
+                    .get_rx_channel()
+                    .as_ref()
+                    .map(to_channel_view);
             }
             "rpc" => {
-                let lease = self.acquire_gh3036_lease(&owner, req.lease_id.as_deref(), req.force, req.ttl_s)?;
+                let lease = self.acquire_gh3036_lease(
+                    &owner,
+                    req.lease_id.as_deref(),
+                    req.force,
+                    req.ttl_s,
+                )?;
                 resp.lease_id = Some(lease.lease_id);
                 self.ensure_gh3036_initialized()?;
 
@@ -2155,7 +2254,11 @@ max_wait_s 内未结束则返回 status=running 与 job_id，用 action=status �
 流程中途停在待切换测试环境时会返回 status=waiting_environment_switch，\
 需人工切换环境后调用 action=continue。action=stop 中止；action=validate_config 校验卡控与配置文件；\
 action=threshold_get 取当前卡控配置 YAML。run/continue/stop 需要 GH3036 租约（首次调用自动获取）。",
-        annotations(read_only_hint = false, destructive_hint = true, idempotent_hint = false)
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false
+        )
     )]
     async fn gh3036_factory_test(
         &self,
@@ -2168,11 +2271,14 @@ action=threshold_get 取当前卡控配置 YAML。run/continue/stop 需要 GH303
             .clone()
             .unwrap_or_else(|| "mcp-client".to_string());
 
-        // 标准档：产测三件套（run/continue/stop）都会驱动硬件，逐次确认
+        // 标准档：产测整轮流程只确认一次 —— run 时用户可勾"本次会话内放行"，
+        // 之后同一 owner 的 continue / stop 直接过；不勾则照旧逐次确认。
         if matches!(action.as_str(), "run" | "continue" | "stop") {
             self.confirm_if_needed(
                 &peer,
+                "combridge_gh3036_factory_test",
                 "GH3036 产测",
+                &owner,
                 format!(
                     "即将执行产测 action={action}（最长等待 {}s）",
                     req.max_wait_s.unwrap_or(180)
@@ -2183,7 +2289,12 @@ action=threshold_get 取当前卡控配置 YAML。run/continue/stop 需要 GH303
 
         match action.as_str() {
             "run" => {
-                let lease = self.acquire_gh3036_lease(&owner, req.lease_id.as_deref(), req.force, req.ttl_s)?;
+                let lease = self.acquire_gh3036_lease(
+                    &owner,
+                    req.lease_id.as_deref(),
+                    req.force,
+                    req.ttl_s,
+                )?;
                 self.ensure_gh3036_initialized()?;
 
                 if let Some(dir) = req.config_dir.as_ref() {
@@ -2271,7 +2382,8 @@ action=threshold_get 取当前卡控配置 YAML。run/continue/stop 需要 GH303
                         FactoryTestStatus::Idle if tokio::time::Instant::now() > deadline => {
                             let mut summary = self.build_factory_summary(&job, status, step);
                             summary.lease_id = Some(lease.lease_id.clone());
-                            summary.hint = Some("产测尚未开始，稍后用 action=status 复查".to_string());
+                            summary.hint =
+                                Some("产测尚未开始，稍后用 action=status 复查".to_string());
                             return Ok(Json(summary));
                         }
                         _ => {
@@ -2295,7 +2407,12 @@ action=threshold_get 取当前卡控配置 YAML。run/continue/stop 需要 GH303
                 Ok(Json(summary))
             }
             "continue" => {
-                let lease = self.acquire_gh3036_lease(&owner, req.lease_id.as_deref(), req.force, req.ttl_s)?;
+                let lease = self.acquire_gh3036_lease(
+                    &owner,
+                    req.lease_id.as_deref(),
+                    req.force,
+                    req.ttl_s,
+                )?;
                 self.ctx.gh3036.factory_test_continue().map_err(|e| {
                     tool_err_full(
                         "FACTORY_TEST_STATE",
@@ -2315,7 +2432,12 @@ action=threshold_get 取当前卡控配置 YAML。run/continue/stop 需要 GH303
                 Ok(Json(summary))
             }
             "stop" => {
-                let lease = self.acquire_gh3036_lease(&owner, req.lease_id.as_deref(), req.force, req.ttl_s)?;
+                let lease = self.acquire_gh3036_lease(
+                    &owner,
+                    req.lease_id.as_deref(),
+                    req.force,
+                    req.ttl_s,
+                )?;
                 self.ctx.gh3036.factory_test_stop().await.map_err(|e| {
                     tool_err_full(
                         "FACTORY_TEST_STATE",
@@ -2389,7 +2511,11 @@ configure_parser 设置解析器（parser.parser_type=delimiter 按分隔符，r
 parse 把文本解析成数值行追加（data 可含多行，每行一条样本）；read 读取最近 N 行；\
 clear 清空；status 查看行数与列名；remove 删除缓冲。\
 典型用法：create → configure_parser → parse(串口收到的整段文本) → read 取值。",
-        annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = false)
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false
+        )
     )]
     async fn waveform(
         &self,
@@ -2634,7 +2760,11 @@ clear 清空；status 查看行数与列名；remove 删除缓冲。\
 load 从脚本路径加载（path 为 Lua 文件绝对路径）；unload 卸载；enable/disable 启停；\
 bind/unbind 把插件绑定到设备（device_id）；bound 查某设备已绑定的插件。\
 禁用（disable）只是停止响应事件，插件仍占用脚本与 hook 注册；彻底移除用 unload。",
-        annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = false)
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false
+        )
     )]
     async fn protocol(
         &self,
@@ -2742,7 +2872,14 @@ bind/unbind 把插件绑定到设备（device_id）；bound 查某设备已绑�
                 Ok(Json(ProtocolResponse {
                     action: action.clone(),
                     plugin: Some(plugin_view(&info)),
-                    message: Some(format!("插件 {plugin_id} 已{}", if action == "enable" { "启用" } else { "禁用" })),
+                    message: Some(format!(
+                        "插件 {plugin_id} 已{}",
+                        if action == "enable" {
+                            "启用"
+                        } else {
+                            "禁用"
+                        }
+                    )),
                     ..Default::default()
                 }))
             }
@@ -2813,7 +2950,11 @@ action=start **不带 confirm 时永远只做 dry-run**：校验包 + 预检设�
 不会烧录。把该 token 原样放到 confirm 再调用一次 start 才真正执行（令牌一次性、5 分钟过期、\
 绑定目标设备+固件路径+镜像 sha256）。action=status 查进度（state/stage/percent）；action=cancel 中止。\
 标准档（standard）下 start 会被 TIER_BLOCKED 拒绝，请在 GUI 中操作或改用研发档。",
-        annotations(read_only_hint = false, destructive_hint = true, idempotent_hint = false)
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false
+        )
     )]
     async fn ota(
         &self,
@@ -2910,29 +3051,22 @@ impl ComBridgeMcp {
         ttl_s: Option<u64>,
     ) -> Result<super::lease::Lease, CallToolResult> {
         if let Some(id) = lease_id {
-            self.ctx
-                .leases
-                .validate(GH3036_RESOURCE, id)
-                .map_err(|e| {
-                    tool_err_full(
-                        "LEASE_INVALID",
-                        e,
-                        Some("省略 lease_id 重新获取，或确认占用方已释放"),
-                        false,
-                    )
-                })?;
-            return self
-                .ctx
-                .leases
-                .current(GH3036_RESOURCE)
-                .ok_or_else(|| {
-                    tool_err_full(
-                        "LEASE_INVALID",
-                        "GH3036 租约不存在",
-                        Some("省略 lease_id 重新获取"),
-                        false,
-                    )
-                });
+            self.ctx.leases.validate(GH3036_RESOURCE, id).map_err(|e| {
+                tool_err_full(
+                    "LEASE_INVALID",
+                    e,
+                    Some("省略 lease_id 重新获取，或确认占用方已释放"),
+                    false,
+                )
+            })?;
+            return self.ctx.leases.current(GH3036_RESOURCE).ok_or_else(|| {
+                tool_err_full(
+                    "LEASE_INVALID",
+                    "GH3036 租约不存在",
+                    Some("省略 lease_id 重新获取"),
+                    false,
+                )
+            });
         }
 
         // 无 lease_id：同一 owner 已在持有则直接复用。
@@ -3031,23 +3165,56 @@ impl ComBridgeMcp {
     ///
     /// 返回 `Ok(())` 才允许改设备；任何"问不到"的情况都按拒绝处理 ——
     /// 确认机制失效时默认关闭，而不是默认放行。
+    ///
+    /// 客户端声明了 elicitation 就在客户端弹窗，没声明（桌面宿主普遍如此）
+    /// 就由 ComBridge 自己的窗口弹，见 [`super::elicit::ask`]。
+    ///
+    /// `scope` 是授权范围（端口名 / 蓝牙地址 / 产测 owner）：用户在弹窗里勾了
+    /// "本次会话内放行"后，同工具同 scope 的后续调用直接放行。
     async fn confirm_if_needed(
         &self,
         peer: &rmcp::Peer<rmcp::RoleServer>,
+        tool: &str,
         risk: &str,
+        scope: &str,
         detail: impl Into<String>,
+    ) -> Result<(), CallToolResult> {
+        self.confirm_action(peer, tool, risk, scope, scope, true, detail.into())
+            .await
+    }
+
+    /// 同上，但可指定 scope 的人读文案与是否允许"记住"。
+    #[allow(clippy::too_many_arguments)]
+    async fn confirm_action(
+        &self,
+        peer: &rmcp::Peer<rmcp::RoleServer>,
+        tool: &str,
+        risk: &str,
+        scope: &str,
+        scope_label: &str,
+        grantable: bool,
+        detail: String,
     ) -> Result<(), CallToolResult> {
         if !needs_user_confirmation(&self.ctx.tier_name()) {
             return Ok(());
         }
-        let detail = detail.into();
-        let message = format!("【{risk}】{detail}\n确认执行？");
-        match super::elicit::ask(peer, message).await {
-            d if d.is_accepted() => Ok(()),
+        let req = super::confirm::Request {
+            tool,
+            risk,
+            scope,
+            scope_label,
+            detail: &detail,
+            grantable,
+        };
+        match super::elicit::ask(peer, &self.ctx.confirm, req).await {
+            d if d.is_accepted() => {
+                tracing::info!("[MCP] {tool} 已确认（通道 {}）", d.channel());
+                Ok(())
+            }
             d => Err(tool_err_full(
                 "CONFIRM_REQUIRED",
                 d.reason(),
-                Some("这是标准档的强制确认：请在客户端弹窗中确认后重试；若客户端不支持 elicitation，请改用 GUI 操作或将档位切到 dev"),
+                Some("这是标准档的强制确认：确认框会出现在 ComBridge 窗口中（客户端若支持 elicitation 则在客户端弹窗），请在 120s 内点确认后重试；也可临时把档位切到 dev"),
                 false,
             )),
         }
@@ -3094,8 +3261,7 @@ impl ComBridgeMcp {
     /// 这样即使令牌有效、包却已经损坏（换了文件），也不会走到烧录。
     async fn ota_start(&self, req: OtaRequest, peer: &Peer<RoleServer>) -> ToolR<OtaResponse> {
         let address = require_arg(req.address.as_deref(), "address", "start")?;
-        let firmware_path =
-            require_arg(req.firmware_path.as_deref(), "firmware_path", "start")?;
+        let firmware_path = require_arg(req.firmware_path.as_deref(), "firmware_path", "start")?;
 
         // 1) 固件包校验（本地，只读）
         let package = self
@@ -3181,7 +3347,10 @@ impl ComBridgeMcp {
                     "confirm_expires_in": fresh.remaining_secs(),
                 });
                 if let Some(p) = payload.as_object_mut() {
-                    p.insert("plan".to_string(), serde_json::to_value(&plan).unwrap_or_default());
+                    p.insert(
+                        "plan".to_string(),
+                        serde_json::to_value(&plan).unwrap_or_default(),
+                    );
                 }
                 return Err(CallToolResult::error(vec![ContentBlock::text(
                     payload.to_string(),
@@ -3190,9 +3359,14 @@ impl ComBridgeMcp {
         }
 
         // 4) 令牌有效 → 标准档再要一次用户确认（L3 双确认）→ 真正烧录
-        self.confirm_if_needed(
+        //    烧录不接受"记住"：每次都得有人点。
+        self.confirm_action(
             peer,
+            "combridge_ota",
             "OTA 烧录",
+            plan.target.as_str(),
+            plan.target.as_str(),
+            false,
             format!(
                 "即将把 {}（{} 字节, 协议 {}）烧录到 {}\nsha256: {}",
                 plan.image_name,
@@ -3217,12 +3391,7 @@ impl ComBridgeMcp {
         let status = self
             .ctx
             .ota
-            .start(
-                Some(protocol_id.clone()),
-                address,
-                firmware_path,
-                options,
-            )
+            .start(Some(protocol_id.clone()), address, firmware_path, options)
             .await
             .map_err(|e| map_ota_error(e, "启动升级失败"))?;
 
@@ -3271,11 +3440,7 @@ impl ComBridgeMcp {
 // ---------------------------------------------------------------------------
 
 /// 必填参数校验，失败信息里带上 action，模型才知道是哪一步缺参数。
-fn require_arg(
-    value: Option<&str>,
-    name: &str,
-    action: &str,
-) -> Result<String, CallToolResult> {
+fn require_arg(value: Option<&str>, name: &str, action: &str) -> Result<String, CallToolResult> {
     match value {
         Some(v) if !v.trim().is_empty() => Ok(v.to_string()),
         _ => Err(tool_err_full(
@@ -3653,23 +3818,68 @@ mod tests {
     #[test]
     fn test_tool_names_registered() {
         let names = [
-            (ComBridgeMcp::about_tool_attr().name.to_string(), "combridge_about"),
-            (ComBridgeMcp::ports_tool_attr().name.to_string(), "combridge_ports"),
-            (ComBridgeMcp::combridge_serial_open_tool_attr().name.to_string(), "combridge_serial_open"),
-            (ComBridgeMcp::combridge_serial_close_tool_attr().name.to_string(), "combridge_serial_close"),
-            (ComBridgeMcp::combridge_serial_write_tool_attr().name.to_string(), "combridge_serial_write"),
-            (ComBridgeMcp::combridge_serial_read_tool_attr().name.to_string(), "combridge_serial_read"),
-            (ComBridgeMcp::combridge_serial_expect_tool_attr().name.to_string(), "combridge_serial_expect"),
-            (ComBridgeMcp::devices_tool_attr().name.to_string(), "combridge_devices"),
-            (ComBridgeMcp::ble_scan_tool_attr().name.to_string(), "combridge_ble_scan"),
-            (ComBridgeMcp::ble_connect_tool_attr().name.to_string(), "combridge_ble_connect"),
-            (ComBridgeMcp::ble_gatt_tool_attr().name.to_string(), "combridge_ble_gatt"),
+            (
+                ComBridgeMcp::about_tool_attr().name.to_string(),
+                "combridge_about",
+            ),
+            (
+                ComBridgeMcp::ports_tool_attr().name.to_string(),
+                "combridge_ports",
+            ),
+            (
+                ComBridgeMcp::combridge_serial_open_tool_attr()
+                    .name
+                    .to_string(),
+                "combridge_serial_open",
+            ),
+            (
+                ComBridgeMcp::combridge_serial_close_tool_attr()
+                    .name
+                    .to_string(),
+                "combridge_serial_close",
+            ),
+            (
+                ComBridgeMcp::combridge_serial_write_tool_attr()
+                    .name
+                    .to_string(),
+                "combridge_serial_write",
+            ),
+            (
+                ComBridgeMcp::combridge_serial_read_tool_attr()
+                    .name
+                    .to_string(),
+                "combridge_serial_read",
+            ),
+            (
+                ComBridgeMcp::combridge_serial_expect_tool_attr()
+                    .name
+                    .to_string(),
+                "combridge_serial_expect",
+            ),
+            (
+                ComBridgeMcp::devices_tool_attr().name.to_string(),
+                "combridge_devices",
+            ),
+            (
+                ComBridgeMcp::ble_scan_tool_attr().name.to_string(),
+                "combridge_ble_scan",
+            ),
+            (
+                ComBridgeMcp::ble_connect_tool_attr().name.to_string(),
+                "combridge_ble_connect",
+            ),
+            (
+                ComBridgeMcp::ble_gatt_tool_attr().name.to_string(),
+                "combridge_ble_gatt",
+            ),
             (
                 ComBridgeMcp::gh3036_rpc_tool_attr().name.to_string(),
                 "combridge_gh3036_rpc",
             ),
             (
-                ComBridgeMcp::gh3036_factory_test_tool_attr().name.to_string(),
+                ComBridgeMcp::gh3036_factory_test_tool_attr()
+                    .name
+                    .to_string(),
                 "combridge_gh3036_factory_test",
             ),
             (
@@ -3680,7 +3890,10 @@ mod tests {
                 ComBridgeMcp::protocol_tool_attr().name.to_string(),
                 "combridge_protocol",
             ),
-            (ComBridgeMcp::ota_tool_attr().name.to_string(), "combridge_ota"),
+            (
+                ComBridgeMcp::ota_tool_attr().name.to_string(),
+                "combridge_ota",
+            ),
         ];
         for (actual, expected) in names {
             assert_eq!(actual, expected);
@@ -3696,7 +3909,9 @@ mod tests {
         assert!(schema.contains("baud_rate"));
 
         let read = ComBridgeMcp::combridge_serial_read_tool_attr();
-        assert!(serde_json::to_string(&*read.input_schema).unwrap().contains("since"));
+        assert!(serde_json::to_string(&*read.input_schema)
+            .unwrap()
+            .contains("since"));
 
         let expect = ComBridgeMcp::combridge_serial_expect_tool_attr();
         let schema = serde_json::to_string(&*expect.input_schema).unwrap();
@@ -3711,10 +3926,14 @@ mod tests {
         assert!(schema.contains("lease_id"));
 
         let connect = ComBridgeMcp::ble_connect_tool_attr();
-        assert!(serde_json::to_string(&*connect.input_schema).unwrap().contains("force"));
+        assert!(serde_json::to_string(&*connect.input_schema)
+            .unwrap()
+            .contains("force"));
 
         let scan = ComBridgeMcp::ble_scan_tool_attr();
-        assert!(serde_json::to_string(&*scan.input_schema).unwrap().contains("duration_ms"));
+        assert!(serde_json::to_string(&*scan.input_schema)
+            .unwrap()
+            .contains("duration_ms"));
 
         // GH3036 域
         let rpc = ComBridgeMcp::gh3036_rpc_tool_attr();

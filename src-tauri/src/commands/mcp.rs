@@ -58,6 +58,8 @@ pub struct McpStatusView {
     pub client_wire_detail: Option<String>,
     /// 上次启动失败原因（命令层临时状态，见 `LAST_ERROR`）
     pub last_error: Option<String>,
+    /// 当前有效的临时授权（0.8 起：客户端不支持 elicitation 时的本机确认通道）
+    pub confirm_grants: Vec<mcp::confirm::GrantView>,
 }
 
 /// 最近一次启动失败原因。进程内保留一份，避免"开关打开了但服务没起来"时用户无从下手。
@@ -68,10 +70,7 @@ fn set_last_error(err: Option<String>) {
 }
 
 fn last_error() -> Option<String> {
-    LAST_ERROR
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .clone()
+    LAST_ERROR.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
 /// 汇总当前状态。
@@ -95,16 +94,16 @@ async fn collect_status() -> McpStatusView {
         audit_records,
         mcp::tool_count(),
         last_error(),
+        mcp::confirm_grants().await,
     )
 }
 
 /// 检查自动接入状态。运行中按实际 url+token 比对，未运行则一律视为残留。
 fn compose_wire(settings: &McpSettings, runtime: Option<&mcp::RuntimeInfo>) -> ClientWireView {
     let report = match runtime {
-        Some(info) => mcp::client_wire::inspect(Some((
-            &mcp::endpoint_url(info.port),
-            info.token.as_str(),
-        ))),
+        Some(info) => {
+            mcp::client_wire::inspect(Some((&mcp::endpoint_url(info.port), info.token.as_str())))
+        }
         None => mcp::client_wire::inspect(None),
     };
     ClientWireView {
@@ -134,6 +133,7 @@ fn compose_status(
     audit_records: u64,
     tool_count: usize,
     last_error: Option<String>,
+    confirm_grants: Vec<mcp::confirm::GrantView>,
 ) -> McpStatusView {
     let running = runtime.is_some();
     // 未运行时 port=0，界面据此判断"没有实际监听"，不要拿配置端口冒充
@@ -168,6 +168,7 @@ fn compose_status(
         client_wire_state: wire.state.clone(),
         client_wire_detail: wire.detail.clone(),
         last_error,
+        confirm_grants,
     }
 }
 
@@ -283,6 +284,33 @@ pub async fn wire_mcp_client() -> Result<McpStatusView, ComBridgeError> {
     Ok(collect_status().await)
 }
 
+/// 待确认的危险操作（前端启动时补拉，防事件丢失）。
+///
+/// 事件 `mcp-confirm-request` 是主通道；这个命令只解决"窗口刚起来、事件已经发过"
+/// 的竞态 —— 否则那次工具调用会一直等到 120s 超时。
+#[tauri::command]
+pub async fn list_mcp_confirm_requests(
+) -> Result<Vec<mcp::confirm::ConfirmRequestView>, ComBridgeError> {
+    Ok(mcp::pending_confirms().await)
+}
+
+/// 应答一条待确认请求。`remember` 只在操作允许"本次会话内放行"时生效。
+#[tauri::command]
+pub async fn resolve_mcp_confirm(
+    id: String,
+    accepted: bool,
+    remember: bool,
+) -> Result<bool, ComBridgeError> {
+    let reply = mcp::confirm::Reply { accepted, remember };
+    Ok(mcp::resolve_confirm(&id, reply).await)
+}
+
+/// 撤销全部临时授权（设置页「全部撤销」）。
+#[tauri::command]
+pub async fn revoke_mcp_confirm_grants() -> Result<usize, ComBridgeError> {
+    Ok(mcp::revoke_confirm_grants().await)
+}
+
 /// 开关「启动时自动接入客户端」。
 ///
 /// 关闭时**不删**已写入的配置：那是用户此刻正在用的东西，删掉等于顺手把它的
@@ -339,7 +367,17 @@ mod tests {
 
     #[test]
     fn stopped_view_has_no_token_and_no_port() {
-        let view = compose_status(&settings(false, 47821, "standard"), None, &wire("noClient"), None, None, 0, 16, None);
+        let view = compose_status(
+            &settings(false, 47821, "standard"),
+            None,
+            &wire("noClient"),
+            None,
+            None,
+            0,
+            16,
+            None,
+            Vec::new(),
+        );
         assert!(!view.running);
         assert!(!view.enabled);
         // 未运行时不能拿配置端口冒充实际端口：UI 靠 port==0 区分
@@ -354,7 +392,17 @@ mod tests {
     #[test]
     fn running_view_reports_actual_port() {
         let rt = runtime(47821, false);
-        let view = compose_status(&settings(true, 47821, "dev"), Some(&rt), &wire("wired"), None, None, 3, 16, None);
+        let view = compose_status(
+            &settings(true, 47821, "dev"),
+            Some(&rt),
+            &wire("wired"),
+            None,
+            None,
+            3,
+            16,
+            None,
+            Vec::new(),
+        );
         assert!(view.running);
         assert_eq!(view.port, 47821);
         assert_eq!(view.url, "http://127.0.0.1:47821/mcp");
@@ -366,7 +414,17 @@ mod tests {
     fn port_fallback_is_surfaced() {
         // 配置 47821，实际落在 51xxx：URL 必须跟着实际端口走，否则用户配了也连不上
         let rt = runtime(51234, true);
-        let view = compose_status(&settings(true, 47821, "dev"), Some(&rt), &wire("wired"), None, None, 0, 16, None);
+        let view = compose_status(
+            &settings(true, 47821, "dev"),
+            Some(&rt),
+            &wire("wired"),
+            None,
+            None,
+            0,
+            16,
+            None,
+            Vec::new(),
+        );
         assert!(view.port_fallback);
         assert_eq!(view.url, "http://127.0.0.1:51234/mcp");
         assert_eq!(view.config_port, 47821);
@@ -383,6 +441,7 @@ mod tests {
             0,
             16,
             Some("端口绑定失败".to_string()),
+            Vec::new(),
         );
         // enabled=true 但 running=false 且带原因 —— 这正是"开关开了却没起来"的界面表达
         assert!(view.enabled);
@@ -404,6 +463,7 @@ mod tests {
             0,
             16,
             None,
+            Vec::new(),
         );
         // 界面要靠这三个字段回答"我要不要再手动配一遍客户端"
         assert!(view.auto_wire);

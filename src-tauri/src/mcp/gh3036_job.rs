@@ -213,13 +213,13 @@ pub fn build_summary(
     }
 
     let pass = match status {
-        FactoryTestStatus::Completed => Some(evaluation.map(|e| e.overall_pass).unwrap_or_else(
-            || {
+        FactoryTestStatus::Completed => {
+            Some(evaluation.map(|e| e.overall_pass).unwrap_or_else(|| {
                 result
                     .map(|r| r.overall_result.eq_ignore_ascii_case("PASS"))
                     .unwrap_or(false)
-            },
-        )),
+            }))
+        }
         FactoryTestStatus::Failed => Some(false),
         _ => None,
     };
@@ -242,11 +242,15 @@ pub fn build_summary(
         duration_s,
         failed_item,
         items,
-        project: result.map(|r| r.project_name.clone()).filter(|s| !s.is_empty()),
+        project: result
+            .map(|r| r.project_name.clone())
+            .filter(|s| !s.is_empty()),
         device_info: result
             .map(|r| r.device_info.clone())
             .filter(|s| !s.is_empty()),
-        uuid: result.map(|r| hex_encode(&r.uuid)).filter(|s| !s.is_empty()),
+        uuid: result
+            .map(|r| hex_encode(&r.uuid))
+            .filter(|s| !s.is_empty()),
         compute_mode: result.map(|r| match r.compute_mode {
             FactoryComputeMode::Mcu => "mcu".to_string(),
             FactoryComputeMode::App => "app".to_string(),
@@ -288,7 +292,10 @@ mod tests {
             status_str(FactoryTestStatus::WaitingForEnvironmentSwitch),
             "waiting_environment_switch"
         );
-        assert_eq!(step_str(FactoryTestStep::EnvironmentSwitch), "environment_switch");
+        assert_eq!(
+            step_str(FactoryTestStep::EnvironmentSwitch),
+            "environment_switch"
+        );
     }
 
     #[test]

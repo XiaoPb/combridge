@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   rotateToken: vi.fn(),
   wireClient: vi.fn(),
   setAutoWire: vi.fn(),
+  revokeGrants: vi.fn(async () => 0),
   showInFolder: vi.fn(async () => undefined),
 }));
 
@@ -25,6 +26,7 @@ vi.mock('../../api/tauri', () => ({
     rotateToken: mocks.rotateToken,
     wireClient: mocks.wireClient,
     setAutoWire: mocks.setAutoWire,
+    revokeGrants: mocks.revokeGrants,
   },
   systemApi: { showInFolder: mocks.showInFolder },
 }));
@@ -55,6 +57,7 @@ const baseStatus = (): McpStatus => ({
   clientConfigPath: 'C:/Users/me/.workbuddy/mcp.json',
   clientWireState: 'wired',
   clientWireDetail: null,
+  confirmGrants: [],
   lastError: null,
 });
 
@@ -194,5 +197,65 @@ describe('MCP integration panel', () => {
 
     fireEvent.click(screen.getByText('mcp.button.openAudit'));
     await waitFor(() => expect(mocks.showInFolder).toHaveBeenCalledWith('C:/log'));
+  });
+
+  it('lists temporary allowances so the user can see what was waved through', async () => {
+    mocks.getStatus.mockResolvedValue({
+      ...baseStatus(),
+      confirmGrants: [
+        {
+          tool: 'combridge_serial_write',
+          scope: 'COM3',
+          scopeLabel: 'COM3',
+          risk: '串口写入',
+          grantedAt: Date.now(),
+          expiresAt: Date.now() + 1_500_000,
+          remainingSecs: 1_500,
+        },
+      ],
+    });
+
+    render(<McpIntegration />);
+    await flush();
+
+    expect(screen.getByText(/串口写入 @ COM3/)).toBeTruthy();
+    expect(screen.getByText('mcp.grant.revoke')).toBeTruthy();
+  });
+
+  it('shows an empty state instead of an unexplained blank when nothing is granted', async () => {
+    render(<McpIntegration />);
+    await flush();
+
+    expect(screen.getByText('mcp.grant.empty')).toBeTruthy();
+    expect(screen.queryByText('mcp.grant.revoke')).toBeNull();
+  });
+
+  it('revokes allowances and refreshes the panel', async () => {
+    mocks.getStatus
+      .mockResolvedValueOnce({
+        ...baseStatus(),
+        confirmGrants: [
+          {
+            tool: 'combridge_serial_write',
+            scope: 'COM3',
+            scopeLabel: 'COM3',
+            risk: '串口写入',
+            grantedAt: Date.now(),
+            expiresAt: Date.now() + 1_500_000,
+            remainingSecs: 1_500,
+          },
+        ],
+      })
+      // 撤销后重新拉状态时已经没有放行了
+      .mockResolvedValue({ ...baseStatus(), confirmGrants: [] });
+    mocks.revokeGrants.mockResolvedValueOnce(1);
+
+    render(<McpIntegration />);
+    await flush();
+
+    fireEvent.click(screen.getByText('mcp.grant.revoke'));
+    await waitFor(() => expect(mocks.revokeGrants).toHaveBeenCalledTimes(1));
+    // 撤销后必须重新拉状态，否则界面还挂着已经失效的标签
+    await waitFor(() => expect(screen.getByText('mcp.grant.empty')).toBeTruthy());
   });
 });

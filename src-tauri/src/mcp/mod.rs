@@ -15,6 +15,7 @@ pub mod audit;
 pub mod auth;
 pub mod ble_hub;
 pub mod client_wire;
+pub mod confirm;
 pub mod ctx;
 pub mod elicit;
 pub mod gh3036_job;
@@ -98,7 +99,11 @@ impl McpSettings {
             Ok(content) => match serde_json::from_str(&content) {
                 Ok(settings) => settings,
                 Err(e) => {
-                    warn!("MCP 配置解析失败，使用默认值（关闭）: {} ({})", path.display(), e);
+                    warn!(
+                        "MCP 配置解析失败，使用默认值（关闭）: {} ({})",
+                        path.display(),
+                        e
+                    );
                     Self::default()
                 }
             },
@@ -112,8 +117,8 @@ impl McpSettings {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
         }
-        let content = serde_json::to_string_pretty(self)
-            .map_err(|e| format!("配置序列化失败: {e}"))?;
+        let content =
+            serde_json::to_string_pretty(self).map_err(|e| format!("配置序列化失败: {e}"))?;
         std::fs::write(&path, content).map_err(|e| format!("写入配置失败: {e}"))
     }
 
@@ -197,7 +202,10 @@ fn tier_cell() -> &'static Arc<std::sync::RwLock<String>> {
 
 /// 当前档位。
 pub fn current_tier() -> String {
-    tier_cell().read().unwrap_or_else(|e| e.into_inner()).clone()
+    tier_cell()
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
 }
 
 /// 热切换档位：改共享 cell + 给限流器换速率，**不重启服务、不换 token**。
@@ -248,6 +256,42 @@ pub fn tool_count() -> usize {
     server::ComBridgeMcp::tool_router().list_all().len()
 }
 
+/// 待确认请求快照（前端启动时补拉；服务未运行时为空）。
+pub async fn pending_confirms() -> Vec<confirm::ConfirmRequestView> {
+    let guard = runtime().lock().await;
+    guard
+        .as_ref()
+        .map(|s| s.ctx.confirm.list())
+        .unwrap_or_default()
+}
+
+/// 应答一条待确认请求。返回 `false` 表示该 id 已失效（超时/已应答/服务已停）。
+pub async fn resolve_confirm(id: &str, reply: confirm::Reply) -> bool {
+    let guard = runtime().lock().await;
+    guard
+        .as_ref()
+        .map(|s| s.ctx.confirm.resolve(id, reply))
+        .unwrap_or(false)
+}
+
+/// 当前有效的临时授权（设置页展示）。
+pub async fn confirm_grants() -> Vec<confirm::GrantView> {
+    let guard = runtime().lock().await;
+    guard
+        .as_ref()
+        .map(|s| s.ctx.confirm.grants())
+        .unwrap_or_default()
+}
+
+/// 撤销全部临时授权，返回被清掉的数量。
+pub async fn revoke_confirm_grants() -> usize {
+    let guard = runtime().lock().await;
+    guard
+        .as_ref()
+        .map(|s| s.ctx.confirm.revoke_grants())
+        .unwrap_or(0)
+}
+
 /// 停止服务。返回是否真的停了一个正在跑的服务。
 pub async fn stop() -> bool {
     let taken = {
@@ -267,6 +311,8 @@ pub async fn stop() -> bool {
 
 /// 关闭一个运行实例：先优雅停服，超时再硬杀；订阅任务直接 abort。
 async fn shutdown(server: RunningServer) {
+    // 先丢掉未应答的确认：否则停服时还在等的工具调用要白等满 120s
+    server.ctx.confirm.abandon_all();
     if let Some(tx) = server.shutdown {
         let _ = tx.send(());
     }
@@ -323,11 +369,7 @@ pub fn endpoint_url(port: u16) -> String {
 }
 
 /// 写入 endpoint 发现文件，供客户端 / 设置页读取。
-fn write_endpoint_file(
-    port: u16,
-    token: &str,
-    tier: &str,
-) -> Result<std::path::PathBuf, String> {
+fn write_endpoint_file(port: u16, token: &str, tier: &str) -> Result<std::path::PathBuf, String> {
     let Some(path) = McpSettings::endpoint_path() else {
         return Err("无法确定数据目录".to_string());
     };
@@ -342,8 +384,8 @@ fn write_endpoint_file(
         "tier": tier,
         "started_at": now_millis(),
     });
-    let content = serde_json::to_string_pretty(&endpoint)
-        .map_err(|e| format!("endpoint 序列化失败: {e}"))?;
+    let content =
+        serde_json::to_string_pretty(&endpoint).map_err(|e| format!("endpoint 序列化失败: {e}"))?;
     std::fs::write(&path, content).map_err(|e| format!("写入 endpoint 失败: {e}"))?;
     Ok(path)
 }
@@ -368,7 +410,10 @@ pub fn clear_stale_endpoint() {
 ///
 /// 已在运行时先停旧的再起新的（设置页改端口 / 档位走这条路，无需重启应用）。
 /// 失败仅影响 MCP 功能本身，不影响 App 主流程 —— 调用方需吞掉错误只记日志。
-pub async fn start(app: tauri::AppHandle, mut settings: McpSettings) -> Result<McpStartInfo, String> {
+pub async fn start(
+    app: tauri::AppHandle,
+    mut settings: McpSettings,
+) -> Result<McpStartInfo, String> {
     if !settings.enabled {
         return Err("MCP 未启用".to_string());
     }
@@ -393,29 +438,27 @@ pub async fn start(app: tauri::AppHandle, mut settings: McpSettings) -> Result<M
 
     let ctx = Arc::new(ctx::McpContext::from_app(&app, Arc::clone(tier_cell())));
     // 订阅 EventBus 广播：串口数据 → hub（游标/等待），端口断开 → 清理
-    let serial_sub = ctx.serial_hub.spawn_subscription(Arc::clone(&ctx.event_bus));
+    let serial_sub = ctx
+        .serial_hub
+        .spawn_subscription(Arc::clone(&ctx.event_bus));
     // BLE 通知数据 → hub（按 地址+特征 分桶）
     let ble_sub = ctx.ble_hub.spawn_subscription(Arc::clone(&ctx.event_bus));
     let mcp_server = server::ComBridgeMcp::new(Arc::clone(&ctx));
 
-    let service =
-        rmcp::transport::streamable_http_server::StreamableHttpService::<
-            server::ComBridgeMcp,
-            rmcp::transport::streamable_http_server::session::local::LocalSessionManager,
-        >::new(
-            move || Ok(mcp_server.clone()),
-            // LocalSessionManager 默认实现即可；协议 2026-07-28 起为无状态模式
-            Default::default(),
-            // 默认 allowed_hosts 仅允许 loopback，防 DNS rebinding
-            Default::default(),
-        );
+    let service = rmcp::transport::streamable_http_server::StreamableHttpService::<
+        server::ComBridgeMcp,
+        rmcp::transport::streamable_http_server::session::local::LocalSessionManager,
+    >::new(
+        move || Ok(mcp_server.clone()),
+        // LocalSessionManager 默认实现即可；协议 2026-07-28 起为无状态模式
+        Default::default(),
+        // 默认 allowed_hosts 仅允许 loopback，防 DNS rebinding
+        Default::default(),
+    );
 
-    let router = axum::Router::new()
-        .nest_service("/mcp", service)
-        .layer(axum::middleware::from_fn_with_state(
-            token.clone(),
-            auth::bearer_auth,
-        ));
+    let router = axum::Router::new().nest_service("/mcp", service).layer(
+        axum::middleware::from_fn_with_state(token.clone(), auth::bearer_auth),
+    );
 
     let listener = bind_listener(settings.port).await?;
     let port = listener

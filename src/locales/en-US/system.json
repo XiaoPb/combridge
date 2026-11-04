@@ -127,7 +127,7 @@
       "tierDev": "Developer (dev)",
       "tierStandard": "Standard",
       "tierDevDesc": "Device writes, factory tests and flashing run without confirmation; everything is audited.",
-      "tierStandardDesc": "Those operations ask the client for user confirmation first; declined or unavailable returns CONFIRM_REQUIRED.",
+      "tierStandardDesc": "Asks you before writing to devices, running factory tests or flashing. Uses the client's elicitation dialog when supported, otherwise a ComBridge window. Denied or unanswerable calls return CONFIRM_REQUIRED.",
       "url": "Endpoint",
       "token": "Access token",
       "tokenHint": "Fixed once generated, so a client only needs configuring once. Rotate it if it was ever pasted into a ticket or chat.",
@@ -180,7 +180,7 @@
     },
     "security": {
       "tierDev": "Dev tier: the AI may write to devices, run factory tests and flash firmware; all actions are audited.",
-      "tierStandard": "Standard tier: those irreversible actions ask for user confirmation first; OTA additionally requires a one-shot confirm_token.",
+      "tierStandard": "Standard: irreversible actions ask for confirmation first (ComBridge window when the client lacks elicitation); denial aborts. OTA additionally requires a one-shot confirm_token.",
       "auditHint": "One JSONL line per tool call: tool name, argument digest (never raw payload), result code, duration. Kept 30 days.",
       "auditRecords": "{{count}} today",
       "noAuditFile": "No calls recorded today"
@@ -191,6 +191,25 @@
       "restartClient": "Restart the client after editing its config",
       "noToken": "Service is not running; the token appears here once started",
       "portChangeRestarts": "Changing the port restarts the service — clients configured with the old URL must be updated"
+    },
+    "confirm": {
+      "title": "ComBridge needs your confirmation",
+      "source": "Requested by {{tool}}",
+      "accept": "Confirm",
+      "decline": "Cancel",
+      "remember": "Allow \"{{risk}}\" on {{target}} for this session",
+      "rememberHint": "Valid for {{minutes}} minutes; revoke anytime in Settings → Integration",
+      "remaining": "Auto-cancels in {{seconds}}s",
+      "queued": "{{count}} more waiting"
+    },
+    "grant": {
+      "title": "Temporary allowances",
+      "empty": "No temporary allowances",
+      "hint": "These actions skip the confirmation dialog. They expire after 30 minutes and reset when the service restarts.",
+      "revoke": "Revoke all",
+      "revoked": "Revoked {{count}} allowances",
+      "remaining": "{{minutes}} min left",
+      "failed": "Revoke failed"
     }
   }
 }

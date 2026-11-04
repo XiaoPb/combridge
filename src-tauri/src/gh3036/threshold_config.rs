@@ -959,12 +959,7 @@ tests:
         assert_eq!(empty.message, "No measurements");
 
         // present 不需要 value/range 字段
-        assert!(config
-            .global_threshold
-            .as_ref()
-            .unwrap()
-            .validate()
-            .is_ok());
+        assert!(config.global_threshold.as_ref().unwrap().validate().is_ok());
     }
 
     /// 一条实测值都没有时必须判失败——这是产测里最危险的一种假合格。
@@ -1016,7 +1011,10 @@ tests:
         assert!(!result
             .error_codes
             .contains(&ERROR_CODE_UUID_CHANNEL_1.to_string()));
-        assert!(!result.has_error, "chip_init 正常且 UUID 有效时不应有错误码");
+        assert!(
+            !result.has_error,
+            "chip_init 正常且 UUID 有效时不应有错误码"
+        );
 
         // 任意一个非零字节即可
         let mut single = vec![0; 32];

@@ -48,6 +48,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      # ============ 关闭国内镜像 ============
+      # 仓库里提交的 .cargo/config.toml 把 crates-io 替换成清华镜像（供本地使用），
+      # 但 GitHub 托管 runner 在境外，访问镜像会被拒绝（实测 403，Windows 构建因此失败）。
+      # CI 里删掉它，直接走上游 crates.io。
+      - name: Use upstream crates.io instead of CN mirror
+        shell: bash
+        run: |
+          if [ -f .cargo/config.toml ]; then
+            rm -f .cargo/config.toml
+            echo "已移除 .cargo/config.toml（CI 不使用国内镜像）"
+          fi
+
       # ============ 设置 Rust ============
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

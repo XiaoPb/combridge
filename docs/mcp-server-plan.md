@@ -864,8 +864,22 @@ P5a 冒烟结果（2026-11-04）：
 | 非法租约写入 | standard | ✅ `LEASE_INVALID`（确认在租约校验之后，不打扰用户） |
 | 18 次快速 `about` | standard（5 QPS） | ✅ 2 通过 / 16 `RATE_LIMITED`（前序 3 次调用已耗掉 3 个令牌） |
 
-**未验证**：真实支持 elicitation 的客户端上"用户点确认 → 放行"与"用户点拒绝 → `CONFIRM_REQUIRED`"
-这两条正向路径（本机只有脚本客户端，未声明 elicitation 能力）；GUI 侧的第二道确认框。
+elicitation 正向路径（2026-11-04，`scripts/mcp/elicit_probe.py`，声明 `elicitation` 能力的脚本客户端）：
+
+| 客户端回应 | 结果 |
+|---|---|
+| `accept` + `confirm:true` | ✅ 工具**继续执行**（返回 `FACTORY_TEST_STATE`「产测未在运行」，而非 `CONFIRM_REQUIRED`） |
+| `decline` | ✅ `CONFIRM_REQUIRED`「用户未确认：用户拒绝」，工具未执行 |
+| `cancel`（关弹窗） | ✅ `CONFIRM_REQUIRED`「用户未确认：用户取消」 |
+| `accept` + `confirm:false` | ✅ `CONFIRM_REQUIRED`「用户未确认：用户未勾选确认项」 |
+| 未声明能力（原 P5a 冒烟） | ✅ `CONFIRM_REQUIRED`「无法向用户确认：客户端未声明 elicitation 能力」 |
+
+服务端发出的请求本身也一并核对：`message` 带上「【GH3036 产测】即将执行产测 action=stop（最长等待 180s）」，
+`requestedSchema` 是 `type=object` + 单个 `confirm: boolean`（required），符合规范对 elicitation schema 的要求。
+注意脚本必须**边读 SSE 边回应**——用 `urlopen().read()` 一次性读完会在等待客户端回应时死锁。
+
+**仍未验证**：WorkBuddy / Claude Desktop 这类带 UI 的客户端上，弹窗的渲染与点击路径
+（客户端侧实现已确认存在，接入受 token 轮换与「需新会话建立连接」限制，见 §8.6）。
 
 
 ### 9.1 阶段划分

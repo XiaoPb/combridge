@@ -13,6 +13,7 @@ use crate::device::{BleManagerRef, SerialManagerRef};
 use crate::service::EventBus;
 use crate::state::AppStateRef;
 
+use super::ble_hub::BleHub;
 use super::lease::LeaseManager;
 use super::serial_hub::SerialHub;
 
@@ -31,6 +32,8 @@ pub struct McpContext {
     pub leases: Arc<LeaseManager>,
     /// 串口数据订阅 hub（游标 + 阻塞等待）
     pub serial_hub: Arc<SerialHub>,
+    /// BLE 通知数据 hub（按 地址+特征 分桶的游标读取）
+    pub ble_hub: Arc<BleHub>,
     /// 由 MCP 打开的端口（GUI 打开的端口 MCP 不允许 close）
     pub opened_by_mcp: RwLock<HashSet<String>>,
 }
@@ -58,6 +61,7 @@ impl McpContext {
             event_bus,
             leases: Arc::new(LeaseManager::new()),
             serial_hub: Arc::new(SerialHub::new()),
+            ble_hub: Arc::new(BleHub::new()),
             opened_by_mcp: RwLock::new(HashSet::new()),
         }
     }

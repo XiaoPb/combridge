@@ -194,6 +194,25 @@ impl LeaseManager {
         }
     }
 
+    /// 当前全部有效租约（供 `combridge_devices` 展示）。
+    pub fn list(&self) -> Vec<Lease> {
+        let now = now_millis();
+        let inner = self
+            .inner
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+        let mut out: Vec<Lease> = inner
+            .leases
+            .values()
+            .filter_map(|slot| match slot {
+                LeaseSlot::Active(l) if l.expires_at > now => Some(l.clone()),
+                _ => None,
+            })
+            .collect();
+        out.sort_by_key(|l| l.acquired_at);
+        out
+    }
+
     /// 系统级强制释放（不校验持有者），如端口意外断开时调用。
     pub fn revoke(&self, resource: &str) {
         let mut inner = self

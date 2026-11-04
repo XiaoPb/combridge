@@ -593,7 +593,7 @@ L2 / L3 通过 MCP 的 **elicitation** 让客户端弹窗询问用户，而不�
 |---|---|---|
 | P0 骨架 | ✅ 已完成 | `src-tauri/src/mcp/{mod,auth,ctx,server}.rs`；`rmcp = "=3.8.0"`；默认关闭，`%LOCALAPPDATA%\combridge\mcp.json` 开启 |
 | P1 串口闭环 | ✅ 已完成 | 新增 `mcp/{lease,serial_hub}.rs`；7 个工具（`about` + `ports` + 5 个 `serial_*`）；租约随 P1 一起落地（按 §9.2 建议提前） |
-| P2 设备与 BLE | 待开始 | — |
+| P2 设备与 BLE | ✅ 已完成 | 新增 `mcp/ble_hub.rs`；工具 `combridge_devices` / `combridge_ble_scan` / `combridge_ble_connect` / `combridge_ble_gatt`；BLE 连接租约资源名 `ble:<address>` |
 | P3 GH3036 与产测 | 待开始 | — |
 | P4 其余业务域 | 待开始 | — |
 | P5 安全与产品化 | 部分前置 | 租约已在 P1 完成；两档策略的 UI 与 elicitation 待 P5 |
@@ -603,6 +603,13 @@ P1 实现要点（与本文档契约的对应）：
 - `combridge_serial_read`：游标 = hub 内单调递增的累计字节数；`since` 省略表示"从缓冲区最旧处"；缓冲上限 1MB，被裁剪时返回 `truncated=true`；broadcast 消费滞后时返回 `lagged=true`。
 - `combridge_serial_expect`：`since` 省略表示"从此刻起只看新数据"；服务端阻塞等待，命中即返回；超时返回 `matched=false` 与已收到的全部文本；端口中途断开返回 `disconnected=true`。
 - 租约：`combridge_serial_open` 返回 `lease_id`，`write` / `close` 强制校验；`PORT_BUSY` 回传当前占用者与过期时间，`force=true` 可抢占。GUI 打开的端口 MCP 可读可写（持租约），但不允许 `close`。
+
+P2 实现要点：
+
+- 工具收敛为 4 个（对应 §5.2 的 #8~#11）：`combridge_devices` 汇总设备/连接/租约，`combridge_ble_scan`（阻塞扫描或 stop），`combridge_ble_connect`（connect/disconnect/list，租约资源 `ble:<address>`），`combridge_ble_gatt`（9 个 action：discover_services / discover_characteristics / read / write / subscribe / unsubscribe / notifications / mtu / rssi）。
+- 通知数据：`ble:data` 与串口同样走 msgpack 广播，`mcp/ble_hub.rs` 按 `address|char_uuid` 分桶缓存并提供游标读取；`subscribe` 时清空旧桶（游标从订阅时刻起算）。
+- 租约粒度：写/订阅/取消订阅/改 MTU 需要租约（会改设备状态）；discover/read/notifications/rssi 免租约。
+- 二进制建议：GATT 读写用 `encoding=hex`，text 模式为 UTF-8 lossy，仅适合 ASCII 载荷。
 
 ### 9.1 阶段划分
 

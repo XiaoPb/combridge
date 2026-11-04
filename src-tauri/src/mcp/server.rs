@@ -256,6 +256,172 @@ pub struct SerialExpectResponse {
 }
 
 // ---------------------------------------------------------------------------
+// combridge_devices
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct LeaseEntry {
+    pub resource: String,
+    pub owner: String,
+    pub expires_at: u64,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct BleConnectionView {
+    pub address: String,
+    pub name: Option<String>,
+    pub is_connected: bool,
+    /// 已订阅的特征 UUID
+    pub subscriptions: Vec<String>,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct DevicesResponse {
+    /// BLE 后端模式："native"（系统蓝牙）| "at"（AT 指令）
+    pub ble_mode: String,
+    /// BLE 后端是否已配置；false 时 BLE 工具不可用
+    pub ble_configured: bool,
+    pub ble_connections: Vec<BleConnectionView>,
+    /// App 状态中的已连接设备快照
+    pub app_devices: Vec<serde_json::Value>,
+    /// 当前全部有效租约（串口 / BLE）
+    pub active_leases: Vec<LeaseEntry>,
+}
+
+// ---------------------------------------------------------------------------
+// combridge_ble_scan
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct BleScanRequest {
+    /// 扫描时长（毫秒），默认 3000。扫描为阻塞调用，到时间返回结果。
+    #[serde(default = "d_scan_ms")]
+    pub duration_ms: u64,
+    /// 置 true 则停止当前扫描并返回已发现列表（忽略 duration_ms）
+    #[serde(default)]
+    pub stop: bool,
+}
+
+fn d_scan_ms() -> u64 {
+    3000
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct BleDeviceView {
+    pub address: String,
+    pub name: Option<String>,
+    pub rssi: Option<i16>,
+    pub is_connectable: bool,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct BleScanResponse {
+    pub devices: Vec<BleDeviceView>,
+    /// 本次是否为"停止扫描"调用（stop=true）
+    pub stopped: bool,
+}
+
+// ---------------------------------------------------------------------------
+// combridge_ble_connect
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct BleConnectRequest {
+    /// "connect" | "disconnect" | "list"
+    pub action: String,
+    /// 设备地址（connect / disconnect 必填）
+    #[serde(default)]
+    pub address: String,
+    /// disconnect 需携带 combridge_ble_connect 返回的 lease_id
+    #[serde(default)]
+    pub lease_id: String,
+    #[serde(default = "d_owner")]
+    pub owner: String,
+    #[serde(default = "d_ttl")]
+    pub ttl_s: u64,
+    /// 连接租约被其他客户端持有时是否抢占
+    #[serde(default)]
+    pub force: bool,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct BleConnectResponse {
+    pub action: String,
+    pub address: String,
+    pub connected: bool,
+    /// connect 返回的租约（后续 write / subscribe / disconnect 需携带）
+    pub lease_id: Option<String>,
+    pub subscriptions: Vec<String>,
+    pub connections: Vec<BleConnectionView>,
+}
+
+// ---------------------------------------------------------------------------
+// combridge_ble_gatt
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct BleGattRequest {
+    /// "discover_services" | "discover_characteristics" | "read" | "write" |
+    /// "subscribe" | "unsubscribe" | "notifications" | "mtu" | "rssi"
+    pub action: String,
+    pub address: String,
+    /// 特征 UUID（read/write/subscribe/unsubscribe/notifications 必填）
+    #[serde(default)]
+    pub char_uuid: String,
+    /// 服务 UUID（discover_characteristics 必填）
+    #[serde(default)]
+    pub service_uuid: String,
+    /// write 的数据
+    #[serde(default)]
+    pub data: String,
+    #[serde(default = "d_text")]
+    pub encoding: String,
+    /// write 时使用无响应写（write without response）
+    #[serde(default)]
+    pub without_response: bool,
+    /// write / subscribe / unsubscribe / mtu 需携带 ble_connect 返回的 lease_id
+    #[serde(default)]
+    pub lease_id: String,
+    /// notifications 的起始游标（上次返回的 next_cursor）；省略读全部缓冲
+    #[serde(default)]
+    pub since: Option<u64>,
+    /// 期望 MTU（action="mtu"，默认 247）
+    #[serde(default)]
+    pub mtu: u16,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct CharView {
+    pub uuid: String,
+    pub service_uuid: String,
+    /// 属性摘要，如 "read,write,notify"
+    pub properties: String,
+    pub subscribed: bool,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct ServiceView {
+    pub uuid: String,
+    pub primary: bool,
+    pub characteristics: Vec<CharView>,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct BleGattResponse {
+    pub action: String,
+    /// read / notifications 的数据（按 encoding 编码）
+    pub value: Option<String>,
+    pub encoding: Option<String>,
+    pub next_cursor: Option<u64>,
+    pub truncated: Option<bool>,
+    pub services: Option<Vec<ServiceView>>,
+    pub characteristics: Option<Vec<CharView>>,
+    pub mtu: Option<u16>,
+    pub rssi: Option<i16>,
+    pub subscriptions: Option<Vec<String>>,
+}
+
+// ---------------------------------------------------------------------------
 // 服务本体
 // ---------------------------------------------------------------------------
 
@@ -371,6 +537,23 @@ fn lease_to_view(lease: &super::lease::Lease) -> LeaseView {
         lease_id: lease.lease_id.clone(),
         owner: lease.owner.clone(),
         expires_at: lease.expires_at,
+    }
+}
+
+fn to_char_view(c: &crate::device::ble::BleCharacteristic) -> CharView {
+    CharView {
+        uuid: c.uuid.clone(),
+        service_uuid: c.service_uuid.clone(),
+        properties: c.properties.to_string(),
+        subscribed: c.subscribed,
+    }
+}
+
+fn to_service_view(s: &crate::device::ble::BleService) -> ServiceView {
+    ServiceView {
+        uuid: s.uuid.clone(),
+        primary: s.primary,
+        characteristics: s.characteristics.iter().map(to_char_view).collect(),
     }
 }
 
@@ -702,6 +885,356 @@ regex=true 时 pattern 为正则，否则为子串匹配；默认只匹配 since
             disconnected: out.disconnected,
         }))
     }
+
+    #[tool(
+        name = "combridge_devices",
+        description = "汇总当前设备与占用状态：BLE 后端模式/是否可用、BLE 连接与订阅、App 状态中的设备快照、\
+全部有效租约。开始任何多设备操作前先调用；也可用来判断某端口/地址是否被其他 AI 客户端占用。",
+        annotations(read_only_hint = true)
+    )]
+    async fn devices(&self) -> Result<Json<DevicesResponse>, McpError> {
+        let ble_mode = self.ctx.ble.mode().await.to_string();
+        let ble_configured = self.ctx.ble.is_configured().await;
+
+        let mut ble_connections = Vec::new();
+        if ble_configured {
+            match self.ctx.ble.get_connections().await {
+                Ok(list) => {
+                    for c in list {
+                        let subscriptions = self.ctx.ble.get_subscriptions(&c.address).await;
+                        ble_connections.push(BleConnectionView {
+                            address: c.address,
+                            name: c.name,
+                            is_connected: c.is_connected,
+                            subscriptions,
+                        });
+                    }
+                }
+                Err(e) => tracing::warn!("[MCP] 获取 BLE 连接失败: {}", e),
+            }
+        }
+
+        let active_leases = self
+            .ctx
+            .leases
+            .list()
+            .into_iter()
+            .map(|l| LeaseEntry {
+                resource: l.resource,
+                owner: l.owner,
+                expires_at: l.expires_at,
+            })
+            .collect();
+
+        Ok(Json(DevicesResponse {
+            ble_mode,
+            ble_configured,
+            ble_connections,
+            app_devices: self.ctx.connected_devices().await,
+            active_leases,
+        }))
+    }
+
+    #[tool(
+        name = "combridge_ble_scan",
+        description = "扫描 BLE 设备（阻塞 duration_ms 后返回结果），或 stop=true 停止正在进行的扫描。\
+返回地址/名称/RSSI/可连接性；address 用于后续 combridge_ble_connect。",
+        annotations(read_only_hint = true)
+    )]
+    async fn ble_scan(
+        &self,
+        Parameters(req): Parameters<BleScanRequest>,
+    ) -> Result<Json<BleScanResponse>, McpError> {
+        let found = if req.stop {
+            self.ctx.ble.stop_scan().await.map_err(|e| mcp_err(format!("停止扫描失败: {e}")))?
+        } else {
+            self.ctx
+                .ble
+                .scan(req.duration_ms.max(100))
+                .await
+                .map_err(|e| mcp_err(format!("扫描失败: {e}")))?
+        };
+
+        Ok(Json(BleScanResponse {
+            devices: found
+                .into_iter()
+                .map(|d| BleDeviceView {
+                    address: d.address,
+                    name: d.name,
+                    rssi: d.rssi,
+                    is_connectable: d.is_connectable,
+                })
+                .collect(),
+            stopped: req.stop,
+        }))
+    }
+
+    #[tool(
+        name = "combridge_ble_connect",
+        description = "BLE 连接管理：action=connect 连接并获取租约（返回 lease_id）、disconnect 断开并释放租约、list 列出当前连接。\
+租约被其他客户端持有时返回 BLE_BUSY，可 force=true 抢占。连接后需先 discover_services 才能读写特征。",
+        annotations(read_only_hint = false, destructive_hint = false)
+    )]
+    async fn ble_connect(
+        &self,
+        Parameters(req): Parameters<BleConnectRequest>,
+    ) -> Result<Json<BleConnectResponse>, McpError> {
+        let action = req.action.to_ascii_lowercase();
+        if !matches!(action.as_str(), "connect" | "disconnect" | "list") {
+            return Err(mcp_err(format!(
+                "未知 action: {}（支持 connect | disconnect | list）",
+                req.action
+            )));
+        }
+        if action != "list" && req.address.trim().is_empty() {
+            return Err(mcp_err("address 不能为空"));
+        }
+        let resource = format!("ble:{}", req.address);
+
+        let mut lease_id = None;
+        let mut connected = false;
+        let mut subscriptions = Vec::new();
+
+        match action.as_str() {
+            "connect" => {
+                let lease = self
+                    .ctx
+                    .leases
+                    .acquire(&resource, &req.owner, req.ttl_s, req.force)
+                    .map_err(|e| match e {
+                        AcquireError::Busy(info) => mcp_err(format!(
+                            "BLE_BUSY: {} 的租约被 {} 持有（lease={}，{} 过期）。\
+可等待过期或用 force=true 抢占。",
+                            req.address, info.current_owner, info.lease_id, info.expires_at
+                        )),
+                    })?;
+
+                match self.ctx.ble.connect(&req.address).await {
+                    Ok(conn) => {
+                        connected = conn.is_connected;
+                        subscriptions = self.ctx.ble.get_subscriptions(&req.address).await;
+                        lease_id = Some(lease.lease_id.clone());
+                        tracing::info!(
+                            "[MCP] BLE 已连接 {} (owner={}, lease={})",
+                            req.address,
+                            req.owner,
+                            lease.lease_id
+                        );
+                    }
+                    Err(e) => {
+                        self.ctx.leases.release(&resource, &lease.lease_id);
+                        return Err(mcp_err(format!("连接 {} 失败: {e}", req.address)));
+                    }
+                }
+            }
+            "disconnect" => {
+                self.ctx
+                    .leases
+                    .validate(&resource, &req.lease_id)
+                    .map_err(mcp_err)?;
+                self.ctx
+                    .ble
+                    .disconnect(&req.address)
+                    .await
+                    .map_err(|e| mcp_err(format!("断开 {} 失败: {e}", req.address)))?;
+                self.ctx.ble_hub.remove_address(&req.address);
+                self.ctx.leases.release(&resource, &req.lease_id);
+                tracing::info!("[MCP] BLE 已断开 {}", req.address);
+            }
+            _ => {}
+        }
+
+        // 统一返回当前连接列表，方便模型确认状态
+        let mut connections = Vec::new();
+        if self.ctx.ble.is_configured().await {
+            if let Ok(list) = self.ctx.ble.get_connections().await {
+                for c in list {
+                    let subs = self.ctx.ble.get_subscriptions(&c.address).await;
+                    connections.push(BleConnectionView {
+                        address: c.address,
+                        name: c.name,
+                        is_connected: c.is_connected,
+                        subscriptions: subs,
+                    });
+                }
+            }
+        }
+
+        Ok(Json(BleConnectResponse {
+            action,
+            address: req.address,
+            connected,
+            lease_id,
+            subscriptions,
+            connections,
+        }))
+    }
+
+    #[tool(
+        name = "combridge_ble_gatt",
+        description = "BLE GATT 操作。action 取值：\
+discover_services / discover_characteristics（需 service_uuid）/ read / write（需 lease_id，支持 without_response）/ \
+subscribe（需 lease_id）/ unsubscribe（需 lease_id）/ notifications（游标读取已订阅通知）/ mtu（需 lease_id）/ rssi。\
+二进制数据用 encoding=hex 读写更可靠。",
+        annotations(read_only_hint = false, destructive_hint = true)
+    )]
+    async fn ble_gatt(
+        &self,
+        Parameters(req): Parameters<BleGattRequest>,
+    ) -> Result<Json<BleGattResponse>, McpError> {
+        let action = req.action.to_ascii_lowercase();
+        let resource = format!("ble:{}", req.address);
+
+        let need_char = matches!(
+            action.as_str(),
+            "read" | "write" | "subscribe" | "unsubscribe" | "notifications"
+        );
+        if need_char && req.char_uuid.trim().is_empty() {
+            return Err(mcp_err("char_uuid 不能为空"));
+        }
+
+        let require_lease = || -> Result<(), McpError> {
+            self.ctx
+                .leases
+                .validate(&resource, &req.lease_id)
+                .map_err(mcp_err)
+        };
+
+        let mut resp = BleGattResponse {
+            action: action.clone(),
+            value: None,
+            encoding: None,
+            next_cursor: None,
+            truncated: None,
+            services: None,
+            characteristics: None,
+            mtu: None,
+            rssi: None,
+            subscriptions: None,
+        };
+
+        match action.as_str() {
+            "discover_services" => {
+                let services = self
+                    .ctx
+                    .ble
+                    .discover_services(&req.address)
+                    .await
+                    .map_err(|e| mcp_err(format!("发现服务失败: {e}")))?;
+                resp.services = Some(services.iter().map(to_service_view).collect());
+            }
+            "discover_characteristics" => {
+                if req.service_uuid.trim().is_empty() {
+                    return Err(mcp_err("discover_characteristics 需要 service_uuid"));
+                }
+                let chars = self
+                    .ctx
+                    .ble
+                    .discover_characteristics(&req.address, &req.service_uuid)
+                    .await
+                    .map_err(|e| mcp_err(format!("发现特征失败: {e}")))?;
+                resp.characteristics = Some(chars.iter().map(to_char_view).collect());
+            }
+            "read" => {
+                let bytes = self
+                    .ctx
+                    .ble
+                    .read_characteristic(&req.address, &req.char_uuid)
+                    .await
+                    .map_err(|e| mcp_err(format!("读取特征失败: {e}")))?;
+                resp.value = Some(encode_bytes(&bytes, &req.encoding)?);
+                resp.encoding = Some(req.encoding.clone());
+            }
+            "write" => {
+                require_lease()?;
+                let payload = decode_bytes(&req.data, &req.encoding)?;
+                if payload.is_empty() {
+                    return Err(mcp_err("待写入数据为空"));
+                }
+                if req.without_response {
+                    self.ctx
+                        .ble
+                        .write_without_response(&req.address, &req.char_uuid, &payload)
+                        .await
+                        .map_err(|e| mcp_err(format!("写入失败: {e}")))?;
+                } else {
+                    self.ctx
+                        .ble
+                        .write_characteristic(&req.address, &req.char_uuid, &payload)
+                        .await
+                        .map_err(|e| mcp_err(format!("写入失败: {e}")))?;
+                }
+                tracing::info!(
+                    "[MCP] ble_gatt write: {} / {} <- {} bytes (without_response={})",
+                    req.address,
+                    req.char_uuid,
+                    payload.len(),
+                    req.without_response
+                );
+            }
+            "subscribe" => {
+                require_lease()?;
+                let cb: crate::device::ble::NotifyCallback = Arc::new(|_a, _c, _d| {});
+                self.ctx
+                    .ble
+                    .subscribe_notify(&req.address, &req.char_uuid, cb)
+                    .await
+                    .map_err(|e| mcp_err(format!("订阅失败: {e}")))?;
+                // 清空旧通知，游标从此刻起算
+                let cursor = self.ctx.ble_hub.reset_to_now(&req.address, &req.char_uuid);
+                resp.next_cursor = Some(cursor);
+                resp.subscriptions = Some(self.ctx.ble.get_subscriptions(&req.address).await);
+            }
+            "unsubscribe" => {
+                require_lease()?;
+                self.ctx
+                    .ble
+                    .unsubscribe_notify(&req.address, &req.char_uuid)
+                    .await
+                    .map_err(|e| mcp_err(format!("取消订阅失败: {e}")))?;
+                resp.subscriptions = Some(self.ctx.ble.get_subscriptions(&req.address).await);
+            }
+            "notifications" => {
+                let since = req.since.unwrap_or(0);
+                let out = self
+                    .ctx
+                    .ble_hub
+                    .snapshot_since(&req.address, &req.char_uuid, since);
+                resp.value = Some(encode_bytes(&out.data, &req.encoding)?);
+                resp.encoding = Some(req.encoding.clone());
+                resp.next_cursor = Some(out.next_cursor);
+                resp.truncated = Some(out.truncated);
+            }
+            "mtu" => {
+                require_lease()?;
+                let mtu = if req.mtu == 0 { 247 } else { req.mtu };
+                let applied = self
+                    .ctx
+                    .ble
+                    .set_mtu(&req.address, mtu)
+                    .await
+                    .map_err(|e| mcp_err(format!("设置 MTU 失败: {e}")))?;
+                resp.mtu = Some(applied);
+            }
+            "rssi" => {
+                let rssi = self
+                    .ctx
+                    .ble
+                    .get_rssi(&req.address)
+                    .await
+                    .map_err(|e| mcp_err(format!("读取 RSSI 失败: {e}")))?;
+                resp.rssi = Some(rssi);
+            }
+            other => {
+                return Err(mcp_err(format!(
+                    "未知 action: {other}（支持 discover_services | discover_characteristics | read | write | \
+subscribe | unsubscribe | notifications | mtu | rssi）"
+                )));
+            }
+        }
+
+        Ok(Json(resp))
+    }
 }
 
 #[tool_handler]
@@ -737,6 +1270,10 @@ mod tests {
             (ComBridgeMcp::combridge_serial_write_tool_attr().name.to_string(), "combridge_serial_write"),
             (ComBridgeMcp::combridge_serial_read_tool_attr().name.to_string(), "combridge_serial_read"),
             (ComBridgeMcp::combridge_serial_expect_tool_attr().name.to_string(), "combridge_serial_expect"),
+            (ComBridgeMcp::devices_tool_attr().name.to_string(), "combridge_devices"),
+            (ComBridgeMcp::ble_scan_tool_attr().name.to_string(), "combridge_ble_scan"),
+            (ComBridgeMcp::ble_connect_tool_attr().name.to_string(), "combridge_ble_connect"),
+            (ComBridgeMcp::ble_gatt_tool_attr().name.to_string(), "combridge_ble_gatt"),
         ];
         for (actual, expected) in names {
             assert_eq!(actual, expected);
@@ -758,6 +1295,19 @@ mod tests {
         let schema = serde_json::to_string(&*expect.input_schema).unwrap();
         assert!(schema.contains("pattern"));
         assert!(schema.contains("timeout_ms"));
+
+        // BLE 域
+        let gatt = ComBridgeMcp::ble_gatt_tool_attr();
+        let schema = serde_json::to_string(&*gatt.input_schema).unwrap();
+        assert!(schema.contains("action"));
+        assert!(schema.contains("char_uuid"));
+        assert!(schema.contains("lease_id"));
+
+        let connect = ComBridgeMcp::ble_connect_tool_attr();
+        assert!(serde_json::to_string(&*connect.input_schema).unwrap().contains("force"));
+
+        let scan = ComBridgeMcp::ble_scan_tool_attr();
+        assert!(serde_json::to_string(&*scan.input_schema).unwrap().contains("duration_ms"));
     }
 
     #[test]

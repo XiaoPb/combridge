@@ -12,6 +12,7 @@
 //! 默认关闭，需在 `%LOCALAPPDATA%\combridge\mcp.json` 中显式启用。
 
 pub mod auth;
+pub mod ble_hub;
 pub mod ctx;
 pub mod lease;
 pub mod serial_hub;
@@ -158,6 +159,8 @@ pub async fn start(app: tauri::AppHandle, settings: McpSettings) -> Result<McpSt
     let ctx = Arc::new(ctx::McpContext::from_app(&app, tier.clone()));
     // 订阅 EventBus 广播：串口数据 → hub（游标/等待），端口断开 → 清理
     ctx.serial_hub.spawn_subscription(Arc::clone(&ctx.event_bus));
+    // BLE 通知数据 → hub（按 地址+特征 分桶）
+    ctx.ble_hub.spawn_subscription(Arc::clone(&ctx.event_bus));
     let mcp_server = server::ComBridgeMcp::new(ctx);
 
     let service =

@@ -60,7 +60,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 # OTA：计算镜像 SHA-256 并展示/比对 manifest
 sha2 = "0.10"
 # MCP：官方 Rust SDK。3.4 以下存在 Streamable HTTP 未认证会话泄漏（CVE-2026-63128），锁定精确版本
-rmcp = { version = "=3.8.0", features = ["server", "transport-streamable-http-server"] }
+rmcp = { version = "=3.8.0", features = ["server", "transport-streamable-http-server", "elicitation"] }
 axum = "0.8.9"
 tower-http = { version = "0.7.1", features = ["trace"] }
 schemars = "1.2.3"

@@ -17,10 +17,12 @@ use crate::protocol::PluginManager;
 use crate::service::EventBus;
 use crate::state::AppStateRef;
 
+use super::audit::AuditLogger;
 use super::ble_hub::BleHub;
 use super::gh3036_job::FactoryJob;
 use super::lease::LeaseManager;
 use super::ota_confirm::OtaConfirmStore;
+use super::ratelimit::{PortBreaker, RateLimiter};
 use super::serial_hub::SerialHub;
 
 pub struct McpContext {
@@ -54,6 +56,12 @@ pub struct McpContext {
     pub ota: Arc<OtaManager>,
     /// OTA dry-run 签发的确认令牌（L3 硬门）
     pub ota_confirm: OtaConfirmStore,
+    /// 审计写入器；目录不可确定时为 None（启动时已记告警）
+    pub audit: Option<Arc<AuditLogger>>,
+    /// QPS + 并发限流（按档位）
+    pub limiter: RateLimiter,
+    /// 端口级熔断（连续硬件错误）
+    pub breaker: PortBreaker,
 }
 
 impl McpContext {
@@ -70,9 +78,20 @@ impl McpContext {
         let protocols = app.state::<Arc<PluginManager>>().inner().clone();
         let ota = app.state::<Arc<OtaManager>>().inner().clone();
 
+        let audit = match AuditLogger::try_new() {
+            Some(logger) => {
+                tracing::info!("[MCP] 审计目录: {}", logger.dir().display());
+                Some(Arc::new(logger))
+            }
+            None => {
+                tracing::warn!("[MCP] 无法确定审计目录，审计降级为仅 tracing 输出");
+                None
+            }
+        };
+
         Self {
             app_version: env!("CARGO_PKG_VERSION").to_string(),
-            tier,
+            tier: tier.clone(),
             started_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -91,6 +110,9 @@ impl McpContext {
             protocols,
             ota,
             ota_confirm: OtaConfirmStore::new(),
+            audit,
+            limiter: RateLimiter::for_tier(&tier),
+            breaker: PortBreaker::new(),
         }
     }
 

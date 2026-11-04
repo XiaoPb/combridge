@@ -11,13 +11,16 @@
 //!
 //! 默认关闭，需在 `%LOCALAPPDATA%\combridge\mcp.json` 中显式启用。
 
+pub mod audit;
 pub mod auth;
 pub mod ble_hub;
 pub mod ctx;
+pub mod elicit;
 pub mod gh3036_job;
 pub mod lease;
 pub mod logs;
 pub mod ota_confirm;
+pub mod ratelimit;
 pub mod serial_hub;
 pub mod server;
 

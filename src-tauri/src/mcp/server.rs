@@ -20,11 +20,14 @@ use rmcp::ServerHandler;
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerConfig};
 use rmcp::{schemars, tool, tool_handler, tool_router};
+use rmcp::{Peer, RoleServer};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use super::audit;
 use super::ctx::McpContext;
 use super::lease::{AcquireError, DEFAULT_TTL_SECS};
+use super::ratelimit::Reject;
 use crate::device::serial::serial_config::{
     BaudRate, DataBits, FlowControl, Parity, SerialPortConfig, StopBits,
 };
@@ -1357,6 +1360,7 @@ encoding=text 原样发送；encoding=hex 发送二进制（如 \"AA BB 01\"）�
     async fn combridge_serial_write(
         &self,
         Parameters(req): Parameters<SerialWriteRequest>,
+        peer: Peer<RoleServer>,
     ) -> ToolR<SerialWriteResponse> {
         self.ctx
             .leases
@@ -1375,6 +1379,19 @@ encoding=text 原样发送；encoding=hex 发送二进制（如 \"AA BB 01\"）�
         if payload.is_empty() {
             return Err(tool_err("INVALID_ARGUMENT", "待发送数据为空"));
         }
+
+        // 标准档：写设备前必须由用户点确认（研发档跳过）
+        self.confirm_if_needed(
+            &peer,
+            "串口写入",
+            format!(
+                "即将向 {} 写入 {} 字节：{}",
+                req.port_name,
+                payload.len(),
+                preview_payload(&payload, 32)
+            ),
+        )
+        .await?;
 
         let written = self
             .ctx
@@ -1694,6 +1711,7 @@ subscribe（需 lease_id）/ unsubscribe（需 lease_id）/ notifications（游�
     async fn ble_gatt(
         &self,
         Parameters(req): Parameters<BleGattRequest>,
+        peer: Peer<RoleServer>,
     ) -> ToolR<BleGattResponse> {
         let action = req.action.to_ascii_lowercase();
         let resource = format!("ble:{}", req.address);
@@ -1730,6 +1748,22 @@ subscribe（需 lease_id）/ unsubscribe（需 lease_id）/ notifications（游�
             rssi: None,
             subscriptions: None,
         };
+
+        // 标准档：只有会改设备状态的动作才要确认（discover/read/notifications/rssi 免确认）
+        if matches!(action.as_str(), "write" | "subscribe" | "unsubscribe" | "mtu") {
+            let detail = match action.as_str() {
+                "write" => format!(
+                    "即将向 {} 的特征 {} 写入 {} 字符：{}",
+                    req.address,
+                    req.char_uuid,
+                    req.data.chars().count(),
+                    req.data.chars().take(64).collect::<String>()
+                ),
+                "mtu" => format!("即将把 {} 的 MTU 协商为 {}", req.address, req.mtu),
+                _ => format!("即将对 {} 的特征 {} 执行 {action}", req.address, req.char_uuid),
+            };
+            self.confirm_if_needed(&peer, "BLE 设备写入", detail).await?;
+        }
 
         match action.as_str() {
             "discover_services" => {
@@ -1870,6 +1904,7 @@ action=rpc 执行一条 RPC（command_key 取自 catalog，params 按命令定�
     async fn gh3036_rpc(
         &self,
         Parameters(req): Parameters<Gh3036RpcRequest>,
+        peer: Peer<RoleServer>,
     ) -> ToolR<Gh3036RpcResponse> {
         let action = req.action.to_lowercase();
         let owner = req
@@ -1891,6 +1926,23 @@ action=rpc 执行一条 RPC（command_key 取自 catalog，params 按命令定�
             hex: None,
             text: None,
         };
+
+        // 标准档：会改动芯片状态的动作先确认（status/catalog 只读，免确认）
+        if matches!(action.as_str(), "rpc" | "init" | "set_channel") {
+            let detail = match action.as_str() {
+                "rpc" => format!(
+                    "即将向 GH3036 发送 RPC 命令 {}，参数 [{}]",
+                    req.command_key.clone().unwrap_or_default(),
+                    req.params.join(", ")
+                ),
+                "init" => "即将初始化 GH3036 会话（会复位芯片通信）".to_string(),
+                _ => format!(
+                    "即将把 GH3036 通道切到 {}",
+                    req.device_id.clone().unwrap_or_default()
+                ),
+            };
+            self.confirm_if_needed(&peer, "GH3036 写入", detail).await?;
+        }
 
         match action.as_str() {
             "status" => {
@@ -2069,6 +2121,7 @@ action=threshold_get 取当前卡控配置 YAML。run/continue/stop 需要 GH303
     async fn gh3036_factory_test(
         &self,
         Parameters(req): Parameters<FactoryTestRequest>,
+        peer: Peer<RoleServer>,
     ) -> ToolR<super::gh3036_job::FactorySummary> {
         let action = req.action.to_lowercase();
         let owner = req
@@ -2076,9 +2129,21 @@ action=threshold_get 取当前卡控配置 YAML。run/continue/stop 需要 GH303
             .clone()
             .unwrap_or_else(|| "mcp-client".to_string());
 
+        // 标准档：产测三件套（run/continue/stop）都会驱动硬件，逐次确认
+        if matches!(action.as_str(), "run" | "continue" | "stop") {
+            self.confirm_if_needed(
+                &peer,
+                "GH3036 产测",
+                format!(
+                    "即将执行产测 action={action}（最长等待 {}s）",
+                    req.max_wait_s.unwrap_or(180)
+                ),
+            )
+            .await?;
+        }
+
         match action.as_str() {
             "run" => {
-                self.require_dev_tier("产测执行")?;
                 let lease = self.acquire_gh3036_lease(&owner, req.lease_id.as_deref(), req.force, req.ttl_s)?;
                 self.ensure_gh3036_initialized()?;
 
@@ -2191,7 +2256,6 @@ action=threshold_get 取当前卡控配置 YAML。run/continue/stop 需要 GH303
                 Ok(Json(summary))
             }
             "continue" => {
-                self.require_dev_tier("产测继续")?;
                 let lease = self.acquire_gh3036_lease(&owner, req.lease_id.as_deref(), req.force, req.ttl_s)?;
                 self.ctx.gh3036.factory_test_continue().map_err(|e| {
                     tool_err_full(
@@ -2712,7 +2776,11 @@ action=start **不带 confirm 时永远只做 dry-run**：校验包 + 预检设�
 标准档（standard）下 start 会被 TIER_BLOCKED 拒绝，请在 GUI 中操作或改用研发档。",
         annotations(read_only_hint = false, destructive_hint = true, idempotent_hint = false)
     )]
-    async fn ota(&self, Parameters(req): Parameters<OtaRequest>) -> ToolR<OtaResponse> {
+    async fn ota(
+        &self,
+        Parameters(req): Parameters<OtaRequest>,
+        peer: Peer<RoleServer>,
+    ) -> ToolR<OtaResponse> {
         let action = req.action.to_lowercase();
 
         match action.as_str() {
@@ -2758,7 +2826,7 @@ action=start **不带 confirm 时永远只做 dry-run**：校验包 + 预检设�
                 resp.device = Some(ota_device_view(&info));
                 Ok(Json(resp))
             }
-            "start" => self.ota_start(req).await,
+            "start" => self.ota_start(req, &peer).await,
             "status" => {
                 let status = self.ctx.ota.status();
                 let mut resp = OtaResponse::new("status");
@@ -2906,27 +2974,72 @@ impl ComBridgeMcp {
         )
     }
 
-    /// L3 操作（OTA 烧录、产测执行）的档位门。
+    /// 危险操作前的用户确认（标准档），研发档跳过。
     ///
-    /// 计划里标准档应是「dry-run + elicitation 双确认」，但 elicitation 属 P5。
-    /// 在它落地之前，标准档一律拒绝执行 —— 宁可少一个能力，也不留一条无确认的烧录路径。
-    fn require_dev_tier(&self, what: &str) -> Result<(), CallToolResult> {
-        if tier_allows_l3(&self.ctx.tier) {
+    /// 返回 `Ok(())` 才允许改设备；任何"问不到"的情况都按拒绝处理 ——
+    /// 确认机制失效时默认关闭，而不是默认放行。
+    async fn confirm_if_needed(
+        &self,
+        peer: &rmcp::Peer<rmcp::RoleServer>,
+        risk: &str,
+        detail: impl Into<String>,
+    ) -> Result<(), CallToolResult> {
+        if !needs_user_confirmation(&self.ctx.tier) {
             return Ok(());
         }
-        Err(tool_err_full(
-            "TIER_BLOCKED",
-            format!("当前为标准档（standard），{what} 仅研发档（dev）可用"),
-            Some("把 %LOCALAPPDATA%\\combridge\\mcp.json 的 tier 改为 \"dev\" 后重启应用；标准档请改用 dry-run / validate 或 GUI 操作"),
-            false,
-        ))
+        let detail = detail.into();
+        let message = format!("【{risk}】{detail}\n确认执行？");
+        match super::elicit::ask(peer, message).await {
+            d if d.is_accepted() => Ok(()),
+            d => Err(tool_err_full(
+                "CONFIRM_REQUIRED",
+                d.reason(),
+                Some("这是标准档的强制确认：请在客户端弹窗中确认后重试；若客户端不支持 elicitation，请改用 GUI 操作或将档位切到 dev"),
+                false,
+            )),
+        }
+    }
+
+    /// 写审计。审计目录不可用时静默跳过（启动时已告警），绝不阻断业务。
+    fn record_audit(
+        &self,
+        tool: &str,
+        args: &serde_json::Map<String, serde_json::Value>,
+        result: &CallToolResult,
+        started: std::time::Instant,
+    ) {
+        let text = result_text(result);
+        let code = audit::result_code(result.is_error, text);
+        self.record_audit_with_code(tool, args, &code, audit::is_dry_run(text), started);
+    }
+
+    fn record_audit_with_code(
+        &self,
+        tool: &str,
+        args: &serde_json::Map<String, serde_json::Value>,
+        code: &str,
+        dry_run: bool,
+        started: std::time::Instant,
+    ) {
+        let Some(logger) = self.ctx.audit.as_ref() else {
+            return;
+        };
+        logger.record(&audit::AuditEntry {
+            ts: audit::now_millis(),
+            tier: self.ctx.tier.clone(),
+            tool: tool.to_string(),
+            args: audit::digest_args(args),
+            result_code: code.to_string(),
+            duration_ms: started.elapsed().as_millis() as u64,
+            dry_run,
+        });
     }
 
     /// `combridge_ota(action=start)`：dry-run 与真实执行的分流点。
     ///
     /// 判定顺序刻意固定：**先校验参数与固件包，再判令牌** ——
     /// 这样即使令牌有效、包却已经损坏（换了文件），也不会走到烧录。
-    async fn ota_start(&self, req: OtaRequest) -> ToolR<OtaResponse> {
+    async fn ota_start(&self, req: OtaRequest, peer: &Peer<RoleServer>) -> ToolR<OtaResponse> {
         let address = require_arg(req.address.as_deref(), "address", "start")?;
         let firmware_path =
             require_arg(req.firmware_path.as_deref(), "firmware_path", "start")?;
@@ -3023,8 +3136,20 @@ impl ComBridgeMcp {
             }
         }
 
-        // 4) 令牌有效：档位门 → 真正烧录
-        self.require_dev_tier("OTA 固件烧录")?;
+        // 4) 令牌有效 → 标准档再要一次用户确认（L3 双确认）→ 真正烧录
+        self.confirm_if_needed(
+            peer,
+            "OTA 烧录",
+            format!(
+                "即将把 {}（{} 字节, 协议 {}）烧录到 {}\nsha256: {}",
+                plan.image_name,
+                plan.image_size,
+                plan.protocol,
+                plan.target,
+                &plan.image_sha256[..plan.image_sha256.len().min(16)]
+            ),
+        )
+        .await?;
 
         let options = OtaStartOptions {
             force_confirm: req.force_confirm.unwrap_or(false),
@@ -3113,12 +3238,63 @@ fn default_columns() -> Vec<String> {
     (0..5).map(|i| format!("CH{i}")).collect()
 }
 
-/// L3（不可逆的硬件写操作）是否放行。
+/// 标准档是否需要为写设备 / 产测 / 烧录弹确认框。
 ///
-/// 抽成自由函数是为了能单测档位语义 —— `require_dev_tier` 需要整个 `McpContext`，
-/// 而档位判定本身只依赖字符串，没必要为了测试去造一堆 Manager。
-fn tier_allows_l3(tier: &str) -> bool {
-    tier == "dev"
+/// 抽成自由函数是为了能单测档位语义 —— `confirm_if_needed` 需要整个 `McpContext` 与 peer，
+/// 而"哪种档位要确认"只依赖字符串。
+fn needs_user_confirmation(tier: &str) -> bool {
+    tier != "dev"
+}
+
+/// 取工具结果里的第一段文本（结构化错误/成功体都放在这里）。
+fn result_text(result: &CallToolResult) -> Option<&str> {
+    result
+        .content
+        .first()
+        .and_then(|c| c.as_text())
+        .map(|t| t.text.as_str())
+}
+
+/// 确认弹窗里的载荷预览：可打印内容原样展示，二进制转 hex，最多 `max` 字节。
+///
+/// 用户在弹窗里看到 "41 54 2B 52 53 54" 才知道自己要放行的是什么字节；
+/// 只写"128 字节"等于没让人确认。
+fn preview_payload(bytes: &[u8], max: usize) -> String {
+    let head = &bytes[..bytes.len().min(max)];
+    let printable = head
+        .iter()
+        .all(|b| b.is_ascii_graphic() || matches!(*b, b' ' | b'\r' | b'\n' | b'\t'));
+    let body = if printable {
+        String::from_utf8_lossy(head).escape_debug().to_string()
+    } else {
+        head.iter()
+            .map(|b| format!("{b:02X}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    if bytes.len() > head.len() {
+        format!("{body} …（共 {} 字节）", bytes.len())
+    } else {
+        body
+    }
+}
+
+/// 限流拒绝 → 工具级错误（模型能读懂、能据此放慢节奏）。
+fn reject_result(tool: &str, reject: Reject) -> CallToolResult {
+    match reject {
+        Reject::Qps { retry_after_ms } => tool_err_full(
+            "RATE_LIMITED",
+            format!("调用过快：{tool} 需等待约 {retry_after_ms}ms"),
+            Some("放慢调用频率；多行数据建议合并成一次调用（如 waveform parse 一次传多行）"),
+            true,
+        ),
+        Reject::Busy { limit } => tool_err_full(
+            "RATE_LIMITED",
+            format!("{tool} 并发已达上限 {limit}"),
+            Some("等当前等待结束后再发起；串口数据可用同一次 expect 的返回值，不必并发等待"),
+            true,
+        ),
+    }
 }
 
 /// 把工具参数里的解析器描述转成 `ParserConfig`，并做模式相关的必填校验。
@@ -3306,7 +3482,8 @@ combridge_gh3036_factory_test(action=run) 一次调用直接产出产测结论�
 【数据】combridge_waveform 把串口文本解析为数值行（create → configure_parser → parse → read）；\
 combridge_protocol 管理 Lua 协议插件；combridge_about(action=logs) 读日志尾部用于自查。\
 【OTA】combridge_ota(action=start) 默认只做 dry-run 并返回 confirm_token，\
-把令牌放进 confirm 再调一次才真正烧录（一次性、5 分钟、绑定设备+包+镜像 sha256）；标准档返回 TIER_BLOCKED。\
+把令牌放进 confirm 再调一次才真正烧录（一次性、5 分钟、绑定设备+包+镜像 sha256）。\
+标准档下写设备 / 产测 / 烧录会先向客户端请求用户确认，拒绝或无法确认时返回 CONFIRM_REQUIRED。\
 工具失败时返回 isError=true 的结构化错误 {code, message, hint, retryable}：先读 hint 再决定是否重试。",
             )
             .with_server_info(
@@ -3314,6 +3491,81 @@ combridge_protocol 管理 Lua 协议插件；combridge_about(action=logs) 读日
                     .with_title("ComBridge")
                     .with_description("ComBridge cross-platform serial/BLE debugging tool"),
             )
+    }
+
+    /// 所有工具调用的统一入口：限流 → 熔断 → 执行 → 审计。
+    ///
+    /// `#[tool_handler]` 见 `call_tool` 已存在就不再生成，因此这里是唯一收口点 ——
+    /// 审计与限流不可能被某个工具"忘记"。
+    async fn call_tool(
+        &self,
+        request: rmcp::model::CallToolRequestParams,
+        context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::CallToolResponse, rmcp::ErrorData> {
+        let tool = request.name.to_string();
+        let args = request.arguments.clone().unwrap_or_default();
+        let started = std::time::Instant::now();
+
+        // 1) 限流 + 并发上限
+        let guard = match self.ctx.limiter.admit(&tool) {
+            Ok(guard) => guard,
+            Err(reject) => {
+                let result = reject_result(&tool, reject);
+                self.record_audit(&tool, &args, &result, started);
+                return Ok(result.into());
+            }
+        };
+
+        // 2) 端口熔断：坏线缆 + 重试循环不该反复打硬件
+        let port = args
+            .get("port_name")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        if let Some(port) = port.as_deref() {
+            if let Some(secs) = self.ctx.breaker.suspended_for(port) {
+                let result = tool_err_full(
+                    "PORT_SUSPENDED",
+                    format!("{port} 已连续 5 次硬件错误，暂停使用 {secs}s"),
+                    Some("检查线缆 / 波特率 / 设备供电；等待冷却后重试，或换一个端口"),
+                    true,
+                );
+                self.record_audit(&tool, &args, &result, started);
+                return Ok(result.into());
+            }
+        }
+
+        // 3) 执行
+        let tcc = rmcp::handler::server::tool::ToolCallContext::new(self, request, context);
+        let outcome = Self::tool_router().call(tcc).await;
+
+        // 4) 审计 + 熔断计数
+        match &outcome {
+            Ok(rmcp::model::CallToolResponse::Complete(result)) => {
+                self.record_audit(&tool, &args, result, started);
+                if let Some(port) = port.as_deref() {
+                    let text = result_text(result);
+                    let code = audit::result_code(result.is_error, text);
+                    if code == "SERIAL_ERROR" {
+                        if self.ctx.breaker.record_failure(port) {
+                            tracing::warn!("[MCP] 端口 {port} 连续硬件错误，熔断 30s");
+                        }
+                    } else if result.is_error != Some(true) {
+                        self.ctx.breaker.record_success(port);
+                    }
+                }
+            }
+            Ok(_) => {
+                // InputRequired / Task 分支：当前没有工具走这两条路径，留个兜底记录
+                self.record_audit_with_code(&tool, &args, "OK", false, started);
+            }
+            Err(e) => {
+                self.record_audit_with_code(&tool, &args, "PROTOCOL_ERROR", false, started);
+                tracing::warn!("[MCP] 工具 {tool} 返回协议错误: {e}");
+            }
+        }
+
+        drop(guard);
+        outcome
     }
 }
 
@@ -3491,13 +3743,37 @@ mod tests {
         assert!(require_arg(Some("   "), "port", "open").is_err());
     }
 
-    /// 标准档必须拦住 L3：这是 OTA 烧录与产测执行唯一的档位保护。
+    /// 标准档必须为准入型操作弹确认；研发档跳过（内部联调不应每次点弹窗）。
     #[test]
-    fn test_tier_gate_blocks_standard() {
-        assert!(tier_allows_l3("dev"));
-        assert!(!tier_allows_l3("standard"));
-        assert!(!tier_allows_l3(""));
-        assert!(!tier_allows_l3("DEV"));
+    fn test_confirmation_policy_by_tier() {
+        assert!(!needs_user_confirmation("dev"));
+        assert!(needs_user_confirmation("standard"));
+        assert!(needs_user_confirmation(""));
+    }
+
+    /// 确认弹窗里给用户看的必须是人能判断的内容，而不是"128 字节"。
+    #[test]
+    fn test_preview_payload() {
+        assert_eq!(preview_payload(b"AT+RST\r\n", 32), "AT+RST\\r\\n");
+        assert_eq!(preview_payload(&[0xAA, 0xBB], 32), "AA BB");
+        let long = vec![b'x'; 40];
+        let shown = preview_payload(&long, 8);
+        assert!(shown.starts_with("xxxxxxxx"), "{shown}");
+        assert!(shown.contains("共 40 字节"), "{shown}");
+    }
+
+    /// 限流错误也必须是 isError 结果，带上可执行的等待建议。
+    #[test]
+    fn test_reject_result_is_tool_error() {
+        let r = reject_result("combridge_ports", Reject::Qps { retry_after_ms: 50 });
+        assert_eq!(r.is_error, Some(true));
+        let raw = serde_json::to_string(&r.content).unwrap();
+        assert!(raw.contains("RATE_LIMITED"), "{raw}");
+        assert!(raw.contains("50"), "{raw}");
+
+        let busy = reject_result("combridge_serial_expect", Reject::Busy { limit: 8 });
+        let raw = serde_json::to_string(&busy.content).unwrap();
+        assert!(raw.contains("并发已达上限 8"), "{raw}");
     }
 
     #[test]

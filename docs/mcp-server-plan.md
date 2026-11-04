@@ -3,9 +3,9 @@
 | 项 | 内容 |
 |---|---|
 | 文档版本 | v1.0 FINAL |
-| 日期 | 2026-11-04（§6.4 / §9.0 随 P4 落地同步更新） |
+| 日期 | 2026-11-04（§6.4 / §8.3~§8.5 / §9.0 随 P4、P5a 落地同步更新） |
 | 适用代码版本 | ComBridge v0.7.2（Tauri 2.0，后端 Rust 10,521 行） |
-| 状态 | 方案定稿；P0~P4 已实现，P5/P6 待排期 |
+| 状态 | 方案定稿；P0~P4 与 P5 后端已实现，P5 前端 / P6 待排期 |
 | 决策人 | 产品 + 研发 |
 
 ---
@@ -482,7 +482,8 @@ GH3036 域另有 `GH3036_BUSY` / `GH3036_INIT_FAILED` / `GH3036_RPC_FAILED` / `G
 P4 新增（已落地）：`CONFIRM_INVALID` / `CONFIRM_EXPIRED` / `CONFIRM_MISMATCH` / `PACKAGE_INVALID` /
 `OTA_ERROR` / `OTA_NOT_RUNNING` / `BUFFER_NOT_FOUND` / `BUFFER_EXISTS` / `PARSER_INVALID` /
 `PROTOCOL_NOT_FOUND` / `PROTOCOL_ERROR` / `LOG_NOT_FOUND` / `LOG_READ_FAILED`。
-`CONFIRM_REQUIRED` 保留给 P5 的 elicitation（"用户点了 decline"），当前实现是"漏带令牌=静默 dry-run"。
+`CONFIRM_REQUIRED` 在 P5a 已启用：标准档下用户拒绝、超时、或客户端没有 elicitation 能力时返回它。
+P5a 另增 `PORT_SUSPENDED`（端口熔断）与 `RATE_LIMITED`（QPS / 并发上限）。
 
 **实现约束（踩过）**：错误必须是 `isError: true` 的工具结果，不能抛 `Err(ErrorData)` —— 后者是 JSON-RPC 协议错误，
 客户端会渲染成 "internal error"，模型读不到 `message`，`hint` 等于白写。
@@ -582,7 +583,8 @@ OTA、产测可能跑数分钟，多数 MCP 客户端有 60s 超时。
 | 审计日志 | 开（不可关） | 开（不可关） |
 | 限流 | 20 QPS/会话 | 5 QPS/会话 |
 
-**实现**：档位是服务端强制的，不依赖客户端行为。`TIER_BLOCKED` 错误码用于档位拒绝。
+**实现**：档位是服务端强制的，不依赖客户端行为。L2/L3 的拦截靠 elicitation 确认（见 §8.3），
+`TIER_BLOCKED` 保留给"档位本身不具备该能力"的场景（当前未使用；P4 曾用它临时拒绝标准档的 L3）。
 
 ### 8.2 网络与认证
 
@@ -606,6 +608,18 @@ L2 / L3 通过 MCP 的 **elicitation** 让客户端弹窗询问用户，而不�
 
 标准档下 decline 直接返回 `CONFIRM_REQUIRED`，不重试。同时前端（GUI）也弹一次确认框作双保险（L3）。
 
+**实现（P5a，`mcp/elicit.rs`）**：
+
+- 只问一句、只收一个布尔字段（`ConfirmForm { confirm }`），弹窗文案必须写清"改什么、改哪个口、改多少"，
+  例如 `即将向 COM3 写入 6 字节：AT+RST\r\n`。二进制载荷转 hex 展示，超 32 字节截断并标总长。
+- 超时 120s；拒绝 / 取消 / 超时 / 客户端不支持 elicitation / 协议版本禁止服务端发起请求 —— **全部按拒绝处理**，
+  统一返回 `CONFIRM_REQUIRED`（`retryable: false`）。"问不到"绝不能等于"默认同意"。
+- 研发档不弹窗（内部联调每次点弹窗会逼疯人），但审计照记 —— 跳过的是交互，不是留痕。
+- **校验顺序**：参数解析 → 租约校验 → 确认 → 执行。不会为一个本身非法的请求先弹窗打扰用户。
+- 覆盖范围：`serial_write`、`ble_gatt`（write / subscribe / unsubscribe / mtu）、`gh3036_rpc`（rpc / init / set_channel）、
+  `gh3036_factory_test`（run / continue / stop）、`ota`（真实烧录那一次）。
+  L3 因此变成**双确认**：先拿 dry-run 令牌（机器可校验），再由用户点确认（人可判断）。
+
 ### 8.4 审计
 
 - 路径：`log/mcp-audit-YYYY-MM-DD.jsonl`
@@ -613,11 +627,33 @@ L2 / L3 通过 MCP 的 **elicitation** 让客户端弹窗询问用户，而不�
 - 审计不可关闭；写失败时降级为 `tracing::error` 但**不阻断**业务（避免审计故障导致产线停摆）
 - 保留 30 天，随现有日志轮转策略清理
 
+**实现（P5a，`mcp/audit.rs`）**：
+
+- 真实字段：`{ts, tier, tool, args:{keys[], sha256, preview_hex, bytes}, result_code, duration_ms, dry_run}`。
+  `session_id` 拿不到（见 §8.5 说明），暂以 `tier` + `tool` + 参数摘要定位调用。
+- 收口在 `ServerHandler::call_tool`（自己实现，`#[tool_handler]` 检测到已存在就不再生成）：
+  **限流拒绝也记审计**，否则"被压制的调用"在日志里不可见。
+- `result_code` 成功为 `OK`，失败取工具错误结构里的 `code`（拼不出就是 `ERROR`），
+  协议层错误记 `PROTOCOL_ERROR` —— 审计能区分"业务失败"与"协议故障"。
+- 目录与当前日志同目录（尊重用户改过的日志路径），否则 `<exe>/log`；进程内首次写入时清理 30 天前的文件。
+- `preview_hex` 只取 `data` / `payload` 字段前 64 字节，其余参数只留 key 列表与整体 sha256：
+  审计要能复盘"发了什么类别的东西"，但不能把固件或密钥原文落盘。
+
 ### 8.5 熔断与限流
 
 - 每会话 20 QPS（研发）/ 5 QPS（标准），全局 100 QPS
 - `serial_expect` 并发上限 8，超出排队等待而非拒绝
 - 同一端口连续 5 次硬件错误 → 暂停该端口 30s，返回明确原因与恢复方式
+
+**实现（P5a，`mcp/ratelimit.rs`）**：
+
+- **按全局而非按会话**：rmcp 的 `RequestContext` 不暴露 session id（`StreamableHttpService` 的 factory
+  在无状态模式下是**每请求**调用，拿不到稳定的会话标识）。计划里的"每会话 20 / 全局 100"在本机单用户场景下
+  等价于一个全局预算，取更保守的每会话值（研发 20 QPS / 标准 5 QPS）。令牌桶按秒补满，允许一秒突刺。
+- `serial_expect` 并发上限 8，超出返回 `RATE_LIMITED`（带 `Busy { limit }` 说明）而不是无限排队 ——
+  排队会让模型以为"卡住了"，报错反而能促使它改用一次等待。
+- 端口熔断只统计 `SERIAL_ERROR`（真实硬件错误），**不统计 `TIMEOUT`** —— `expect` 超时是正常业务结果，
+  把它算失败会让熔断在正常调试中频繁误触发。熔断期间返回 `PORT_SUSPENDED` + 剩余秒数。
 
 ---
 
@@ -634,7 +670,7 @@ L2 / L3 通过 MCP 的 **elicitation** 让客户端弹窗询问用户，而不�
 | P2 设备与 BLE | ✅ 已完成 | 新增 `mcp/ble_hub.rs`；工具 `combridge_devices` / `combridge_ble_scan` / `combridge_ble_connect` / `combridge_ble_gatt`；BLE 连接租约资源名 `ble:<address>` |
 | P3 GH3036 与产测 | ✅ 已实现（真机验收待补） | 新增 `mcp/gh3036_job.rs`；工具 `combridge_gh3036_rpc` / `combridge_gh3036_factory_test`；`FactoryTestManager` 增加 CSV 路径访问器 |
 | P4 其余业务域 | ✅ 已完成（OTA 真机烧录待验） | 新增 `mcp/{ota_confirm,logs}.rs`；工具 `combridge_waveform` / `combridge_protocol` / `combridge_ota`；`combridge_about` 增加 `action=logs`。**对外 16 个工具** |
-| P5 安全与产品化 | 部分前置 | 租约已在 P1 完成；两档策略的 UI 与 elicitation 待 P5 |
+| P5 安全与产品化 | 后端已完成（UI / i18n 待做） | 新增 `mcp/{audit,ratelimit,elicit}.rs`；审计 / 限流 / 熔断 / elicitation 全部收口在 `call_tool`；余下为设置页「集成」与中英文案 |
 
 P1 实现要点（与本文档契约的对应）：
 
@@ -725,6 +761,35 @@ P4 冒烟结果（2026-11-04，`npm run tauri dev` + `127.0.0.1:47821`，tier=de
 
 **未验证**：真实固件包下的 dry-run → confirm → 烧录链路（仓库内无固件样本）；
 标准档运行时拦截（`tier_allows_l3` 有单测，但未在 standard 档下实跑）。
+
+P5a 实现要点（后端安全，`docs` 里 §8.3~§8.5 已同步为实际实现）：
+
+- **统一收口**：自己实现 `ServerHandler::call_tool`（`#[tool_handler]` 检测到已存在就不再生成），
+  顺序是 **限流 → 端口熔断 → 执行 → 审计**。放在这一层是因为它是唯一不可能被某个工具"忘记"的位置；
+  如果按工具逐个加，第 17 个工具一定会漏。
+- `peer: Peer<RoleServer>` 作为工具参数注入（rmcp 的 `FromContextPart` 支持），
+  因此确认弹窗不需要把 `RequestContext` 手工穿过每一层。
+- L3 的语义从 P4 的"标准档直接拒绝"升级为计划的**双确认**：
+  机器可校验的 dry-run 令牌（防误触发）+ 用户点确认（防模型自作主张）。
+- 限流按全局而非按会话：无状态 HTTP 下 factory 是每请求调用，拿不到稳定会话标识，细节见 §8.5。
+- 端口熔断只认 `SERIAL_ERROR`，不认 `TIMEOUT` —— 否则正常调试里的"等不到响应"会反复触发熔断。
+
+P5a 冒烟结果（2026-11-04）：
+
+| 场景 | 档位 | 结果 |
+|---|---|---|
+| 45 次快速 `about` | dev（20 QPS） | ✅ 0.44s 内 27 通过 / 18 `RATE_LIMITED`（桶容量 20 + 0.44s 补 9，与实现吻合） |
+| 冷却 1.2s 后再调 | dev | ✅ 恢复正常 |
+| 审计落盘 | dev | ✅ `E:\Tools\ComBridge\log\mcp-audit-2026-11-04.jsonl`，47 行，含 `RATE_LIMITED` 记录 |
+| 审计字段 | dev | ✅ `tool/result_code/duration_ms/dry_run/tier` + `args.keys` + `args.sha256`（前 12 位可读） |
+| 只读工具 | standard | ✅ `combridge_ports` 正常，不受确认影响 |
+| L3 产测 `run` | standard | ✅ `CONFIRM_REQUIRED`「无法向用户确认：客户端未声明 elicitation 能力」——问不到即拒绝 |
+| 非法租约写入 | standard | ✅ `LEASE_INVALID`（确认在租约校验之后，不打扰用户） |
+| 18 次快速 `about` | standard（5 QPS） | ✅ 2 通过 / 16 `RATE_LIMITED`（前序 3 次调用已耗掉 3 个令牌） |
+
+**未验证**：真实支持 elicitation 的客户端上"用户点确认 → 放行"与"用户点拒绝 → `CONFIRM_REQUIRED`"
+这两条正向路径（本机只有脚本客户端，未声明 elicitation 能力）；GUI 侧的第二道确认框。
+
 
 ### 9.1 阶段划分
 

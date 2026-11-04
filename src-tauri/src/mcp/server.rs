@@ -10,10 +10,9 @@
 //! - 读类工具（ports/read/expect）不需要租约：数据经 hub 对所有人可见
 //! - 注解：只读工具标 `read_only_hint = true`，写/关设备标 `destructive_hint = true`
 
-use rmcp::ErrorData as McpError;
 use rmcp::ServerHandler;
 use rmcp::handler::server::wrapper::{Json, Parameters};
-use rmcp::model::{Implementation, ServerCapabilities, ServerConfig};
+use rmcp::model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerConfig};
 use rmcp::{schemars, tool, tool_handler, tool_router};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -35,7 +34,9 @@ pub struct AboutResponse {
     pub started_at: u64,
     /// 当前已连接设备快照
     pub connected_devices: Vec<serde_json::Value>,
-    /// 可用工具域
+    /// 已实现的工具域
+    pub tool_domains: Vec<String>,
+    /// 尚未实现的工具域（调用无效，仅作能力预告）
     pub planned_tool_domains: Vec<String>,
 }
 
@@ -437,11 +438,41 @@ impl ComBridgeMcp {
 }
 
 /// 统一把内部错误转成 MCP 错误。
-fn mcp_err(msg: impl Into<String>) -> McpError {
-    McpError::internal_error(msg.into(), None)
+/// 工具返回值：成功为结构化 JSON，失败为 `isError: true` 的工具结果。
+///
+/// MCP 规范区分两种失败：协议错误（`Err(ErrorData)`，客户端渲染为不透明提示、
+/// 模型读不到错误信息）与工具级错误（`isError: true`，错误内容直接进入模型的
+/// 上下文，可据此自我纠正）。本服务一律使用后者。
+type ToolR<T> = Result<Json<T>, CallToolResult>;
+
+/// 构造工具级错误，字段与 docs/mcp-server-plan.md §6.6 一致。
+///
+/// `hint` 是模型的恢复依据（下一步该调用什么），`retryable` 表示原样重试是否有意义。
+fn tool_err_full(
+    code: &'static str,
+    message: impl Into<String>,
+    hint: Option<&str>,
+    retryable: bool,
+) -> CallToolResult {
+    let payload = serde_json::json!({
+        "code": code,
+        "message": message.into(),
+        "hint": hint,
+        "retryable": retryable,
+    });
+    CallToolResult::error(vec![ContentBlock::text(payload.to_string())])
 }
 
-fn map_baud(b: u32) -> Result<BaudRate, McpError> {
+/// 无恢复提示的简写形式。
+fn tool_err(code: &'static str, message: impl Into<String>) -> CallToolResult {
+    tool_err_full(code, message, None, false)
+}
+
+fn mcp_err(msg: impl Into<String>) -> CallToolResult {
+    tool_err("ERROR", msg)
+}
+
+fn map_baud(b: u32) -> Result<BaudRate, CallToolResult> {
     Ok(match b {
         1200 => BaudRate::B1200,
         2400 => BaudRate::B2400,
@@ -458,7 +489,7 @@ fn map_baud(b: u32) -> Result<BaudRate, McpError> {
     })
 }
 
-fn map_data_bits(n: u32) -> Result<DataBits, McpError> {
+fn map_data_bits(n: u32) -> Result<DataBits, CallToolResult> {
     Ok(match n {
         5 => DataBits::Five,
         6 => DataBits::Six,
@@ -468,7 +499,7 @@ fn map_data_bits(n: u32) -> Result<DataBits, McpError> {
     })
 }
 
-fn map_parity(s: &str) -> Result<Parity, McpError> {
+fn map_parity(s: &str) -> Result<Parity, CallToolResult> {
     Ok(match s.to_ascii_lowercase().as_str() {
         "none" | "" => Parity::None,
         "odd" => Parity::Odd,
@@ -477,7 +508,7 @@ fn map_parity(s: &str) -> Result<Parity, McpError> {
     })
 }
 
-fn map_stop_bits(n: u32) -> Result<StopBits, McpError> {
+fn map_stop_bits(n: u32) -> Result<StopBits, CallToolResult> {
     Ok(match n {
         1 => StopBits::One,
         2 => StopBits::Two,
@@ -485,7 +516,7 @@ fn map_stop_bits(n: u32) -> Result<StopBits, McpError> {
     })
 }
 
-fn map_flow(s: &str) -> Result<FlowControl, McpError> {
+fn map_flow(s: &str) -> Result<FlowControl, CallToolResult> {
     Ok(match s.to_ascii_lowercase().as_str() {
         "none" | "" => FlowControl::None,
         "software" => FlowControl::Software,
@@ -494,7 +525,7 @@ fn map_flow(s: &str) -> Result<FlowControl, McpError> {
     })
 }
 
-fn encode_bytes(bytes: &[u8], encoding: &str) -> Result<String, McpError> {
+fn encode_bytes(bytes: &[u8], encoding: &str) -> Result<String, CallToolResult> {
     match encoding {
         "text" => Ok(String::from_utf8_lossy(bytes).into_owned()),
         "hex" => Ok(bytes
@@ -508,7 +539,7 @@ fn encode_bytes(bytes: &[u8], encoding: &str) -> Result<String, McpError> {
     }
 }
 
-fn decode_bytes(data: &str, encoding: &str) -> Result<Vec<u8>, McpError> {
+fn decode_bytes(data: &str, encoding: &str) -> Result<Vec<u8>, CallToolResult> {
     match encoding {
         "text" => Ok(data.as_bytes().to_vec()),
         "hex" => {
@@ -568,17 +599,19 @@ impl ComBridgeMcp {
 首次连接时调用一次即可；设备状态变化后可重新调用获取最新快照。",
         annotations(read_only_hint = true)
     )]
-    async fn about(&self) -> Result<Json<AboutResponse>, McpError> {
+    async fn about(&self) -> ToolR<AboutResponse> {
         let connected_devices = self.ctx.connected_devices().await;
         Ok(Json(AboutResponse {
             app_version: self.ctx.app_version.clone(),
             tier: self.ctx.tier.clone(),
             started_at: self.ctx.started_at,
             connected_devices,
-            planned_tool_domains: vec![
+            tool_domains: vec![
                 "serial".to_string(),
                 "ble".to_string(),
                 "devices".to_string(),
+            ],
+            planned_tool_domains: vec![
                 "gh3036".to_string(),
                 "waveform".to_string(),
                 "protocol".to_string(),
@@ -593,7 +626,7 @@ impl ComBridgeMcp {
 操作串口前必须先调用本工具确认端口存在且可用。",
         annotations(read_only_hint = true)
     )]
-    async fn ports(&self) -> Result<Json<PortsResponse>, McpError> {
+    async fn ports(&self) -> ToolR<PortsResponse> {
         let scanned = self
             .ctx
             .serial
@@ -635,7 +668,7 @@ impl ComBridgeMcp {
     async fn combridge_serial_open(
         &self,
         Parameters(req): Parameters<SerialOpenRequest>,
-    ) -> Result<Json<SerialOpenResponse>, McpError> {
+    ) -> ToolR<SerialOpenResponse> {
         // 参数映射（先验证再动手）
         let config = SerialPortConfig {
             port_name: req.port_name.clone(),
@@ -655,11 +688,17 @@ impl ComBridgeMcp {
         {
             Ok(l) => l,
             Err(AcquireError::Busy(info)) => {
-                return Err(mcp_err(format!(
-                    "PORT_BUSY: 串口 {} 的租约被 {} 持有（lease={}，{} 过期）。\
-可等待其过期，或用 force=true 抢占（会踢出对方）。",
-                    req.port_name, info.current_owner, info.lease_id, info.expires_at
-                )));
+                return Err(tool_err_full(
+                    "PORT_BUSY",
+                    format!(
+                        "串口 {} 的租约被 {} 持有（lease={}，{} 过期）",
+                        req.port_name, info.current_owner, info.lease_id, info.expires_at
+                    ),
+                    Some(
+                        "等租约过期后重试；或用 force=true 重新调用 combridge_serial_open 抢占（会踢出对方）",
+                    ),
+                    true,
+                ));
             }
         };
 
@@ -678,7 +717,12 @@ impl ComBridgeMcp {
                 .open_port(config, |_name, _data| { /* 数据由 SerialHub 订阅 */ })
             {
                 self.ctx.leases.release(&req.port_name, &lease.lease_id);
-                return Err(mcp_err(format!("打开串口 {} 失败: {e}", req.port_name)));
+                return Err(tool_err_full(
+                    "SERIAL_ERROR",
+                    format!("打开串口 {} 失败: {e}", req.port_name),
+                    Some("确认端口未被其他程序占用，或改用 combridge_ports 检查端口是否仍存在"),
+                    false,
+                ));
             }
             self.ctx
                 .opened_by_mcp
@@ -713,11 +757,16 @@ impl ComBridgeMcp {
     async fn combridge_serial_close(
         &self,
         Parameters(req): Parameters<SerialCloseRequest>,
-    ) -> Result<Json<SerialCloseResponse>, McpError> {
+    ) -> ToolR<SerialCloseResponse> {
         self.ctx
             .leases
             .validate(&req.port_name, &req.lease_id)
-            .map_err(mcp_err)?;
+            .map_err(|e| tool_err_full(
+                "LEASE_INVALID",
+                e,
+                Some("先调用 combridge_serial_open 获取该端口的 lease_id"),
+                false,
+            ))?;
 
         let opened_by_mcp = self
             .ctx
@@ -727,10 +776,15 @@ impl ComBridgeMcp {
             .contains(&req.port_name);
 
         if !opened_by_mcp {
-            return Err(mcp_err(format!(
-                "串口 {} 不是由 MCP 打开的（可能由 GUI 打开），请通过界面关闭",
-                req.port_name
-            )));
+            return Err(tool_err_full(
+                "PORT_NOT_OWNED",
+                format!(
+                    "串口 {} 不是由 MCP 打开（可能由 GUI 打开），MCP 无权关闭",
+                    req.port_name
+                ),
+                Some("在 ComBridge 界面关闭该端口，或由持有它的会话关闭"),
+                false,
+            ));
         }
 
         self.ctx
@@ -760,18 +814,23 @@ encoding=text 原样发送；encoding=hex 发送二进制（如 \"AA BB 01\"）�
     async fn combridge_serial_write(
         &self,
         Parameters(req): Parameters<SerialWriteRequest>,
-    ) -> Result<Json<SerialWriteResponse>, McpError> {
+    ) -> ToolR<SerialWriteResponse> {
         self.ctx
             .leases
             .validate(&req.port_name, &req.lease_id)
-            .map_err(mcp_err)?;
+            .map_err(|e| tool_err_full(
+                "LEASE_INVALID",
+                e,
+                Some("先调用 combridge_serial_open 获取该端口的 lease_id"),
+                false,
+            ))?;
 
         let mut payload = decode_bytes(&req.data, &req.encoding)?;
         if req.append_crlf {
             payload.extend_from_slice(b"\r\n");
         }
         if payload.is_empty() {
-            return Err(mcp_err("待发送数据为空"));
+            return Err(tool_err("INVALID_ARGUMENT", "待发送数据为空"));
         }
 
         let written = self
@@ -802,7 +861,7 @@ encoding=text 原样发送；encoding=hex 发送二进制（如 \"AA BB 01\"）�
     async fn combridge_serial_read(
         &self,
         Parameters(req): Parameters<SerialReadRequest>,
-    ) -> Result<Json<SerialReadResponse>, McpError> {
+    ) -> ToolR<SerialReadResponse> {
         let since = req.since.unwrap_or(0);
         let out = self.ctx.serial_hub.snapshot_since(&req.port_name, since);
         let data = encode_bytes(&out.data, &req.encoding)?;
@@ -826,7 +885,7 @@ regex=true 时 pattern 为正则，否则为子串匹配；默认只匹配 since
     async fn combridge_serial_expect(
         &self,
         Parameters(req): Parameters<SerialExpectRequest>,
-    ) -> Result<Json<SerialExpectResponse>, McpError> {
+    ) -> ToolR<SerialExpectResponse> {
         let since = match req.since {
             Some(s) => s,
             None => self.ctx.serial_hub.current_cursor(&req.port_name),
@@ -838,7 +897,7 @@ regex=true 时 pattern 为正则，否则为子串匹配；默认只匹配 since
             let re = regex::RegexBuilder::new(&pattern)
                 .case_insensitive(req.case_insensitive)
                 .build()
-                .map_err(|e| mcp_err(format!("正则表达式无效: {e}")))?;
+                .map_err(|e| tool_err("INVALID_ARGUMENT", format!("正则表达式无效: {e}")))?;
             Box::new(move |text: &str| re.find(text).map(|m| m.as_str().to_string()))
         } else if req.case_insensitive {
             let pat = pattern.to_lowercase();
@@ -892,7 +951,7 @@ regex=true 时 pattern 为正则，否则为子串匹配；默认只匹配 since
 全部有效租约。开始任何多设备操作前先调用；也可用来判断某端口/地址是否被其他 AI 客户端占用。",
         annotations(read_only_hint = true)
     )]
-    async fn devices(&self) -> Result<Json<DevicesResponse>, McpError> {
+    async fn devices(&self) -> ToolR<DevicesResponse> {
         let ble_mode = self.ctx.ble.mode().await.to_string();
         let ble_configured = self.ctx.ble.is_configured().await;
 
@@ -944,7 +1003,7 @@ regex=true 时 pattern 为正则，否则为子串匹配；默认只匹配 since
     async fn ble_scan(
         &self,
         Parameters(req): Parameters<BleScanRequest>,
-    ) -> Result<Json<BleScanResponse>, McpError> {
+    ) -> ToolR<BleScanResponse> {
         let found = if req.stop {
             self.ctx.ble.stop_scan().await.map_err(|e| mcp_err(format!("停止扫描失败: {e}")))?
         } else {
@@ -978,7 +1037,7 @@ regex=true 时 pattern 为正则，否则为子串匹配；默认只匹配 since
     async fn ble_connect(
         &self,
         Parameters(req): Parameters<BleConnectRequest>,
-    ) -> Result<Json<BleConnectResponse>, McpError> {
+    ) -> ToolR<BleConnectResponse> {
         let action = req.action.to_ascii_lowercase();
         if !matches!(action.as_str(), "connect" | "disconnect" | "list") {
             return Err(mcp_err(format!(
@@ -987,7 +1046,7 @@ regex=true 时 pattern 为正则，否则为子串匹配；默认只匹配 since
             )));
         }
         if action != "list" && req.address.trim().is_empty() {
-            return Err(mcp_err("address 不能为空"));
+            return Err(tool_err("INVALID_ARGUMENT", "address 不能为空"));
         }
         let resource = format!("ble:{}", req.address);
 
@@ -1002,11 +1061,17 @@ regex=true 时 pattern 为正则，否则为子串匹配；默认只匹配 since
                     .leases
                     .acquire(&resource, &req.owner, req.ttl_s, req.force)
                     .map_err(|e| match e {
-                        AcquireError::Busy(info) => mcp_err(format!(
-                            "BLE_BUSY: {} 的租约被 {} 持有（lease={}，{} 过期）。\
-可等待过期或用 force=true 抢占。",
-                            req.address, info.current_owner, info.lease_id, info.expires_at
-                        )),
+                        AcquireError::Busy(info) => tool_err_full(
+                            "BLE_BUSY",
+                            format!(
+                                "{} 的租约被 {} 持有（lease={}，{} 过期）",
+                                req.address, info.current_owner, info.lease_id, info.expires_at
+                            ),
+                            Some(
+                                "等租约过期后重试；或用 force=true 重新调用 combridge_ble_connect 抢占",
+                            ),
+                            true,
+                        ),
                     })?;
 
                 match self.ctx.ble.connect(&req.address).await {
@@ -1031,7 +1096,12 @@ regex=true 时 pattern 为正则，否则为子串匹配；默认只匹配 since
                 self.ctx
                     .leases
                     .validate(&resource, &req.lease_id)
-                    .map_err(mcp_err)?;
+                    .map_err(|e| tool_err_full(
+                    "LEASE_INVALID",
+                    e,
+                    Some("先调用 combridge_ble_connect 获取该地址的 lease_id"),
+                    false,
+                ))?;
                 self.ctx
                     .ble
                     .disconnect(&req.address)
@@ -1081,7 +1151,7 @@ subscribe（需 lease_id）/ unsubscribe（需 lease_id）/ notifications（游�
     async fn ble_gatt(
         &self,
         Parameters(req): Parameters<BleGattRequest>,
-    ) -> Result<Json<BleGattResponse>, McpError> {
+    ) -> ToolR<BleGattResponse> {
         let action = req.action.to_ascii_lowercase();
         let resource = format!("ble:{}", req.address);
 
@@ -1090,14 +1160,19 @@ subscribe（需 lease_id）/ unsubscribe（需 lease_id）/ notifications（游�
             "read" | "write" | "subscribe" | "unsubscribe" | "notifications"
         );
         if need_char && req.char_uuid.trim().is_empty() {
-            return Err(mcp_err("char_uuid 不能为空"));
+            return Err(tool_err("INVALID_ARGUMENT", "char_uuid 不能为空"));
         }
 
-        let require_lease = || -> Result<(), McpError> {
+        let require_lease = || -> Result<(), CallToolResult> {
             self.ctx
                 .leases
                 .validate(&resource, &req.lease_id)
-                .map_err(mcp_err)
+                .map_err(|e| tool_err_full(
+                    "LEASE_INVALID",
+                    e,
+                    Some("先调用 combridge_ble_connect 获取该地址的 lease_id"),
+                    false,
+                ))
         };
 
         let mut resp = BleGattResponse {
@@ -1125,7 +1200,7 @@ subscribe（需 lease_id）/ unsubscribe（需 lease_id）/ notifications（游�
             }
             "discover_characteristics" => {
                 if req.service_uuid.trim().is_empty() {
-                    return Err(mcp_err("discover_characteristics 需要 service_uuid"));
+                    return Err(tool_err("INVALID_ARGUMENT", "discover_characteristics 需要 service_uuid"));
                 }
                 let chars = self
                     .ctx
@@ -1149,7 +1224,7 @@ subscribe（需 lease_id）/ unsubscribe（需 lease_id）/ notifications（游�
                 require_lease()?;
                 let payload = decode_bytes(&req.data, &req.encoding)?;
                 if payload.is_empty() {
-                    return Err(mcp_err("待写入数据为空"));
+                    return Err(tool_err("INVALID_ARGUMENT", "待写入数据为空"));
                 }
                 if req.without_response {
                     self.ctx
@@ -1258,6 +1333,29 @@ combridge_serial_expect 等待响应（或 combridge_serial_read 游标读取）
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 工具错误必须是 `isError: true` 的结果而非协议错误，
+    /// 否则客户端会渲染成 "internal error"，模型读不到错误内容。
+    #[test]
+    fn test_tool_err_is_error_result() {
+        let e = tool_err("PORT_BUSY", "COM3 被 claude-code 持有");
+        assert_eq!(e.is_error, Some(true), "工具错误必须标记 isError");
+        let raw = serde_json::to_string(&e.content).unwrap();
+        assert!(raw.contains("PORT_BUSY"), "错误码应出现在内容中: {raw}");
+        assert!(raw.contains("claude-code"), "应带占用者信息: {raw}");
+    }
+
+    /// 错误结构须与文档 §6.6 一致：code / message / hint / retryable 四字段。
+    #[test]
+    fn test_tool_err_full_shape() {
+        let e = tool_err_full("PORT_BUSY", "占用中", Some("用 force=true 重试"), true);
+        assert_eq!(e.is_error, Some(true));
+        let raw = serde_json::to_string(&e.content).unwrap();
+        for k in ["code", "message", "hint", "retryable"] {
+            assert!(raw.contains(k), "缺字段 {k}: {raw}");
+        }
+        assert!(raw.contains("force=true"), "hint 应进入内容: {raw}");
+    }
 
     /// 工具名与 schema 由宏生成，此项可防止改名/漏注册。
     #[test]

@@ -611,6 +611,25 @@ P2 实现要点：
 - 租约粒度：写/订阅/取消订阅/改 MTU 需要租约（会改设备状态）；discover/read/notifications/rssi 免租约。
 - 二进制建议：GATT 读写用 `encoding=hex`，text 模式为 UTF-8 lossy，仅适合 ASCII 载荷。
 
+P1/P2 真机冒烟结果（2026-11-04，`npm run tauri dev` + `127.0.0.1:47821`）：
+
+| 验证项 | 结果 |
+|---|---|
+| `initialize` 握手 / `mcp-session-id` | ✅ 返回 serverInfo + instructions，SSE 流正常 |
+| `tools/list` | ✅ 11 个工具，schema 与必填项正确 |
+| 无 / 伪造 Bearer | ✅ 401 |
+| 监听范围 | ✅ 仅 loopback |
+| `serial_open` → 租约 → `write` → `close` | ✅ COM1 真实打开，`bytes_written=4` |
+| 跨客户端抢占 | ✅ 第二客户端 `PORT_BUSY`；`force=true` 抢占成功；原持有者 `write`/`close` 均被拒 |
+| `serial_expect` 无应答 | ✅ 1.2s 超时降级返回 `matched=false`，不阻塞、不报错 |
+| 重复 `close` | ✅ `LEASE_INVALID`（租约已释放） |
+
+**错误语义（重要，冒烟中发现并修正）**：初版把业务错误抛成 JSON-RPC 协议错误（`-32603`）。
+rmcp 文档明确：协议错误在客户端被渲染为不透明提示（如 "Tool result missing due to internal error"），
+**模型读不到 message**，等于错误信息全丢。现已统一改为 `isError: true` 的工具结果，按 §6.6 输出
+`{code, message, hint, retryable}`。已落地错误码：`PORT_BUSY` / `BLE_BUSY` / `LEASE_INVALID` /
+`PORT_NOT_OWNED` / `SERIAL_ERROR` / `INVALID_ARGUMENT` / `ERROR`。
+
 ### 9.1 阶段划分
 
 | 阶段 | 内容 | 人力 | 交付物 | 验收 |

@@ -131,7 +131,11 @@ export const useWaveformStore = create<WaveformStore>((set, get) => ({
 
   readData: async (bufferId: string) => {
     try {
-      const rows = get().displayRows;
+      // 兜底：偏好尚未加载或持久化配置缺失字段时，displayRows 可能为 undefined，
+      // Tauri 会丢弃 undefined 参数导致后端 "missing required key rows" 报错
+      const rows = Number.isFinite(get().displayRows) && get().displayRows > 0
+        ? get().displayRows
+        : DEFAULT_PREFERENCES.displayRows;
       const data = await waveformApi.readData(bufferId, rows);
       set({ data });
     } catch (err) {
@@ -195,9 +199,13 @@ export const useWaveformStore = create<WaveformStore>((set, get) => ({
       const prefs = await preferencesApi.get();
       if (prefs.waveform) {
         const waveformPrefs: WaveformPreferencesState = {
-          displayRows: prefs.waveform.display_rows,
-          refreshInterval: prefs.waveform.refresh_interval,
-          sidebarCollapsed: prefs.waveform.sidebar_collapsed,
+          displayRows: Number.isFinite(prefs.waveform.display_rows) && prefs.waveform.display_rows > 0
+            ? prefs.waveform.display_rows
+            : DEFAULT_PREFERENCES.displayRows,
+          refreshInterval: Number.isFinite(prefs.waveform.refresh_interval) && prefs.waveform.refresh_interval > 0
+            ? prefs.waveform.refresh_interval
+            : DEFAULT_PREFERENCES.refreshInterval,
+          sidebarCollapsed: prefs.waveform.sidebar_collapsed ?? DEFAULT_PREFERENCES.sidebarCollapsed,
         };
         set({
           preferences: waveformPrefs,

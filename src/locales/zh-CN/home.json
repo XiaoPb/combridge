@@ -35,9 +35,11 @@
       "name": "GH3220",
       "description": "GH3220 UProtocol 设备信息、控制与数据采集",
       "tabs": {
-        "connect": "连接",
-        "control": "控制",
+        "config": "配置",
+        "monitor": "监控",
+        "version": "版本",
         "capture": "采集",
+        "control": "控制",
         "events": "事件"
       }
     },

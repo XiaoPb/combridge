@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useGh3220Store } from '../../stores/gh3220Store';
 import { useWaveformStore } from '../../stores/waveformStore';
+import { usePageTabsStore } from '../../stores/pageTabsStore';
 import { parseFuncMask } from '../../types/gh3220';
 import type { Gh3220Record } from '../../types/gh3220';
 import { formatErrorMessage } from '../../utils/errorMessage';
@@ -26,12 +27,12 @@ const CaptureTab: React.FC = () => {
   const { t } = useTranslation('gh3220');
   const navigate = useNavigate();
   const { refreshBuffers, setCurrentBuffer, readData } = useWaveformStore();
+  const { setWaveformActiveTab } = usePageTabsStore();
   const {
     status,
     capture,
     stats,
     records,
-    preferences,
     loading,
     startCapture,
     stopCapture,
@@ -39,34 +40,18 @@ const CaptureTab: React.FC = () => {
     refreshStats,
     clearStats,
     clearRecords,
-    loadPreferences,
-    savePreferences,
   } = useGh3220Store();
 
   const [autoStart, setAutoStart] = useState(true);
-  const [autoStop, setAutoStop] = useState(false);
   const [mode, setMode] = useState(0);
   const [slotEn, setSlotEn] = useState(0);
   const [funcMaskText, setFuncMaskText] = useState('hr');
   const [channelsOverride, setChannelsOverride] = useState<number | null>(null);
-  const [csvEnabled, setCsvEnabled] = useState(true);
-  const [outputDir, setOutputDir] = useState('');
-  const [idleCloseSecs, setIdleCloseSecs] = useState(10);
 
   useEffect(() => {
-    void loadPreferences();
     void refreshCapture();
     void refreshStats();
-  }, [loadPreferences, refreshCapture, refreshStats]);
-
-  useEffect(() => {
-    if (!preferences) return;
-    setCsvEnabled(preferences.csv.enabled);
-    setOutputDir(preferences.csv.outputDir);
-    setIdleCloseSecs(preferences.csv.idleCloseSecs);
-    setChannelsOverride(preferences.capture.channelsOverride);
-    setAutoStop(preferences.capture.autoStop);
-  }, [preferences]);
+  }, [refreshCapture, refreshStats]);
 
   const handleStart = async () => {
     let mask = 0;
@@ -83,12 +68,10 @@ const CaptureTab: React.FC = () => {
     try {
       await startCapture({
         autoStart,
-        autoStop,
         mode,
         slotEn,
         funcMask: mask,
         channelsOverride,
-        csvEnabled,
       });
       message.success(t('capture.started'));
     } catch (error) {
@@ -99,27 +82,6 @@ const CaptureTab: React.FC = () => {
   const handleStop = async () => {
     await stopCapture();
     message.info(t('capture.stopped'));
-  };
-
-  const handleSavePreferences = async () => {
-    if (!preferences) return;
-    try {
-      await savePreferences({
-        csv: {
-          enabled: csvEnabled,
-          outputDir,
-          idleCloseSecs,
-        },
-        capture: {
-          channelsOverride,
-          autoStop,
-        },
-        debugTcp: preferences.debugTcp,
-      });
-      message.success(t('capture.preferencesSaved'));
-    } catch (error) {
-      message.error(formatErrorMessage(error, t('capture.preferencesSaveFailed')));
-    }
   };
 
   const columns: ColumnsType<Gh3220Record> = [
@@ -157,6 +119,8 @@ const CaptureTab: React.FC = () => {
       await refreshBuffers();
       setCurrentBuffer(bufferId);
       await readData(bufferId);
+      // 确保落在实时波形页签（缓冲在 realtime 视图中展示）
+      setWaveformActiveTab('realtime');
       navigate('/waveform');
     } catch (error) {
       message.error(formatErrorMessage(error, t('capture.openWaveformFailed')));
@@ -172,10 +136,6 @@ const CaptureTab: React.FC = () => {
           <Space>
             <Typography.Text>{t('capture.autoStart')}</Typography.Text>
             <Switch checked={autoStart} onChange={setAutoStart} />
-          </Space>
-          <Space>
-            <Typography.Text>{t('capture.autoStop')}</Typography.Text>
-            <Switch checked={autoStop} onChange={setAutoStop} />
           </Space>
           <Space>
             <Typography.Text>{t('control.mode')}</Typography.Text>
@@ -248,35 +208,6 @@ const CaptureTab: React.FC = () => {
             )}
           </Descriptions.Item>
         </Descriptions>
-      </Card>
-
-      <Card title={t('capture.csvTitle')}>
-        <Space wrap size="middle">
-          <Space>
-            <Typography.Text>{t('capture.csvEnabled')}</Typography.Text>
-            <Switch checked={csvEnabled} onChange={setCsvEnabled} />
-          </Space>
-          <Space>
-            <Typography.Text>{t('capture.outputDir')}</Typography.Text>
-            <Input
-              style={{ width: 320 }}
-              value={outputDir}
-              onChange={(e) => setOutputDir(e.target.value)}
-            />
-          </Space>
-          <Space>
-            <Typography.Text>{t('capture.idleClose')}</Typography.Text>
-            <InputNumber
-              min={0}
-              max={3600}
-              value={idleCloseSecs}
-              onChange={(v) => setIdleCloseSecs(v ?? 0)}
-            />
-          </Space>
-          <Button onClick={handleSavePreferences} disabled={!preferences}>
-            {t('capture.savePreferences')}
-          </Button>
-        </Space>
       </Card>
 
       <Card

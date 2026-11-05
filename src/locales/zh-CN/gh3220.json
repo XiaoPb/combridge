@@ -1,8 +1,10 @@
 {
   "tabs": {
-    "connect": "连接",
-    "control": "控制",
+    "config": "配置",
+    "monitor": "监控",
+    "version": "版本",
     "capture": "采集",
+    "control": "控制",
     "events": "事件",
     "debug": "调试"
   },
@@ -50,6 +52,57 @@
     "linkOk": "正常",
     "linkDown": "断开",
     "empty": "连接设备后点击“刷新信息”读取版本"
+  },
+  "config": {
+    "preferenceTitle": "采集与 CSV 偏好"
+  },
+  "version": {
+    "title": "版本信息",
+    "fwDesc": "固件版本（GET_VER 0x01）",
+    "protocolDesc": "协议版本（GET_VER 0x0E）",
+    "chipDesc": "芯片版本（GET_VER 0x11）",
+    "driverDesc": "驱动版本（GET_VER 0x10）",
+    "refreshAll": "全部刷新",
+    "refresh": "刷新",
+    "refreshSuccess": "版本读取完成",
+    "typeName": "类型",
+    "typeValue": "取值",
+    "description": "说明",
+    "version": "版本",
+    "action": "操作",
+    "noDevice": "请先连接设备",
+    "readFailed": "版本读取失败"
+  },
+  "monitor": {
+    "statusTitle": "运行状态",
+    "connState": "连接状态",
+    "linkKind": "链路",
+    "address": "设备地址",
+    "captureState": "采集状态",
+    "recordCount": "记录总数",
+    "qualityTitle": "解码质量",
+    "dataTitle": "实时波形",
+    "displayDurationTooltip": "波形窗口时长",
+    "sampleRateTooltip": "采样率（用于时间轴换算）",
+    "displayDuration": "显示时长",
+    "sampleRate": "采样率",
+    "dataMode": "数据类型",
+    "rawMode": "RAW",
+    "agcMode": "AGC",
+    "selectFunction": "选择功能",
+    "clearData": "清空数据",
+    "noData": "暂无数据，开始采集后显示波形",
+    "rawGroup": "RAW 通道",
+    "agcGroup": "AGC 通道",
+    "accGroup": "加速度",
+    "idle": "空闲",
+    "active": "采集中",
+    "state": {
+      "disconnected": "未连接",
+      "connecting": "连接中",
+      "ready": "已就绪",
+      "capturing": "采集中"
+    }
   },
   "control": {
     "samplingTitle": "采样控制",

@@ -35,9 +35,11 @@ export const DEFAULT_MENU_VISIBILITY: MenuVisibilityPreferences = {
     gh3220: {
       visible: true,
       tabs: {
-        connect: true,
-        control: true,
+        config: true,
+        monitor: true,
+        version: true,
         capture: true,
+        control: true,
         events: true,
       },
     },
@@ -58,7 +60,7 @@ export const DEFAULT_MENU_VISIBILITY: MenuVisibilityPreferences = {
     waveform: {
       visible: true,
       tabs: {
-        realtime: false,
+        realtime: true,
         csvLoader: true,
       },
     },

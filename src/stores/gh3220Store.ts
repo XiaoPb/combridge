@@ -23,6 +23,23 @@ import type {
 const MAX_RECORDS = 300;
 const MAX_EVENTS = 200;
 
+/** 波形默认窗口：10s × 25Hz = 250 行 */
+const DEFAULT_SAMPLE_RATE = 25;
+const DEFAULT_DURATION_SECONDS = 10;
+
+/** 单个功能的波形缓冲（行式，与 MultiLineChart 的 rows 对齐） */
+export interface Gh3220FrameBuffer {
+  functionId: number;
+  /** 每行的通道数；通道宽度变化时缓冲整体重置 */
+  channelCount: number;
+  rawRows: number[][];
+  agcRows: number[][];
+  accRows: number[][];
+  lastTsMs: number;
+}
+
+export type Gh3220DataMode = 'raw' | 'agc';
+
 const EMPTY_STATUS: Gh3220Status = {
   state: 'disconnected',
   link: null,
@@ -78,6 +95,14 @@ interface Gh3220Store {
   loading: boolean;
   error: string | null;
 
+  // 波形监控（对齐 gh3036Store 的 framesData 模式）
+  frames: Map<number, Gh3220FrameBuffer>;
+  selectedFunctionId: number | null;
+  dataMode: Gh3220DataMode;
+  sampleRate: number;
+  displayDurationSeconds: number;
+  chartLegendSelected: Record<string, boolean>;
+
   connect: (config: Gh3220LinkConfig) => Promise<void>;
   disconnect: () => Promise<void>;
   refreshStatus: () => Promise<void>;
@@ -94,6 +119,63 @@ interface Gh3220Store {
   subscribeEvents: () => Promise<void>;
   unsubscribeEvents: () => void;
   setError: (message: string | null) => void;
+
+  setSelectedFunctionId: (id: number | null) => void;
+  setDataMode: (mode: Gh3220DataMode) => void;
+  setSampleRate: (rate: number) => void;
+  setDisplayDurationSeconds: (seconds: number) => void;
+  setChartLegendSelected: (selected: Record<string, boolean>) => void;
+  clearWaveformData: () => void;
+}
+
+/** 把一批记录追加进环形缓冲（一次事件一批，避免逐条 set） */
+function appendRecords(
+  frames: Map<number, Gh3220FrameBuffer>,
+  records: Gh3220Record[],
+  maxRows: number
+): Map<number, Gh3220FrameBuffer> {
+  if (records.length === 0) return frames;
+  const next = new Map(frames);
+
+  for (const record of records) {
+    const width = record.raw.length;
+    if (width === 0) continue;
+    let buffer = next.get(record.functionId);
+
+    // 通道宽度变化（或首帧）：重建该功能缓冲
+    if (!buffer || buffer.channelCount !== width) {
+      buffer = {
+        functionId: record.functionId,
+        channelCount: width,
+        rawRows: [],
+        agcRows: [],
+        accRows: [],
+        lastTsMs: 0,
+      };
+      next.set(record.functionId, buffer);
+    }
+
+    buffer.rawRows.push([...record.raw]);
+    if (record.agc && record.agc.length === width) {
+      buffer.agcRows.push([...record.agc]);
+    }
+    if (record.gs) {
+      buffer.accRows.push([record.gs[0], record.gs[1], record.gs[2]]);
+    }
+    buffer.lastTsMs = record.tsMs;
+
+    if (buffer.rawRows.length > maxRows) {
+      buffer.rawRows.splice(0, buffer.rawRows.length - maxRows);
+    }
+    if (buffer.agcRows.length > maxRows) {
+      buffer.agcRows.splice(0, buffer.agcRows.length - maxRows);
+    }
+    if (buffer.accRows.length > maxRows) {
+      buffer.accRows.splice(0, buffer.accRows.length - maxRows);
+    }
+  }
+
+  return next;
 }
 
 export const useGh3220Store = create<Gh3220Store>((set) => ({
@@ -106,6 +188,13 @@ export const useGh3220Store = create<Gh3220Store>((set) => ({
   preferences: null,
   loading: false,
   error: null,
+
+  frames: new Map(),
+  selectedFunctionId: null,
+  dataMode: 'raw' as Gh3220DataMode,
+  sampleRate: DEFAULT_SAMPLE_RATE,
+  displayDurationSeconds: DEFAULT_DURATION_SECONDS,
+  chartLegendSelected: {},
 
   connect: async (config) => {
     set({ loading: true, error: null });
@@ -227,6 +316,13 @@ export const useGh3220Store = create<Gh3220Store>((set) => ({
   clearEvents: () => set({ events: [] }),
   setError: (error) => set({ error }),
 
+  setSelectedFunctionId: (id) => set({ selectedFunctionId: id }),
+  setDataMode: (mode) => set({ dataMode: mode }),
+  setSampleRate: (rate) => set({ sampleRate: rate }),
+  setDisplayDurationSeconds: (seconds) => set({ displayDurationSeconds: seconds }),
+  setChartLegendSelected: (selected) => set({ chartLegendSelected: selected }),
+  clearWaveformData: () => set({ frames: new Map() }),
+
   subscribeEvents: async () => {
     if (unlisteners.length > 0) return;
 
@@ -235,9 +331,13 @@ export const useGh3220Store = create<Gh3220Store>((set) => ({
         set({ status: payload.status });
       }),
       onGh3220Data((payload) => {
-        set((state) => ({
-          records: [...state.records, ...payload.records].slice(-MAX_RECORDS),
-        }));
+        set((state) => {
+          const maxRows = Math.max(10, state.displayDurationSeconds * state.sampleRate);
+          return {
+            records: [...state.records, ...payload.records].slice(-MAX_RECORDS),
+            frames: appendRecords(state.frames, payload.records, maxRows),
+          };
+        });
       }),
       onGh3220Event((payload) => {
         set((state) => ({

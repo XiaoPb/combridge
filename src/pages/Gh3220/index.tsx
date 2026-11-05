@@ -1,74 +1,98 @@
-import React, { useEffect } from 'react';
-import { Tabs, Tag } from 'antd';
+import React, { useEffect, useRef } from 'react';
+import { Alert } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useGh3220Store } from '../../stores/gh3220Store';
 import { usePageTabsStore } from '../../stores/pageTabsStore';
-import ConnectTab from './ConnectTab';
-import ControlTab from './ControlTab';
+import ConfigTab from './ConfigTab';
+import MonitorTab from './MonitorTab';
+import VersionTab from './VersionTab';
 import CaptureTab from './CaptureTab';
+import ControlTab from './ControlTab';
 import EventTab from './EventTab';
 import DebugTab from './DebugTab';
 
 const Gh3220Page: React.FC = () => {
   const { t } = useTranslation('gh3220');
-  const { gh3220ActiveTab, setGh3220ActiveTab } = usePageTabsStore();
-  const { status, subscribeEvents, unsubscribeEvents, refreshStatus, loadPreferences } =
-    useGh3220Store();
+  const { gh3220ActiveTab } = usePageTabsStore();
+  const {
+    status,
+    error,
+    refreshStatus,
+    loadPreferences,
+    subscribeEvents,
+    unsubscribeEvents,
+  } = useGh3220Store();
+  const subscribedRef = useRef(false);
 
   useEffect(() => {
     void refreshStatus();
     void loadPreferences();
-    void subscribeEvents();
+
+    if (!subscribedRef.current) {
+      subscribedRef.current = true;
+      void subscribeEvents();
+    }
 
     return () => {
-      unsubscribeEvents();
+      if (subscribedRef.current) {
+        subscribedRef.current = false;
+        unsubscribeEvents();
+      }
     };
-  }, [refreshStatus, loadPreferences, subscribeEvents, unsubscribeEvents]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const items = [
-    {
-      key: 'connect',
-      label: t('tabs.connect'),
-      children: <ConnectTab />,
-    },
-    {
-      key: 'control',
-      label: t('tabs.control'),
-      children: <ControlTab />,
-    },
-    {
-      key: 'capture',
-      label: t('tabs.capture'),
-      children: <CaptureTab />,
-    },
-    {
-      key: 'events',
-      label: t('tabs.events'),
-      children: <EventTab />,
-    },
-    ...(import.meta.env.DEV
-      ? [
-          {
-            key: 'debug',
-            label: t('tabs.debug'),
-            children: <DebugTab />,
-          },
-        ]
-      : []),
-  ];
+  const renderContent = () => {
+    switch (gh3220ActiveTab) {
+      case 'config':
+        return <ConfigTab />;
+      case 'monitor':
+        return <MonitorTab />;
+      case 'version':
+        return <VersionTab />;
+      case 'capture':
+        return <CaptureTab />;
+      case 'control':
+        return <ControlTab />;
+      case 'events':
+        return <EventTab />;
+      case 'debug':
+        return import.meta.env.DEV ? <DebugTab /> : null;
+      default:
+        return <MonitorTab />;
+    }
+  };
+
+  // 未连接时各页签（除配置/调试）给出可感知的提示条，样式与 GH3036 的错误条一致
+  const showNotConnected =
+    status.state === 'disconnected' &&
+    gh3220ActiveTab !== 'config' &&
+    gh3220ActiveTab !== 'debug';
 
   return (
-    <div style={{ padding: 16, height: '100%', overflow: 'auto' }}>
-      <Tabs
-        activeKey={gh3220ActiveTab}
-        onChange={(key) => setGh3220ActiveTab(key as typeof gh3220ActiveTab)}
-        items={items}
-        tabBarExtraContent={
-          <Tag color={status.state === 'disconnected' ? 'default' : 'success'}>
-            {t(`state.${status.state}`)}
-          </Tag>
-        }
-      />
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {error && (
+        <Alert
+          message={t('common.error', '错误')}
+          description={error}
+          type="error"
+          closable
+          style={{ marginBottom: 8, flexShrink: 0 }}
+          afterClose={() => useGh3220Store.getState().setError(null)}
+        />
+      )}
+      {showNotConnected && (
+        <Alert
+          message={t('capture.notConnected')}
+          type="warning"
+          showIcon
+          style={{ marginBottom: 8, flexShrink: 0 }}
+        />
+      )}
+
+      <div style={{ flex: 1, overflow: 'auto', padding: '8px 8px 0 8px' }}>
+        {renderContent()}
+      </div>
     </div>
   );
 };

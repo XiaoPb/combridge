@@ -131,7 +131,9 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
       case '/gh3220': {
         const tab = firstVisibleTab('gh3220');
         if (tab) {
-          setGh3220ActiveTab(tab as 'connect' | 'control' | 'capture' | 'events');
+          setGh3220ActiveTab(
+            tab as 'config' | 'monitor' | 'version' | 'capture' | 'control' | 'events'
+          );
         }
         break;
       }

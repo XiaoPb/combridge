@@ -1,8 +1,10 @@
 {
   "tabs": {
-    "connect": "Connection",
-    "control": "Control",
+    "config": "Config",
+    "monitor": "Monitor",
+    "version": "Version",
     "capture": "Capture",
+    "control": "Control",
     "events": "Events",
     "debug": "Debug"
   },
@@ -50,6 +52,57 @@
     "linkOk": "OK",
     "linkDown": "Down",
     "empty": "Connect the device, then click \"Refresh info\"."
+  },
+  "config": {
+    "preferenceTitle": "Capture & CSV Preferences"
+  },
+  "version": {
+    "title": "Version Info",
+    "fwDesc": "Firmware (GET_VER 0x01)",
+    "protocolDesc": "Protocol (GET_VER 0x0E)",
+    "chipDesc": "Chip (GET_VER 0x11)",
+    "driverDesc": "Driver (GET_VER 0x10)",
+    "refreshAll": "Refresh all",
+    "refresh": "Refresh",
+    "refreshSuccess": "Versions loaded",
+    "typeName": "Type",
+    "typeValue": "Value",
+    "description": "Description",
+    "version": "Version",
+    "action": "Action",
+    "noDevice": "Connect the device first",
+    "readFailed": "Failed to read version"
+  },
+  "monitor": {
+    "statusTitle": "Run Status",
+    "connState": "Connection",
+    "linkKind": "Link",
+    "address": "Address",
+    "captureState": "Capture",
+    "recordCount": "Total records",
+    "qualityTitle": "Decode Quality",
+    "dataTitle": "Realtime Waveform",
+    "displayDurationTooltip": "Waveform window duration",
+    "sampleRateTooltip": "Sample rate (for time axis)",
+    "displayDuration": "Duration",
+    "sampleRate": "Sample rate",
+    "dataMode": "Data type",
+    "rawMode": "RAW",
+    "agcMode": "AGC",
+    "selectFunction": "Select function",
+    "clearData": "Clear data",
+    "noData": "No data yet, start capture to see waveform",
+    "rawGroup": "RAW channels",
+    "agcGroup": "AGC channels",
+    "accGroup": "Accelerometer",
+    "idle": "Idle",
+    "active": "Capturing",
+    "state": {
+      "disconnected": "Disconnected",
+      "connecting": "Connecting",
+      "ready": "Ready",
+      "capturing": "Capturing"
+    }
   },
   "control": {
     "samplingTitle": "Sampling Control",

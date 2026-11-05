@@ -231,6 +231,40 @@ pub fn run() {
             info!("初始化 HR 金标监听器");
             gh3036_manager.init_hr_ref_monitor();
 
+            // GH3036 启动期初始化（带 CSV 偏好）。
+            //
+            // 此前 GH3036 只在页面挂到 /gh3036 或 /Protocol 时才初始化，
+            // 于是任何"不开页面"的入口（MCP、调试脚本）直接调 RPC 都会撞上
+            // "RPC 核心未初始化"；而且能绕开 gh3036_init 的入口还会丢掉
+            // CSV 偏好（默认 enabled=false，数据静默不落盘）。这里统一在
+            // 启动期完成一次，去掉"先开页面"的隐式顺序依赖。
+            {
+                let gh_for_bootstrap = Arc::clone(&gh3036_manager);
+                let persistence_for_bootstrap =
+                    app.state::<state::StatePersistenceRef>().inner().clone();
+                tauri::async_runtime::spawn(async move {
+                    let csv_config = {
+                        let persistence = persistence_for_bootstrap.read().await;
+                        match persistence.load_preferences().await {
+                            Ok(prefs) => gh3036::CsvConfig {
+                                enabled: prefs.gh3036_csv.enabled,
+                                output_dir: prefs.gh3036_csv.output_dir,
+                            },
+                            Err(e) => {
+                                warn!("[GH3036] 读取偏好失败，CSV 退回默认配置: {}", e);
+                                gh3036::CsvConfig::default()
+                            }
+                        }
+                    };
+                    match gh_for_bootstrap.bootstrap(csv_config) {
+                        Ok(()) => info!("[GH3036] 启动期初始化完成"),
+                        Err(e) => {
+                            error!("[GH3036] 启动期初始化失败（首次使用时会重试）: {}", e)
+                        }
+                    }
+                });
+            }
+
             info!("PluginManager 订阅 EventBus 事件");
             plugin_manager_clone.subscribe_to_events();
 

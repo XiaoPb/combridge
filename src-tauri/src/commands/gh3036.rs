@@ -30,12 +30,8 @@ pub async fn gh3036_init(
         enabled: prefs.gh3036_csv.enabled,
         output_dir: prefs.gh3036_csv.output_dir,
     };
-    manager.set_csv_config(csv_config).map_err(|e| {
-        ComBridgeError::protocol(format!("设置CSV配置失败: {}", e)).to_error_response()
-    })?;
-
     manager
-        .initialize()
+        .bootstrap(csv_config)
         .map_err(|e| ComBridgeError::protocol(e).to_error_response())
 }
 

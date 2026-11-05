@@ -583,6 +583,10 @@ pub struct Gh3036Manager {
     device_manager: Arc<DeviceManager>,
     event_bus: Arc<EventBus>,
     initialized: Mutex<bool>,
+    /// 串行化并发初始化。用独立锁而不是复用 `initialized`：
+    /// 初始化过程包含 `block_in_place` 与线程创建，持 `initialized` 锁会让
+    /// 期间任何 `is_initialized()` 调用一起阻塞。
+    init_lock: Mutex<()>,
     running: Arc<std::sync::atomic::AtomicBool>,
     thread_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
     executor: Mutex<Option<Arc<tokio::sync::RwLock<CommandExecutor>>>>,
@@ -601,6 +605,7 @@ impl Gh3036Manager {
             device_manager,
             event_bus,
             initialized: Mutex::new(false),
+            init_lock: Mutex::new(()),
             running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             thread_handle: Mutex::new(None),
             executor: Mutex::new(None),
@@ -616,7 +621,41 @@ impl Gh3036Manager {
         true
     }
 
+    /// 绑定 CSV 配置并初始化（幂等）。
+    ///
+    /// 启动期与各命令入口共用：CSV 偏好属于会话配置、运行期可变，每次都写入；
+    /// 初始化本身只做一次（`initialize` 内部有幂等守卫）。
+    ///
+    /// 为什么需要它：`initialize()` 只装 RPC 核心与数据回调，不碰 CSV 配置，
+    /// 而 `CsvConfig::default()` 是 `enabled = false`。任何绕过 `gh3036_init`
+    /// 命令的入口（MCP、脚本）直接调 `initialize()` 都会得到"CSV 不落盘"的
+    /// 静默后果。
+    pub fn bootstrap(&self, csv_config: CsvConfig) -> Result<(), String> {
+        self.set_csv_config(csv_config)?;
+        self.initialize()
+    }
+
+    /// 初始化协议管理器。**幂等**：重复调用直接返回 Ok。
+    ///
+    /// 必须幂等的原因：`initialize_rpc()` 会重建 executor 并重新注册 G 协议
+    /// 处理器，`start_processing_thread()` 会 `setup_rpc_channel()` 换掉通道并
+    /// 再起一个处理线程 —— 两个线程抢同一个 channel 会造成帧丢失与重复处理。
     pub fn initialize(&self) -> Result<(), String> {
+        if self.is_initialized() {
+            debug!("GH3036 已初始化，跳过重复初始化");
+            return Ok(());
+        }
+
+        // 串行化并发初始化：全局 setup 的自动 bootstrap 与页面/MCP 的首次调用
+        // 可能同时到达。
+        let _guard = self.init_lock.lock();
+
+        // 双检：等锁期间可能已被另一路径完成。
+        if self.is_initialized() {
+            debug!("GH3036 初始化已由其他路径完成");
+            return Ok(());
+        }
+
         info!("GH3036 协议管理器初始化 (纯 Rust 模式 + RPC 集成)");
 
         CALLBACK_CONTEXT.set_device_manager(Arc::clone(&self.device_manager));
@@ -630,12 +669,12 @@ impl Gh3036Manager {
 
         self.subscribe_data_events();
 
+        self.start_processing_thread()?;
+
         {
             let mut initialized = self.initialized.lock();
             *initialized = true;
         }
-
-        self.start_processing_thread()?;
 
         info!("GH3036 协议管理器初始化成功");
         Ok(())

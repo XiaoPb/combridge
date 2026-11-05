@@ -31,7 +31,7 @@ use super::ratelimit::Reject;
 use crate::device::serial::serial_config::{
     BaudRate, DataBits, FlowControl, Parity, SerialPortConfig, StopBits,
 };
-use crate::gh3036::{ChannelConfig, ChannelType, FactoryTestStatus, FactoryTestStep};
+use crate::gh3036::{ChannelConfig, ChannelType, CsvConfig, FactoryTestStatus, FactoryTestStep};
 use crate::ota::{
     OtaDeviceInfo, OtaPackageInfo, OtaProtocolDescriptor, OtaStage, OtaStartOptions, OtaState,
     OtaStatusDto,
@@ -71,6 +71,64 @@ pub struct AboutResponse {
     pub log_file: Option<String>,
     /// `logs`：日志尾部内容（每项一行）
     pub log_lines: Vec<String>,
+}
+
+// ---------------------------------------------------------------------------
+// combridge_tools_guide
+// ---------------------------------------------------------------------------
+
+/// `combridge_tools_guide` 入参。
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ToolsGuideRequest {
+    /// 只查单个工具（可省略 `combridge_` 前缀，大小写不敏感）
+    #[serde(default)]
+    pub tool: Option<String>,
+    /// 按域过滤：core | serial | ble | gh3036 | waveform | protocol | ota
+    #[serde(default)]
+    pub domain: Option<String>,
+    /// 是否附带全局约定与错误码表，默认 true（首次调用建议保留）
+    #[serde(default)]
+    pub include_conventions: Option<bool>,
+}
+
+/// 单个工具的使用说明。
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct ToolGuideView {
+    pub name: String,
+    /// 所属域
+    pub domain: String,
+    pub summary: String,
+    /// 调用前必须满足的条件
+    pub prerequisites: Vec<String>,
+    /// 注意事项与已知坑
+    pub notes: Vec<String>,
+    /// 最小可用调用示例（JSON 入参）
+    pub example: String,
+    /// read | write | destructive | critical
+    pub risk: String,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct ErrorCodeView {
+    pub code: String,
+    pub meaning: String,
+}
+
+/// 与具体工具无关、但每次调用都要遵守的约定。
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct ConventionsView {
+    pub rules: Vec<String>,
+    pub error_codes: Vec<ErrorCodeView>,
+}
+
+/// `combridge_tools_guide` 返回体。
+#[derive(Debug, Default, Serialize, schemars::JsonSchema)]
+pub struct ToolsGuideResponse {
+    /// 命中的工具数
+    pub total: usize,
+    pub tools: Vec<ToolGuideView>,
+    /// 全局约定与错误码；`include_conventions=false` 时为 None
+    pub conventions: Option<ConventionsView>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1153,6 +1211,7 @@ action=logs 读取日志尾部（默认 100 行），工具返回错误且看不
             started_at: self.ctx.started_at,
             connected_devices,
             tool_domains: vec![
+                "core".to_string(),
                 "serial".to_string(),
                 "ble".to_string(),
                 "devices".to_string(),
@@ -1164,6 +1223,90 @@ action=logs 读取日志尾部（默认 100 行），工具返回错误且看不
             planned_tool_domains: Vec::new(),
             log_file: None,
             log_lines: Vec::new(),
+        }))
+    }
+
+    #[tool(
+        name = "combridge_tools_guide",
+        description = "查询工具的使用方式、前置条件、注意事项与错误码。\
+**动手前先查一次**：不传参数返回全部工具，传 tool 只返回该工具（省 token）。\
+返回的 prerequisites 是【缺一项就会失败】的硬条件，notes 是踩过的坑（默认值、副作用、顺序依赖），\
+conventions 是全局约定（租约/档位/游标/编码）与错误码含义。\
+工具返回错误而 suggestion 不够具体时，先查本工具再查 combridge_about(action=logs)。",
+        annotations(read_only_hint = true)
+    )]
+    async fn tools_guide(
+        &self,
+        Parameters(req): Parameters<ToolsGuideRequest>,
+    ) -> ToolR<ToolsGuideResponse> {
+        use super::guide;
+
+        let selected: Vec<&'static guide::ToolGuide> = if let Some(name) = req
+            .tool
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+        {
+            vec![guide::find(name).ok_or_else(|| {
+                tool_err_full(
+                    "INVALID_ARGUMENT",
+                    format!("未知工具: {name}"),
+                    Some("省略 tool 参数可列出全部工具名"),
+                    false,
+                )
+            })?]
+        } else if let Some(domain) = req
+            .domain
+            .as_deref()
+            .map(str::trim)
+            .filter(|domain| !domain.is_empty())
+        {
+            let hits = guide::by_domain(domain);
+            if hits.is_empty() {
+                return Err(tool_err_full(
+                    "INVALID_ARGUMENT",
+                    format!("未知域: {domain}"),
+                    Some("可用域：core | serial | ble | gh3036 | waveform | protocol | ota"),
+                    false,
+                ));
+            }
+            hits
+        } else {
+            guide::TOOL_GUIDES.iter().collect()
+        };
+
+        let tools: Vec<ToolGuideView> = selected
+            .iter()
+            .map(|g| ToolGuideView {
+                name: g.name.to_string(),
+                domain: g.domain.to_string(),
+                summary: g.summary.to_string(),
+                prerequisites: g.prerequisites.iter().map(|s| s.to_string()).collect(),
+                notes: g.notes.iter().map(|s| s.to_string()).collect(),
+                example: g.example.to_string(),
+                risk: g.risk.to_string(),
+            })
+            .collect();
+
+        let conventions = if req.include_conventions.unwrap_or(true) {
+            Some(ConventionsView {
+                rules: guide::CONVENTIONS.iter().map(|s| s.to_string()).collect(),
+                error_codes: guide::ERROR_CODES
+                    .iter()
+                    .map(|(code, meaning)| ErrorCodeView {
+                        code: code.to_string(),
+                        meaning: meaning.to_string(),
+                    })
+                    .collect(),
+            })
+        } else {
+            None
+        };
+
+        Ok(Json(ToolsGuideResponse {
+            total: tools.len(),
+            tools,
+            conventions,
         }))
     }
 
@@ -2076,7 +2219,7 @@ action=rpc 执行一条 RPC（command_key 取自 catalog，params 按命令定�
                     req.ttl_s,
                 )?;
                 resp.lease_id = Some(lease.lease_id);
-                self.ensure_gh3036_initialized()?;
+                self.ensure_gh3036_initialized().await?;
 
                 let channel_type = req
                     .channel_type
@@ -2201,7 +2344,7 @@ action=rpc 执行一条 RPC（command_key 取自 catalog，params 按命令定�
                     req.ttl_s,
                 )?;
                 resp.lease_id = Some(lease.lease_id);
-                self.ensure_gh3036_initialized()?;
+                self.ensure_gh3036_initialized().await?;
 
                 let key = req.command_key.clone().ok_or_else(|| {
                     tool_err_full(
@@ -2295,7 +2438,7 @@ action=threshold_get 取当前卡控配置 YAML。run/continue/stop 需要 GH303
                     req.force,
                     req.ttl_s,
                 )?;
-                self.ensure_gh3036_initialized()?;
+                self.ensure_gh3036_initialized().await?;
 
                 if let Some(dir) = req.config_dir.as_ref() {
                     self.ctx
@@ -3098,12 +3241,32 @@ impl ComBridgeMcp {
         }
     }
 
-    /// 首次使用 GH3036 时惰性初始化（`initialize` 幂等但会重复装回调，故先查状态）。
-    fn ensure_gh3036_initialized(&self) -> Result<(), CallToolResult> {
+    /// 首次使用 GH3036 时惰性初始化。
+    ///
+    /// 正常情况下启动期已由 `lib.rs` 的 bootstrap 完成初始化，这里只是兜底
+    /// （例如启动期读偏好失败、或服务被更早拉起）。兜底路径同样要绑上 CSV
+    /// 偏好：直接 `initialize()` 会让 `CsvConfig` 停在 `enabled=false` 的默认值，
+    /// 表现为"采了数据却没有 CSV 文件"。
+    async fn ensure_gh3036_initialized(&self) -> Result<(), CallToolResult> {
         if self.ctx.gh3036.is_initialized() {
             return Ok(());
         }
-        self.ctx.gh3036.initialize().map_err(|e| {
+
+        let csv_config = {
+            let persistence = self.ctx.persistence.read().await;
+            match persistence.load_preferences().await {
+                Ok(prefs) => CsvConfig {
+                    enabled: prefs.gh3036_csv.enabled,
+                    output_dir: prefs.gh3036_csv.output_dir,
+                },
+                Err(e) => {
+                    tracing::warn!("[MCP] 读取偏好失败，GH3036 CSV 退回默认配置: {e}");
+                    CsvConfig::default()
+                }
+            }
+        };
+
+        self.ctx.gh3036.bootstrap(csv_config).map_err(|e| {
             tool_err_full(
                 "GH3036_INIT_FAILED",
                 e,
@@ -3689,12 +3852,16 @@ impl ServerHandler for ComBridgeMcp {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_instructions(
                 "ComBridge 串口/BLE/GH3036/OTA 调试工具的 MCP 服务。\
+【先读指南】combridge_tools_guide 返回每个工具的前置条件、注意事项、调用示例与错误码含义。\
+不传参数返回全部工具，传 tool 只返回该工具。**动手前先查一次**，尤其是第一次用某个工具、\
+或工具报错而 hint 不够具体时。\
 【串口】combridge_ports 发现端口 → combridge_serial_open 打开并获取租约 → combridge_serial_write 发送 → \
 combridge_serial_expect 等待响应（或 combridge_serial_read 游标读取）→ combridge_serial_close 释放。\
 写/关操作需携带 combridge_serial_open 返回的 lease_id；端口被其他客户端占用时返回 PORT_BUSY。\
 【BLE】combridge_ble_scan 扫描 → combridge_ble_connect 连接（lease 资源 ble:<address>）→ \
 combridge_ble_gatt 发现服务/读写/订阅；combridge_ble_gatt(action=notifications) 按游标取通知数据。\
-【GH3036】combridge_gh3036_rpc(action=set_channel) 先绑通道 → action=rpc 执行命令（命令键见 action=catalog）；\
+【GH3036】协议栈在应用启动时已自动初始化（含 CSV 偏好），通常不需要 action=init；\
+combridge_gh3036_rpc(action=set_channel) 先绑通道 → action=rpc 执行命令（命令键见 action=catalog）；\
 combridge_gh3036_factory_test(action=run) 一次调用直接产出产测结论（pass/failed_item/csv_path），\
 只有超时才返回 status=running 需用 action=status 续等；停在待切换环境时用 action=continue。\
 【数据】combridge_waveform 把串口文本解析为数值行（create → configure_parser → parse → read）；\

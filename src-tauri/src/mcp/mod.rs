@@ -19,6 +19,7 @@ pub mod confirm;
 pub mod ctx;
 pub mod elicit;
 pub mod gh3036_job;
+pub mod guide;
 pub mod lease;
 pub mod logs;
 pub mod ota_confirm;

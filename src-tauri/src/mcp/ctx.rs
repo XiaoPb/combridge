@@ -15,7 +15,7 @@ use crate::gh3036::Gh3036ManagerRef;
 use crate::ota::OtaManager;
 use crate::protocol::PluginManager;
 use crate::service::EventBus;
-use crate::state::AppStateRef;
+use crate::state::{AppStateRef, StatePersistenceRef};
 
 use super::audit::AuditLogger;
 use super::ble_hub::BleHub;
@@ -39,6 +39,9 @@ pub struct McpContext {
     pub serial: SerialManagerRef,
     pub ble: BleManagerRef,
     pub app_state: AppStateRef,
+    /// 偏好持久化：GH3036 惰性初始化时要用它还原 CSV 配置，
+    /// 否则会退回 `CsvConfig::default()`（enabled=false，数据静默不落盘）。
+    pub persistence: StatePersistenceRef,
     pub event_bus: Arc<EventBus>,
     /// 设备租约（P1：串口端口）
     pub leases: Arc<LeaseManager>,
@@ -78,6 +81,7 @@ impl McpContext {
         let serial = app.state::<SerialManagerRef>().inner().clone();
         let ble = app.state::<BleManagerRef>().inner().clone();
         let app_state = app.state::<AppStateRef>().inner().clone();
+        let persistence = app.state::<StatePersistenceRef>().inner().clone();
         let event_bus = app.state::<Arc<EventBus>>().inner().clone();
         let gh3036 = app.state::<Gh3036ManagerRef>().inner().clone();
         let waveform = app.state::<Arc<WaveformManager>>().inner().clone();
@@ -107,6 +111,7 @@ impl McpContext {
             serial,
             ble,
             app_state,
+            persistence,
             event_bus,
             leases: Arc::new(LeaseManager::new()),
             serial_hub: Arc::new(SerialHub::new()),

@@ -1,5 +1,6 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use chrono::Local;
 use csv::{Writer, WriterBuilder};
@@ -7,6 +8,12 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use super::types::{Gh3036FrameData, REF_DATA_COUNT};
+
+/// 达到该行数立即 flush，降低崩溃/断电时的尾部丢失窗口
+const FLUSH_ROWS: u32 = 32;
+
+/// 距上次 flush 超过该时长立即 flush（25Hz 下约每 300ms 一次）
+const FLUSH_INTERVAL: Duration = Duration::from_millis(300);
 
 /// CSV 第一行信息（精简 JSON，对应 gh3036.yaml info_row）
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +34,12 @@ pub struct CsvWriter {
     current_file_index: u32,
     last_frame_id: i32,
     rows_since_flush: u32,
+    /// 当前已打开文件的路径（关闭后清空，便于日志与测试断言）
+    current_path: Option<PathBuf>,
+    /// 最后一次成功写入的时间，用于空闲关闭判定
+    last_write_at: Option<Instant>,
+    /// 最后一次 flush 的时间，用于时间阈值 flush
+    last_flush_at: Instant,
 }
 
 impl CsvWriter {
@@ -45,6 +58,9 @@ impl CsvWriter {
             current_file_index: 0,
             last_frame_id: -1,
             rows_since_flush: 0,
+            current_path: None,
+            last_write_at: None,
+            last_flush_at: Instant::now(),
         }
     }
 
@@ -76,18 +92,71 @@ impl CsvWriter {
             self.rows_since_flush = 0;
         }
 
-        let mut writer_guard = self.writer.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(ref mut writer) = *writer_guard {
-            self.write_row(writer, frame)?;
-            self.last_frame_id = frame.frame_id;
-            self.rows_since_flush += 1;
-            if self.rows_since_flush >= 100 {
-                writer.flush()?;
-                self.rows_since_flush = 0;
+        let wrote = {
+            let mut writer_guard = self.writer.lock().unwrap_or_else(|e| e.into_inner());
+            match *writer_guard {
+                Some(ref mut writer) => {
+                    self.write_row(writer, frame)?;
+                    true
+                }
+                None => false,
             }
+        };
+
+        if wrote {
+            self.last_frame_id = frame.frame_id;
+            self.last_write_at = Some(Instant::now());
+            self.rows_since_flush += 1;
+            self.flush_if_due()?;
         }
 
         Ok(())
+    }
+
+    /// 按行数或时间阈值 flush；不关闭文件句柄
+    pub fn flush_if_due(&mut self) -> std::io::Result<()> {
+        if self.rows_since_flush == 0 {
+            return Ok(());
+        }
+        if self.rows_since_flush < FLUSH_ROWS && self.last_flush_at.elapsed() < FLUSH_INTERVAL {
+            return Ok(());
+        }
+
+        let mut writer_guard = self.writer.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(ref mut writer) = *writer_guard {
+            writer.flush()?;
+        }
+        self.rows_since_flush = 0;
+        self.last_flush_at = Instant::now();
+        Ok(())
+    }
+
+    /// 关闭当前文件：先 flush 再释放文件句柄。幂等。
+    ///
+    /// 无论 flush 是否成功都会释放句柄，避免"写失败就把文件永久占住"。
+    pub fn close(&mut self) -> std::io::Result<()> {
+        let mut writer_guard = self.writer.lock().unwrap_or_else(|e| e.into_inner());
+        let flush_result = match *writer_guard {
+            Some(ref mut writer) => writer.flush(),
+            None => Ok(()),
+        };
+        *writer_guard = None;
+        drop(writer_guard);
+
+        self.rows_since_flush = 0;
+        self.current_path = None;
+        self.last_write_at = None;
+        flush_result
+    }
+
+    /// 距最后一次写入的空闲时长（未打开或从未写入时为 None）
+    pub fn idle_for(&self) -> Option<Duration> {
+        self.last_write_at.map(|time| time.elapsed())
+    }
+
+    /// 当前已打开文件的路径
+    pub fn current_path(&self) -> Option<&Path> {
+        self.current_path.as_deref()
     }
 
     /// 强制创建新的 CSV 文件
@@ -95,20 +164,10 @@ impl CsvWriter {
     /// 用于在特定事件（如启动/停止命令、设备断开）发生时，
     /// 确保后续数据写入新文件
     pub fn force_new_file(&mut self) -> std::io::Result<()> {
-        // 先刷新当前文件（如果有）
-        {
-            let mut writer_guard = self.writer.lock().unwrap_or_else(|e| e.into_inner());
-            if let Some(ref mut writer) = *writer_guard {
-                writer.flush()?;
-            }
-            // 清空 writer，下次写入时会创建新文件
-            *writer_guard = None;
-        }
-
+        self.close()?;
         self.last_frame_id = -1;
-        self.rows_since_flush = 0;
 
-        info!("[CsvWriter] 强制创建新文件标记已设置");
+        info!("[CsvWriter] 已关闭当前文件，下次写入将创建新文件");
         Ok(())
     }
 
@@ -136,7 +195,13 @@ impl CsvWriter {
 
         let mut writer_guard = self.writer.lock().unwrap_or_else(|e| e.into_inner());
         *writer_guard = Some(writer);
+        drop(writer_guard);
+
         self.current_file_index += 1;
+        self.current_path = Some(filepath);
+        self.last_flush_at = Instant::now();
+        self.last_write_at = Some(Instant::now());
+        self.rows_since_flush = 0;
 
         Ok(())
     }
@@ -432,5 +497,81 @@ mod tests {
         let data = &records[2];
         assert_eq!(data.get(0), Some("123"));
         assert_eq!(data.get(1), Some("7"));
+    }
+
+    #[test]
+    fn close_flushes_rows_and_releases_writer() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let mut writer = CsvWriter::new(temp_dir.path().to_path_buf(), 2, "SPO2".to_string());
+        writer.write_frame(&sample_frame()).unwrap();
+
+        let path = writer.current_path().unwrap().to_path_buf();
+        assert!(writer.is_open(), "写入后应保持文件打开");
+
+        writer.close().unwrap();
+        writer.close().unwrap(); // 幂等
+
+        assert!(!writer.is_open(), "close 后不应再持有文件句柄");
+        assert!(writer.current_path().is_none());
+
+        // close 内部已 flush：信息行 + 表头 + 1 行数据
+        let mut reader = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .flexible(true)
+            .from_path(&path)
+            .unwrap();
+        let records: Vec<_> = reader.records().collect::<Result<_, _>>().unwrap();
+        assert_eq!(records.len(), 3, "close 必须先 flush 再释放句柄");
+    }
+
+    #[test]
+    fn flush_if_due_writes_buffer_without_closing() {
+        use std::time::Duration;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let mut writer = CsvWriter::new(temp_dir.path().to_path_buf(), 2, "SPO2".to_string());
+        writer.write_frame(&sample_frame()).unwrap();
+        let path = writer.current_path().unwrap().to_path_buf();
+
+        std::thread::sleep(Duration::from_millis(350));
+        writer.flush_if_due().unwrap();
+
+        assert!(writer.is_open(), "时间阈值 flush 不应关闭文件");
+        let record_count = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .flexible(true)
+            .from_path(&path)
+            .unwrap()
+            .records()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .len();
+        assert_eq!(record_count, 3, "超过时间阈值后数据应已落盘");
+    }
+
+    #[test]
+    fn write_after_close_creates_new_file() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let mut writer = CsvWriter::new(temp_dir.path().to_path_buf(), 2, "SPO2".to_string());
+
+        let frame = sample_frame();
+        writer.write_frame(&frame).unwrap();
+        let first_path = writer.current_path().unwrap().to_path_buf();
+        writer.close().unwrap();
+
+        let next = Gh3036FrameData {
+            frame_id: 8,
+            ..frame
+        };
+        writer.write_frame(&next).unwrap();
+        let second_path = writer.current_path().unwrap().to_path_buf();
+
+        assert_ne!(first_path, second_path, "关闭后再写入应创建新文件");
+        assert!(writer.is_open());
     }
 }

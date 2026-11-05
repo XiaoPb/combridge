@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Select, Switch, Input, Button, Space, Typography, message, Row, Col, theme, Divider } from 'antd';
+import { Select, Switch, Input, InputNumber, Button, Space, Typography, message, Row, Col, theme, Divider } from 'antd';
 import { FolderOpenOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
@@ -30,6 +30,7 @@ const Gh3036ChannelConfig: React.FC = () => {
 
   const [csvEnabled, setCsvEnabled] = useState(csvConfig.enabled);
   const [csvDir, setCsvDir] = useState(csvConfig.output_dir);
+  const [csvIdleCloseSecs, setCsvIdleCloseSecs] = useState<number>(csvConfig.idle_close_secs);
 
   useEffect(() => {
     loadChannelConfig();
@@ -38,6 +39,7 @@ const Gh3036ChannelConfig: React.FC = () => {
   useEffect(() => {
     setCsvEnabled(csvConfig.enabled);
     setCsvDir(csvConfig.output_dir);
+    setCsvIdleCloseSecs(csvConfig.idle_close_secs);
   }, [csvConfig]);
 
   const serialOptions = connectedDevices
@@ -167,7 +169,7 @@ const Gh3036ChannelConfig: React.FC = () => {
   };
 
   const handleSaveCsvConfig = async () => {
-    const success = await updateCsvConfig(csvEnabled, csvDir);
+    const success = await updateCsvConfig(csvEnabled, csvDir, csvIdleCloseSecs);
     if (success) {
       message.success(t('gh3036.csvConfigSaved'));
     }
@@ -286,6 +288,21 @@ const Gh3036ChannelConfig: React.FC = () => {
               />
               <Button size="small" icon={<FolderOpenOutlined />} onClick={handleSelectCsvDir} />
             </Space.Compact>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 12 }} title={t('gh3036.idleCloseSecondsHint')}>
+                {t('gh3036.idleCloseSeconds')}
+              </Text>
+              <InputNumber
+                size="small"
+                min={1}
+                max={3600}
+                step={1}
+                precision={0}
+                value={csvIdleCloseSecs}
+                onChange={(value) => setCsvIdleCloseSecs(value ?? 10)}
+                style={{ width: 88 }}
+              />
+            </div>
             <Button size="small" type="primary" onClick={handleSaveCsvConfig} block>
               {t('gh3036.saveCsvConfig')}
             </Button>

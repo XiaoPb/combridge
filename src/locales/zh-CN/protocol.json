@@ -158,6 +158,8 @@
     "csvSave": "CSV 保存",
     "enableCsv": "启用 CSV 保存",
     "outputDir": "输出目录",
+    "idleCloseSeconds": "空闲关闭（秒）",
+    "idleCloseSecondsHint": "无新数据超过该时长后自动关闭 CSV 文件，释放文件占用。默认 10 秒，范围 1-3600。",
     "saveCsvConfig": "保存 CSV 配置",
     "execute": "执行",
     "noTxChannel": "请先配置发送通道",

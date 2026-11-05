@@ -169,6 +169,7 @@ pub async fn update_gh3036_csv_preferences(
     manager: State<'_, Gh3036ManagerRef>,
     enabled: bool,
     output_dir: String,
+    idle_close_secs: Option<u64>,
 ) -> Result<()> {
     debug!("更新GH3036 CSV偏好设置");
 
@@ -178,8 +179,12 @@ pub async fn update_gh3036_csv_preferences(
         .await
         .unwrap_or_else(|_| Preferences::default());
 
+    // 未传该参数时保留已保存的值，避免旧前端把配置覆盖成默认
+    let idle_close_secs = idle_close_secs.unwrap_or(prefs.gh3036_csv.idle_close_secs);
+
     prefs.gh3036_csv.enabled = enabled;
     prefs.gh3036_csv.output_dir = output_dir.clone();
+    prefs.gh3036_csv.idle_close_secs = idle_close_secs;
 
     persistence.save_preferences(&prefs).await.map_err(|e| {
         error!("保存偏好设置失败: {}", e);
@@ -189,6 +194,7 @@ pub async fn update_gh3036_csv_preferences(
     let config = CsvConfig {
         enabled,
         output_dir,
+        idle_close_secs,
     };
     if let Err(e) = manager.set_csv_config(config) {
         error!("同步更新后端CSV配置失败: {}", e);

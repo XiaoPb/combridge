@@ -443,6 +443,13 @@ impl Gh3036ChannelPreferences {
 pub struct Gh3036CsvPreferences {
     pub enabled: bool,
     pub output_dir: String,
+    /// CSV 空闲关闭时长（秒），0 = 不自动关闭。旧配置文件缺该字段时回落默认值。
+    #[serde(default = "default_idle_close_secs")]
+    pub idle_close_secs: u64,
+}
+
+fn default_idle_close_secs() -> u64 {
+    crate::gh3036::DEFAULT_CSV_IDLE_CLOSE_SECS
 }
 
 impl Default for Gh3036CsvPreferences {
@@ -463,6 +470,7 @@ impl Gh3036CsvPreferences {
         Self {
             enabled: true,
             output_dir,
+            idle_close_secs: crate::gh3036::DEFAULT_CSV_IDLE_CLOSE_SECS,
         }
     }
 }
@@ -639,5 +647,37 @@ impl Preferences {
             gh3036_csv: Gh3036CsvPreferences::default_values(),
             menu_visibility: MenuVisibilityPreferences::default_values(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Gh3036CsvPreferences;
+    use crate::gh3036::DEFAULT_CSV_IDLE_CLOSE_SECS;
+
+    #[test]
+    fn legacy_csv_preferences_without_idle_close_fall_back_to_default() {
+        // 旧版本 preferences.json 没有 idleCloseSecs 字段，必须能正常反序列化
+        let legacy = r#"{"enabled":true,"outputDir":"D:/data"}"#;
+        let prefs: Gh3036CsvPreferences = serde_json::from_str(legacy).expect("旧配置应能加载");
+
+        assert!(prefs.enabled);
+        assert_eq!(prefs.output_dir, "D:/data");
+        assert_eq!(prefs.idle_close_secs, DEFAULT_CSV_IDLE_CLOSE_SECS);
+        assert_eq!(prefs.idle_close_secs, 10);
+    }
+
+    #[test]
+    fn csv_preferences_round_trip_keeps_idle_close() {
+        let prefs = Gh3036CsvPreferences {
+            enabled: false,
+            output_dir: "D:/out".to_string(),
+            idle_close_secs: 3,
+        };
+        let json = serde_json::to_string(&prefs).unwrap();
+        assert!(json.contains("\"idleCloseSecs\":3"), "字段应为 camelCase");
+
+        let back: Gh3036CsvPreferences = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.idle_close_secs, 3);
     }
 }

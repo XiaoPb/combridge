@@ -3258,6 +3258,7 @@ impl ComBridgeMcp {
                 Ok(prefs) => CsvConfig {
                     enabled: prefs.gh3036_csv.enabled,
                     output_dir: prefs.gh3036_csv.output_dir,
+                    idle_close_secs: prefs.gh3036_csv.idle_close_secs,
                 },
                 Err(e) => {
                     tracing::warn!("[MCP] 读取偏好失败，GH3036 CSV 退回默认配置: {e}");

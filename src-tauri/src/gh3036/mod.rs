@@ -32,7 +32,7 @@ pub use hr_ref_monitor::{
 };
 pub use manager::{
     ChannelConfig, ChannelType, CsvConfig, Gh3036Manager, HrRefStatus, HrvRefStatus, RefDataStatus,
-    Spo2RefStatus,
+    Spo2RefStatus, DEFAULT_CSV_IDLE_CLOSE_SECS, MAX_CSV_IDLE_CLOSE_SECS,
 };
 pub use ref_data_manager::{RefDataError, RefDataManager, REF_DATA_TIMEOUT_SECS};
 pub use threshold_config::{

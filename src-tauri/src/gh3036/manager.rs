@@ -64,10 +64,46 @@ pub struct ChannelConfig {
     pub characteristic_uuid: Option<String>,
 }
 
+/// CSV 空闲关闭默认时长（秒）：超过该时长没有新帧就关闭文件句柄
+pub const DEFAULT_CSV_IDLE_CLOSE_SECS: u64 = 10;
+
+/// CSV 空闲关闭时长上限（秒）
+pub const MAX_CSV_IDLE_CLOSE_SECS: u64 = 3600;
+
+fn default_idle_close_secs() -> u64 {
+    DEFAULT_CSV_IDLE_CLOSE_SECS
+}
+
+/// 空闲关闭时长归一化：0 表示禁用空闲关闭（保留老行为），其余限制在 1..=3600
+fn normalize_idle_close_secs(secs: u64) -> u64 {
+    if secs == 0 {
+        0
+    } else {
+        secs.min(MAX_CSV_IDLE_CLOSE_SECS)
+    }
+}
+
+/// 相对路径按可执行文件目录展开为绝对路径
+fn normalize_output_dir(dir: &str) -> String {
+    if std::path::Path::new(dir).is_absolute() {
+        dir.to_string()
+    } else {
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe_path| exe_path.parent().map(|p| p.to_path_buf()))
+            .map(|exe_dir| exe_dir.join(dir))
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| dir.to_string())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CsvConfig {
     pub enabled: bool,
     pub output_dir: String,
+    /// 空闲关闭时长（秒）。0 = 不自动关闭（不推荐）
+    #[serde(default = "default_idle_close_secs")]
+    pub idle_close_secs: u64,
 }
 
 impl Default for CsvConfig {
@@ -82,6 +118,7 @@ impl Default for CsvConfig {
         Self {
             enabled: false,
             output_dir,
+            idle_close_secs: DEFAULT_CSV_IDLE_CLOSE_SECS,
         }
     }
 }
@@ -323,23 +360,86 @@ impl GlobalContext {
     }
 
     fn set_csv_config(&self, config: CsvConfig) {
-        let mut csv_config = self.csv_config.lock();
+        let output_dir = normalize_output_dir(&config.output_dir);
 
-        let output_dir = if std::path::Path::new(&config.output_dir).is_absolute() {
-            config.output_dir
-        } else {
-            std::env::current_exe()
-                .ok()
-                .and_then(|exe_path| exe_path.parent().map(|p| p.to_path_buf()))
-                .map(|exe_dir| exe_dir.join(&config.output_dir))
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or(config.output_dir)
+        // 只有"禁用"和"换目录"需要重建 writer；只改空闲时长不打断正在写的文件
+        let should_rebuild = {
+            let mut csv_config = self.csv_config.lock();
+            let turned_off = csv_config.enabled && !config.enabled;
+            let dir_changed = csv_config.output_dir != output_dir;
+            let rebuild = turned_off || dir_changed;
+
+            *csv_config = CsvConfig {
+                enabled: config.enabled,
+                output_dir,
+                idle_close_secs: normalize_idle_close_secs(config.idle_close_secs),
+            };
+
+            rebuild
         };
 
-        *csv_config = CsvConfig {
-            enabled: config.enabled,
-            output_dir,
-        };
+        if should_rebuild {
+            self.close_all_csv_writers();
+            info!("[GH3036] CSV 配置变更，已关闭全部 writer，下次写入将按新配置重建");
+        }
+    }
+
+    /// 关闭并丢弃全部 CSV writer（释放文件句柄）
+    fn close_all_csv_writers(&self) {
+        let mut writers = self.csv_writers.lock();
+        for (function_id, writer) in writers.iter_mut() {
+            if let Err(e) = writer.close() {
+                error!("[GH3036] 功能 {} 关闭 CSV 失败: {}", function_id, e);
+            }
+        }
+        writers.clear();
+    }
+
+    /// 关闭空闲超时的 CSV 文件，避免设备静默停流后句柄一直不释放
+    fn close_idle_csv_writers(&self) {
+        let idle_close_secs = self.csv_config.lock().idle_close_secs;
+        self.close_idle_csv_writers_with(std::time::Duration::from_secs(idle_close_secs));
+    }
+
+    fn close_idle_csv_writers_with(&self, idle_close: std::time::Duration) {
+        // 0 表示禁用空闲关闭（保留老行为）
+        if idle_close.is_zero() {
+            return;
+        }
+
+        let mut writers = self.csv_writers.lock();
+        for (function_id, writer) in writers.iter_mut() {
+            if !writer.is_open() {
+                continue;
+            }
+            let Some(idle) = writer.idle_for() else {
+                continue;
+            };
+            if idle < idle_close {
+                continue;
+            }
+
+            let path = writer.current_path().map(|p| p.to_path_buf());
+            match writer.close() {
+                Ok(()) => info!(
+                    "[GH3036] 功能 {} 的 CSV 空闲 {}s，已关闭: {:?}",
+                    function_id,
+                    idle.as_secs(),
+                    path
+                ),
+                Err(e) => error!("[GH3036] 功能 {} 空闲关闭 CSV 失败: {}", function_id, e),
+            }
+        }
+    }
+
+    /// 当前处于打开状态的 CSV 文件数量（仅测试使用）
+    #[cfg(test)]
+    fn open_csv_count(&self) -> usize {
+        self.csv_writers
+            .lock()
+            .values()
+            .filter(|writer| writer.is_open())
+            .count()
     }
 
     fn get_csv_config(&self) -> CsvConfig {
@@ -381,20 +481,15 @@ impl GlobalContext {
     /// 触发所有 CSV writer 创建新文件
     ///
     /// 在启动/停止命令执行或设备断开时调用，
-    /// 确保每个功能的 CSV writer 都创建新文件
+    /// 确保每个功能的 CSV writer 都创建新文件。
+    /// 关闭文件是清理动作，不受 `enabled` 影响——否则关闭开关后就再也释放不了句柄。
     fn trigger_new_csv_file(&self) {
-        let csv_config = self.csv_config.lock();
-        if !csv_config.enabled {
-            return;
-        }
-        drop(csv_config);
-
         let mut writers = self.csv_writers.lock();
         for (function_id, writer) in writers.iter_mut() {
             if let Err(e) = writer.force_new_file() {
                 error!("[GH3036] 功能 {} 强制创建新CSV文件失败: {}", function_id, e);
             } else {
-                info!("[GH3036] 功能 {} 已标记创建新CSV文件", function_id);
+                info!("[GH3036] 功能 {} 已关闭当前CSV文件", function_id);
             }
         }
     }
@@ -976,6 +1071,7 @@ impl Gh3036Manager {
                 if now.duration_since(last_ref_data_publish) >= ref_data_interval {
                     CALLBACK_CONTEXT.publish_ref_data();
                     CALLBACK_CONTEXT.check_stream_watchdog();
+                    CALLBACK_CONTEXT.close_idle_csv_writers();
                     last_ref_data_publish = now;
                 }
             }
@@ -1070,6 +1166,14 @@ impl Gh3036Manager {
         CALLBACK_CONTEXT.trigger_new_csv_file();
         info!("[GH3036] 手动触发新CSV文件创建");
         Ok(())
+    }
+
+    /// 程序退出时关闭全部 CSV 文件（先 flush 再释放句柄）
+    ///
+    /// 静态上下文不会执行 Drop，必须在 RunEvent::Exit 显式收尾，否则缓冲区末几行会丢失。
+    pub fn shutdown_csv(&self) {
+        info!("[GH3036] 程序退出，关闭全部 CSV 文件");
+        CALLBACK_CONTEXT.close_all_csv_writers();
     }
 
     pub fn get_csv_config(&self) -> CsvConfig {
@@ -1807,6 +1911,7 @@ mod tests {
     use super::{
         AlgorithmResultCache, ChannelConfig, ChannelType, CsvConfig, FrameAggregator,
         Gh3036Manager, GlobalContext, RefDataManager, RpcInput, CALLBACK_CONTEXT,
+        DEFAULT_CSV_IDLE_CLOSE_SECS, MAX_CSV_IDLE_CLOSE_SECS,
     };
     use crate::gh3036::types::{GhFuncFixIdx, GhFuncFrame};
 
@@ -1931,6 +2036,7 @@ mod tests {
         context.set_csv_config(CsvConfig {
             enabled: true,
             output_dir: temp_dir.path().to_string_lossy().to_string(),
+            ..CsvConfig::default()
         });
 
         // 模拟已有 writer
@@ -1975,6 +2081,7 @@ mod tests {
             context.set_csv_config(CsvConfig {
                 enabled: true,
                 output_dir: temp_dir.path().to_string_lossy().to_string(),
+                ..CsvConfig::default()
             });
 
             // 写入初始帧
@@ -2035,6 +2142,7 @@ mod tests {
         CALLBACK_CONTEXT.set_csv_config(CsvConfig {
             enabled: true,
             output_dir: temp_dir.path().to_string_lossy().to_string(),
+            ..CsvConfig::default()
         });
         CALLBACK_CONTEXT.set_rx_channel(ChannelConfig {
             channel_type: ChannelType::Ble,
@@ -2085,6 +2193,7 @@ mod tests {
         context.set_csv_config(CsvConfig {
             enabled: true,
             output_dir: temp_dir.path().to_string_lossy().to_string(),
+            ..CsvConfig::default()
         });
 
         // save_frame_to_csv 的信息行取自全局 CALLBACK_CONTEXT
@@ -2194,5 +2303,236 @@ mod tests {
 
         // 清理全局状态
         *CALLBACK_CONTEXT.last_ble_device.lock() = None;
+    }
+
+    fn count_csv_files(dir: &std::path::Path) -> usize {
+        std::fs::read_dir(dir)
+            .map(|entries| {
+                entries
+                    .filter_map(|entry| entry.ok())
+                    .filter(|entry| {
+                        entry
+                            .path()
+                            .extension()
+                            .map(|ext| ext == "csv")
+                            .unwrap_or(false)
+                    })
+                    .count()
+            })
+            .unwrap_or(0)
+    }
+
+    #[test]
+    fn disabling_csv_closes_open_files() {
+        use tempfile::TempDir;
+
+        let _guard = TEST_GLOBAL_LOCK.lock();
+
+        let context = GlobalContext::new();
+        let temp_dir = TempDir::new().unwrap();
+        let output_dir = temp_dir.path().to_string_lossy().to_string();
+
+        context.set_csv_config(CsvConfig {
+            enabled: true,
+            output_dir: output_dir.clone(),
+            ..CsvConfig::default()
+        });
+        context.save_frame_to_csv(&make_frame(GhFuncFixIdx::Spo2, 1, vec![98]));
+        assert_eq!(context.open_csv_count(), 1, "写入后应有 1 个打开的文件");
+
+        context.set_csv_config(CsvConfig {
+            enabled: false,
+            output_dir,
+            ..CsvConfig::default()
+        });
+
+        assert_eq!(context.open_csv_count(), 0, "关闭开关后必须释放文件句柄");
+        assert!(
+            context.csv_writers.lock().is_empty(),
+            "关闭开关后 writer 应被清空"
+        );
+    }
+
+    #[test]
+    fn trigger_new_csv_file_closes_even_when_disabled() {
+        use tempfile::TempDir;
+
+        let _guard = TEST_GLOBAL_LOCK.lock();
+
+        let context = GlobalContext::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        context.set_csv_config(CsvConfig {
+            enabled: true,
+            output_dir: temp_dir.path().to_string_lossy().to_string(),
+            ..CsvConfig::default()
+        });
+        context.save_frame_to_csv(&make_frame(GhFuncFixIdx::Spo2, 1, vec![98]));
+        assert_eq!(context.open_csv_count(), 1);
+
+        // 白盒模拟：配置已禁用但 writer 仍在（修复前会因 `!enabled` 提前 return 而无法关闭）
+        context.csv_config.lock().enabled = false;
+        context.trigger_new_csv_file();
+
+        assert_eq!(context.open_csv_count(), 0, "关闭动作不应被 enabled 挡住");
+    }
+
+    #[test]
+    fn changing_output_dir_switches_target() {
+        use tempfile::TempDir;
+
+        let _guard = TEST_GLOBAL_LOCK.lock();
+
+        let context = GlobalContext::new();
+        let dir_a = TempDir::new().unwrap();
+        let dir_b = TempDir::new().unwrap();
+
+        context.set_csv_config(CsvConfig {
+            enabled: true,
+            output_dir: dir_a.path().to_string_lossy().to_string(),
+            ..CsvConfig::default()
+        });
+        context.save_frame_to_csv(&make_frame(GhFuncFixIdx::Spo2, 1, vec![98]));
+        assert_eq!(context.open_csv_count(), 1);
+
+        context.set_csv_config(CsvConfig {
+            enabled: true,
+            output_dir: dir_b.path().to_string_lossy().to_string(),
+            ..CsvConfig::default()
+        });
+        assert_eq!(context.open_csv_count(), 0, "换目录应关闭旧文件");
+
+        context.save_frame_to_csv(&make_frame(GhFuncFixIdx::Spo2, 2, vec![99]));
+
+        assert_eq!(count_csv_files(&dir_a.path().join("SPO2")), 1);
+        assert_eq!(
+            count_csv_files(&dir_b.path().join("SPO2")),
+            1,
+            "新数据应写入新目录"
+        );
+    }
+
+    #[test]
+    fn changing_idle_threshold_keeps_file_open() {
+        use tempfile::TempDir;
+
+        let _guard = TEST_GLOBAL_LOCK.lock();
+
+        let context = GlobalContext::new();
+        let temp_dir = TempDir::new().unwrap();
+        let output_dir = temp_dir.path().to_string_lossy().to_string();
+
+        context.set_csv_config(CsvConfig {
+            enabled: true,
+            output_dir: output_dir.clone(),
+            ..CsvConfig::default()
+        });
+        context.save_frame_to_csv(&make_frame(GhFuncFixIdx::Spo2, 1, vec![98]));
+        assert_eq!(context.open_csv_count(), 1);
+
+        context.set_csv_config(CsvConfig {
+            enabled: true,
+            output_dir,
+            idle_close_secs: 3,
+        });
+
+        assert_eq!(
+            context.open_csv_count(),
+            1,
+            "只改空闲阈值不应打断正在写的文件"
+        );
+        assert_eq!(context.get_csv_config().idle_close_secs, 3);
+    }
+
+    #[test]
+    fn idle_close_secs_is_clamped() {
+        use tempfile::TempDir;
+
+        let _guard = TEST_GLOBAL_LOCK.lock();
+
+        let context = GlobalContext::new();
+        let temp_dir = TempDir::new().unwrap();
+        let output_dir = temp_dir.path().to_string_lossy().to_string();
+
+        context.set_csv_config(CsvConfig {
+            enabled: true,
+            output_dir: output_dir.clone(),
+            idle_close_secs: u64::MAX,
+        });
+        assert_eq!(
+            context.get_csv_config().idle_close_secs,
+            MAX_CSV_IDLE_CLOSE_SECS
+        );
+
+        // 0 = 禁用空闲关闭，必须原样保留
+        context.set_csv_config(CsvConfig {
+            enabled: true,
+            output_dir,
+            idle_close_secs: 0,
+        });
+        assert_eq!(context.get_csv_config().idle_close_secs, 0);
+
+        // 缺省配置为 10s
+        assert_eq!(
+            CsvConfig::default().idle_close_secs,
+            DEFAULT_CSV_IDLE_CLOSE_SECS
+        );
+    }
+
+    #[test]
+    fn idle_writers_close_after_threshold() {
+        use tempfile::TempDir;
+
+        let _guard = TEST_GLOBAL_LOCK.lock();
+
+        let context = GlobalContext::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        context.set_csv_config(CsvConfig {
+            enabled: true,
+            output_dir: temp_dir.path().to_string_lossy().to_string(),
+            ..CsvConfig::default()
+        });
+        context.save_frame_to_csv(&make_frame(GhFuncFixIdx::Spo2, 1, vec![98]));
+        assert_eq!(context.open_csv_count(), 1);
+
+        context.close_idle_csv_writers_with(std::time::Duration::from_nanos(1));
+        assert_eq!(context.open_csv_count(), 0, "超过空闲阈值应关闭文件");
+
+        // 关闭后下一帧应自动开新文件
+        context.save_frame_to_csv(&make_frame(GhFuncFixIdx::Spo2, 2, vec![99]));
+        assert_eq!(context.open_csv_count(), 1);
+        assert_eq!(count_csv_files(&temp_dir.path().join("SPO2")), 2);
+    }
+
+    #[test]
+    fn disabled_idle_close_keeps_handle() {
+        use tempfile::TempDir;
+
+        let _guard = TEST_GLOBAL_LOCK.lock();
+
+        let context = GlobalContext::new();
+        let temp_dir = TempDir::new().unwrap();
+        let output_dir = temp_dir.path().to_string_lossy().to_string();
+
+        context.set_csv_config(CsvConfig {
+            enabled: true,
+            output_dir: output_dir.clone(),
+            ..CsvConfig::default()
+        });
+        context.save_frame_to_csv(&make_frame(GhFuncFixIdx::Spo2, 1, vec![98]));
+
+        context.set_csv_config(CsvConfig {
+            enabled: true,
+            output_dir,
+            idle_close_secs: 0,
+        });
+        context.close_idle_csv_writers();
+
+        assert_eq!(
+            context.open_csv_count(),
+            1,
+            "idle_close_secs = 0 时应保留句柄（显式选择的老行为）"
+        );
     }
 }

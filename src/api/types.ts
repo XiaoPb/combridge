@@ -138,7 +138,14 @@ export interface Gh3036ChannelConfig {
 export interface Gh3036CsvConfig {
   enabled: boolean;
   output_dir: string;
+  /** 空闲关闭时长（秒），0 = 不自动关闭。默认 10s */
+  idle_close_secs: number;
 }
+
+/** 与后端 DEFAULT_CSV_IDLE_CLOSE_SECS 保持一致 */
+export const DEFAULT_CSV_IDLE_CLOSE_SECS = 10;
+/** 与后端 MAX_CSV_IDLE_CLOSE_SECS 保持一致 */
+export const MAX_CSV_IDLE_CLOSE_SECS = 3600;
 
 export interface Gh3036FrameData {
   function_id: number;

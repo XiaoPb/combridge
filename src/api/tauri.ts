@@ -332,6 +332,8 @@ export interface Gh3036ChannelPreferences {
 export interface Gh3036CsvPreferences {
   enabled: boolean;
   outputDir: string;
+  /** 空闲关闭时长（秒），缺省由后端回落默认值 */
+  idleCloseSecs?: number;
 }
 
 export interface MenuGroupVisibility {
@@ -533,6 +535,7 @@ export const preferencesApi = {
     await invoke<void>('update_gh3036_csv_preferences', {
       enabled: prefs.enabled,
       outputDir: prefs.outputDir,
+      idleCloseSecs: prefs.idleCloseSecs,
     });
   },
 

@@ -15,6 +15,7 @@ import type {
   FactoryEvaluationResult,
   ThresholdConfigValidation
 } from '../api/types';
+import { DEFAULT_CSV_IDLE_CLOSE_SECS } from '../api/types';
 import { gh3036Api, factoryTestApi } from '../api/gh3036';
 import { preferencesApi, type Gh3036ChannelPreferences } from '../api/tauri';
 import { decodePayload, type EventBusEvent } from '../utils/msgpack';
@@ -214,7 +215,7 @@ interface Gh3036State {
   configureTxChannel: (channelType: 'serial' | 'ble', deviceId: string, characteristicUuid?: string) => Promise<boolean>;
   configureRxChannel: (channelType: 'serial' | 'ble', deviceId: string, characteristicUuid?: string) => Promise<boolean>;
   
-  updateCsvConfig: (enabled: boolean, outputDir: string) => Promise<boolean>;
+  updateCsvConfig: (enabled: boolean, outputDir: string, idleCloseSecs: number) => Promise<boolean>;
   
   sendData: (data: number[]) => Promise<boolean>;
   
@@ -269,6 +270,7 @@ export const useGh3036Store = create<Gh3036State>()(
       csvConfig: {
         enabled: true,
         output_dir: '.',
+        idle_close_secs: DEFAULT_CSV_IDLE_CLOSE_SECS,
       },
   
   rpcCommands: [],
@@ -605,6 +607,7 @@ export const useGh3036Store = create<Gh3036State>()(
           csvConfig: {
             enabled: gh3036Csv.enabled ?? true,
             output_dir: gh3036Csv.outputDir || '.',
+            idle_close_secs: gh3036Csv.idleCloseSecs ?? DEFAULT_CSV_IDLE_CLOSE_SECS,
           },
         });
       }
@@ -714,15 +717,16 @@ export const useGh3036Store = create<Gh3036State>()(
     }
   },
   
-  updateCsvConfig: async (enabled, outputDir) => {
+  updateCsvConfig: async (enabled, outputDir, idleCloseSecs) => {
     set({ isLoading: true, error: null });
     try {
       await preferencesApi.updateGh3036Csv({
         enabled,
         outputDir: outputDir,
+        idleCloseSecs,
       });
       set({ 
-        csvConfig: { enabled, output_dir: outputDir }
+        csvConfig: { enabled, output_dir: outputDir, idle_close_secs: idleCloseSecs }
       });
       return true;
     } catch (err) {

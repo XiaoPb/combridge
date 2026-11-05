@@ -249,6 +249,7 @@ pub fn run() {
                             Ok(prefs) => gh3036::CsvConfig {
                                 enabled: prefs.gh3036_csv.enabled,
                                 output_dir: prefs.gh3036_csv.output_dir,
+                                idle_close_secs: prefs.gh3036_csv.idle_close_secs,
                             },
                             Err(e) => {
                                 warn!("[GH3036] 读取偏好失败，CSV 退回默认配置: {}", e);
@@ -462,6 +463,14 @@ pub fn run() {
             commands::ota::ota_get_status,
             commands::ota::ota_cancel,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // 静态上下文不会执行 Drop：退出前必须显式 flush + 关闭 CSV 句柄
+            if matches!(event, tauri::RunEvent::Exit) {
+                if let Some(manager) = app_handle.try_state::<gh3036::Gh3036ManagerRef>() {
+                    manager.shutdown_csv();
+                }
+            }
+        });
 }

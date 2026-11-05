@@ -158,6 +158,8 @@
     "csvSave": "CSV Save",
     "enableCsv": "Enable CSV Save",
     "outputDir": "Output Directory",
+    "idleCloseSeconds": "Idle Close (s)",
+    "idleCloseSecondsHint": "Close the CSV file (and release the file lock) after no new data for this long. Default 10s, range 1-3600.",
     "saveCsvConfig": "Save CSV Config",
     "execute": "Execute",
     "noTxChannel": "Please configure TX channel first",

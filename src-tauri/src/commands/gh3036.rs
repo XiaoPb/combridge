@@ -29,6 +29,7 @@ pub async fn gh3036_init(
     let csv_config = CsvConfig {
         enabled: prefs.gh3036_csv.enabled,
         output_dir: prefs.gh3036_csv.output_dir,
+        idle_close_secs: prefs.gh3036_csv.idle_close_secs,
     };
     manager
         .bootstrap(csv_config)
@@ -124,11 +125,16 @@ pub async fn gh3036_send_data(
 pub async fn gh3036_set_csv_config(
     enabled: bool,
     output_dir: String,
+    idle_close_secs: Option<u64>,
     manager: State<'_, Gh3036ManagerRef>,
 ) -> Result<(), ErrorResponse> {
+    // 未显式传入时保留当前值，避免旧前端调用把用户配置重置为默认
+    let idle_close_secs =
+        idle_close_secs.unwrap_or_else(|| manager.get_csv_config().idle_close_secs);
     let config = CsvConfig {
         enabled,
         output_dir,
+        idle_close_secs,
     };
     manager
         .set_csv_config(config)

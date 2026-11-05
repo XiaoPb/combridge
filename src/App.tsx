@@ -21,6 +21,7 @@ const HomePage = lazy(() => import('./pages/Home'));
 const SerialPage = lazy(() => import('./pages/Serial'));
 const BlePage = lazy(() => import('./pages/Ble'));
 const Gh3036Page = lazy(() => import('./pages/Gh3036'));
+const Gh3220Page = lazy(() => import('./pages/Gh3220'));
 const ProtocolPage = lazy(() => import('./pages/Protocol'));
 const DashboardPage = lazy(() => import('./pages/Dashboard'));
 const SystemPage = lazy(() => import('./pages/System'));
@@ -276,6 +277,7 @@ function AppContent() {
                       <Route path="/serial" element={<SerialPage />} />
                       <Route path="/ble" element={<BlePage />} />
                       <Route path="/gh3036" element={<Gh3036Page />} />
+                      <Route path="/gh3220" element={<Gh3220Page />} />
                       <Route path="/protocol" element={<ProtocolPage />} />
                       <Route path="/dashboard" element={<DashboardPage />} />
                       <Route path="/waveform" element={<WaveformPage />} />

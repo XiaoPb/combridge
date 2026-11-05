@@ -229,7 +229,7 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation('home');
-  const { setWaveformActiveTab, setProtocolActiveTab, setSystemActiveTab, setGh3036ActiveTab, setOtaActiveTab } = usePageTabsStore();
+  const { setWaveformActiveTab, setProtocolActiveTab, setSystemActiveTab, setGh3036ActiveTab, setGh3220ActiveTab, setOtaActiveTab } = usePageTabsStore();
   const { setActiveTabs } = useDashboardStore();
   const { menuVisibility } = useMenuVisibilityStore();
 
@@ -264,6 +264,17 @@ const HomePage: React.FC = () => {
         { key: 'version', label: t('modules.gh3036.tabs.version'), icon: <InfoCircleOutlined /> },
         { key: 'factory', label: t('modules.gh3036.tabs.factory'), icon: <ExperimentOutlined /> },
         { key: 'threshold', label: t('modules.gh3036.tabs.threshold'), icon: <FileProtectOutlined /> },
+      ],
+    },
+    {
+      key: 'gh3220',
+      icon: <ExperimentOutlined />,
+      path: '/gh3220',
+      subTabs: [
+        { key: 'connect', label: t('modules.gh3220.tabs.connect'), icon: <ApiOutlined /> },
+        { key: 'control', label: t('modules.gh3220.tabs.control'), icon: <SettingOutlined /> },
+        { key: 'capture', label: t('modules.gh3220.tabs.capture'), icon: <LineChartOutlined /> },
+        { key: 'events', label: t('modules.gh3220.tabs.events'), icon: <InfoCircleOutlined /> },
       ],
     },
     {
@@ -346,6 +357,13 @@ const HomePage: React.FC = () => {
         }
         break;
       }
+      case '/gh3220': {
+        const tab = getFirstVisibleTab('gh3220');
+        if (tab) {
+          setGh3220ActiveTab(tab as 'connect' | 'control' | 'capture' | 'events');
+        }
+        break;
+      }
       case '/dashboard': {
         const tab = getFirstVisibleTab('dashboard');
         if (tab) {
@@ -384,6 +402,9 @@ const HomePage: React.FC = () => {
         break;
       case '/gh3036':
         setGh3036ActiveTab(tabKey as 'config' | 'monitor' | 'version' | 'factory' | 'threshold');
+        break;
+      case '/gh3220':
+        setGh3220ActiveTab(tabKey as 'connect' | 'control' | 'capture' | 'events');
         break;
       case '/dashboard':
         setActiveTabs([tabKey as 'dashboard' | 'console' | 'settings' | 'jsonEditor']);

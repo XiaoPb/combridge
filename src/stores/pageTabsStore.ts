@@ -5,11 +5,13 @@ interface PageTabsState {
   protocolActiveTab: 'editor' | 'bind';
   waveformActiveTab: 'realtime' | 'csvLoader';
   gh3036ActiveTab: 'config' | 'monitor' | 'version' | 'factory' | 'threshold';
+  gh3220ActiveTab: 'connect' | 'control' | 'capture' | 'events' | 'debug';
   otaActiveTab: 'upgrade' | 'history';
   setSystemActiveTab: (tab: 'info' | 'logs' | 'settings' | 'integration') => void;
   setProtocolActiveTab: (tab: 'editor' | 'bind') => void;
   setWaveformActiveTab: (tab: 'realtime' | 'csvLoader') => void;
   setGh3036ActiveTab: (tab: 'config' | 'monitor' | 'version' | 'factory' | 'threshold') => void;
+  setGh3220ActiveTab: (tab: 'connect' | 'control' | 'capture' | 'events' | 'debug') => void;
   setOtaActiveTab: (tab: 'upgrade' | 'history') => void;
 }
 
@@ -18,10 +20,12 @@ export const usePageTabsStore = create<PageTabsState>((set) => ({
   protocolActiveTab: 'editor',
   waveformActiveTab: 'realtime',
   gh3036ActiveTab: 'monitor',
+  gh3220ActiveTab: 'connect',
   otaActiveTab: 'upgrade',
   setSystemActiveTab: (tab) => set({ systemActiveTab: tab }),
   setProtocolActiveTab: (tab) => set({ protocolActiveTab: tab }),
   setWaveformActiveTab: (tab) => set({ waveformActiveTab: tab }),
   setGh3036ActiveTab: (tab) => set({ gh3036ActiveTab: tab }),
+  setGh3220ActiveTab: (tab) => set({ gh3220ActiveTab: tab }),
   setOtaActiveTab: (tab) => set({ otaActiveTab: tab }),
 }));

@@ -31,6 +31,16 @@
         "threshold": "Factory Config Generator"
       }
     },
+    "gh3220": {
+      "name": "GH3220",
+      "description": "GH3220 UProtocol device info, control and data capture",
+      "tabs": {
+        "connect": "Connection",
+        "control": "Control",
+        "capture": "Capture",
+        "events": "Events"
+      }
+    },
     "ota": {
       "name": "OTA Upgrade",
       "description": "Upgrade NCS firmware over Nordic SMP",

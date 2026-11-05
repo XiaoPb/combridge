@@ -42,6 +42,7 @@ The Rust backend uses an **event-driven architecture** centered on `EventBus` (t
 - **state/** — Redux-like state management. `ActionDispatcher` processes `Action` objects to mutate `AppState` (behind `RwLock`). `StatePersistence` saves state to disk.
 - **protocol/** — Lua scripting engine (`mlua`, Lua 5.4). `PluginManager` manages script lifecycle; `HookExecutor` dispatches data through user-defined hooks.
 - **gh3036/** — Domain-specific module for GH3036 sensor chip. Handles factory testing, heart-rate/SpO2 reference monitoring, threshold evaluation, and CSV data recording.
+- **gh3220/** — Domain-specific module for GH3220 UProtocol over BLE. Handles session lifecycle, command serialization, frame/data decoding, event ACK, CSV recording, and stats. Codec lives in `libs/gh-uprotocol/`.
 - **waveform/** — Ring-buffer based time-series storage with configurable parsers for raw-byte-to-float conversion.
 - **websocket/** — WebSocket client with connection pooling and automatic reconnection.
 - **commands/** — Tauri IPC command handlers, one sub-module per domain. These are the frontend-facing API surface.

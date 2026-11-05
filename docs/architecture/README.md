@@ -88,6 +88,7 @@ graph TB
 | BLE 模块 | [ble-module.md](./backend/ble-module.md) | BLE 双模式架构（原生/AT指令） |
 | 协议插件 | [protocol-module.md](./backend/protocol-module.md) | Lua 脚本协议解析 |
 | GH3036 协议 | [gh3036-module.md](./backend/gh3036-module.md) | GH3036 芯片协议支持 |
+| GH3220 协议 | [gh3220-module.md](./backend/gh3220-module.md) | GH3220 UProtocol 编解码、命令与采集 |
 | Dashboard | [dashboard-module.md](./backend/dashboard-module.md) | Dashboard 数据解析与配置 |
 | 状态管理 | [state-module.md](./backend/state-module.md) | 应用状态持久化 |
 | 服务层 | [service-module.md](./backend/service-module.md) | 日志、配置、事件总线等 |
@@ -206,6 +207,7 @@ combridge-rust/
 │   │   │   └── parser_scripts.rs # 解析脚本管理
 │   │   ├── device/               # 设备管理
 │   │   ├── gh3036/               # GH3036 协议
+│   │   ├── gh3220/               # GH3220 UProtocol
 │   │   ├── protocol/             # 协议插件
 │   │   ├── service/              # 服务层
 │   │   ├── state/                # 状态管理

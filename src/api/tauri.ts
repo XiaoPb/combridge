@@ -345,6 +345,7 @@ export interface HomeMenuVisibility {
   connection: MenuGroupVisibility;
   dashboard: MenuGroupVisibility;
   gh3036: MenuGroupVisibility;
+  gh3220: MenuGroupVisibility;
   ota: MenuGroupVisibility;
   protocol: MenuGroupVisibility;
   waveform: MenuGroupVisibility;
@@ -357,6 +358,7 @@ export interface SidebarMenuVisibility {
   ble: boolean;
   dashboard: boolean;
   gh3036: boolean;
+  gh3220: boolean;
   ota: boolean;
   protocol: boolean;
   waveform: boolean;
@@ -374,6 +376,7 @@ export interface Preferences {
   waveform?: WaveformPreferences;
   gh3036_channel?: Gh3036ChannelPreferences;
   gh3036Csv?: Gh3036CsvPreferences;
+  gh3220?: import('../types/gh3220').Gh3220Preferences;
   menuVisibility?: MenuVisibilityPreferences;
 }
 

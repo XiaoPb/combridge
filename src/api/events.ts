@@ -1,5 +1,11 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { decode as msgpackDecode } from '@msgpack/msgpack';
+import type {
+  Gh3220DataEvent,
+  Gh3220EventPayload,
+  Gh3220Stats,
+  Gh3220StatusEvent,
+} from '../types/gh3220';
 
 export interface EventBusEvent {
   topic: string;
@@ -144,6 +150,10 @@ export const EventBusTopics = {
   BLE_CONNECTED: 'ble:connected',
   BLE_DISCONNECTED: 'ble:disconnected',
   GH3036_FRAME: 'gh3036:frame',
+  GH3220_STATUS: 'gh3220:status',
+  GH3220_DATA: 'gh3220:data',
+  GH3220_EVENT: 'gh3220:event',
+  GH3220_STATS: 'gh3220:stats',
   PROTOCOL_PARSED: 'protocol:parsed',
 } as const;
 
@@ -193,6 +203,22 @@ export function onBleData(callback: (event: BleDataEvent) => void): Promise<Unli
 
 export function onParsedData(callback: (event: ParsedDataEvent) => void): Promise<UnlistenFn> {
   return onTopic<ParsedDataEvent>(EventBusTopics.PROTOCOL_PARSED, callback);
+}
+
+export function onGh3220Status(callback: (event: Gh3220StatusEvent) => void): Promise<UnlistenFn> {
+  return onTopic<Gh3220StatusEvent>(EventBusTopics.GH3220_STATUS, callback);
+}
+
+export function onGh3220Data(callback: (event: Gh3220DataEvent) => void): Promise<UnlistenFn> {
+  return onTopic<Gh3220DataEvent>(EventBusTopics.GH3220_DATA, callback);
+}
+
+export function onGh3220Event(callback: (event: Gh3220EventPayload) => void): Promise<UnlistenFn> {
+  return onTopic<Gh3220EventPayload>(EventBusTopics.GH3220_EVENT, callback);
+}
+
+export function onGh3220Stats(callback: (event: Gh3220Stats) => void): Promise<UnlistenFn> {
+  return onTopic<Gh3220Stats>(EventBusTopics.GH3220_STATS, callback);
 }
 
 export const eventBus = {

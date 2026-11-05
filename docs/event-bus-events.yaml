@@ -1163,3 +1163,70 @@ event_publishers:
       - "system:shutdown"
       - "system:config:changed"
       - "system:error"
+
+  gh3220_events:
+    gh3220_status:
+      topic: "gh3220:status"
+      description: "GH3220连接/采集状态变化"
+      publisher: "Gh3220Manager"
+      payload:
+        status:
+          type: "object"
+          description: "Gh3220Status"
+          properties:
+            state: { type: "string", enum: ["disconnected", "connecting", "ready", "capturing"] }
+            link: { type: "string", enum: ["ble", "tcp"], optional: true }
+            address: { type: "string", optional: true }
+            name: { type: "string", optional: true }
+            error: { type: "string", optional: true }
+            capturing: { type: "boolean" }
+            chunkSize: { type: "number" }
+
+    gh3220_data:
+      topic: "gh3220:data"
+      description: "GH3220解码后的数据记录（60ms / 100 条批量）"
+      publisher: "Gh3220Manager"
+      payload:
+        seq:
+          type: "number"
+          description: "批次序号"
+        records:
+          type: "array<object>"
+          description: "Gh3220Record 列表"
+        dropped:
+          type: "number"
+          description: "丢弃记录数"
+
+    gh3220_event:
+      topic: "gh3220:event"
+      description: "GH3220芯片事件（已自动回 ACK）"
+      publisher: "Gh3220Manager"
+      payload:
+        eventId:
+          type: "number"
+        reportId:
+          type: "number"
+        acked:
+          type: "boolean"
+        tsMs:
+          type: "number"
+
+    gh3220_stats:
+      topic: "gh3220:stats"
+      description: "GH3220解码统计（约 1s 一次）"
+      publisher: "Gh3220Manager"
+      payload:
+        frames:
+          type: "number"
+        crcErrors:
+          type: "number"
+        resyncs:
+          type: "number"
+        badLen:
+          type: "number"
+        packets:
+          type: "number"
+        records:
+          type: "number"
+        lostFrames:
+          type: "number"

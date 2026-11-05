@@ -12,6 +12,7 @@ import {
   LineChartOutlined,
   DashboardOutlined,
   HeartOutlined,
+  ExperimentOutlined,
   CloudUploadOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -38,7 +39,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
   const location = useLocation();
   const { t } = useTranslation('sidebar');
   const { menuVisibility } = useMenuVisibilityStore();
-  const { setWaveformActiveTab, setProtocolActiveTab, setSystemActiveTab, setGh3036ActiveTab, setOtaActiveTab } = usePageTabsStore();
+  const { setWaveformActiveTab, setProtocolActiveTab, setSystemActiveTab, setGh3036ActiveTab, setGh3220ActiveTab, setOtaActiveTab } = usePageTabsStore();
   const { setActiveTabs } = useDashboardStore();
 
   const allMenuItems: SidebarMenuItem[] = [
@@ -71,6 +72,12 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
       visibilityKey: 'gh3036',
       icon: <HeartOutlined />,
       label: t('menu.gh3036'),
+    },
+    {
+      key: '/gh3220',
+      visibilityKey: 'gh3220',
+      icon: <ExperimentOutlined />,
+      label: t('menu.gh3220'),
     },
     {
       key: '/ota',
@@ -118,6 +125,13 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
         const tab = firstVisibleTab('gh3036');
         if (tab) {
           setGh3036ActiveTab(tab as 'config' | 'monitor' | 'version' | 'factory' | 'threshold');
+        }
+        break;
+      }
+      case '/gh3220': {
+        const tab = firstVisibleTab('gh3220');
+        if (tab) {
+          setGh3220ActiveTab(tab as 'connect' | 'control' | 'capture' | 'events');
         }
         break;
       }

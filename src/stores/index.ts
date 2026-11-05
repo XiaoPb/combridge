@@ -6,6 +6,7 @@ export * from './menuVisibilityStore';
 export * from './pageTabsStore';
 export * from './dashboardStore';
 export * from './gh3036Store';
+export * from './gh3220Store';
 export * from './waveformStore';
 export * from './csvChartStore';
 export * from './configStore';

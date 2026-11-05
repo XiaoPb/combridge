@@ -534,6 +534,12 @@ pub mod topics {
     /// 帧流看门狗状态变化（stalled=true 表示超过阈值未收到帧）
     pub const GH3036_STREAM_STALLED: &str = "gh3036:stream:stalled";
 
+    pub const GH3220_STATUS: &str = "gh3220:status";
+    pub const GH3220_DATA: &str = "gh3220:data";
+    pub const GH3220_EVENT: &str = "gh3220:event";
+    pub const GH3220_STATS: &str = "gh3220:stats";
+    pub const GH3220_ERROR: &str = "gh3220:error";
+
     pub const PROTOCOL_PARSED: &str = "protocol:parsed";
     pub const PROTOCOL_ERROR: &str = "protocol:error";
 

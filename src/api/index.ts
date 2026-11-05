@@ -4,5 +4,6 @@ export * from './types';
 export * from './stateApi';
 export * from './dashboard';
 export * from './gh3036';
+export * from './gh3220';
 export * from './waveform';
 export * from './ota';

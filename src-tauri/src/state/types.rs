@@ -477,6 +477,121 @@ impl Gh3036CsvPreferences {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct Gh3220CsvPreferences {
+    pub enabled: bool,
+    pub output_dir: String,
+    #[serde(default = "default_gh3220_idle_close_secs")]
+    pub idle_close_secs: u64,
+}
+
+fn default_gh3220_idle_close_secs() -> u64 {
+    crate::gh3220::DEFAULT_CSV_IDLE_CLOSE_SECS
+}
+
+impl Default for Gh3220CsvPreferences {
+    fn default() -> Self {
+        Self::default_values()
+    }
+}
+
+impl Gh3220CsvPreferences {
+    pub fn default_values() -> Self {
+        let output_dir = std::env::current_exe()
+            .ok()
+            .and_then(|exe_path| exe_path.parent().map(|p| p.to_path_buf()))
+            .map(|exe_dir| exe_dir.join("data"))
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| String::from("data"));
+
+        Self {
+            enabled: true,
+            output_dir,
+            idle_close_secs: crate::gh3220::DEFAULT_CSV_IDLE_CLOSE_SECS,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Gh3220CapturePreferences {
+    pub channels_override: Option<usize>,
+    pub auto_stop: bool,
+}
+
+impl Default for Gh3220CapturePreferences {
+    fn default() -> Self {
+        Self::default_values()
+    }
+}
+
+impl Gh3220CapturePreferences {
+    pub fn default_values() -> Self {
+        Self {
+            channels_override: None,
+            auto_stop: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Gh3220DebugTcpPreferences {
+    pub enabled: bool,
+    pub address: String,
+}
+
+impl Default for Gh3220DebugTcpPreferences {
+    fn default() -> Self {
+        Self::default_values()
+    }
+}
+
+impl Gh3220DebugTcpPreferences {
+    pub fn default_values() -> Self {
+        Self {
+            enabled: false,
+            address: "127.0.0.1:9000".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Gh3220Preferences {
+    #[serde(default = "Gh3220CsvPreferences::default_values")]
+    pub csv: Gh3220CsvPreferences,
+    #[serde(default = "Gh3220CapturePreferences::default_values")]
+    pub capture: Gh3220CapturePreferences,
+    #[serde(default = "Gh3220DebugTcpPreferences::default_values")]
+    pub debug_tcp: Gh3220DebugTcpPreferences,
+}
+
+impl Default for Gh3220Preferences {
+    fn default() -> Self {
+        Self::default_values()
+    }
+}
+
+impl Gh3220Preferences {
+    pub fn default_values() -> Self {
+        Self {
+            csv: Gh3220CsvPreferences::default_values(),
+            capture: Gh3220CapturePreferences::default_values(),
+            debug_tcp: Gh3220DebugTcpPreferences::default_values(),
+        }
+    }
+
+    pub fn to_csv_config(&self) -> crate::gh3220::Gh3220CsvConfig {
+        crate::gh3220::Gh3220CsvConfig {
+            enabled: self.csv.enabled,
+            output_dir: self.csv.output_dir.clone(),
+            idle_close_secs: self.csv.idle_close_secs,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MenuGroupVisibility {
     pub visible: bool,
     pub tabs: BTreeMap<String, bool>,
@@ -502,12 +617,30 @@ fn default_ota_group() -> MenuGroupVisibility {
     MenuGroupVisibility::new(true, &[("upgrade", true), ("history", true)])
 }
 
+fn default_gh3220_group() -> MenuGroupVisibility {
+    MenuGroupVisibility::new(
+        true,
+        &[
+            ("connect", true),
+            ("control", true),
+            ("capture", true),
+            ("events", true),
+        ],
+    )
+}
+
+fn default_gh3220_visible() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HomeMenuVisibility {
     pub connection: MenuGroupVisibility,
     pub dashboard: MenuGroupVisibility,
     pub gh3036: MenuGroupVisibility,
+    #[serde(default = "default_gh3220_group")]
+    pub gh3220: MenuGroupVisibility,
     #[serde(default = "default_ota_group")]
     pub ota: MenuGroupVisibility,
     pub protocol: MenuGroupVisibility,
@@ -544,6 +677,7 @@ impl HomeMenuVisibility {
                     ("threshold", true),
                 ],
             ),
+            gh3220: default_gh3220_group(),
             protocol: MenuGroupVisibility::new(false, &[("editor", false), ("bind", false)]),
             waveform: MenuGroupVisibility::new(true, &[("realtime", false), ("csvLoader", true)]),
             system: MenuGroupVisibility::new(
@@ -563,6 +697,8 @@ pub struct SidebarMenuVisibility {
     pub ble: bool,
     pub dashboard: bool,
     pub gh3036: bool,
+    #[serde(default = "default_gh3220_visible")]
+    pub gh3220: bool,
     #[serde(default = "default_ota_visible")]
     pub ota: bool,
     pub protocol: bool,
@@ -584,6 +720,7 @@ impl SidebarMenuVisibility {
             ble: true,
             dashboard: false,
             gh3036: true,
+            gh3220: true,
             ota: true,
             protocol: false,
             waveform: true,
@@ -627,6 +764,8 @@ pub struct Preferences {
     pub gh3036_channel: Gh3036ChannelPreferences,
     #[serde(default = "Gh3036CsvPreferences::default_values")]
     pub gh3036_csv: Gh3036CsvPreferences,
+    #[serde(default = "Gh3220Preferences::default_values")]
+    pub gh3220: Gh3220Preferences,
     #[serde(default = "MenuVisibilityPreferences::default_values")]
     pub menu_visibility: MenuVisibilityPreferences,
 }
@@ -645,6 +784,7 @@ impl Preferences {
             waveform: WaveformPreferences::default_values(),
             gh3036_channel: Gh3036ChannelPreferences::default_values(),
             gh3036_csv: Gh3036CsvPreferences::default_values(),
+            gh3220: Gh3220Preferences::default_values(),
             menu_visibility: MenuVisibilityPreferences::default_values(),
         }
     }

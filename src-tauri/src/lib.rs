@@ -4,6 +4,7 @@ pub mod dashboard;
 pub mod device;
 pub mod error;
 pub mod gh3036;
+pub mod gh3220;
 pub mod mcp;
 pub mod ota;
 pub mod protocol;
@@ -115,6 +116,13 @@ pub fn run() {
         event_bus.clone(),
     ));
 
+    let gh3220_manager = Arc::new(gh3220::Gh3220Manager::new(
+        device_manager.ble_manager.clone(),
+        event_bus.clone(),
+    ));
+    gh3220_manager.start_event_bridge();
+    let gh3220_for_bootstrap = gh3220_manager.clone();
+
     let app_state = create_app_state_with_event_bus(event_bus.clone());
     let app_data_dir = get_app_data_dir();
     let update_service = update::UpdateService::new(app_data_dir.clone())
@@ -147,6 +155,7 @@ pub fn run() {
         .manage(state_persistence)
         .manage(action_dispatcher)
         .manage(gh3036_manager.clone())
+        .manage(gh3220_manager)
         .manage(waveform_manager)
         .manage(parser_script_manager)
         .manage(json_config_manager)
@@ -266,6 +275,30 @@ pub fn run() {
                 });
             }
 
+            // GH3220 偏好：CSV 输出与调试 TCP 开关（默认关闭）
+            {
+                let mgr = gh3220_for_bootstrap;
+                let persistence_for_gh3220 =
+                    app.state::<state::StatePersistenceRef>().inner().clone();
+                tauri::async_runtime::spawn(async move {
+                    let prefs = {
+                        let persistence = persistence_for_gh3220.read().await;
+                        persistence.load_preferences().await
+                    };
+                    match prefs {
+                        Ok(prefs) => {
+                            mgr.set_csv_config(prefs.gh3220.to_csv_config());
+                            mgr.set_debug_tcp_enabled(prefs.gh3220.debug_tcp.enabled);
+                            info!(
+                                "[GH3220] 偏好已加载: csv={}, debug_tcp={}",
+                                prefs.gh3220.csv.enabled, prefs.gh3220.debug_tcp.enabled
+                            );
+                        }
+                        Err(e) => warn!("[GH3220] 读取偏好失败，使用默认配置: {}", e),
+                    }
+                });
+            }
+
             info!("PluginManager 订阅 EventBus 事件");
             plugin_manager_clone.subscribe_to_events();
 
@@ -275,6 +308,7 @@ pub fn run() {
                 "serial:".to_string(),
                 "ble:".to_string(),
                 "gh3036:".to_string(),
+                "gh3220:".to_string(),
                 "protocol:".to_string(),
                 "ota:".to_string(),
             ]);
@@ -456,6 +490,30 @@ pub fn run() {
             commands::gh3036::gh3036_start_hr_ref_monitor,
             commands::gh3036::gh3036_stop_hr_ref_monitor,
             commands::gh3036::gh3036_get_hr_ref_monitor_status,
+            commands::gh3220::gh3220_connect,
+            commands::gh3220::gh3220_disconnect,
+            commands::gh3220::gh3220_get_status,
+            commands::gh3220::gh3220_get_device_info,
+            commands::gh3220::gh3220_set_work_mode,
+            commands::gh3220::gh3220_start,
+            commands::gh3220::gh3220_stop,
+            commands::gh3220::gh3220_switch_slot_func,
+            commands::gh3220::gh3220_reg_read,
+            commands::gh3220::gh3220_reg_write,
+            commands::gh3220::gh3220_load_reg_list,
+            commands::gh3220::gh3220_chip_ctrl,
+            commands::gh3220::gh3220_set_fifo_thr,
+            commands::gh3220::gh3220_set_report_event,
+            commands::gh3220::gh3220_debug_status,
+            commands::gh3220::gh3220_package_test,
+            commands::gh3220::gh3220_send_raw,
+            commands::gh3220::gh3220_capture_start,
+            commands::gh3220::gh3220_capture_stop,
+            commands::gh3220::gh3220_get_capture_status,
+            commands::gh3220::gh3220_get_stats,
+            commands::gh3220::gh3220_clear_stats,
+            commands::gh3220::gh3220_get_preferences,
+            commands::gh3220::gh3220_update_preferences,
             commands::ota::ota_list_protocols,
             commands::ota::ota_validate_package,
             commands::ota::ota_preflight,

@@ -1,5 +1,6 @@
 pub mod ble;
 pub mod gh3036;
+pub mod gh3220;
 pub mod mcp;
 pub mod ota;
 pub mod preferences;

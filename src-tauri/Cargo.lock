@@ -697,7 +697,7 @@ dependencies = [
 
 [[package]]
 name = "combridge-rust"
-version = "0.8.2"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -712,6 +712,7 @@ dependencies = [
  "futures",
  "futures-util",
  "gh-rpc",
+ "gh-uprotocol",
  "heapless",
  "mcumgr-toolkit",
  "mlua",
@@ -1837,6 +1838,13 @@ dependencies = [
  "rpc",
  "serde",
  "tokio",
+]
+
+[[package]]
+name = "gh-uprotocol"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.21",
 ]
 
 [[package]]

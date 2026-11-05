@@ -31,6 +31,16 @@
         "threshold": "产测配置生成"
       }
     },
+    "gh3220": {
+      "name": "GH3220",
+      "description": "GH3220 UProtocol 设备信息、控制与数据采集",
+      "tabs": {
+        "connect": "连接",
+        "control": "控制",
+        "capture": "采集",
+        "events": "事件"
+      }
+    },
     "ota": {
       "name": "OTA 升级",
       "description": "通过 Nordic SMP 协议升级 NCS 设备固件",

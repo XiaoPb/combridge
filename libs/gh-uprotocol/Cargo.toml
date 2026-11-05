@@ -1,0 +1,11 @@
+[package]
+name = "gh-uprotocol"
+version = "0.1.0"
+edition = "2021"
+description = "GH3220 UProtocol codec (host side)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+thiserror = "2"
+
+[dev-dependencies]

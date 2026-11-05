@@ -14,8 +14,10 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
+use crate::commands::waveform::WaveformManager;
 use crate::device::ble::BleManagerRef;
 use crate::service::event_bus::{topics, BleConnectionEvent, BleDataEvent, EventBus};
+use crate::waveform::WaveformBufferConfig;
 
 use super::csv_writer::CsvWriter;
 use super::link::Gh3220Link;
@@ -72,6 +74,8 @@ struct CaptureRuntime {
 pub struct Gh3220Manager {
     ble_manager: BleManagerRef,
     event_bus: Arc<EventBus>,
+    /// 与 GUI/MCP 共用的波形缓冲；None 时不写波形
+    waveform: Option<Arc<WaveformManager>>,
     runtime: Mutex<Runtime>,
     session: Mutex<Option<Arc<Session>>>,
     ingress: Mutex<Option<mpsc::UnboundedSender<Vec<u8>>>>,
@@ -88,10 +92,15 @@ pub struct Gh3220Manager {
 }
 
 impl Gh3220Manager {
-    pub fn new(ble_manager: BleManagerRef, event_bus: Arc<EventBus>) -> Self {
+    pub fn new(
+        ble_manager: BleManagerRef,
+        event_bus: Arc<EventBus>,
+        waveform: Option<Arc<WaveformManager>>,
+    ) -> Self {
         Self {
             ble_manager,
             event_bus,
+            waveform,
             runtime: Mutex::new(Runtime::default()),
             session: Mutex::new(None),
             ingress: Mutex::new(None),
@@ -612,6 +621,8 @@ impl Gh3220Manager {
             .csv_enabled
             .unwrap_or_else(|| self.csv_config().enabled);
 
+        self.reset_waveform_buffers();
+
         {
             let mut capture = self.lock(&self.capture);
             *capture = CaptureRuntime {
@@ -776,7 +787,11 @@ impl Gh3220Manager {
             return;
         }
         let records = std::mem::take(batch);
+        let waveform_enabled = self.lock(&self.capture).active;
         for rec in &records {
+            if waveform_enabled {
+                self.feed_waveform(rec);
+            }
             self.write_csv(rec);
         }
         self.flush_csv();
@@ -788,6 +803,46 @@ impl Gh3220Manager {
             dropped: 0,
         };
         self.event_bus.publish_msgpack(topics::GH3220_DATA, &event);
+    }
+
+    fn reset_waveform_buffers(&self) {
+        let Some(waveform) = &self.waveform else {
+            return;
+        };
+        for id in waveform.list_buffers() {
+            if id.starts_with("gh3220:") {
+                waveform.remove_buffer(&id);
+            }
+        }
+    }
+
+    fn feed_waveform(&self, rec: &Gh3220Record) {
+        let Some(waveform) = &self.waveform else {
+            return;
+        };
+        let buffer_id = format!("gh3220:func{}", rec.function_id);
+        let buffer = match waveform.get_buffer(&buffer_id) {
+            Ok(buffer) => buffer,
+            Err(_) => {
+                let columns = (0..rec.raw.len()).map(|i| format!("raw{i}")).collect();
+                let config = WaveformBufferConfig {
+                    capacity: 5000,
+                    column_names: columns,
+                };
+                if waveform.create_buffer(&buffer_id, config).is_err() {
+                    return;
+                }
+                match waveform.get_buffer(&buffer_id) {
+                    Ok(buffer) => buffer,
+                    Err(_) => return,
+                }
+            }
+        };
+
+        let columns = buffer.get_column_names().len();
+        let mut row: Vec<f64> = rec.raw.iter().map(|value| *value as f64).collect();
+        row.resize(columns, 0.0);
+        buffer.append_row(row);
     }
 
     fn write_csv(&self, rec: &Gh3220Record) {
@@ -938,6 +993,37 @@ mod tests {
         std::fs::write(&path, "# comment\n0x0010, 0x1234\n0x0012 7\n").unwrap();
         let regs = parse_reg_list_file(&path).unwrap();
         assert_eq!(regs, vec![(0x0010, 0x1234), (0x0012, 7)]);
+    }
+
+    #[test]
+    fn waveform_buffer_is_created_and_appended() {
+        use crate::commands::waveform::WaveformManager;
+        use crate::device::ble::BleManager;
+
+        let bus = Arc::new(crate::service::event_bus::EventBus::new(16));
+        let ble = Arc::new(BleManager::new(bus.clone()));
+        let waveform = Arc::new(WaveformManager::new());
+        let mgr = Gh3220Manager::new(ble, bus, Some(waveform.clone()));
+
+        let record = Gh3220Record {
+            function_id: 1,
+            frame_id: 7,
+            raw: vec![11, 22],
+            agc: vec![],
+            gs: None,
+            gyro: None,
+            cap: None,
+            temp: None,
+            flags: [0; 5],
+            algo: vec![],
+            ts_ms: 1,
+        };
+        mgr.feed_waveform(&record);
+
+        assert_eq!(waveform.list_buffers(), vec!["gh3220:func1".to_string()]);
+        let data = waveform.read_data("gh3220:func1", 10).unwrap();
+        assert_eq!(data.columns, vec!["raw0".to_string(), "raw1".to_string()]);
+        assert_eq!(data.rows, vec![vec![11.0, 22.0]]);
     }
 
     #[test]

@@ -2,7 +2,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 状态 | P1–P5 已实现（分支 `feat/gh3220-uprotocol`）；P6 波形/MCP 后置 |
+| 状态 | P1–P6 已实现（分支 `feat/gh3220-uprotocol`） |
 | 目标工程 | ComBridge（`src-tauri` + React 前端） |
 | 源工程 | `l-evk-t2-gh3020/client/`（commit `2eda9f4`） |
 | 日期 | 2026-11-05 |
@@ -16,8 +16,8 @@
 | 首期传输 | 仅 BLE（原生模式） |
 | 串口 | 首期不做，架构预留扩展点 |
 | TCP 调试通道 | 保留，默认关闭，仅用于接 `uprotocol-sim` 与自动化联调 |
-| 波形 | 纳入方案，P6 后置实现 |
-| MCP 工具域 | 纳入方案，P6 后置实现 |
+| 波形 | 已实现：按 function_id 建缓冲，页面可跳转查看 |
+| MCP 工具域 | 已实现：`combridge_gh3220` |
 | 协议库形态 | 本地 crate `libs/gh-uprotocol/`，以 path 依赖引入 |
 | 移植范围 | 仅 `client/protocol/`；`uprotocol-host/`（CLI、C 模拟器、BLE Bridge）不进入产品工程 |
 
@@ -518,11 +518,14 @@ pub struct Gh3220Stats {
   - 采集开关与 CSV 路径展示；
   - 中英文文案完整。
 
-### P6 后置能力
+### P6 波形与 MCP（已完成）
 
-- 波形：每 `function_id` 创建独立 buffer，列为 `raw0..rawN`，批量 append；页面复用现有波形组件。
-- MCP：新增 GH3220 工具组（连接状态、设备信息、启停、采集、统计），沿用现有确认门与审计。
-- 验收：波形可实时滚动；MCP 工具在关闭状态返回明确错误，不越权自动连接。
+- 波形：每 `function_id` 创建 `gh3220:func<N>` buffer，列为 `raw0..rawN`，每批记录 append；
+  采集页提供“波形 funcN”入口，跳转并选中对应 buffer。
+- MCP：新增 `combridge_gh3220`，覆盖 status/info/connect/disconnect/work_mode/start/stop/
+  switch_func/reg_read/reg_write/load_reg_list/chip_ctrl/capture_start/capture_stop/send_raw；
+  写操作走确认门，错误统一映射为工具错误。
+- 验收：真机采集后波形 buffer 有数据；MCP 工具注册、schema 与指南数量测试通过。
 
 ### P7 收尾
 
@@ -604,6 +607,7 @@ pub struct Gh3220Stats {
   - `max_len=238`、`opened_func=0x2`、链路正常
   - 8s 采集：212 条记录，56 帧，CRC/重同步/坏包/丢帧均为 0
   - CSV：func1 为 4 通道 + 4 AGC，func0 为单通道，列宽与数值正常
+  - 波形：采集后生成 `gh3220:func0` / `gh3220:func1` 缓冲，读取到有效行
 - 前端：`tsc`、`vite build`、206 项 Vitest 通过。
 
 ### 12.2 实施中发现并修正的问题
@@ -615,8 +619,8 @@ pub struct Gh3220Stats {
 
 ### 12.3 未完成
 
-- P6 波形 / MCP 仍为后置。
-- 页面 UI 未在真机桌面环境完整手工走查（后端与命令层已通过真机测试）。
+- 页面 UI 未在真机桌面环境完整手工走查（后端、命令层、波形缓冲已通过真机测试）。
+- MCP 工具已通过注册/单测，未在真实 MCP 客户端上做端到端联调。
 
 ## 13. 附录
 

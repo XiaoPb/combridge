@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Button,
@@ -15,13 +15,17 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { useGh3220Store } from '../../stores/gh3220Store';
+import { useWaveformStore } from '../../stores/waveformStore';
 import { parseFuncMask } from '../../types/gh3220';
 import type { Gh3220Record } from '../../types/gh3220';
 import { formatErrorMessage } from '../../utils/errorMessage';
 
 const CaptureTab: React.FC = () => {
   const { t } = useTranslation('gh3220');
+  const navigate = useNavigate();
+  const { refreshBuffers, setCurrentBuffer, readData } = useWaveformStore();
   const {
     status,
     capture,
@@ -142,6 +146,22 @@ const CaptureTab: React.FC = () => {
   ];
 
   const connected = status.state !== 'disconnected';
+  const waveformFunctions = useMemo(
+    () => Array.from(new Set(records.map((record) => record.functionId))).sort((a, b) => a - b),
+    [records]
+  );
+
+  const openWaveform = async (functionId: number) => {
+    const bufferId = `gh3220:func${functionId}`;
+    try {
+      await refreshBuffers();
+      setCurrentBuffer(bufferId);
+      await readData(bufferId);
+      navigate('/waveform');
+    } catch (error) {
+      message.error(formatErrorMessage(error, t('capture.openWaveformFailed')));
+    }
+  };
 
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
@@ -292,9 +312,20 @@ const CaptureTab: React.FC = () => {
       <Card
         title={t('capture.latestTitle')}
         extra={
-          <Button size="small" onClick={clearRecords}>
-            {t('capture.clearRecords')}
-          </Button>
+          <Space>
+            {waveformFunctions.map((functionId) => (
+              <Button
+                key={functionId}
+                size="small"
+                onClick={() => void openWaveform(functionId)}
+              >
+                {t('capture.openWaveform', { func: functionId })}
+              </Button>
+            ))}
+            <Button size="small" onClick={clearRecords}>
+              {t('capture.clearRecords')}
+            </Button>
+          </Space>
         }
       >
         <Table<Gh3220Record>

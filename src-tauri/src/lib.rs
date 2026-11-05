@@ -119,6 +119,7 @@ pub fn run() {
     let gh3220_manager = Arc::new(gh3220::Gh3220Manager::new(
         device_manager.ble_manager.clone(),
         event_bus.clone(),
+        Some(waveform_manager.clone()),
     ));
     gh3220_manager.start_event_bridge();
     let gh3220_for_bootstrap = gh3220_manager.clone();

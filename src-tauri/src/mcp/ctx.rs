@@ -12,6 +12,7 @@ use tracing::warn;
 use crate::commands::waveform::WaveformManager;
 use crate::device::{BleManagerRef, SerialManagerRef};
 use crate::gh3036::Gh3036ManagerRef;
+use crate::gh3220::Gh3220ManagerRef;
 use crate::ota::OtaManager;
 use crate::protocol::PluginManager;
 use crate::service::EventBus;
@@ -53,6 +54,8 @@ pub struct McpContext {
     pub opened_by_mcp: RwLock<HashSet<String>>,
     /// GH3036 协议管理器（单芯片会话，资源名固定为 `gh3036`）
     pub gh3036: Gh3036ManagerRef,
+    /// GH3220 UProtocol 管理器（单会话，GUI 与 MCP 共用）
+    pub gh3220: Gh3220ManagerRef,
     /// 最近一次 MCP 发起的产测 job（用于超时降级后的续等）
     pub factory_job: RwLock<Option<FactoryJob>>,
     /// 波形缓冲（与 GUI 共用同一份实例，MCP 写入的数据 GUI 立即可见）
@@ -84,6 +87,7 @@ impl McpContext {
         let persistence = app.state::<StatePersistenceRef>().inner().clone();
         let event_bus = app.state::<Arc<EventBus>>().inner().clone();
         let gh3036 = app.state::<Gh3036ManagerRef>().inner().clone();
+        let gh3220 = app.state::<Gh3220ManagerRef>().inner().clone();
         let waveform = app.state::<Arc<WaveformManager>>().inner().clone();
         let protocols = app.state::<Arc<PluginManager>>().inner().clone();
         let ota = app.state::<Arc<OtaManager>>().inner().clone();
@@ -118,6 +122,7 @@ impl McpContext {
             ble_hub: Arc::new(BleHub::new()),
             opened_by_mcp: RwLock::new(HashSet::new()),
             gh3036,
+            gh3220,
             factory_job: RwLock::new(None),
             waveform,
             protocols,

@@ -118,6 +118,8 @@
     },
     "latestTitle": "Latest Records",
     "clearRecords": "Clear",
+    "openWaveform": "Waveform func{{func}}",
+    "openWaveformFailed": "Failed to open waveform",
     "table": {
       "func": "Func",
       "frame": "Frame"

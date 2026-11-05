@@ -32,6 +32,10 @@ use crate::device::serial::serial_config::{
     BaudRate, DataBits, FlowControl, Parity, SerialPortConfig, StopBits,
 };
 use crate::gh3036::{ChannelConfig, ChannelType, CsvConfig, FactoryTestStatus, FactoryTestStep};
+use crate::gh3220::{
+    Gh3220CaptureConfig, Gh3220CaptureStatus, Gh3220DeviceInfo, Gh3220Error, Gh3220LinkConfig,
+    Gh3220LinkKind, Gh3220Stats, Gh3220Status,
+};
 use crate::ota::{
     OtaDeviceInfo, OtaPackageInfo, OtaProtocolDescriptor, OtaStage, OtaStartOptions, OtaState,
     OtaStatusDto,
@@ -561,6 +565,22 @@ fn tool_err(code: &'static str, message: impl Into<String>) -> CallToolResult {
 
 fn mcp_err(msg: impl Into<String>) -> CallToolResult {
     tool_err("ERROR", msg)
+}
+
+/// GH3220 错误 → 带可执行提示的工具错误。
+fn gh3220_tool_err(error: Gh3220Error) -> CallToolResult {
+    let code = match &error {
+        Gh3220Error::NotConnected | Gh3220Error::Disconnected => "GH3220_NOT_CONNECTED",
+        Gh3220Error::Timeout { .. } => "GH3220_TIMEOUT",
+        Gh3220Error::Busy => "GH3220_BUSY",
+        Gh3220Error::DebugTcpDisabled => "GH3220_DEBUG_TCP_DISABLED",
+        Gh3220Error::Invalid(_) => "GH3220_INVALID_ARGUMENT",
+        Gh3220Error::Ble(_) => "GH3220_BLE_ERROR",
+        Gh3220Error::Status { .. } => "GH3220_DEVICE_STATUS",
+        Gh3220Error::Io(_) => "GH3220_IO_ERROR",
+        Gh3220Error::Protocol(_) => "GH3220_PROTOCOL_ERROR",
+    };
+    tool_err(code, error.to_string())
 }
 
 fn map_baud(b: u32) -> Result<BaudRate, CallToolResult> {
@@ -1151,6 +1171,91 @@ impl OtaResponse {
     }
 }
 
+/// `combridge_gh3220` 入参。
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct Gh3220Request {
+    /// 动作：status | info | connect | disconnect | work_mode | start | stop | switch_func |
+    /// reg_read | reg_write | load_reg_list | chip_ctrl | capture_start | capture_stop | send_raw
+    pub action: String,
+    /// BLE 地址（connect 必填）或调试 TCP 地址
+    #[serde(default)]
+    pub address: Option<String>,
+    /// 链路类型：ble（默认）| tcp（调试，默认关闭）
+    #[serde(default)]
+    pub kind: Option<String>,
+    /// 工作模式（work_mode / capture_start）
+    #[serde(default)]
+    pub mode: Option<u8>,
+    /// 功能位掩码，如 0x2 = hr、0x6 = hr+spo2
+    #[serde(default)]
+    pub func_mask: Option<u32>,
+    /// 槽位使能（start）
+    #[serde(default)]
+    pub slot_en: Option<u8>,
+    /// 槽位号（switch_func）
+    #[serde(default)]
+    pub slot: Option<u8>,
+    /// 附加参数（switch_func）
+    #[serde(default)]
+    pub extra: Option<u8>,
+    /// 开启/关闭（switch_func），默认 true
+    #[serde(default)]
+    pub on: Option<bool>,
+    /// 寄存器地址
+    #[serde(default)]
+    pub addr: Option<u16>,
+    /// 读取数量
+    #[serde(default)]
+    pub count: Option<u8>,
+    /// 写入值
+    #[serde(default)]
+    pub values: Option<Vec<u16>>,
+    /// 寄存器表文件路径（每行 addr,value）
+    #[serde(default)]
+    pub file_path: Option<String>,
+    /// 芯片控制动作：wakeup | sleep | soft-reset | hard-reset | rx-reset
+    #[serde(default)]
+    pub chip_action: Option<String>,
+    /// 覆盖通道数（capture_start）
+    #[serde(default)]
+    pub channels_override: Option<usize>,
+    /// 是否写 CSV（capture_start），缺省跟随偏好
+    #[serde(default)]
+    pub csv_enabled: Option<bool>,
+    /// 启动前自动 WORK_MODE + START（capture_start），默认 true
+    #[serde(default)]
+    pub auto_start: Option<bool>,
+    /// 停止时自动 STOP（capture_start/capture_stop），默认 false
+    #[serde(default)]
+    pub auto_stop: Option<bool>,
+    /// 原始帧十六进制（send_raw）
+    #[serde(default)]
+    pub hex: Option<String>,
+}
+
+/// `combridge_gh3220` 返回体。未涉及的字段为 None。
+#[derive(Debug, Default, Serialize, schemars::JsonSchema)]
+pub struct Gh3220Response {
+    pub action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<Gh3220Status>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stats: Option<Gh3220Stats>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capture: Option<Gh3220CaptureStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_info: Option<Gh3220DeviceInfo>,
+    /// 设备状态码：0 成功 / 1 失败 / 0xFF 不支持
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub registers: Option<Vec<u16>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bytes: Option<Vec<u8>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
 // 路由函数对外可见：设置页要报工具数量，不必凭空造一个 McpContext 只为了数一遍
 #[tool_router(vis = "pub(crate)")]
 impl ComBridgeMcp {
@@ -1216,6 +1321,7 @@ action=logs 读取日志尾部（默认 100 行），工具返回错误且看不
                 "ble".to_string(),
                 "devices".to_string(),
                 "gh3036".to_string(),
+                "gh3220".to_string(),
                 "waveform".to_string(),
                 "protocol".to_string(),
                 "ota".to_string(),
@@ -2643,6 +2749,353 @@ action=threshold_get 取当前卡控配置 YAML。run/continue/stop 需要 GH303
     }
 
     // -----------------------------------------------------------------------
+    // GH3220
+    // -----------------------------------------------------------------------
+
+    #[tool(
+        name = "combridge_gh3220",
+        description = "GH3220 UProtocol 设备操作。action=status 看连接/采集/解码统计；info 读版本；\
+connect 连接 BLE（address 必填，kind=ble|tcp）；disconnect 断开；work_mode/start/stop/switch_func 控制采样；\
+reg_read/reg_write/load_reg_list 操作寄存器；chip_ctrl 复位/唤醒；\
+capture_start/capture_stop 控制采集与 CSV/波形；send_raw 发原始帧（hex）。\
+GH3220 是单会话：GUI 已连接时 connect 会失败，先让 GUI 断开。写操作在标准档需要用户确认。",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false
+        )
+    )]
+    async fn gh3220(
+        &self,
+        Parameters(req): Parameters<Gh3220Request>,
+        peer: Peer<RoleServer>,
+    ) -> ToolR<Gh3220Response> {
+        let action = req.action.to_lowercase();
+        let mut resp = Gh3220Response {
+            action: action.clone(),
+            ..Default::default()
+        };
+
+        match action.as_str() {
+            "status" => {
+                resp.status = Some(self.ctx.gh3220.status());
+                resp.stats = Some(self.ctx.gh3220.stats());
+                resp.capture = Some(self.ctx.gh3220.capture_status());
+            }
+            "info" => {
+                resp.device_info = Some(
+                    self.ctx
+                        .gh3220
+                        .device_info()
+                        .await
+                        .map_err(gh3220_tool_err)?,
+                );
+            }
+            "connect" => {
+                let address = req.address.clone().ok_or_else(|| {
+                    tool_err("INVALID_ARGUMENT", "connect 需要 address（BLE MAC）")
+                })?;
+                let kind = match req.kind.as_deref().unwrap_or("ble").to_lowercase().as_str() {
+                    "ble" | "" => Gh3220LinkKind::Ble,
+                    "tcp" => Gh3220LinkKind::Tcp,
+                    other => {
+                        return Err(tool_err(
+                            "INVALID_ARGUMENT",
+                            format!("未知 kind: {other}（支持 ble | tcp）"),
+                        ))
+                    }
+                };
+                self.confirm_if_needed(
+                    &peer,
+                    "combridge_gh3220",
+                    "GH3220 连接",
+                    "gh3220",
+                    format!("连接 {address}（{kind}）"),
+                )
+                .await?;
+                let config = Gh3220LinkConfig {
+                    kind,
+                    address,
+                    write_uuid: None,
+                    notify_uuid: None,
+                    mtu: None,
+                };
+                resp.status = Some(
+                    self.ctx
+                        .gh3220
+                        .connect(config)
+                        .await
+                        .map_err(gh3220_tool_err)?,
+                );
+            }
+            "disconnect" => {
+                self.confirm_if_needed(
+                    &peer,
+                    "combridge_gh3220",
+                    "GH3220 断开",
+                    "gh3220",
+                    "断开当前 GH3220 连接",
+                )
+                .await?;
+                self.ctx
+                    .gh3220
+                    .disconnect()
+                    .await
+                    .map_err(gh3220_tool_err)?;
+                resp.status = Some(self.ctx.gh3220.status());
+            }
+            "work_mode" => {
+                let func_mask = req
+                    .func_mask
+                    .ok_or_else(|| tool_err("INVALID_ARGUMENT", "work_mode 需要 func_mask"))?;
+                self.confirm_if_needed(
+                    &peer,
+                    "combridge_gh3220",
+                    "GH3220 采样控制",
+                    "gh3220",
+                    format!(
+                        "WORK_MODE mode={} func=0x{func_mask:X}",
+                        req.mode.unwrap_or(0)
+                    ),
+                )
+                .await?;
+                resp.code = Some(
+                    self.ctx
+                        .gh3220
+                        .set_work_mode(req.mode.unwrap_or(0), func_mask)
+                        .await
+                        .map_err(gh3220_tool_err)?,
+                );
+            }
+            "start" => {
+                let func_mask = req
+                    .func_mask
+                    .ok_or_else(|| tool_err("INVALID_ARGUMENT", "start 需要 func_mask"))?;
+                self.confirm_if_needed(
+                    &peer,
+                    "combridge_gh3220",
+                    "GH3220 启动采样",
+                    "gh3220",
+                    format!(
+                        "START func=0x{func_mask:X} slot_en={}",
+                        req.slot_en.unwrap_or(0)
+                    ),
+                )
+                .await?;
+                resp.code = Some(
+                    self.ctx
+                        .gh3220
+                        .start(func_mask, req.slot_en.unwrap_or(0))
+                        .await
+                        .map_err(gh3220_tool_err)?,
+                );
+            }
+            "stop" => {
+                let func_mask = req
+                    .func_mask
+                    .ok_or_else(|| tool_err("INVALID_ARGUMENT", "stop 需要 func_mask"))?;
+                self.confirm_if_needed(
+                    &peer,
+                    "combridge_gh3220",
+                    "GH3220 停止采样",
+                    "gh3220",
+                    format!("STOP func=0x{func_mask:X}"),
+                )
+                .await?;
+                resp.code = Some(
+                    self.ctx
+                        .gh3220
+                        .stop(func_mask)
+                        .await
+                        .map_err(gh3220_tool_err)?,
+                );
+            }
+            "switch_func" => {
+                let func_mask = req
+                    .func_mask
+                    .ok_or_else(|| tool_err("INVALID_ARGUMENT", "switch_func 需要 func_mask"))?;
+                self.confirm_if_needed(
+                    &peer,
+                    "combridge_gh3220",
+                    "GH3220 功能开关",
+                    "gh3220",
+                    format!(
+                        "slot={} func=0x{func_mask:X} on={}",
+                        req.slot.unwrap_or(0),
+                        req.on.unwrap_or(true)
+                    ),
+                )
+                .await?;
+                resp.code = Some(
+                    self.ctx
+                        .gh3220
+                        .switch_slot_func(
+                            req.slot.unwrap_or(0),
+                            req.extra.unwrap_or(0),
+                            func_mask,
+                            req.on.unwrap_or(true),
+                        )
+                        .await
+                        .map_err(gh3220_tool_err)?,
+                );
+            }
+            "reg_read" => {
+                let addr = req
+                    .addr
+                    .ok_or_else(|| tool_err("INVALID_ARGUMENT", "reg_read 需要 addr"))?;
+                resp.registers = Some(
+                    self.ctx
+                        .gh3220
+                        .reg_read(addr, req.count.unwrap_or(1))
+                        .await
+                        .map_err(gh3220_tool_err)?,
+                );
+            }
+            "reg_write" => {
+                let addr = req
+                    .addr
+                    .ok_or_else(|| tool_err("INVALID_ARGUMENT", "reg_write 需要 addr"))?;
+                let values = req
+                    .values
+                    .clone()
+                    .ok_or_else(|| tool_err("INVALID_ARGUMENT", "reg_write 需要 values"))?;
+                self.confirm_if_needed(
+                    &peer,
+                    "combridge_gh3220",
+                    "GH3220 寄存器写入",
+                    "gh3220",
+                    format!("写 0x{addr:04X}: {values:?}"),
+                )
+                .await?;
+                self.ctx
+                    .gh3220
+                    .reg_write(addr, &values)
+                    .await
+                    .map_err(gh3220_tool_err)?;
+                resp.message = Some("寄存器写入完成".to_string());
+            }
+            "load_reg_list" => {
+                let file_path = req
+                    .file_path
+                    .clone()
+                    .ok_or_else(|| tool_err("INVALID_ARGUMENT", "load_reg_list 需要 file_path"))?;
+                self.confirm_if_needed(
+                    &peer,
+                    "combridge_gh3220",
+                    "GH3220 寄存器批量写入",
+                    "gh3220",
+                    format!("加载寄存器表 {file_path}"),
+                )
+                .await?;
+                resp.code = Some(
+                    self.ctx
+                        .gh3220
+                        .load_reg_list(&file_path)
+                        .await
+                        .map_err(gh3220_tool_err)?,
+                );
+            }
+            "chip_ctrl" => {
+                let chip_action = req
+                    .chip_action
+                    .clone()
+                    .ok_or_else(|| tool_err("INVALID_ARGUMENT", "chip_ctrl 需要 chip_action"))?;
+                self.confirm_if_needed(
+                    &peer,
+                    "combridge_gh3220",
+                    "GH3220 芯片控制",
+                    "gh3220",
+                    format!("芯片控制 {chip_action}"),
+                )
+                .await?;
+                resp.code = Some(
+                    self.ctx
+                        .gh3220
+                        .chip_ctrl(&chip_action)
+                        .await
+                        .map_err(gh3220_tool_err)?,
+                );
+            }
+            "capture_start" => {
+                let auto_start = req.auto_start.unwrap_or(true);
+                let func_mask = req.func_mask.unwrap_or(0);
+                if auto_start && func_mask == 0 {
+                    return Err(tool_err(
+                        "INVALID_ARGUMENT",
+                        "capture_start 在 auto_start=true 时需要 func_mask",
+                    ));
+                }
+                self.confirm_if_needed(
+                    &peer,
+                    "combridge_gh3220",
+                    "GH3220 开始采集",
+                    "gh3220",
+                    format!("开始采集 func=0x{func_mask:X} auto_start={auto_start}"),
+                )
+                .await?;
+                self.ctx
+                    .gh3220
+                    .capture_start(Gh3220CaptureConfig {
+                        auto_start,
+                        auto_stop: req.auto_stop.unwrap_or(false),
+                        mode: req.mode.unwrap_or(0),
+                        slot_en: req.slot_en.unwrap_or(0),
+                        func_mask,
+                        channels_override: req.channels_override,
+                        csv_enabled: req.csv_enabled,
+                    })
+                    .await
+                    .map_err(gh3220_tool_err)?;
+                resp.capture = Some(self.ctx.gh3220.capture_status());
+            }
+            "capture_stop" => {
+                self.confirm_if_needed(
+                    &peer,
+                    "combridge_gh3220",
+                    "GH3220 停止采集",
+                    "gh3220",
+                    "停止采集并关闭 CSV/波形",
+                )
+                .await?;
+                self.ctx
+                    .gh3220
+                    .capture_stop()
+                    .await
+                    .map_err(gh3220_tool_err)?;
+                resp.capture = Some(self.ctx.gh3220.capture_status());
+            }
+            "send_raw" => {
+                let hex = req
+                    .hex
+                    .clone()
+                    .ok_or_else(|| tool_err("INVALID_ARGUMENT", "send_raw 需要 hex"))?;
+                self.confirm_if_needed(
+                    &peer,
+                    "combridge_gh3220",
+                    "GH3220 原始帧",
+                    "gh3220",
+                    format!("发送原始帧 {hex}"),
+                )
+                .await?;
+                self.ctx
+                    .gh3220
+                    .send_raw(&hex)
+                    .await
+                    .map_err(gh3220_tool_err)?;
+                resp.message = Some("已发送".to_string());
+            }
+            other => {
+                return Err(tool_err(
+                    "INVALID_ARGUMENT",
+                    format!("未知 action: {other}"),
+                ))
+            }
+        }
+
+        Ok(Json(resp))
+    }
+
+    // -----------------------------------------------------------------------
     // P4：波形
     // -----------------------------------------------------------------------
 
@@ -4051,6 +4504,10 @@ mod tests {
                 "combridge_gh3036_factory_test",
             ),
             (
+                ComBridgeMcp::gh3220_tool_attr().name.to_string(),
+                "combridge_gh3220",
+            ),
+            (
                 ComBridgeMcp::waveform_tool_attr().name.to_string(),
                 "combridge_waveform",
             ),
@@ -4102,6 +4559,12 @@ mod tests {
         assert!(serde_json::to_string(&*scan.input_schema)
             .unwrap()
             .contains("duration_ms"));
+
+        // GH3220 域
+        let gh3220 = ComBridgeMcp::gh3220_tool_attr();
+        let schema = serde_json::to_string(&*gh3220.input_schema).unwrap();
+        assert!(schema.contains("action"));
+        assert!(schema.contains("func_mask"));
 
         // GH3036 域
         let rpc = ComBridgeMcp::gh3036_rpc_tool_attr();

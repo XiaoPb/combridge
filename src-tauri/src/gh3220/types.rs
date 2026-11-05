@@ -30,7 +30,9 @@ pub const DEFAULT_CSV_IDLE_CLOSE_SECS: u64 = 10;
 /// CSV 空闲关闭时长上限（秒）
 pub const MAX_CSV_IDLE_CLOSE_SECS: u64 = 3600;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, schemars::JsonSchema,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Gh3220LinkKind {
     #[default]
@@ -47,7 +49,9 @@ impl std::fmt::Display for Gh3220LinkKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, schemars::JsonSchema,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Gh3220State {
     #[default]
@@ -72,7 +76,7 @@ pub struct Gh3220LinkConfig {
     pub mtu: Option<u16>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Gh3220Status {
     pub state: Gh3220State,
@@ -98,7 +102,7 @@ impl Default for Gh3220Status {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Gh3220DeviceInfo {
     pub fw_version: String,
@@ -144,7 +148,7 @@ impl Gh3220Record {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Gh3220Stats {
     pub frames: u64,
@@ -183,7 +187,7 @@ pub struct Gh3220ErrorEvent {
     pub message: String,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Gh3220StatusEvent {
     pub status: Gh3220Status,
@@ -220,7 +224,7 @@ pub struct Gh3220CaptureConfig {
     pub csv_enabled: Option<bool>,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Gh3220CaptureStatus {
     pub active: bool,

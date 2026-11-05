@@ -10,6 +10,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use combridge_rust_lib::commands::waveform::WaveformManager;
 use combridge_rust_lib::device::ble::BleManager;
 use combridge_rust_lib::gh3220::{
     Gh3220CaptureConfig, Gh3220CsvConfig, Gh3220LinkConfig, Gh3220LinkKind, Gh3220Manager,
@@ -51,7 +52,8 @@ async fn ble_real_device_smoke() {
         "扫描结果里没有目标设备 {address}"
     );
 
-    let mgr = Arc::new(Gh3220Manager::new(ble, bus));
+    let waveform = Arc::new(WaveformManager::new());
+    let mgr = Arc::new(Gh3220Manager::new(ble, bus, Some(waveform.clone())));
     mgr.start_event_bridge();
     mgr.set_csv_config(Gh3220CsvConfig {
         enabled: true,
@@ -96,6 +98,24 @@ async fn ble_real_device_smoke() {
     println!("stats: {stats:?}");
     assert!(capture.records > 0, "未收到数据");
     assert!(stats.frames > 0, "未解析到帧");
+
+    let buffers = waveform.list_buffers();
+    println!("waveform buffers: {buffers:?}");
+    assert!(
+        buffers.iter().any(|id| id.starts_with("gh3220:func")),
+        "未创建波形缓冲"
+    );
+    let buffer_id = buffers
+        .iter()
+        .find(|id| id.starts_with("gh3220:func"))
+        .unwrap();
+    let data = waveform.read_data(buffer_id, 10).expect("读取波形失败");
+    assert!(!data.rows.is_empty(), "波形缓冲为空");
+    println!(
+        "waveform rows: {} cols: {:?}",
+        data.rows.len(),
+        data.columns
+    );
 
     mgr.capture_stop().await.expect("停止采集失败");
     mgr.disconnect().await.expect("断开失败");

@@ -243,7 +243,37 @@ Windows 后端 MTU 可能无法真正协商，返回值以实际为准，别按 
 - `stop` 中止 job，不释放租约
 - `validate_config` 不连设备，适合测前自查卡控文件
 
-### 4.5 waveform
+### 4.5 gh3220
+
+#### `combridge_gh3220`
+
+| action | 用途 | 关键参数 |
+|---|---|---|
+| `status` | 连接/采集/解码统计（无需连接） | — |
+| `info` | 读版本、最大包长、已开功能 | — |
+| `connect` / `disconnect` | 建立/断开会话 | `address`、`kind`（ble 默认 / tcp 调试） |
+| `work_mode` | 设置工作模式与功能位 | `mode`、`func_mask` |
+| `start` / `stop` | 启动/停止采样 | `func_mask`、`slot_en` |
+| `switch_func` | 槽位功能开关 | `slot`、`extra`、`func_mask`、`on` |
+| `reg_read` / `reg_write` | 寄存器读写 | `addr`、`count` / `values[]` |
+| `load_reg_list` | 批量寄存器表 | `file_path`（每行 addr,value） |
+| `chip_ctrl` | 唤醒/休眠/复位 | `chip_action` |
+| `capture_start` / `capture_stop` | 采集 + CSV/波形 | `func_mask`、`auto_start`、`channels_override` |
+| `send_raw` | 发送原始帧 | `hex` |
+
+**顺序**：`connect` → `info` → `work_mode` → `start`。`WORK_MODE` 是 `START` 的前置条件。
+`capture_start` 默认 `auto_start=true`，会自动完成 `WORK_MODE + START` 并开启 CSV/波形。
+
+- GH3220 是**单会话**：GUI 已连接时先断开再 `connect`。
+- 真机 `STOP` 后通常需要复位才能再次 `START`；`auto_stop` 默认 `false`。
+- `0x16` 事件由后端自动 ACK，无需额外操作。
+- 调试 TCP 通道默认关闭，仅用于接本地 `uprotocol-sim`。
+
+```json
+{"action": "capture_start", "func_mask": 2, "channels_override": 4}
+```
+
+### 4.6 waveform
 
 | action | 说明 |
 |---|---|
@@ -258,7 +288,7 @@ Windows 后端 MTU 可能无法真正协商，返回值以实际为准，别按 
 `parse` 返回 `accepted` / `rejected` / `errors`（前 5 条失败原因）。
 缓冲与 GUI 波形面板**共用**，写进去 GUI 立刻可见。
 
-### 4.6 protocol
+### 4.7 protocol
 
 `action=list|get|load|unload|enable|disable|bind|unbind|bound`，`plugin_id`、`path`（load 用绝对路径）、`device_id`（bind 用）。
 
@@ -266,7 +296,7 @@ Windows 后端 MTU 可能无法真正协商，返回值以实际为准，别按 
 - 插件必须 `bind` 到设备才处理该设备的数据
 - `load` 失败时 `plugin.error` 带 Lua 报错行号
 
-### 4.7 ota
+### 4.8 ota
 
 `action=protocols|validate|preflight|start|status|cancel`。
 
@@ -315,7 +345,18 @@ combridge_gh3036_rpc   {"action":"rpc","command_key":"S","params":["4","0"]}   #
 combridge_gh3036_rpc   {"action":"rpc","command_key":"S","params":["255"]}
 ```
 
-### 5.4 产测
+### 5.4 GH3220 采集
+
+```
+combridge_gh3220  {"action":"connect","address":"AA:BB:..."}
+combridge_gh3220  {"action":"info"}
+combridge_gh3220  {"action":"capture_start","func_mask":2}
+# 数据写入 GUI 偏好目录，同时生成 gh3220:funcN 波形缓冲
+combridge_gh3220  {"action":"status"}
+combridge_gh3220  {"action":"capture_stop"}
+```
+
+### 5.5 产测
 
 ```
 combridge_gh3036_factory_test  {"action":"validate_config"}
@@ -324,7 +365,7 @@ combridge_gh3036_factory_test  {"action":"run","max_wait_s":240}
 combridge_gh3036_factory_test  {"action":"status"}
 ```
 
-### 5.5 OTA
+### 5.6 OTA
 
 ```
 combridge_ota  {"action":"validate","firmware_path":"D:/fw/app.zip"}

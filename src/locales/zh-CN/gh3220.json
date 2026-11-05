@@ -118,6 +118,8 @@
     },
     "latestTitle": "最新记录",
     "clearRecords": "清空",
+    "openWaveform": "波形 func{{func}}",
+    "openWaveformFailed": "打开波形失败",
     "table": {
       "func": "功能",
       "frame": "帧号"

@@ -16,6 +16,7 @@ import type {
   BleDisconnectedPayload,
   Gh3036FramesPayload,
   Gh3036RefDataPayload,
+  Gh3036StreamStatusPayload,
 } from '../api/events';
 
 let eventBusListener: UnlistenFn | undefined;
@@ -23,13 +24,8 @@ let initialized = false;
 let initPromise: Promise<void> | null = null;
 
 function handleSerialData(payload: SerialDataPayload) {
-  console.log('[EventListeners] handleSerialData called with payload:', payload);
-  console.log('[EventListeners] device_id:', payload.device_id, 'data type:', typeof payload.data, 'data length:', payload.data?.length);
-  
   const store = useSerialStore.getState();
-  const matchingTab = store.tabs.find(t => t.portName === payload.device_id && t.tabType === 'port');
-  console.log('[EventListeners] Matching tab found:', !!matchingTab, 'Available tabs:', store.tabs.map(t => ({ portName: t.portName, tabType: t.tabType })));
-  
+
   store.addReceivedData(payload.device_id, {
     id: generateId(),
     timestamp: payload.timestamp ?? Date.now(),
@@ -37,15 +33,11 @@ function handleSerialData(payload: SerialDataPayload) {
     direction: 'receive',
     format: 'hex',
   });
-  console.log('[EventListeners] addReceivedData called for device_id:', payload.device_id);
 }
 
 function handleSerialConnected(payload: SerialConnectedPayload) {
-  console.log('[EventListeners] handleSerialConnected called with payload:', payload);
   const store = useSerialStore.getState();
   store.addPortTab(payload.port_name);
-  console.log('[EventListeners] Added port tab for:', payload.port_name);
-  console.log('[EventListeners] Current tabs after addPortTab:', store.tabs.map(t => ({ portName: t.portName, tabType: t.tabType })));
   useLogStore.getState().addLog('info', 'SerialManager', `串口 ${payload.port_name} 已连接`);
   useNotificationStore.getState().addNotification('success', `串口 ${payload.port_name} 已连接`);
 }
@@ -88,7 +80,6 @@ function handleBleConnected(payload: BleConnectedPayload) {
 }
 
 function handleBleDisconnected(payload: BleDisconnectedPayload) {
-  console.log('[EventListeners] handleBleDisconnected called with payload:', payload);
   const store = useBleStore.getState();
   const deviceId = payload.address;
   const connection = store.connections.find((c) => c.address === deviceId);
@@ -101,21 +92,26 @@ function handleBleDisconnected(payload: BleDisconnectedPayload) {
 }
 
 function handleGh3036Frames(payload: Gh3036FramesPayload) {
-  console.log('[EventListeners] handleGh3036Frames:', payload);
-  const store = useGh3036Store.getState();
-  store.addFramesData(payload);
+  useGh3036Store.getState().addFramesData(payload);
 }
 
 function handleGh3036RefData(payload: Gh3036RefDataPayload) {
-  console.log('[EventListeners] handleGh3036RefData:', payload);
+  useGh3036Store.getState().updateRefData(payload);
+}
+
+function handleGh3036StreamStatus(payload: Gh3036StreamStatusPayload) {
   const store = useGh3036Store.getState();
-  store.updateRefData(payload);
+  store.setStreamStalled(payload.stalled);
+  if (payload.stalled) {
+    useLogStore
+      .getState()
+      .addLog('warn', 'GH3036', `帧流已停止（超过 ${Math.round(payload.elapsed_ms / 1000)} 秒未收到数据）`);
+  } else {
+    useLogStore.getState().addLog('info', 'GH3036', '帧流已恢复');
+  }
 }
 
 function dispatchEvent(event: EventBusEvent) {
-  const ts = new Date().toISOString().substr(11, 12);
-  console.log(`[${ts}] [EventListeners] Received event-bus event: topic=${event.topic}, encoding=${event.encoding}`);
-  
   try {
     switch (event.topic) {
       case 'serial:data':
@@ -142,8 +138,11 @@ function dispatchEvent(event: EventBusEvent) {
       case 'gh3036:ref_data':
         handleGh3036RefData(decodePayload<Gh3036RefDataPayload>(event));
         break;
+      case 'gh3036:stream:stalled':
+        handleGh3036StreamStatus(decodePayload<Gh3036StreamStatusPayload>(event));
+        break;
       case 'gh3036:factory_test_progress':
-        console.log(`[${ts}] [EventListeners] gh3036:factory_test_progress received (handled by store)`);
+        // 由 gh3036Store 的订阅处理
         break;
       case 'ota:progress': {
         const payload = decodePayload<OtaStatus>(event);
@@ -151,11 +150,10 @@ function dispatchEvent(event: EventBusEvent) {
         break;
       }
       default:
-        console.log(`[${ts}] [EventListeners] Unknown topic: ${event.topic}`);
         break;
     }
   } catch (err) {
-    console.error(`[${ts}] [EventListeners] Failed to decode payload for topic "${event.topic}":`, err);
+    console.error(`[EventListeners] Failed to decode payload for topic "${event.topic}":`, err);
   }
 }
 

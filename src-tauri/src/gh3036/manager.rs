@@ -9,6 +9,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -195,6 +196,8 @@ struct GlobalContext {
     ref_data_manager: Arc<RefDataManager>,
     event_bus: Mutex<Option<Arc<EventBus>>>,
     last_frame_time: Mutex<Option<std::time::Instant>>,
+    /// 帧流看门狗：当前是否已处于"停止"状态，用于只在状态翻转时发布事件
+    stream_stalled: AtomicBool,
 }
 
 impl GlobalContext {
@@ -216,6 +219,7 @@ impl GlobalContext {
             ref_data_manager,
             event_bus: Mutex::new(None),
             last_frame_time: Mutex::new(None),
+            stream_stalled: AtomicBool::new(false),
         }
     }
 
@@ -347,7 +351,6 @@ impl GlobalContext {
         if !csv_config.enabled {
             return;
         }
-        info!("frame.frame_cnt: {}", frame.frame_cnt);
         let ref_data = self.ref_data_manager.get_ref_data(frame.frame_cnt as usize);
         let frame_data = Gh3036FrameData::from_func_frame(frame, Some(&ref_data));
         let mut writers = self.csv_writers.lock();
@@ -401,12 +404,83 @@ impl GlobalContext {
     /// 启动（ctrl_type=0）或停止（ctrl_type=1）命令执行后，触发新 CSV 文件创建
     fn handle_sw_function_command_completed(&self, ctrl_type: u8) {
         if ctrl_type == 0 || ctrl_type == 1 {
+            // 主动停止采样时复位帧流看门狗，避免把"用户停止"误报成"帧流异常"
+            if ctrl_type == 1 {
+                self.reset_stream_watchdog();
+            }
             self.trigger_new_csv_file();
             info!(
                 "[GH3036] 软件{}命令执行完成，已触发新CSV文件创建",
                 if ctrl_type == 0 { "启动" } else { "停止" }
             );
         }
+    }
+
+    /// 帧流看门狗：超过阈值未收到帧时向前端发布状态变化事件。
+    ///
+    /// 只关注"状态翻转"（正常→停止 / 停止→恢复），避免每秒重复发事件。
+    /// 从未收到过帧（未开始采样）时不报警，由前端依据采样状态自行提示。
+    fn check_stream_watchdog(&self) {
+        use super::types::Gh3036StreamStatusEvent;
+        use std::time::Duration;
+
+        /// 判定帧流停止的阈值。设备端正常出帧 25Hz，5 秒无帧已属异常，
+        /// 同时留出足够余量避免 BLE 拥塞抖动误报。
+        const STALL_THRESHOLD: Duration = Duration::from_secs(5);
+
+        let elapsed = {
+            let guard = self.last_frame_time.lock();
+            guard.as_ref().map(|time| time.elapsed())
+        };
+
+        let Some(elapsed) = elapsed else {
+            return;
+        };
+
+        let stalled = elapsed >= STALL_THRESHOLD;
+        let was_stalled = self.stream_stalled.swap(stalled, Ordering::SeqCst);
+        if stalled == was_stalled {
+            return;
+        }
+
+        if stalled {
+            warn!(
+                "[GH3036] 帧流已停止: 距最后一帧 {} 秒，已通知前端",
+                elapsed.as_secs()
+            );
+        } else {
+            info!("[GH3036] 帧流已恢复，已通知前端");
+        }
+
+        let event_bus = self.event_bus.lock();
+        if let Some(bus) = event_bus.as_ref() {
+            let event = Gh3036StreamStatusEvent {
+                stalled,
+                elapsed_ms: elapsed.as_millis() as u64,
+            };
+            bus.publish_msgpack(topics::GH3036_STREAM_STALLED, &event);
+        }
+    }
+
+    /// 用户主动停止采样时复位看门狗，避免把"主动停止"误报成"帧流异常"
+    fn reset_stream_watchdog(&self) {
+        use super::types::Gh3036StreamStatusEvent;
+
+        *self.last_frame_time.lock() = None;
+        let was_stalled = self.stream_stalled.swap(false, Ordering::SeqCst);
+        if !was_stalled {
+            return;
+        }
+
+        let event_bus = self.event_bus.lock();
+        if let Some(bus) = event_bus.as_ref() {
+            let event = Gh3036StreamStatusEvent {
+                stalled: false,
+                elapsed_ms: 0,
+            };
+            bus.publish_msgpack(topics::GH3036_STREAM_STALLED, &event);
+        }
+        info!("[GH3036] 已复位帧流看门狗（采样停止）");
     }
 
     fn publish_ref_data(&self) {
@@ -780,13 +854,14 @@ impl Gh3036Manager {
             let func_id = frame.id as u8;
             let func_name = GhFuncFixIdx::from(func_id).name();
             let acc = &frame.gsensor_data.acc;
-            info!(
+            // 每帧日志降为 debug：采集时每秒数十帧，info 级别会拖慢回调与前端实时显示
+            debug!(
                 "[GH3036] 帧解码: func_id={} ({}), frame_cnt={}, ch_num={}, acc=[{},{},{}], algo_data={:?}",
                 func_id, func_name, frame.frame_cnt, frame.ch_num, acc[0], acc[1], acc[2], frame.algo_data
             );
 
             for (i, ch_data) in frame.data.iter().enumerate() {
-                info!(
+                debug!(
                     "[GH3036]   ch[{}]: ipd={}, raw={}",
                     i, ch_data.ipd_pa, ch_data.rawdata
                 );
@@ -796,7 +871,7 @@ impl Gh3036Manager {
             CALLBACK_CONTEXT.save_frame_to_csv(&frame);
 
             for aggregated in CALLBACK_CONTEXT.add_frame_to_aggregator(&frame) {
-                info!(
+                debug!(
                     "[GH3036] 发布聚合帧事件: function_id={}, frame_count={}, channel_count={}",
                     aggregated.function_id, aggregated.frame_count, aggregated.channel_count
                 );
@@ -861,6 +936,7 @@ impl Gh3036Manager {
                 let now = std::time::Instant::now();
                 if now.duration_since(last_ref_data_publish) >= ref_data_interval {
                     CALLBACK_CONTEXT.publish_ref_data();
+                    CALLBACK_CONTEXT.check_stream_watchdog();
                     last_ref_data_publish = now;
                 }
             }

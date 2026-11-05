@@ -71,6 +71,14 @@ export interface Gh3036RefDataPayload {
   timestamp: number;
 }
 
+/** 帧流看门狗状态：宿主侧超过阈值未收到帧时由后端发布 */
+export interface Gh3036StreamStatusPayload {
+  /** 帧流是否已停止 */
+  stalled: boolean;
+  /** 距最后一帧的毫秒数（恢复时表示停顿时长） */
+  elapsed_ms: number;
+}
+
 export interface ProtocolParsedPayload {
   plugin_id: string;
   device_id: string;

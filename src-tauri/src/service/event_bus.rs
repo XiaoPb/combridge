@@ -531,6 +531,8 @@ pub mod topics {
     pub const GH3036_FRAME: &str = "gh3036:frame";
     pub const GH3036_EVENT: &str = "gh3036:event";
     pub const GH3036_CHANNEL_CHANGED: &str = "gh3036:channel:changed";
+    /// 帧流看门狗状态变化（stalled=true 表示超过阈值未收到帧）
+    pub const GH3036_STREAM_STALLED: &str = "gh3036:stream:stalled";
 
     pub const PROTOCOL_PARSED: &str = "protocol:parsed";
     pub const PROTOCOL_ERROR: &str = "protocol:error";

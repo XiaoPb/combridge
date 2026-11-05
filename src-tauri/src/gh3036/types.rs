@@ -714,22 +714,38 @@ impl Gh3036FramesEvent {
     }
 
     pub fn add_frame_with_ref(&mut self, frame: &GhFuncFrame, ref_data: Vec<i32>) {
+        let channel_count = frame.ch_num as usize;
+
+        // 首帧初始化；设备通道数变化时按新通道数重建，保证各通道数组与帧序列对齐
+        if self.ipd_pa.is_empty() || self.channel_count != channel_count {
+            self.channel_count = channel_count;
+            self.ipd_pa = vec![Vec::new(); channel_count];
+            self.rawdata = vec![Vec::new(); channel_count];
+            self.flags = vec![Vec::new(); channel_count];
+            self.agc_info = vec![Vec::new(); channel_count];
+        }
+
+        // 通道数据不完整（如 BLE 截帧导致解码出的通道数不足）时整帧丢弃：
+        // 否则 frame_cnts/timestamps 会与各通道数组错位，前端波形会出现
+        // 恒定值平线。CSV 由回调直接写入，不受此处影响。
+        if frame.data.len() != channel_count {
+            tracing::debug!(
+                "[GH3036] 丢弃通道不完整的帧: func_id={}, frame_cnt={}, ch_num={}, data_len={}",
+                frame.id as u8,
+                frame.frame_cnt,
+                frame.ch_num,
+                frame.data.len()
+            );
+            return;
+        }
+
         self.frame_cnts.push(frame.frame_cnt);
         self.timestamps.push(frame.timestamp);
         self.frame_ids.push(frame.frame_cnt);
 
-        if self.ipd_pa.is_empty() {
-            self.channel_count = frame.ch_num as usize;
-            self.ipd_pa = vec![Vec::new(); frame.ch_num as usize];
-            self.rawdata = vec![Vec::new(); frame.ch_num as usize];
-            self.flags = vec![Vec::new(); frame.ch_num as usize];
-            self.agc_info = vec![Vec::new(); frame.ch_num as usize];
-        }
-
         for (i, ch_data) in frame.data.iter().enumerate() {
-            if i < self.ipd_pa.len() {
-                self.ipd_pa[i].push(ch_data.ipd_pa);
-                self.rawdata[i].push(ch_data.rawdata);
+            self.ipd_pa[i].push(ch_data.ipd_pa);
+            self.rawdata[i].push(ch_data.rawdata);
 
                 let mut flag_val = 0i32;
                 if ch_data.flag.led_adj_flag {
@@ -756,7 +772,6 @@ impl Gh3036FramesEvent {
                     | ((ch_data.agc_info.led_drv0 as u32) << 16)
                     | ((ch_data.agc_info.led_drv1 as u32) << 24);
                 self.agc_info[i].push(word0 as i32);
-            }
         }
 
         self.acc_x.push(frame.gsensor_data.acc[0]);
@@ -918,6 +933,19 @@ pub struct Gh3036RefDataEvent {
     pub spo2_count: i32,
     pub spo2_valid: bool,
     pub timestamp: u64,
+}
+
+/// 帧流看门狗状态事件
+///
+/// 设备端可能因为健康框架定时器、算法库异常或连接假死而静默停止发帧。
+/// 宿主侧在超过阈值未收到帧时发布该事件，前端据此显示"数据已停止"提示，
+/// 避免用户把"设备停了"误判成"前端卡死"。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Gh3036StreamStatusEvent {
+    /// 帧流是否已停止
+    pub stalled: bool,
+    /// 距最后一帧的毫秒数（stalled=false 时为恢复时的间隔）
+    pub elapsed_ms: u64,
 }
 
 #[cfg(test)]

@@ -49,4 +49,77 @@ describe('mergeGh3036Frames', () => {
     expect(merged.ipd_pa[0][0]).toBe(1010);
     expect(merged.rawdata[1][19]).toBe(4029);
   });
+
+  it('drops incoming frames that overlap with the cache tail', () => {
+    const maxFramesCount = 100;
+    // 缓存已有 0..14，重传批次为 10..19：前 5 帧重叠，后 5 帧为新帧
+    const first = mergeGh3036Frames(undefined, makeFrames(0, 15), maxFramesCount);
+    const merged = mergeGh3036Frames(first, makeFrames(10, 10), maxFramesCount);
+
+    expect(merged.frame_cnts).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+    expect(merged.frame_count).toBe(20);
+    expect(merged.ipd_pa[0]).toHaveLength(20);
+    expect(merged.ipd_pa[0][19]).toBe(1019);
+    expect(merged.acc_x).toHaveLength(20);
+    expect(merged.algo_results).toHaveLength(20);
+  });
+
+  it('returns the same cache when the whole batch is duplicated', () => {
+    const maxFramesCount = 100;
+    const first = mergeGh3036Frames(undefined, makeFrames(0, 10), maxFramesCount);
+    const merged = mergeGh3036Frames(first, makeFrames(0, 10), maxFramesCount);
+
+    expect(merged).toBe(first);
+  });
+
+  it('drops duplicate frames inside a single batch', () => {
+    const maxFramesCount = 100;
+    const duplicated = makeFrames(0, 5);
+    duplicated.frame_cnts = [0, 1, 1, 2, 3];
+    duplicated.timestamps = [0, 1, 1, 2, 3];
+
+    const merged = mergeGh3036Frames(undefined, duplicated, maxFramesCount);
+
+    expect(merged.frame_cnts).toEqual([0, 1, 2, 3]);
+    expect(merged.frame_count).toBe(4);
+    expect(merged.ipd_pa[0]).toHaveLength(4);
+  });
+
+  it('keeps the whole batch when the device restarts frame_cnt', () => {
+    const maxFramesCount = 100;
+    const first = mergeGh3036Frames(undefined, makeFrames(50, 10), maxFramesCount);
+
+    // 设备重启后 frame_cnt 回退到 0
+    const merged = mergeGh3036Frames(first, makeFrames(0, 5), maxFramesCount);
+
+    expect(merged.frame_cnts).toEqual([...Array.from({ length: 10 }, (_, i) => 50 + i), 0, 1, 2, 3, 4]);
+    expect(merged.frame_count).toBe(15);
+  });
+
+  it('treats a restarted session as new even when the cache holds the same frame_cnt range', () => {
+    const maxFramesCount = 1000;
+    // 上一轮会话已缓存 0..199。用户停止后重新开始采样时，设备的 frame_cnt 与
+    // timestamp 都会从 0 重新计数，与缓存开头完全重合。
+    const first = mergeGh3036Frames(undefined, makeFrames(0, 200), maxFramesCount);
+
+    // 旧实现按 (frame_cnt, timestamp) 逐帧比对，会把整批 50 帧判成重传全部丢弃，
+    // 表现为波形冻结约一个缓存窗口后才恢复。
+    const restarted = mergeGh3036Frames(first, makeFrames(0, 50), maxFramesCount);
+
+    expect(restarted.frame_count).toBe(250);
+    expect(restarted.frame_cnts.slice(200)).toEqual(
+      Array.from({ length: 50 }, (_, i) => i)
+    );
+    expect(restarted.ipd_pa[0]).toHaveLength(250);
+  });
+
+  it('still drops resent frames inside the same session', () => {
+    const maxFramesCount = 1000;
+    const first = mergeGh3036Frames(undefined, makeFrames(0, 200), maxFramesCount);
+    // 同一会话内的重传：批次首帧不从 0 开始，必须继续按重复帧丢弃
+    const merged = mergeGh3036Frames(first, makeFrames(195, 10), maxFramesCount);
+
+    expect(merged.frame_count).toBe(205);
+    expect(merged.frame_cnts.slice(-5)).toEqual([200, 201, 202, 203, 204]);
+  });
 });

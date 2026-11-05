@@ -1,11 +1,12 @@
 import React, { useMemo, useCallback, useEffect } from 'react';
-import { Button, Empty, Card, Select, Space, Row, Col, message } from 'antd';
+import { Button, Empty, Card, Select, Space, Row, Col, message, Alert } from 'antd';
 import { ClearOutlined, FileAddOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3036Store } from '../../stores/gh3036Store';
 import { gh3036ForceNewCsvFile } from '../../api/gh3036';
 import MultiLineChart from '../Waveform/MultiLineChart';
 import { getChartGroupKey } from '../Waveform/chartGroup';
+import { buildIpdPaChartData } from '../Gh3036/monitorChartData';
 import {
   appendGh3036ChartGroup,
   normalizeGh3036ChartGroups,
@@ -22,6 +23,9 @@ const Gh3036DataView: React.FC = () => {
     setChartGroups,
     chartLegendSelected,
     setChartLegendSelected,
+    ipdRawDataType,
+    streamStalled,
+    rpcConfig,
   } = useGh3036Store();
 
   const chartGroupsWithStableIds = useMemo(
@@ -105,22 +109,27 @@ const Gh3036DataView: React.FC = () => {
       return [];
     }
 
+    // 与 MonitorTab 保持一致：统一走 buildIpdPaChartData，
+    // 尊重 ipd/rawdata 切换，并按各通道最小公共长度取数，避免 0 填充平线
+    const { columns: allColumns, rows: allRows } = buildIpdPaChartData(
+      currentFrames,
+      ipdRawDataType
+    );
+
+    if (allRows.length === 0) {
+      return [];
+    }
+
     return chartGroupsWithStableIds.map((group) => {
       const columns = group.columns.slice(0, 4);
-      const rows: number[][] = [];
-
-      for (let frameIdx = 0; frameIdx < currentFrames.frame_count; frameIdx++) {
-        const row: number[] = [];
-        for (const col of columns) {
-          const chIdx = parseInt(col.replace('CH', ''), 10);
-          row.push(currentFrames.ipd_pa[chIdx]?.[frameIdx] ?? 0);
-        }
-        rows.push(row);
-      }
+      const columnIndices = columns.map((col) => allColumns.indexOf(col));
+      const rows = allRows.map((row) =>
+        columnIndices.map((idx) => (idx >= 0 ? row[idx] : 0))
+      );
 
       return { group, columns, rows };
     });
-  }, [currentFrames, chartGroupsWithStableIds]);
+  }, [currentFrames, chartGroupsWithStableIds, ipdRawDataType]);
 
   if (framesData.size === 0) {
     return (
@@ -178,6 +187,18 @@ const Gh3036DataView: React.FC = () => {
         body: { padding: 8, height: 'calc(100% - 40px)', overflow: 'auto' },
       }}
     >
+      {streamStalled && rpcConfig.isRunning && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 8 }}
+          message={t('gh3036.streamStalledTitle', '设备已停止发送数据')}
+          description={t(
+            'gh3036.streamStalledDesc',
+            '波形已定格，但连接仍在。可能是设备端测量被自动停止或采样管线异常，请检查设备后重新开始采样。'
+          )}
+        />
+      )}
       <Space orientation="vertical" style={{ width: '100%' }} size="small">
         <Row gutter={8}>
           {[0, 1].map((chartIndex) => {

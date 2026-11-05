@@ -118,6 +118,9 @@ interface Gh3036State {
   sampleRateConfig: Record<number, number>;
   
   isLinked: boolean;
+
+  /** 帧流看门狗状态：true 表示宿主侧超过阈值未收到帧（设备可能已停止采样） */
+  streamStalled: boolean;
   
   eventListeners: {
     event?: UnlistenFn;
@@ -192,6 +195,8 @@ interface Gh3036State {
   setSampleRateConfig: (config: Record<number, number>) => void;
   
   setIsLinked: (value: boolean) => void;
+
+  setStreamStalled: (value: boolean) => void;
   
   setRpcConfig: (config: Partial<Gh3036State['rpcConfig']>) => void;
   
@@ -213,7 +218,7 @@ interface Gh3036State {
   
   sendData: (data: number[]) => Promise<boolean>;
   
-  executeRpc: (commandKey: string, params: string[]) => Promise<number[] | null>;
+  executeRpc: (commandKey: string, params: string[]) => Promise<number[]>;
   subscribeEvents: () => Promise<void>;
   unsubscribeEvents: () => void;
   loadLibraryStatus: () => Promise<void>;
@@ -326,6 +331,8 @@ export const useGh3036Store = create<Gh3036State>()(
   },
   
   isLinked: false,
+
+  streamStalled: false,
   
   eventListeners: {},
   
@@ -555,6 +562,8 @@ export const useGh3036Store = create<Gh3036State>()(
   setSampleRateConfig: (config) => set({ sampleRateConfig: config }),
   
   setIsLinked: (value) => set({ isLinked: value }),
+
+  setStreamStalled: (value) => set({ streamStalled: value }),
   
   setRpcConfig: (config) => set((state) => ({
     rpcConfig: { ...state.rpcConfig, ...config },
@@ -740,12 +749,14 @@ export const useGh3036Store = create<Gh3036State>()(
   executeRpc: async (commandKey, params) => {
     set({ isLoading: true, error: null });
     try {
-      const result = await gh3036Api.executeRpc(commandKey, params);
-      return result;
+      return await gh3036Api.executeRpc(commandKey, params);
     } catch (err) {
       const errorMsg = formatErrorMessage(err, i18n.t('gh3036:errors.executeRpc'));
       set({ error: errorMsg });
-      return null;
+      // 不吞错：把格式化后的错误抛给调用方。
+      // 原先这里 return null，导致"命令执行异常"和"设备返回空数组"无法区分，
+      // 排查链路问题时极易误判为设备没响应。
+      throw new Error(errorMsg);
     } finally {
       set({ isLoading: false });
     }
@@ -754,34 +765,12 @@ export const useGh3036Store = create<Gh3036State>()(
   subscribeEvents: async () => {
     const { eventListeners } = get();
     
-    if (eventListeners.event || eventListeners.frame || eventListeners.deviceDisconnected) {
+    if (eventListeners.deviceDisconnected) {
       console.debug('[Gh3036Store] 事件已订阅，跳过重复订阅');
       return;
     }
     
     try {
-      const eventUnlisten = await listen<EventBusEvent>('event-bus', (event) => {
-        if (event.payload.topic === 'gh3036:event') {
-          try {
-            const parsed = decodePayload<Gh3036EventData>(event.payload);
-            get().addEventData(parsed);
-          } catch (err) {
-            console.error('[Gh3036Store] Failed to decode gh3036:event payload:', err);
-          }
-        }
-      });
-      
-      const frameUnlisten = await listen<EventBusEvent>('event-bus', (event) => {
-        if (event.payload.topic === 'gh3036:frame') {
-          try {
-            const parsed = decodePayload<Gh3036FrameEventData>(event.payload);
-            get().addFrameData(parsed);
-          } catch (err) {
-            console.error('[Gh3036Store] Failed to decode gh3036:frame payload:', err);
-          }
-        }
-      });
-      
       const deviceDisconnectedUnlisten = await listen<EventBusEvent>('event-bus', (event) => {
         const { topic } = event.payload;
         
@@ -810,8 +799,6 @@ export const useGh3036Store = create<Gh3036State>()(
       
       set({ 
         eventListeners: { 
-          event: eventUnlisten, 
-          frame: frameUnlisten,
           deviceDisconnected: deviceDisconnectedUnlisten,
         } 
       });
@@ -823,12 +810,6 @@ export const useGh3036Store = create<Gh3036State>()(
   unsubscribeEvents: () => {
     const { eventListeners } = get();
     
-    if (eventListeners.event) {
-      eventListeners.event();
-    }
-    if (eventListeners.frame) {
-      eventListeners.frame();
-    }
     if (eventListeners.deviceDisconnected) {
       eventListeners.deviceDisconnected();
     }
@@ -1186,6 +1167,7 @@ export const useGh3036Store = create<Gh3036State>()(
     chartLegendSelected: state.chartLegendSelected ? { ...state.chartLegendSelected } : {},
     ipdRawDataType: state.ipdRawDataType || 'ipd',
     displayDurationSeconds: state.displayDurationSeconds || 10,
+    maxFramesCount: state.maxFramesCount || 100,
     sampleRateConfig: state.sampleRateConfig || { 0: 5, 1: 25, 2: 25, 3: 25, 4: 25 },
   }),
   merge: (persisted, current) => ({
@@ -1193,6 +1175,7 @@ export const useGh3036Store = create<Gh3036State>()(
     chartLegendSelected: (persisted as { chartLegendSelected?: Record<string, boolean> })?.chartLegendSelected || {},
     ipdRawDataType: (persisted as { ipdRawDataType?: 'ipd' | 'rawdata' })?.ipdRawDataType || 'ipd',
     displayDurationSeconds: (persisted as { displayDurationSeconds?: number })?.displayDurationSeconds || 10,
+    maxFramesCount: (persisted as { maxFramesCount?: number })?.maxFramesCount || 100,
     sampleRateConfig: (persisted as { sampleRateConfig?: Record<number, number> })?.sampleRateConfig || { 0: 5, 1: 25, 2: 25, 3: 25, 4: 25 },
   }),
 }

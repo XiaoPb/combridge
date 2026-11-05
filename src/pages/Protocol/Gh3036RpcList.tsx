@@ -86,12 +86,14 @@ const Gh3036RpcList: React.FC = () => {
       message.error(t('gh3036.noTxChannel'));
       return false;
     }
-    const result = await executeRpc(commandKey, params);
-    const success = result !== null;
-    if (success) {
+    try {
+      await executeRpc(commandKey, params);
       message.success(t('gh3036.commandSent', { name: commandKey }));
+      return true;
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : String(err));
+      return false;
     }
-    return success;
   };
 
   const handleRestart = async () => {
@@ -99,10 +101,14 @@ const Gh3036RpcList: React.FC = () => {
   };
 
   const handleGetVersion = async () => {
-    const result = await executeRpc('V', [rpcConfig.versionType.toString()]);
-    if (result && result.length > 0) {
-      const versionStr = String.fromCharCode(...result.filter(c => c >= 32 && c < 127));
-      setRpcConfig({ version: versionStr || '-' });
+    try {
+      const result = await executeRpc('V', [rpcConfig.versionType.toString()]);
+      if (result.length > 0) {
+        const versionStr = String.fromCharCode(...result.filter(c => c >= 32 && c < 127));
+        setRpcConfig({ version: versionStr || '-' });
+      }
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -124,11 +130,15 @@ const Gh3036RpcList: React.FC = () => {
 
   const handleReadReg = async () => {
     const addr = parseInt(rpcConfig.readRegAddr, 16);
-    const result = await executeRpc('R', ['0x' + addr.toString(16), '1']);
-    if (result && result.length >= 2) {
-      const value = (result[1] << 8) | result[0];
-      setRpcConfig({ readRegValue: value.toString(16).toUpperCase().padStart(4, '0') });
-      message.success(`寄存器 0x${rpcConfig.readRegAddr.toUpperCase()} = 0x${value.toString(16).toUpperCase().padStart(4, '0')}`);
+    try {
+      const result = await executeRpc('R', ['0x' + addr.toString(16), '1']);
+      if (result.length >= 2) {
+        const value = (result[1] << 8) | result[0];
+        setRpcConfig({ readRegValue: value.toString(16).toUpperCase().padStart(4, '0') });
+        message.success(`寄存器 0x${rpcConfig.readRegAddr.toUpperCase()} = 0x${value.toString(16).toUpperCase().padStart(4, '0')}`);
+      }
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -287,8 +297,11 @@ const Gh3036RpcList: React.FC = () => {
       lplctr: 0x20,
     };
     const modeBits = bitMap[rpcConfig.factoryMode] || 0;
-    const result = await executeRpc('FG', ['0x' + modeBits.toString(16)]);
-    if (result === null) {
+    let result: number[];
+    try {
+      result = await executeRpc('FG', ['0x' + modeBits.toString(16)]);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : String(err));
       return;
     }
     const values: string[] = [];

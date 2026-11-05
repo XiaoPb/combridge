@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Card, Row, Col, Empty, Select, Space, Button, InputNumber, Tooltip } from 'antd';
+import { Card, Row, Col, Empty, Select, Space, Button, InputNumber, Tooltip, Alert } from 'antd';
 import { ClearOutlined, HeartOutlined, ThunderboltOutlined, SettingOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
@@ -38,6 +38,8 @@ const MonitorTab: React.FC = () => {
     setMaxFramesCount,
     chartLegendSelected,
     setChartLegendSelected,
+    streamStalled,
+    rpcConfig,
   } = useGh3036Store();
 
   const [hrRefDialogOpen, setHrRefDialogOpen] = useState(false);
@@ -167,39 +169,27 @@ const MonitorTab: React.FC = () => {
     const columns: string[] = [];
     const rows: number[][] = [];
 
-    // 合并 PPG 列
-    if (ipdPaChartData.columns.length > 0) {
-      columns.push(...ipdPaChartData.columns);
-    }
-
-    // 合并 ACC 列
-    if (gsensorChartData.columns.length > 0) {
-      columns.push(...gsensorChartData.columns);
-    }
-
-    // 合并数据行（以较长的数据为准，缺失的数据填充为 0）
-    const maxRows = Math.max(
-      ipdPaChartData.rows.length,
-      gsensorChartData.rows.length
+    const sources = [ipdPaChartData, gsensorChartData].filter(
+      (source) => source.columns.length > 0 && source.rows.length > 0
     );
 
-    for (let i = 0; i < maxRows; i++) {
+    for (const source of sources) {
+      columns.push(...source.columns);
+    }
+
+    if (sources.length === 0) {
+      return { columns, rows };
+    }
+
+    // 各数据源按最短的长度对齐，缺失部分不使用 0 填充，
+    // 避免在图上绘制出虚假的恒定值平线
+    const alignedRows = Math.min(...sources.map((source) => source.rows.length));
+
+    for (let i = 0; i < alignedRows; i++) {
       const row: number[] = [];
-
-      // 添加 PPG 数据
-      if (ipdPaChartData.rows[i]) {
-        row.push(...ipdPaChartData.rows[i]);
-      } else {
-        row.push(...Array(ipdPaChartData.columns.length).fill(0));
+      for (const source of sources) {
+        row.push(...source.rows[i]);
       }
-
-      // 添加 ACC 数据
-      if (gsensorChartData.rows[i]) {
-        row.push(...gsensorChartData.rows[i]);
-      } else {
-        row.push(...Array(gsensorChartData.columns.length).fill(0));
-      }
-
       rows.push(row);
     }
 
@@ -208,6 +198,17 @@ const MonitorTab: React.FC = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 8, overflow: 'auto' }}>
+      {streamStalled && rpcConfig.isRunning && (
+        <Alert
+          type="warning"
+          showIcon
+          message={t('monitor.streamStalledTitle', '设备已停止发送数据')}
+          description={t(
+            'monitor.streamStalledDesc',
+            '波形已定格，但连接仍在。可能是设备端测量被自动停止或采样管线异常，请检查设备后重新开始采样。'
+          )}
+        />
+      )}
       <Row gutter={8}>
         <Col xs={12} sm={6}>
           <VitalSignCard

@@ -7,7 +7,7 @@ use std::sync::{
 use bluest::{Adapter, Device, DeviceId};
 use futures::StreamExt;
 use tokio::sync::Notify;
-use tracing::info;
+use tracing::{info, warn};
 
 use super::super::ble_traits::BleDevice;
 use super::gatt_client::{DisconnectCallback, GattClient};
@@ -254,9 +254,38 @@ impl BleAdapter {
             }
         }
 
-        let device = self
-            .get_device(address)
-            .ok_or_else(|| ComBridgeError::ble(format!("设备未找到: {}", address)))?;
+        let device = match self.get_device(address) {
+            Some(device) => device,
+            None => {
+                // 扫描缓存里没有：可能是伪断连后设备仍处于"已连接"状态而停止广播，
+                // 这种情况下广播扫描永远找不到它。改从系统已连接设备列表里找回，
+                // 免去用户必须复位器件才能重新连接的麻烦。
+                info!(
+                    "扫描缓存中未找到 {}，尝试从系统已连接设备中找回",
+                    address
+                );
+                let recovered = match self.adapter.connected_devices().await {
+                    Ok(devices) => devices
+                        .into_iter()
+                        .find(|device| device.id().to_string() == address),
+                    Err(e) => {
+                        warn!("获取系统已连接设备列表失败: {}", e);
+                        None
+                    }
+                };
+                let Some(device) = recovered else {
+                    return Err(ComBridgeError::ble(format!("设备未找到: {}", address)));
+                };
+                let device = Arc::new(device);
+                info!("已从系统已连接设备中找回: {}", address);
+                // 放入扫描缓存，保证后续服务/特征发现流程能正常取到设备
+                self.scanned_devices
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(device.id(), (device.clone(), None));
+                device
+            }
+        };
 
         let client = self.get_or_create_client(address);
         client.set_device(device, self.adapter.clone())?;
@@ -265,6 +294,10 @@ impl BleAdapter {
         let adapter_for_callback = self.clone_handles();
         let client_clone = client.clone();
         let callback: DisconnectCallback = Arc::new(move |addr: &str| {
+            // 关键顺序：先释放底层 GATT 连接，再清理本地状态。
+            // 只丢本地句柄时，Windows 的 WinRT GattSession 可能仍持有连接，
+            // 设备会一直认为"已连接"而停止广播，用户只能复位器件才能重新发现。
+            client_clone.spawn_release_connection();
             client_clone.reset_state();
             adapter_for_callback.cleanup_passive_disconnect(addr);
         });

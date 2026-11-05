@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 
-use bluest::{Characteristic, Device, Service};
+use bluest::{Characteristic, ConnectionEvent, Device, Service};
 use futures::StreamExt;
 use tracing::{debug, error, info, warn};
 
@@ -12,6 +12,16 @@ use crate::device::cache::{create_ring_buffer, ChannelCache, RingBufferRef};
 use crate::error::{ComBridgeError, Result};
 
 pub type DisconnectCallback = Arc<dyn Fn(&str) + Send + Sync>;
+
+/// 连接监控宽限期：连接刚建立时 GattSession 状态未稳定，不判定断开
+const CONNECTION_GRACE_PERIOD: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// 断连二次确认延迟：系统推送的断开事件可能只是瞬时抖动，
+/// 短暂等待后复查连接状态，仍为断开才认定真断开
+const DISCONNECT_CONFIRM_DELAY: std::time::Duration = std::time::Duration::from_millis(800);
+
+/// 事件流空闲时兜底轮询的间隔计数（每 N 次事件流超时做一次状态复查）
+const IDLE_POLL_EVERY: u32 = 10;
 
 fn extract_short_mac(address: &str) -> String {
     if let Some(pos) = address.rfind('-') {
@@ -143,6 +153,47 @@ impl GattClient {
         );
     }
 
+    /// 异步释放底层 GATT 连接（不清理业务状态）。
+    ///
+    /// 被动断开路径专用：Windows 的 WinRT GattSession 可能仍持有连接，设备端会一直
+    /// 保持"已连接"而停止广播，表现为必须复位器件才能重新被发现。这里在清理本地
+    /// 状态之前显式 disconnect，保证链路真正释放、设备恢复广播。
+    pub fn spawn_release_connection(&self) {
+        let device = self
+            .device
+            .read()
+            .ok()
+            .and_then(|guard| guard.as_ref().cloned());
+        let adapter = self
+            .adapter
+            .read()
+            .ok()
+            .and_then(|guard| guard.as_ref().cloned());
+
+        let (Some(device), Some(adapter)) = (device, adapter) else {
+            debug!(
+                "[{}] 无需释放底层连接（设备或适配器已释放）",
+                extract_short_mac(&self.address)
+            );
+            return;
+        };
+
+        let address = self.address.clone();
+        tokio::spawn(async move {
+            match adapter.disconnect_device(&device).await {
+                Ok(()) => info!(
+                    "[{}] 已释放底层 GATT 连接，设备可恢复广播",
+                    extract_short_mac(&address)
+                ),
+                Err(e) => warn!(
+                    "[{}] 释放底层 GATT 连接失败: {}（设备可能仍处于假连接状态）",
+                    extract_short_mac(&address),
+                    e
+                ),
+            }
+        });
+    }
+
     pub fn set_device(&self, device: Arc<Device>, adapter: Arc<bluest::Adapter>) -> Result<()> {
         *self
             .device
@@ -238,36 +289,114 @@ impl GattClient {
             None => return,
         };
 
+        let adapter = self
+            .adapter
+            .read()
+            .ok()
+            .and_then(|guard| guard.as_ref().cloned());
+
         let address = self.address.clone();
         let callback_arc = self.disconnect_callback.clone();
 
         let handle = tokio::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            // 连接后宽限期：bluest 在 Windows 下 connect 返回后 GattSession 状态
+            // 可能短暂未就绪（is_connected 返回 false），立即判定会误报断开并触发
+            // 通道清理（曾出现连接成功 6 秒后误报的案例）。宽限 10 秒后再开始判定。
+            tokio::time::sleep(CONNECTION_GRACE_PERIOD).await;
             info!("[{}] 连接监控任务已启动", extract_short_mac(&address));
 
-            let mut disconnect_count = 0;
-            loop {
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            // 优先使用系统推送的连接事件（Windows 由 BluetoothLEDevice 的
+            // ConnectionStatusChanged 驱动），比固定间隔轮询更及时，也不会
+            // 因为轮询采样点错过短暂状态变化。
+            //
+            // 注意：事件流借用 adapter 与 device，因此 adapter_handle 必须绑定在
+            // 外层作用域，不能写在 match 分支里（否则借用提前结束）。
+            let adapter_handle = adapter;
+            let mut event_stream = match adapter_handle.as_ref() {
+                Some(adapter_ref) => {
+                    match adapter_ref.device_connection_events(&device).await {
+                        Ok(stream) => {
+                            info!(
+                                "[{}] 已订阅系统连接事件流",
+                                extract_short_mac(&address)
+                            );
+                            Some(Box::pin(stream))
+                        }
+                        Err(e) => {
+                            warn!(
+                                "[{}] 订阅连接事件流失败: {}，回退到轮询",
+                                extract_short_mac(&address),
+                                e
+                            );
+                            None
+                        }
+                    }
+                }
+                None => None,
+            };
 
-                let connected = device.is_connected().await;
-                if !connected {
-                    disconnect_count += 1;
-                    if disconnect_count >= 2 {
-                        info!(
-                            "[{}] 检测到设备断开连接（连续{}次确认）",
-                            extract_short_mac(&address),
-                            disconnect_count
-                        );
-                        if let Ok(cb_guard) = callback_arc.read() {
-                            if let Some(cb) = cb_guard.as_ref() {
-                                cb(&address);
+            let mut idle_rounds = 0u32;
+            loop {
+                let detected = match event_stream.as_mut() {
+                    Some(stream) => {
+                        match tokio::time::timeout(
+                            std::time::Duration::from_secs(3),
+                            stream.next(),
+                        )
+                        .await
+                        {
+                            Ok(Some(ConnectionEvent::Disconnected)) => true,
+                            Ok(Some(ConnectionEvent::Connected)) => false,
+                            Ok(None) => {
+                                // 事件流结束（设备对象销毁等），退回轮询
+                                warn!(
+                                    "[{}] 连接事件流结束，回退到轮询",
+                                    extract_short_mac(&address)
+                                );
+                                event_stream = None;
+                                continue;
+                            }
+                            Err(_) => {
+                                // 超时无事件：定期兜底复查一次，避免事件丢失导致永不判定
+                                idle_rounds = idle_rounds.wrapping_add(1);
+                                if idle_rounds % IDLE_POLL_EVERY == 0 {
+                                    !device.is_connected().await
+                                } else {
+                                    false
+                                }
                             }
                         }
-                        break;
                     }
-                } else {
-                    disconnect_count = 0;
+                    None => {
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                        !device.is_connected().await
+                    }
+                };
+
+                if !detected {
+                    continue;
                 }
+
+                // 二次确认：系统连接状态存在瞬时抖动，短暂等待后复查再定性
+                tokio::time::sleep(DISCONNECT_CONFIRM_DELAY).await;
+                if device.is_connected().await {
+                    debug!(
+                        "[{}] 检测到瞬时断连抖动，复查已恢复，忽略",
+                        extract_short_mac(&address)
+                    );
+                    continue;
+                }
+
+                info!(
+                    "[{}] 确认设备断开连接（事件流+复查）",
+                    extract_short_mac(&address)
+                );
+                if let Ok(cb_guard) = callback_arc.read() {
+                    if let Some(cb) = cb_guard.as_ref() {
+                        cb(&address);
+                    }
+                }
+                break;
             }
         });
 
@@ -804,11 +933,17 @@ impl GattClient {
     }
 
     pub async fn set_mtu(&self, mtu: u16) -> Result<u16> {
-        info!("MTU协商，请求值: {}", mtu);
-
-        let actual_mtu = mtu.clamp(23, 517);
-        info!("MTU协商完成，实际值: {}", actual_mtu);
-        Ok(actual_mtu)
+        // bluest 在 Windows 后端不暴露 GattSession.MaxPduSize，无法主动协商 MTU：
+        // Windows 蓝牙栈会在连接建立时自动协商最大 MTU。这里仅记录请求值并返回
+        // clamp 结果，不假装完成了协商（此前静默返回导致上层误以为协商成功）。
+        let clamped = mtu.clamp(23, 517);
+        warn!(
+            "[{}] MTU 请求 {}：Windows 蓝牙栈自动管理 MTU，无法主动协商；返回 clamp 值 {}（实际 MTU 以栈协商结果为准）",
+            extract_short_mac(&self.address),
+            mtu,
+            clamped
+        );
+        Ok(clamped)
     }
 
     pub async fn max_write_len(&self, char_uuid: &str) -> Result<usize> {
@@ -940,14 +1075,23 @@ impl GattClient {
             .map_err(|e| ComBridgeError::ble(format!("锁获取失败: {}", e)))?
             .clone();
 
+        let norm = |s: &str| s.trim().to_lowercase();
+        let want = norm(char_uuid);
+        let mut seen: Vec<String> = Vec::new();
         for chars in char_map.values() {
             for c in chars {
-                if c.uuid().to_string() == char_uuid {
+                let got = c.uuid().to_string();
+                seen.push(got.clone());
+                if norm(&got) == want {
                     return Ok(c.clone());
                 }
             }
         }
 
+        error!(
+            "特征未找到: {} | 已发现的特征: {:?}",
+            char_uuid, seen
+        );
         Err(ComBridgeError::ble(format!("特征未找到: {}", char_uuid)))
     }
 }

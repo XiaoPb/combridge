@@ -1,16 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   Alert,
   Button,
   Card,
   Descriptions,
   Divider,
-  Input,
   InputNumber,
+  Modal,
   Select,
   Space,
   Switch,
   Table,
+  Tag,
+  Tooltip,
   Typography,
   message,
 } from 'antd';
@@ -18,15 +20,24 @@ import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useGh3220Store } from '../../../stores/gh3220Store';
+import { useGh3220CommandConfig } from '../../../stores/gh3220CommandConfig';
 import { useWaveformStore } from '../../../stores/waveformStore';
 import { usePageTabsStore } from '../../../stores/pageTabsStore';
-import { parseFuncMask } from '../../../types/gh3220';
 import type { Gh3220Record } from '../../../types/gh3220';
 import { formatErrorMessage } from '../../../utils/errorMessage';
+import { encodeBoundedNumber } from '../../../constants/gh3220CommandSchema';
 import {
+  boundedOptions,
+  channelOptions,
+  customOption,
+  customValue,
+  encodeFunctionMask,
+  formatFunctionMaskPreview,
   formatWorkModeLabel,
+  functionOptions,
   getFunctionName,
   GH3220_WORK_MODE_LIST,
+  isCustom,
   resolveGh3220Lang,
 } from '../../../constants/gh3220Functions';
 
@@ -50,12 +61,8 @@ const CaptureSection: React.FC = () => {
     clearStats,
     clearRecords,
   } = useGh3220Store();
-
-  const [autoStart, setAutoStart] = useState(true);
-  const [mode, setMode] = useState(0);
-  const [slotEn, setSlotEn] = useState(0);
-  const [funcMaskText, setFuncMaskText] = useState('hr');
-  const [channelsOverride, setChannelsOverride] = useState<number | null>(null);
+  const cfg = useGh3220CommandConfig();
+  const mask = encodeFunctionMask(cfg.selectedFunctions);
 
   useEffect(() => {
     void refreshCapture();
@@ -63,24 +70,17 @@ const CaptureSection: React.FC = () => {
   }, [refreshCapture, refreshStats]);
 
   const handleStart = async () => {
-    let mask = 0;
-    try {
-      mask = parseFuncMask(funcMaskText);
-    } catch (error) {
-      message.error((error as Error).message);
-      return;
-    }
-    if (autoStart && mask === 0) {
+    if (cfg.autoStart === 'true' && mask === 0) {
       message.error(t('capture.maskRequired'));
       return;
     }
     try {
       await startCapture({
-        autoStart,
-        mode,
-        slotEn,
+        autoStart: cfg.autoStart === 'true',
+        mode: Number(cfg.workMode),
+        slotEn: encodeBoundedNumber(cfg.slotEn) ?? 0,
         funcMask: mask,
-        channelsOverride,
+        channelsOverride: encodeBoundedNumber(cfg.channelsOverride),
       });
       message.success(t('capture.started'));
     } catch (error) {
@@ -88,10 +88,49 @@ const CaptureSection: React.FC = () => {
     }
   };
 
-  const handleStop = async () => {
-    await stopCapture();
-    message.info(t('capture.stopped'));
+  const handleStop = () => {
+    Modal.confirm({
+      title: t('commands.confirmTitles.captureStop'),
+      content: t('commands.confirmContents.captureStop'),
+      okText: t('commands.confirm'),
+      cancelText: t('commands.cancel'),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        await stopCapture();
+        message.info(t('capture.stopped'));
+      },
+    });
   };
+
+  const numericSelect = (
+    value: string,
+    options: ReturnType<typeof boundedOptions>,
+    onChange: (next: string) => void,
+    min = 0,
+    max = 255
+  ) => (
+    <>
+      <Select
+        size="small"
+        style={{ width: 140 }}
+        value={isCustom(value) ? 'custom' : value}
+        options={options}
+        onChange={(next: string) =>
+          onChange(next === 'custom' ? customOption(customValue(value) || '0') : next)
+        }
+      />
+      {isCustom(value) ? (
+        <InputNumber
+          size="small"
+          min={min}
+          max={max}
+          value={Number(customValue(value, '0'))}
+          onChange={(next) => onChange(customOption(next ?? 0))}
+          style={{ width: 92 }}
+        />
+      ) : null}
+    </>
+  );
 
   const columns: ColumnsType<Gh3220Record> = [
     {
@@ -149,43 +188,55 @@ const CaptureSection: React.FC = () => {
         <Space wrap size="middle">
           <Space>
             <Typography.Text>{t('capture.autoStart')}</Typography.Text>
-            <Switch checked={autoStart} onChange={setAutoStart} />
+            <Switch
+              checked={cfg.autoStart === 'true'}
+              onChange={(checked) => cfg.setConfig({ autoStart: String(checked) })}
+            />
           </Space>
           <Space>
             <Typography.Text>{t('control.mode')}</Typography.Text>
             <Select
               size="small"
-              style={{ width: 220 }}
-              value={mode}
-              onChange={setMode}
+              style={{ width: 240 }}
+              value={cfg.workMode}
+              onChange={(next: string) => cfg.setConfig({ workMode: next })}
               options={GH3220_WORK_MODE_LIST.map((info) => ({
-                value: info.mode,
+                value: String(info.mode),
                 label: formatWorkModeLabel(info.mode, lang),
               }))}
             />
           </Space>
           <Space>
             <Typography.Text>{t('control.slotEn')}</Typography.Text>
-            <InputNumber min={0} max={255} value={slotEn} onChange={(v) => setSlotEn(v ?? 0)} />
+            {numericSelect(cfg.slotEn, boundedOptions('slotEn', lang), (next) =>
+              cfg.setConfig({ slotEn: next })
+            )}
           </Space>
           <Space>
             <Typography.Text>{t('control.funcMask')}</Typography.Text>
-            <Input
-              style={{ width: 160 }}
-              value={funcMaskText}
-              onChange={(e) => setFuncMaskText(e.target.value)}
-              placeholder={t('control.funcMaskHint')}
+            <Select
+              size="small"
+              mode="multiple"
+              maxTagCount={2}
+              style={{ minWidth: 220 }}
+              value={cfg.selectedFunctions}
+              onChange={(keys: string[]) => cfg.setSelectedFunctions(keys)}
+              options={functionOptions(lang)}
+              placeholder={t('commands.preview.selectFunctions')}
             />
+            <Tooltip title={formatFunctionMaskPreview(mask, lang)}>
+              <Tag color="blue">{formatFunctionMaskPreview(mask, lang)}</Tag>
+            </Tooltip>
           </Space>
           <Space>
             <Typography.Text>{t('capture.channels')}</Typography.Text>
-            <InputNumber
-              min={1}
-              max={32}
-              value={channelsOverride}
-              onChange={(v) => setChannelsOverride(v ?? null)}
-              placeholder={t('capture.auto')}
-            />
+            {numericSelect(
+              cfg.channelsOverride,
+              channelOptions(cfg.selectedFunctions, lang),
+              (next) => cfg.setConfig({ channelsOverride: next }),
+              1,
+              32
+            )}
           </Space>
         </Space>
 

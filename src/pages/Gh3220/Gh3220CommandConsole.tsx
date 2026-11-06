@@ -418,6 +418,7 @@ const Gh3220CommandConsole: React.FC = () => {
       title: t('commands.action'),
       key: 'action',
       width: 100,
+      fixed: 'right' as const,
       render: (_, def) => (
         <Button
           size="small"
@@ -469,6 +470,7 @@ const Gh3220CommandConsole: React.FC = () => {
       title: t('commands.status'),
       dataIndex: 'ok',
       width: 76,
+      fixed: 'right' as const,
       render: (ok: boolean) => (
         <Tag color={ok ? 'success' : 'error'}>{ok ? t('commands.success') : t('commands.failed')}</Tag>
       ),
@@ -573,6 +575,9 @@ const Gh3220CommandConsole: React.FC = () => {
     padding: '12px 16px',
     background: token.colorFillSecondary,
     borderRadius: 8,
+    // 约束宽度，让横向滚动留在表格内部，行内发送按钮（fixed right）始终可见
+    minWidth: 0,
+    overflow: 'hidden',
   };
   const labelStyle: React.CSSProperties = {
     fontSize: 13,
@@ -669,7 +674,7 @@ const Gh3220CommandConsole: React.FC = () => {
   ];
 
   return (
-    <Space direction="vertical" size={10} style={{ width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', minWidth: 0 }}>
       {status.state === 'disconnected' && (
         <Alert type="warning" showIcon message={t('commands.notConnected')} />
       )}
@@ -756,7 +761,7 @@ const Gh3220CommandConsole: React.FC = () => {
           columns={commandColumns}
           dataSource={GH3220_COMMAND_CATALOG}
           pagination={false}
-          scroll={{ y: 460, x: 1180 }}
+          scroll={{ y: 460, x: 1000 }}
         />
         <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
           {t('commands.hint')}
@@ -794,7 +799,7 @@ const Gh3220CommandConsole: React.FC = () => {
           locale={{ emptyText: t('commands.empty') }}
         />
       </div>
-    </Space>
+    </div>
   );
 };
 

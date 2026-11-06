@@ -24,8 +24,22 @@ def list_targets():
 
 
 def find_page():
-    for t in list_targets():
-        if t.get("type") == "page":
+    """选中 ComBridge 应用页，而不是 DevTools 的调试页面。
+
+    WebView2 会把 `devtools://` 页面也列为 type=page；旧实现按遍历顺序取第一个，
+    在应用开着 DevTools 时会连到 DevTools 页，导致 eval 操作不到应用 DOM。
+    """
+    targets = list_targets()
+    for t in targets:
+        if (
+            t.get("type") == "page"
+            and t.get("title") == "ComBridge"
+            and str(t.get("url", "")).startswith("http")
+        ):
+            return t
+    # 回退：第一个 http(s) 页面（排除 devtools:// / chrome-extension:// 等）
+    for t in targets:
+        if t.get("type") == "page" and str(t.get("url", "")).startswith("http"):
             return t
     raise RuntimeError("no page target found")
 

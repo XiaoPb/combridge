@@ -5,6 +5,7 @@ import {
   Card,
   Descriptions,
   Input,
+  Select,
   Space,
   Switch,
   Typography,
@@ -14,16 +15,21 @@ import { useTranslation } from 'react-i18next';
 import { gh3220Api } from '../../../api/gh3220';
 import { useGh3220Store } from '../../../stores/gh3220Store';
 import { formatErrorMessage } from '../../../utils/errorMessage';
+import { encodeHex, GH3220_SELECT_OPTIONS } from '../../../constants/gh3220CommandSchema';
 import {
+  customOption,
+  customValue,
   formatBitNames,
   getFunctionName,
+  GH3220_HEX_TEMPLATES,
+  isCustom,
   parseFrameHeader,
   resolveGh3220Lang,
 } from '../../../constants/gh3220Functions';
 
 /**
  * 调试页分区④：TCP 调试通道 + 原始帧 / 回显测试 + 0x0B 帧头解析
- * （原 ConfigTab 的 DebugChannelCard 与独立 DebugTab 合并而来）
+ * V3：地址改下拉预设 + 自定义，三类 HEX 输入附加模板下拉与格式校验。
  */
 const ChannelSection: React.FC = () => {
   const { t, i18n } = useTranslation('gh3220');
@@ -45,19 +51,46 @@ const ChannelSection: React.FC = () => {
   useEffect(() => {
     if (!preferences) return;
     setEnabled(preferences.debugTcp.enabled);
-    setAddress(preferences.debugTcp.address);
-  }, [preferences]);
+    const saved = preferences.debugTcp.address;
+    if (!saved) return;
+    const presets = GH3220_SELECT_OPTIONS.tcpAddress(lang).map((item) => item.value);
+    setAddress(presets.includes(saved) ? saved : customOption(saved));
+  }, [preferences, lang]);
 
   const connected = status.state !== 'disconnected' && status.state !== 'connecting';
   const frameHeader = useMemo(() => parseFrameHeader(headerHex), [headerHex]);
   const hexByte = (value: number) => `0x${(value & 0xff).toString(16).padStart(2, '0')}`;
+  const resolvedAddress = isCustom(address) ? customValue(address) : address;
+
+  const validHex = (text: string): boolean => {
+    const cleaned = encodeHex(text);
+    return cleaned.length > 0 && cleaned.length % 2 === 0 && /^[0-9a-f]+$/i.test(cleaned);
+  };
+
+  /** HEX 模板下拉：选中即自动填充输入框 */
+  const templateSelect = (onPick: (hex: string) => void) => (
+    <Select
+      size="small"
+      style={{ width: 170 }}
+      value={undefined}
+      placeholder={t('debug.template')}
+      options={GH3220_HEX_TEMPLATES.map((item) => ({
+        value: item.key,
+        label: lang === 'zh' ? item.nameZh : item.nameEn,
+      }))}
+      onChange={(key: string) => {
+        const template = GH3220_HEX_TEMPLATES.find((item) => item.key === key);
+        if (template) onPick(template.hex);
+      }}
+    />
+  );
 
   const handleSave = async () => {
     if (!preferences) return;
     try {
       await savePreferences({
         ...preferences,
-        debugTcp: { enabled, address },
+        debugTcp: { enabled, address: resolvedAddress },
       });
       message.success(t('debug.saved'));
     } catch (error) {
@@ -67,7 +100,7 @@ const ChannelSection: React.FC = () => {
 
   const handleConnect = async () => {
     try {
-      await connect({ kind: 'tcp', address });
+      await connect({ kind: 'tcp', address: resolvedAddress });
       message.success(t('debug.connected'));
     } catch (error) {
       message.error(formatErrorMessage(error, t('debug.connectFailed')));
@@ -75,6 +108,10 @@ const ChannelSection: React.FC = () => {
   };
 
   const handleRaw = async () => {
+    if (!validHex(rawHex)) {
+      message.error(t('debug.frameInvalid'));
+      return;
+    }
     try {
       await gh3220Api.sendRaw(rawHex);
       message.success(t('debug.rawSent'));
@@ -84,6 +121,10 @@ const ChannelSection: React.FC = () => {
   };
 
   const handlePackageTest = async () => {
+    if (!validHex(testHex)) {
+      message.error(t('debug.frameInvalid'));
+      return;
+    }
     try {
       const payload = await gh3220Api.packageTest(testHex);
       setPackageResult(payload.map((v) => v.toString(16).padStart(2, '0')).join(' '));
@@ -96,12 +137,15 @@ const ChannelSection: React.FC = () => {
   const frameInspector = (
     <Card size="small" title={t('debug.frameTitle')}>
       <Space direction="vertical" size="small" style={{ width: '100%' }}>
-        <Input
-          value={headerHex}
-          onChange={(e) => setHeaderHex(e.target.value)}
-          addonBefore={t('debug.frameInput')}
-          placeholder={t('debug.framePlaceholder')}
-        />
+        <Space.Compact style={{ width: '100%' }}>
+          <Input
+            value={headerHex}
+            onChange={(e) => setHeaderHex(e.target.value)}
+            addonBefore={t('debug.frameInput')}
+            placeholder={t('debug.framePlaceholder')}
+          />
+          {templateSelect(setHeaderHex)}
+        </Space.Compact>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {t('debug.frameHint')}
         </Typography.Text>
@@ -150,12 +194,24 @@ const ChannelSection: React.FC = () => {
           </Space>
           <Space>
             <Typography.Text>{t('debug.address')}</Typography.Text>
-            <Input
-              style={{ width: 220 }}
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="127.0.0.1:9000"
+            <Select
+              size="small"
+              style={{ width: 200 }}
+              value={isCustom(address) ? 'custom' : address}
+              options={GH3220_SELECT_OPTIONS.tcpAddress(lang)}
+              onChange={(next: string) =>
+                setAddress(next === 'custom' ? customOption(customValue(address) || '127.0.0.1:9000') : next)
+              }
             />
+            {isCustom(address) ? (
+              <Input
+                size="small"
+                style={{ width: 180 }}
+                value={customValue(address)}
+                onChange={(e) => setAddress(customOption(e.target.value))}
+                placeholder={t('channel.customValue')}
+              />
+            ) : null}
           </Space>
           <Button onClick={handleSave} disabled={!preferences}>
             {t('debug.save')}
@@ -170,16 +226,18 @@ const ChannelSection: React.FC = () => {
       </Card>
 
       <Card size="small" title={t('debug.rawTitle')}>
-        <Space.Compact style={{ width: '100%' }}>
+        <Space wrap>
           <Input
+            style={{ width: 240 }}
             value={rawHex}
             onChange={(e) => setRawHex(e.target.value)}
             placeholder="AA11A00100BF"
           />
+          {templateSelect(setRawHex)}
           <Button onClick={handleRaw} disabled={!connected}>
             {t('debug.send')}
           </Button>
-        </Space.Compact>
+        </Space>
       </Card>
 
       <Card size="small" title={t('debug.packageTitle')}>
@@ -190,6 +248,7 @@ const ChannelSection: React.FC = () => {
             onChange={(e) => setTestHex(e.target.value)}
             placeholder="0102"
           />
+          {templateSelect(setTestHex)}
           <Button onClick={handlePackageTest} disabled={!connected}>
             {t('debug.send')}
           </Button>

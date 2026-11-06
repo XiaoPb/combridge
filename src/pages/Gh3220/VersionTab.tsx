@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Card, Space, Table, Tag, Typography, message, theme } from 'antd';
+import { Alert, Button, Card, Select, Space, Table, Tag, Typography, message, theme } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
   CheckCircleOutlined,
@@ -11,6 +11,8 @@ import { useGh3220Store } from '../../stores/gh3220Store';
 import { gh3220Api } from '../../api/gh3220';
 import type { Gh3220DeviceInfo } from '../../types/gh3220';
 import { formatErrorMessage } from '../../utils/errorMessage';
+import { GH3220_SELECT_OPTIONS } from '../../constants/gh3220CommandSchema';
+import { resolveGh3220Lang } from '../../constants/gh3220Functions';
 
 interface VersionRow {
   key: string;
@@ -54,7 +56,8 @@ const ROW_TEMPLATE: Array<Omit<VersionRow, 'version'>> = [
 ];
 
 const VersionTab: React.FC = () => {
-  const { t } = useTranslation('gh3220');
+  const { t, i18n } = useTranslation('gh3220');
+  const lang = resolveGh3220Lang(i18n.language);
   const { token } = theme.useToken();
   const { status, deviceInfo, loadDeviceInfo } = useGh3220Store();
 
@@ -63,8 +66,13 @@ const VersionTab: React.FC = () => {
   );
   const [refreshingKey, setRefreshingKey] = useState<string | null>(null);
   const [loadingAll, setLoadingAll] = useState(false);
+  // V3：版本类型下拉只做定位/高亮，不改后端读取逻辑（GET_VER 仍是完整读取 4 项）
+  const [selectedType, setSelectedType] = useState('0x01');
 
   const connected = status.state !== 'disconnected' && status.state !== 'connecting';
+  const matchedRow = rows.find(
+    (row) => row.typeValue.toLowerCase() === selectedType.toLowerCase()
+  );
 
   // 设备信息变化时同步版本行（连接后 index 骨架已触发 loadDeviceInfo）
   useEffect(() => {
@@ -180,25 +188,52 @@ const VersionTab: React.FC = () => {
         size="small"
         title={t('version.title')}
         extra={
-          <Button
-            type="primary"
-            icon={<ReloadOutlined />}
-            onClick={handleRefreshAll}
-            loading={loadingAll}
-            size="small"
-            disabled={!connected}
-          >
-            {t('version.refreshAll')}
-          </Button>
+          <Space size={8}>
+            <Select
+              size="small"
+              style={{ width: 230 }}
+              value={selectedType}
+              options={GH3220_SELECT_OPTIONS.versionType(lang)}
+              onChange={setSelectedType}
+            />
+            <Button
+              type="primary"
+              icon={<ReloadOutlined />}
+              onClick={handleRefreshAll}
+              loading={loadingAll}
+              size="small"
+              disabled={!connected}
+            >
+              {t('version.refreshAll')}
+            </Button>
+          </Space>
         }
         style={{ background: token.colorBgContainer, borderRadius: token.borderRadius }}
       >
+        <Space direction="vertical" size={8} style={{ width: '100%', marginBottom: 8 }}>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {t('version.locateHint')}
+          </Typography.Text>
+          {!matchedRow ? (
+            <Alert
+              type="info"
+              showIcon
+              message={`${selectedType} · ${t('version.typeSelect')}`}
+            />
+          ) : null}
+        </Space>
         <Table<VersionRow>
           columns={columns}
           dataSource={rows}
           rowKey="key"
           size="small"
           pagination={false}
+          onRow={(record) => ({
+            style:
+              record.typeValue.toLowerCase() === selectedType.toLowerCase()
+                ? { background: token.colorPrimaryBg, fontWeight: 600 }
+                : {},
+          })}
         />
       </Card>
 

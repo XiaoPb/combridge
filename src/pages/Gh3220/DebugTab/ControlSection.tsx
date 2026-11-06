@@ -5,58 +5,59 @@ import {
   Divider,
   Input,
   InputNumber,
+  Modal,
   Select,
   Space,
   Switch,
+  Tag,
+  Tooltip,
   Typography,
   message,
 } from 'antd';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
 import { gh3220Api } from '../../../api/gh3220';
-import { parseFuncMask } from '../../../types/gh3220';
+import { useGh3220CommandConfig } from '../../../stores/gh3220CommandConfig';
 import { formatErrorMessage } from '../../../utils/errorMessage';
+import { encodeBoundedNumber } from '../../../constants/gh3220CommandSchema';
 import {
+  boundedOptions,
+  chipActionOptions,
+  customOption,
+  customValue,
+  encodeEventMask,
+  encodeFunctionMask,
+  eventMaskOptions,
+  formatEventMaskPreview,
+  formatFunctionMaskPreview,
   formatWorkModeLabel,
+  functionOptions,
   GH3220_WORK_MODE_LIST,
+  isCustom,
   resolveGh3220Lang,
+  type Gh3220Option,
 } from '../../../constants/gh3220Functions';
 
-/** 调试页分区②：采样命令控制（原 ControlTab 主体） */
+/** 调试页分区②：采样命令控制（V3：参数全部下拉/多选，功能选择与配置页共享） */
 const ControlSection: React.FC = () => {
   const { t, i18n } = useTranslation('gh3220');
   const lang = resolveGh3220Lang(i18n.language);
+  const cfg = useGh3220CommandConfig();
 
-  const [mode, setMode] = useState(0);
-  const [funcMaskText, setFuncMaskText] = useState('hr');
-  const [slotEn, setSlotEn] = useState(0);
-  const [slot, setSlot] = useState(0);
-  const [extra, setExtra] = useState(0);
-  const [slotOn, setSlotOn] = useState(true);
-
-  const [chipAction, setChipAction] = useState('wakeup');
-  const [fifoThr, setFifoThr] = useState(0);
-  const [eventMask, setEventMask] = useState(0);
-
+  const [fifoThr, setFifoThr] = useState('0');
   const [regAddr, setRegAddr] = useState('0x0000');
-  const [regCount, setRegCount] = useState(1);
+  const [regCount, setRegCount] = useState('1');
   const [regValues, setRegValues] = useState('');
   const [regRead, setRegRead] = useState<number[]>([]);
+
+  const mask = encodeFunctionMask(cfg.selectedFunctions);
+  const eventMask = encodeEventMask(cfg.eventMaskKeys);
 
   const codeText = (code: number) => {
     if (code === 0) return t('common.ok');
     if (code === 1) return t('common.fail');
     if (code === 0xff) return t('common.unsupported');
     return `0x${code.toString(16)}`;
-  };
-
-  const readMask = (): number | null => {
-    try {
-      return parseFuncMask(funcMaskText);
-    } catch (error) {
-      message.error((error as Error).message);
-      return null;
-    }
   };
 
   const run = async (label: string, action: () => Promise<number>) => {
@@ -68,46 +69,112 @@ const ControlSection: React.FC = () => {
     }
   };
 
-  const handleWorkMode = () => {
-    const mask = readMask();
-    if (mask === null) return;
-    void run(t('control.workMode'), () => gh3220Api.setWorkMode(mode, mask));
+  const confirmRun = (
+    title: string,
+    content: string,
+    label: string,
+    action: () => Promise<number>
+  ) => {
+    Modal.confirm({
+      title,
+      content,
+      okText: t('commands.confirm'),
+      cancelText: t('commands.cancel'),
+      okButtonProps: { danger: true },
+      onOk: () => void run(label, action),
+    });
   };
 
-  const handleStart = () => {
-    const mask = readMask();
-    if (mask === null) return;
-    void run(t('control.start'), () => gh3220Api.start(mask, slotEn));
-  };
+  /** 数值档位下拉 + 自定义值编辑 */
+  const numericSelect = (
+    value: string,
+    options: Gh3220Option[],
+    onChange: (next: string) => void,
+    min = 0,
+    max = 255,
+    width = 120
+  ) => (
+    <>
+      <Select
+        size="small"
+        style={{ width }}
+        value={isCustom(value) ? 'custom' : value}
+        options={options}
+        onChange={(next: string) =>
+          onChange(next === 'custom' ? customOption(customValue(value) || '0') : next)
+        }
+      />
+      {isCustom(value) ? (
+        <InputNumber
+          size="small"
+          min={min}
+          max={max}
+          value={Number(customValue(value, '0'))}
+          onChange={(next) => onChange(customOption(next ?? 0))}
+          style={{ width: 96 }}
+        />
+      ) : null}
+    </>
+  );
 
-  const handleStop = () => {
-    const mask = readMask();
-    if (mask === null) return;
-    void run(t('control.stop'), () => gh3220Api.stop(mask));
-  };
+  const numberOrZero = (value: string) => encodeBoundedNumber(value) ?? 0;
 
-  const handleSwitch = () => {
-    const mask = readMask();
-    if (mask === null) return;
-    void run(t('control.switchFunc'), () =>
-      gh3220Api.switchSlotFunc(slot, extra, mask, slotOn)
+  const handleWorkMode = () =>
+    void run(t('control.workMode'), () =>
+      gh3220Api.setWorkMode(Number(cfg.workMode), mask)
     );
+
+  const handleStart = () =>
+    void run(t('control.start'), () => gh3220Api.start(mask, numberOrZero(cfg.slotEn)));
+
+  const handleStop = () =>
+    confirmRun(
+      t('commands.confirmTitles.stop'),
+      t('commands.confirmContents.stop'),
+      t('control.stop'),
+      () => gh3220Api.stop(mask)
+    );
+
+  const handleSwitch = () =>
+    void run(t('control.switchFunc'), () =>
+      gh3220Api.switchSlotFunc(
+        numberOrZero(cfg.slot),
+        numberOrZero(cfg.extra),
+        mask,
+        cfg.slotOn === 'true'
+      )
+    );
+
+  const handleChip = () => {
+    const action = () => gh3220Api.chipCtrl(cfg.chipAction);
+    if (cfg.chipAction.includes('reset')) {
+      confirmRun(
+        t('commands.confirmTitles.chipReset'),
+        t('commands.confirmContents.chipReset'),
+        t('control.chipAction'),
+        action
+      );
+    } else {
+      void run(t('control.chipAction'), action);
+    }
   };
 
   const parseNumber = (text: string): number | null => {
-    const value = Number(text);
-    if (Number.isNaN(value)) {
+    const parsed = /^0x[0-9a-f]+$/i.test(text.trim())
+      ? Number.parseInt(text.trim().slice(2), 16)
+      : Number(text);
+    if (Number.isNaN(parsed)) {
       message.error(t('control.invalidNumber', { value: text }));
       return null;
     }
-    return value;
+    return parsed;
   };
 
   const handleRegRead = async () => {
     const addr = parseNumber(regAddr);
     if (addr === null) return;
     try {
-      const values = await gh3220Api.regRead(addr, regCount);
+      const values = await gh3220Api.regRead(addr, Number(regCount));
       setRegRead(values);
       message.success(
         `${t('control.regRead')}: ${values.map((v) => `0x${v.toString(16)}`).join(', ')}`
@@ -123,8 +190,9 @@ const ControlSection: React.FC = () => {
     const values = regValues
       .split(/[,\s]+/)
       .filter(Boolean)
-      .map((part) => Number(part));
-    if (values.length === 0 || values.some((v) => Number.isNaN(v))) {
+      .map((part) => parseNumber(part))
+      .filter((value): value is number => value !== null);
+    if (values.length === 0) {
       message.error(t('control.invalidValues'));
       return;
     }
@@ -150,36 +218,46 @@ const ControlSection: React.FC = () => {
     }
   };
 
+  const workModes: Gh3220Option[] = GH3220_WORK_MODE_LIST.map((info) => ({
+    value: String(info.mode),
+    label: formatWorkModeLabel(info.mode, lang),
+  }));
+
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
       <Card title={t('control.samplingTitle')}>
         <Space wrap size="middle">
           <Space>
             <Typography.Text>{t('control.mode')}</Typography.Text>
-            {/* U4：下拉显示语义名，下发给设备的仍是原始 mode 数值 */}
             <Select
               size="small"
               style={{ width: 240 }}
-              value={mode}
-              onChange={setMode}
-              options={GH3220_WORK_MODE_LIST.map((info) => ({
-                value: info.mode,
-                label: formatWorkModeLabel(info.mode, lang),
-              }))}
+              value={cfg.workMode}
+              onChange={(next: string) => cfg.setConfig({ workMode: next })}
+              options={workModes}
             />
           </Space>
           <Space>
             <Typography.Text>{t('control.funcMask')}</Typography.Text>
-            <Input
-              style={{ width: 180 }}
-              value={funcMaskText}
-              onChange={(e) => setFuncMaskText(e.target.value)}
-              placeholder={t('control.funcMaskHint')}
+            <Select
+              size="small"
+              mode="multiple"
+              maxTagCount={2}
+              style={{ minWidth: 220 }}
+              value={cfg.selectedFunctions}
+              onChange={(keys: string[]) => cfg.setSelectedFunctions(keys)}
+              options={functionOptions(lang)}
+              placeholder={t('commands.preview.selectFunctions')}
             />
+            <Tooltip title={formatFunctionMaskPreview(mask, lang)}>
+              <Tag color="blue">{formatFunctionMaskPreview(mask, lang)}</Tag>
+            </Tooltip>
           </Space>
           <Space>
             <Typography.Text>{t('control.slotEn')}</Typography.Text>
-            <InputNumber min={0} max={255} value={slotEn} onChange={(v) => setSlotEn(v ?? 0)} />
+            {numericSelect(cfg.slotEn, boundedOptions('slotEn', lang), (next) =>
+              cfg.setConfig({ slotEn: next })
+            )}
           </Space>
         </Space>
         <Divider />
@@ -201,54 +279,68 @@ const ControlSection: React.FC = () => {
         <Space wrap size="middle">
           <Space>
             <Typography.Text>{t('control.slot')}</Typography.Text>
-            <InputNumber min={0} max={255} value={slot} onChange={(v) => setSlot(v ?? 0)} />
+            {numericSelect(cfg.slot, boundedOptions('slot', lang), (next) =>
+              cfg.setConfig({ slot: next })
+            )}
           </Space>
           <Space>
             <Typography.Text>{t('control.extra')}</Typography.Text>
-            <InputNumber min={0} max={255} value={extra} onChange={(v) => setExtra(v ?? 0)} />
+            {numericSelect(cfg.extra, boundedOptions('extra', lang), (next) =>
+              cfg.setConfig({ extra: next })
+            )}
           </Space>
           <Space>
             <Typography.Text>{t('control.enable')}</Typography.Text>
-            <Switch checked={slotOn} onChange={setSlotOn} />
+            <Switch
+              checked={cfg.slotOn === 'true'}
+              onChange={(checked) => cfg.setConfig({ slotOn: String(checked) })}
+            />
           </Space>
           <Button onClick={handleSwitch}>{t('control.switchFunc')}</Button>
         </Space>
       </Card>
 
       <Card title={t('control.chipTitle')}>
-        <Space wrap size="middle">
-          <Space>
-            <Typography.Text>{t('control.chipAction')}</Typography.Text>
-            <Select
-              style={{ width: 160 }}
-              value={chipAction}
-              onChange={setChipAction}
-              options={[
-                { value: 'wakeup', label: 'wakeup' },
-                { value: 'sleep', label: 'sleep' },
-                { value: 'soft-reset', label: 'soft-reset' },
-                { value: 'hard-reset', label: 'hard-reset' },
-                { value: 'rx-reset', label: 'rx-reset' },
-              ]}
-            />
-            <Button
-              onClick={() => void run(t('control.chipAction'), () => gh3220Api.chipCtrl(chipAction))}
-            >
-              {t('control.apply')}
-            </Button>
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Space wrap size="middle">
+            <Space>
+              <Typography.Text>{t('control.chipAction')}</Typography.Text>
+              <Select
+                size="small"
+                style={{ width: 160 }}
+                value={cfg.chipAction}
+                onChange={(next: string) => cfg.setConfig({ chipAction: next })}
+                options={chipActionOptions(lang)}
+              />
+              <Button onClick={handleChip}>{t('control.apply')}</Button>
+            </Space>
+            <Space>
+              <Typography.Text>{t('control.fifoThr')}</Typography.Text>
+              {numericSelect(fifoThr, boundedOptions('fifoThr', lang), setFifoThr, 0, 65535)}
+              <Button
+                onClick={() =>
+                  void run(t('control.fifoThr'), () =>
+                    gh3220Api.setFifoThr(numberOrZero(fifoThr))
+                  )
+                }
+              >
+                {t('control.apply')}
+              </Button>
+            </Space>
           </Space>
-          <Space>
-            <Typography.Text>{t('control.fifoThr')}</Typography.Text>
-            <InputNumber min={0} max={65535} value={fifoThr} onChange={(v) => setFifoThr(v ?? 0)} />
-            <Button
-              onClick={() => void run(t('control.fifoThr'), () => gh3220Api.setFifoThr(fifoThr))}
-            >
-              {t('control.apply')}
-            </Button>
-          </Space>
-          <Space>
+          <Space wrap size="middle">
             <Typography.Text>{t('control.eventMask')}</Typography.Text>
-            <InputNumber min={0} max={65535} value={eventMask} onChange={(v) => setEventMask(v ?? 0)} />
+            <Select
+              size="small"
+              mode="multiple"
+              maxTagCount={2}
+              style={{ minWidth: 260 }}
+              value={cfg.eventMaskKeys}
+              onChange={(keys: string[]) => cfg.setEventMaskKeys(keys)}
+              options={eventMaskOptions(lang)}
+              placeholder={t('commands.preview.selectEvents')}
+            />
+            <Tag color="blue">{formatEventMaskPreview(eventMask, lang)}</Tag>
             <Button
               onClick={() =>
                 void run(t('control.eventMask'), () => gh3220Api.setReportEvent(eventMask))
@@ -276,7 +368,7 @@ const ControlSection: React.FC = () => {
           </Space>
           <Space>
             <Typography.Text>{t('control.count')}</Typography.Text>
-            <InputNumber min={1} max={64} value={regCount} onChange={(v) => setRegCount(v ?? 1)} />
+            {numericSelect(regCount, boundedOptions('count', lang), setRegCount, 1, 64)}
             <Button onClick={handleRegRead}>{t('control.regRead')}</Button>
           </Space>
         </Space>

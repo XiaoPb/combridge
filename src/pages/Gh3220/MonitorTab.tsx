@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, Col, Empty, InputNumber, Row, Select, Space, Tag, Tooltip, Button, Typography } from 'antd';
 import {
   ApiOutlined,
@@ -10,10 +10,14 @@ import {
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3220Store } from '../../stores/gh3220Store';
+import { GH3220_SELECT_OPTIONS } from '../../constants/gh3220CommandSchema';
 import {
+  customOption,
+  customValue,
   formatFunctionLabel,
   formatFunctionMaskNames,
   resolveGh3220Lang,
+  type Gh3220Option,
 } from '../../constants/gh3220Functions';
 import MultiLineChart from '../Waveform/MultiLineChart';
 import { buildChartGroups, buildWaveformChartData } from './monitorChartData';
@@ -39,6 +43,50 @@ const MonitorTab: React.FC = () => {
     setChartLegendSelected,
     clearWaveformData,
   } = useGh3220Store();
+
+  // V3：显示时长 / 采样率改常用档位下拉，选「自定义…」才展开数值输入
+  const [customDuration, setCustomDuration] = useState<string | null>(null);
+  const [customRate, setCustomRate] = useState<string | null>(null);
+
+  const numericField = (
+    value: number,
+    options: Gh3220Option[],
+    onSelect: (next: number) => void,
+    customRaw: string | null,
+    setCustomRaw: (next: string | null) => void,
+    min: number,
+    max: number
+  ) => (
+    <>
+      <Select
+        size="small"
+        style={{ width: 100 }}
+        value={customRaw === null ? String(value) : 'custom'}
+        options={options}
+        onChange={(next: string) => {
+          if (next === 'custom') setCustomRaw(customOption(value));
+          else {
+            setCustomRaw(null);
+            onSelect(Number(next));
+          }
+        }}
+      />
+      {customRaw !== null ? (
+        <InputNumber
+          size="small"
+          min={min}
+          max={max}
+          value={Number(customValue(customRaw, String(value)))}
+          onChange={(next) => {
+            const resolved = next ?? min;
+            setCustomRaw(customOption(resolved));
+            onSelect(resolved);
+          }}
+          style={{ width: 76 }}
+        />
+      ) : null}
+    </>
+  );
 
   // U1：功能选择器显示「心率 HR (4 CH)」，未知 func 由语义层兜底为「功能 funcN」
   const functionOptions = useMemo(
@@ -149,29 +197,29 @@ const MonitorTab: React.FC = () => {
               <Tooltip title={t('monitor.displayDurationTooltip')}>
                 <Space size={4}>
                   <ClockCircleOutlined />
-                  <InputNumber
-                    size="small"
-                    min={1}
-                    max={60}
-                    value={displayDurationSeconds}
-                    onChange={(value) => setDisplayDurationSeconds(value ?? 10)}
-                    style={{ width: 60 }}
-                    addonAfter="s"
-                  />
+                  {numericField(
+                    displayDurationSeconds,
+                    GH3220_SELECT_OPTIONS.displayDuration(lang),
+                    setDisplayDurationSeconds,
+                    customDuration,
+                    setCustomDuration,
+                    1,
+                    60
+                  )}
                 </Space>
               </Tooltip>
               <Tooltip title={t('monitor.sampleRateTooltip')}>
                 <Space size={4}>
                   <SettingOutlined />
-                  <InputNumber
-                    size="small"
-                    min={1}
-                    max={1000}
-                    value={sampleRate}
-                    onChange={(value) => setSampleRate(value ?? 25)}
-                    style={{ width: 70 }}
-                    addonAfter="Hz"
-                  />
+                  {numericField(
+                    sampleRate,
+                    GH3220_SELECT_OPTIONS.sampleRate(lang),
+                    setSampleRate,
+                    customRate,
+                    setCustomRate,
+                    1,
+                    1000
+                  )}
                 </Space>
               </Tooltip>
               <Select

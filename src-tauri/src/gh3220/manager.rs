@@ -954,7 +954,13 @@ fn parse_reg_list_file(path: &Path) -> Result<Vec<(u16, u16)>, Gh3220Error> {
         .map_err(|e| Gh3220Error::Io(format!("读取 {} 失败: {e}", path.display())))?;
     let mut regs = Vec::new();
     for (line_no, raw) in text.lines().enumerate() {
-        let line = raw.split('#').next().unwrap_or("").trim();
+        // UTF-8 BOM：Windows 编辑器/脚本常带 BOM，首行会被解析成单个非法 token
+        let line = raw
+            .trim_start_matches('\u{feff}')
+            .split('#')
+            .next()
+            .unwrap_or("")
+            .trim();
         if line.is_empty() {
             continue;
         }

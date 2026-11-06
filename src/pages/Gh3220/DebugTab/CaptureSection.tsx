@@ -1,37 +1,58 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   Alert,
   Button,
   Card,
   Descriptions,
   Divider,
-  Input,
   InputNumber,
+  Modal,
+  Select,
   Space,
   Switch,
   Table,
+  Tag,
+  Tooltip,
   Typography,
   message,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { useGh3220Store } from '../../stores/gh3220Store';
-import { useWaveformStore } from '../../stores/waveformStore';
-import { parseFuncMask } from '../../types/gh3220';
-import type { Gh3220Record } from '../../types/gh3220';
-import { formatErrorMessage } from '../../utils/errorMessage';
+import { useGh3220Store } from '../../../stores/gh3220Store';
+import { useGh3220CommandConfig } from '../../../stores/gh3220CommandConfig';
+import { useWaveformStore } from '../../../stores/waveformStore';
+import { usePageTabsStore } from '../../../stores/pageTabsStore';
+import type { Gh3220Record } from '../../../types/gh3220';
+import { formatErrorMessage } from '../../../utils/errorMessage';
+import { encodeBoundedNumber } from '../../../constants/gh3220CommandSchema';
+import {
+  boundedOptions,
+  channelOptions,
+  customOption,
+  customValue,
+  encodeFunctionMask,
+  formatFunctionMaskPreview,
+  formatWorkModeLabel,
+  functionOptions,
+  getFunctionName,
+  GH3220_WORK_MODE_LIST,
+  isCustom,
+  resolveGh3220Lang,
+} from '../../../constants/gh3220Functions';
 
-const CaptureTab: React.FC = () => {
-  const { t } = useTranslation('gh3220');
+/** 调试页分区①：采集与 CSV（原 CaptureTab 主体） */
+const CaptureSection: React.FC = () => {
+  const { t, i18n } = useTranslation('gh3220');
+  const lang = resolveGh3220Lang(i18n.language);
   const navigate = useNavigate();
   const { refreshBuffers, setCurrentBuffer, readData } = useWaveformStore();
+  const { setWaveformActiveTab } = usePageTabsStore();
   const {
     status,
     capture,
     stats,
     records,
-    preferences,
     loading,
     startCapture,
     stopCapture,
@@ -39,56 +60,27 @@ const CaptureTab: React.FC = () => {
     refreshStats,
     clearStats,
     clearRecords,
-    loadPreferences,
-    savePreferences,
   } = useGh3220Store();
-
-  const [autoStart, setAutoStart] = useState(true);
-  const [autoStop, setAutoStop] = useState(false);
-  const [mode, setMode] = useState(0);
-  const [slotEn, setSlotEn] = useState(0);
-  const [funcMaskText, setFuncMaskText] = useState('hr');
-  const [channelsOverride, setChannelsOverride] = useState<number | null>(null);
-  const [csvEnabled, setCsvEnabled] = useState(true);
-  const [outputDir, setOutputDir] = useState('');
-  const [idleCloseSecs, setIdleCloseSecs] = useState(10);
+  const cfg = useGh3220CommandConfig();
+  const mask = encodeFunctionMask(cfg.selectedFunctions);
 
   useEffect(() => {
-    void loadPreferences();
     void refreshCapture();
     void refreshStats();
-  }, [loadPreferences, refreshCapture, refreshStats]);
-
-  useEffect(() => {
-    if (!preferences) return;
-    setCsvEnabled(preferences.csv.enabled);
-    setOutputDir(preferences.csv.outputDir);
-    setIdleCloseSecs(preferences.csv.idleCloseSecs);
-    setChannelsOverride(preferences.capture.channelsOverride);
-    setAutoStop(preferences.capture.autoStop);
-  }, [preferences]);
+  }, [refreshCapture, refreshStats]);
 
   const handleStart = async () => {
-    let mask = 0;
-    try {
-      mask = parseFuncMask(funcMaskText);
-    } catch (error) {
-      message.error((error as Error).message);
-      return;
-    }
-    if (autoStart && mask === 0) {
+    if (cfg.autoStart === 'true' && mask === 0) {
       message.error(t('capture.maskRequired'));
       return;
     }
     try {
       await startCapture({
-        autoStart,
-        autoStop,
-        mode,
-        slotEn,
+        autoStart: cfg.autoStart === 'true',
+        mode: Number(cfg.workMode),
+        slotEn: encodeBoundedNumber(cfg.slotEn) ?? 0,
         funcMask: mask,
-        channelsOverride,
-        csvEnabled,
+        channelsOverride: encodeBoundedNumber(cfg.channelsOverride),
       });
       message.success(t('capture.started'));
     } catch (error) {
@@ -96,34 +88,57 @@ const CaptureTab: React.FC = () => {
     }
   };
 
-  const handleStop = async () => {
-    await stopCapture();
-    message.info(t('capture.stopped'));
+  const handleStop = () => {
+    Modal.confirm({
+      title: t('commands.confirmTitles.captureStop'),
+      content: t('commands.confirmContents.captureStop'),
+      okText: t('commands.confirm'),
+      cancelText: t('commands.cancel'),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        await stopCapture();
+        message.info(t('capture.stopped'));
+      },
+    });
   };
 
-  const handleSavePreferences = async () => {
-    if (!preferences) return;
-    try {
-      await savePreferences({
-        csv: {
-          enabled: csvEnabled,
-          outputDir,
-          idleCloseSecs,
-        },
-        capture: {
-          channelsOverride,
-          autoStop,
-        },
-        debugTcp: preferences.debugTcp,
-      });
-      message.success(t('capture.preferencesSaved'));
-    } catch (error) {
-      message.error(formatErrorMessage(error, t('capture.preferencesSaveFailed')));
-    }
-  };
+  const numericSelect = (
+    value: string,
+    options: ReturnType<typeof boundedOptions>,
+    onChange: (next: string) => void,
+    min = 0,
+    max = 255
+  ) => (
+    <>
+      <Select
+        size="small"
+        style={{ width: 140 }}
+        value={isCustom(value) ? 'custom' : value}
+        options={options}
+        onChange={(next: string) =>
+          onChange(next === 'custom' ? customOption(customValue(value) || '0') : next)
+        }
+      />
+      {isCustom(value) ? (
+        <InputNumber
+          size="small"
+          min={min}
+          max={max}
+          value={Number(customValue(value, '0'))}
+          onChange={(next) => onChange(customOption(next ?? 0))}
+          style={{ width: 92 }}
+        />
+      ) : null}
+    </>
+  );
 
   const columns: ColumnsType<Gh3220Record> = [
-    { title: t('capture.table.func'), dataIndex: 'functionId', width: 70 },
+    {
+      title: t('capture.table.func'),
+      dataIndex: 'functionId',
+      width: 170,
+      render: (value: number) => getFunctionName(value, lang),
+    },
     { title: t('capture.table.frame'), dataIndex: 'frameId', width: 70 },
     {
       title: 'RAW',
@@ -157,6 +172,8 @@ const CaptureTab: React.FC = () => {
       await refreshBuffers();
       setCurrentBuffer(bufferId);
       await readData(bufferId);
+      // 确保落在实时波形页签（缓冲在 realtime 视图中展示）
+      setWaveformActiveTab('realtime');
       navigate('/waveform');
     } catch (error) {
       message.error(formatErrorMessage(error, t('capture.openWaveformFailed')));
@@ -171,38 +188,55 @@ const CaptureTab: React.FC = () => {
         <Space wrap size="middle">
           <Space>
             <Typography.Text>{t('capture.autoStart')}</Typography.Text>
-            <Switch checked={autoStart} onChange={setAutoStart} />
-          </Space>
-          <Space>
-            <Typography.Text>{t('capture.autoStop')}</Typography.Text>
-            <Switch checked={autoStop} onChange={setAutoStop} />
+            <Switch
+              checked={cfg.autoStart === 'true'}
+              onChange={(checked) => cfg.setConfig({ autoStart: String(checked) })}
+            />
           </Space>
           <Space>
             <Typography.Text>{t('control.mode')}</Typography.Text>
-            <InputNumber min={0} max={255} value={mode} onChange={(v) => setMode(v ?? 0)} />
+            <Select
+              size="small"
+              style={{ width: 240 }}
+              value={cfg.workMode}
+              onChange={(next: string) => cfg.setConfig({ workMode: next })}
+              options={GH3220_WORK_MODE_LIST.map((info) => ({
+                value: String(info.mode),
+                label: formatWorkModeLabel(info.mode, lang),
+              }))}
+            />
           </Space>
           <Space>
             <Typography.Text>{t('control.slotEn')}</Typography.Text>
-            <InputNumber min={0} max={255} value={slotEn} onChange={(v) => setSlotEn(v ?? 0)} />
+            {numericSelect(cfg.slotEn, boundedOptions('slotEn', lang), (next) =>
+              cfg.setConfig({ slotEn: next })
+            )}
           </Space>
           <Space>
             <Typography.Text>{t('control.funcMask')}</Typography.Text>
-            <Input
-              style={{ width: 160 }}
-              value={funcMaskText}
-              onChange={(e) => setFuncMaskText(e.target.value)}
-              placeholder="hr,spo2"
+            <Select
+              size="small"
+              mode="multiple"
+              maxTagCount={2}
+              style={{ minWidth: 220 }}
+              value={cfg.selectedFunctions}
+              onChange={(keys: string[]) => cfg.setSelectedFunctions(keys)}
+              options={functionOptions(lang)}
+              placeholder={t('commands.preview.selectFunctions')}
             />
+            <Tooltip title={formatFunctionMaskPreview(mask, lang)}>
+              <Tag color="blue">{formatFunctionMaskPreview(mask, lang)}</Tag>
+            </Tooltip>
           </Space>
           <Space>
             <Typography.Text>{t('capture.channels')}</Typography.Text>
-            <InputNumber
-              min={1}
-              max={32}
-              value={channelsOverride}
-              onChange={(v) => setChannelsOverride(v ?? null)}
-              placeholder={t('capture.auto')}
-            />
+            {numericSelect(
+              cfg.channelsOverride,
+              channelOptions(cfg.selectedFunctions, lang),
+              (next) => cfg.setConfig({ channelsOverride: next }),
+              1,
+              32
+            )}
           </Space>
         </Space>
 
@@ -250,35 +284,6 @@ const CaptureTab: React.FC = () => {
         </Descriptions>
       </Card>
 
-      <Card title={t('capture.csvTitle')}>
-        <Space wrap size="middle">
-          <Space>
-            <Typography.Text>{t('capture.csvEnabled')}</Typography.Text>
-            <Switch checked={csvEnabled} onChange={setCsvEnabled} />
-          </Space>
-          <Space>
-            <Typography.Text>{t('capture.outputDir')}</Typography.Text>
-            <Input
-              style={{ width: 320 }}
-              value={outputDir}
-              onChange={(e) => setOutputDir(e.target.value)}
-            />
-          </Space>
-          <Space>
-            <Typography.Text>{t('capture.idleClose')}</Typography.Text>
-            <InputNumber
-              min={0}
-              max={3600}
-              value={idleCloseSecs}
-              onChange={(v) => setIdleCloseSecs(v ?? 0)}
-            />
-          </Space>
-          <Button onClick={handleSavePreferences} disabled={!preferences}>
-            {t('capture.savePreferences')}
-          </Button>
-        </Space>
-      </Card>
-
       <Card
         title={t('capture.statsTitle')}
         extra={
@@ -319,7 +324,7 @@ const CaptureTab: React.FC = () => {
                 size="small"
                 onClick={() => void openWaveform(functionId)}
               >
-                {t('capture.openWaveform', { func: functionId })}
+                {t('capture.openWaveform', { name: getFunctionName(functionId, lang) })}
               </Button>
             ))}
             <Button size="small" onClick={clearRecords}>
@@ -334,7 +339,7 @@ const CaptureTab: React.FC = () => {
           columns={columns}
           dataSource={records}
           pagination={{ pageSize: 10, size: 'small' }}
-          scroll={{ x: 760 }}
+          scroll={{ x: 860 }}
           locale={{ emptyText: t('capture.empty') }}
         />
       </Card>
@@ -342,4 +347,4 @@ const CaptureTab: React.FC = () => {
   );
 };
 
-export default CaptureTab;
+export default CaptureSection;

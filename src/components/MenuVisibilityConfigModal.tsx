@@ -45,7 +45,7 @@ const HOME_TAB_KEYS: Record<HomeMenuKey, string[]> = {
   connection: ['serial', 'ble'],
   dashboard: ['dashboard', 'console', 'settings', 'jsonEditor'],
   gh3036: ['config', 'monitor', 'version', 'factory', 'threshold'],
-  gh3220: ['connect', 'control', 'capture', 'events'],
+  gh3220: ['config', 'monitor', 'version', 'debug'],
   ota: ['upgrade', 'history'],
   protocol: ['editor', 'bind'],
   waveform: ['realtime', 'csvLoader'],

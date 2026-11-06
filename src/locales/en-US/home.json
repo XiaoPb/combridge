@@ -35,10 +35,10 @@
       "name": "GH3220",
       "description": "GH3220 UProtocol device info, control and data capture",
       "tabs": {
-        "connect": "Connection",
-        "control": "Control",
-        "capture": "Capture",
-        "events": "Events"
+        "config": "Config",
+        "monitor": "Monitor",
+        "version": "Version",
+        "debug": "Debug"
       }
     },
     "ota": {

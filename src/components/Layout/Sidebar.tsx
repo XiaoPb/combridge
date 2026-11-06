@@ -17,7 +17,7 @@ import {
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useMenuVisibilityStore, type SidebarMenuKey } from '../../stores/menuVisibilityStore';
-import { usePageTabsStore } from '../../stores/pageTabsStore';
+import { usePageTabsStore, type Gh3220TabKey } from '../../stores/pageTabsStore';
 import { useDashboardStore } from '../../stores/dashboardStore';
 
 const { Sider } = Layout;
@@ -131,7 +131,9 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
       case '/gh3220': {
         const tab = firstVisibleTab('gh3220');
         if (tab) {
-          setGh3220ActiveTab(tab as 'connect' | 'control' | 'capture' | 'events');
+          setGh3220ActiveTab(
+            tab as Gh3220TabKey
+          );
         }
         break;
       }

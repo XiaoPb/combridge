@@ -18,6 +18,7 @@ import ProtocolTitleTabs from './ProtocolTitleTabs';
 import SystemTitleTabs from './SystemTitleTabs';
 import WaveformTitleTabs from './WaveformTitleTabs';
 import Gh3036TitleTabs from './Gh3036TitleTabs';
+import Gh3220TitleTabs from './Gh3220TitleTabs';
 import DashboardTitleTabs from './DashboardTitleTabs';
 import OtaTitleTabs from './OtaTitleTabs';
 import { useTranslation } from 'react-i18next';
@@ -111,6 +112,8 @@ const TitleBar: React.FC = () => {
         return <BleTitleTabs />;
       case '/gh3036':
         return <Gh3036TitleTabs />;
+      case '/gh3220':
+        return <Gh3220TitleTabs />;
       case '/dashboard':
         return <DashboardTitleTabs />;
       case '/protocol':

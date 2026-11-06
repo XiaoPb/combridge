@@ -247,3 +247,66 @@ pub async fn gh3220_update_preferences(
         .set_debug_tcp_enabled(prefs.debug_tcp.enabled);
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// §6.6 方案 B：把协议命令号 / 版本类型以目录形式暴露给前端与 MCP。
+// 只读、无副作用，前端拉取失败时回退到常量层目录（见 gh3220BackendCatalog.ts）。
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Gh3220NamedValueDto {
+    pub key: &'static str,
+    pub value: u8,
+    pub name_zh: &'static str,
+    pub name_en: &'static str,
+}
+
+#[tauri::command]
+pub async fn gh3220_get_version_types() -> Vec<Gh3220NamedValueDto> {
+    use gh_uprotocol::ver_type as v;
+    vec![
+        Gh3220NamedValueDto { key: "fw", value: v::FW, name_zh: "固件版本", name_en: "Firmware" },
+        Gh3220NamedValueDto { key: "demo", value: v::DEMO, name_zh: "Demo 版本", name_en: "Demo" },
+        Gh3220NamedValueDto { key: "virtual_reg", value: v::VIRTUAL_REG, name_zh: "虚拟寄存器版本", name_en: "Virtual register" },
+        Gh3220NamedValueDto { key: "bootloader", value: v::BOOTLOADER, name_zh: "Bootloader 版本", name_en: "Bootloader" },
+        Gh3220NamedValueDto { key: "protocol", value: v::PROTOCOL, name_zh: "协议版本", name_en: "Protocol" },
+        Gh3220NamedValueDto { key: "func_support", value: v::FUNC_SUPPORT, name_zh: "功能支持版本", name_en: "Function support" },
+        Gh3220NamedValueDto { key: "drv", value: v::DRV, name_zh: "驱动版本", name_en: "Driver" },
+        Gh3220NamedValueDto { key: "chip", value: v::CHIP, name_zh: "芯片版本", name_en: "Chip" },
+        Gh3220NamedValueDto { key: "algo", value: v::ALGO, name_zh: "算法版本", name_en: "Algorithm" },
+    ]
+}
+
+#[derive(serde::Serialize)]
+pub struct Gh3220CommandCodeDto {
+    pub key: &'static str,
+    pub cmd: u8,
+}
+
+#[tauri::command]
+pub async fn gh3220_get_command_codes() -> Vec<Gh3220CommandCodeDto> {
+    use gh_uprotocol::command as c;
+    vec![
+        Gh3220CommandCodeDto { key: "regRw", cmd: c::REG_RW },
+        Gh3220CommandCodeDto { key: "packageTest", cmd: c::PACKAGE_TEST },
+        Gh3220CommandCodeDto { key: "newStructRawdata", cmd: c::NEW_STRUCT_RAWDATA },
+        Gh3220CommandCodeDto { key: "startCtrl", cmd: c::START_CTRL },
+        Gh3220CommandCodeDto { key: "workMode", cmd: c::WORK_MODE },
+        Gh3220CommandCodeDto { key: "fifoThrConfig", cmd: c::FIFO_THR_CONFIG },
+        Gh3220CommandCodeDto { key: "reportEventSet", cmd: c::REPORT_EVENT_SET },
+        Gh3220CommandCodeDto { key: "ecgClassification", cmd: c::ECG_CLASSIFICATION },
+        Gh3220CommandCodeDto { key: "chipEventReport", cmd: c::CHIP_EVENT_REPORT },
+        Gh3220CommandCodeDto { key: "chipCtrl", cmd: c::CHIP_CTRL },
+        Gh3220CommandCodeDto { key: "getVer", cmd: c::GET_VER },
+        Gh3220CommandCodeDto { key: "getConnStatus", cmd: c::GET_CONN_STATUS },
+        Gh3220CommandCodeDto { key: "switchSlotFunc", cmd: c::SWITCH_SLOT_FUNC },
+        Gh3220CommandCodeDto { key: "getOpenedFunc", cmd: c::GET_OPENED_FUNC },
+        Gh3220CommandCodeDto { key: "setEcgCascade", cmd: c::SET_ECG_CASCADE },
+        Gh3220CommandCodeDto { key: "bpDataTrans", cmd: c::BP_DATA_TRANS },
+        Gh3220CommandCodeDto { key: "functionInfoUpdate", cmd: c::FUNCTION_INFO_UPDATE },
+        Gh3220CommandCodeDto { key: "getMaxLen", cmd: c::GET_MAX_LEN },
+        Gh3220CommandCodeDto { key: "loadRegList", cmd: c::LOAD_REG_LIST },
+        Gh3220CommandCodeDto { key: "debugStatus", cmd: c::DEBUG_STATUS },
+    ]
+}

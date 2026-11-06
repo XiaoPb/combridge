@@ -124,6 +124,7 @@ const RealtimeDataTab: React.FC = () => {
         <Content style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <Card
             size="small"
+            style={{ flex: 1, minHeight: 0 }}
             styles={{ body: { padding: 8, display: 'flex', flexDirection: 'column', height: 'calc(100% - 40px)' } }}
             title={
               <Space>

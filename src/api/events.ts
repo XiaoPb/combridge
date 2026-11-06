@@ -3,7 +3,9 @@ import { decode as msgpackDecode } from '@msgpack/msgpack';
 import type {
   Gh3220DataEvent,
   Gh3220EventPayload,
+  Gh3220Record,
   Gh3220Stats,
+  Gh3220Status,
   Gh3220StatusEvent,
 } from '../types/gh3220';
 
@@ -205,20 +207,119 @@ export function onParsedData(callback: (event: ParsedDataEvent) => void): Promis
   return onTopic<ParsedDataEvent>(EventBusTopics.PROTOCOL_PARSED, callback);
 }
 
+// ---------------------------------------------------------------------------
+// GH3220 事件线格式归一化
+//
+// 后端 msgpack（rmp-serde）把结构体编码为**数组**（按字段声明顺序），而
+// invoke(JSON) 返回 camelCase 对象。这里把数组形式归一化为 TS 类型声明的
+// 对象形状，同时保持对对象形式的兼容。
+// 字段顺序必须与 src-tauri/src/gh3220/types.rs 中结构体声明顺序一致。
+// ---------------------------------------------------------------------------
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function normalizeGh3220Status(raw: any): Gh3220Status {
+  if (Array.isArray(raw)) {
+    return {
+      state: raw[0] ?? 'disconnected',
+      link: raw[1] ?? null,
+      address: raw[2] ?? null,
+      name: raw[3] ?? null,
+      error: raw[4] ?? null,
+      capturing: Boolean(raw[5]),
+      chunkSize: raw[6] ?? 0,
+    };
+  }
+  return raw;
+}
+
+function normalizeGh3220Record(raw: any): Gh3220Record {
+  if (Array.isArray(raw)) {
+    return {
+      functionId: raw[0] ?? 0,
+      frameId: raw[1] ?? 0,
+      raw: Array.isArray(raw[2]) ? raw[2] : [],
+      agc: Array.isArray(raw[3]) ? raw[3] : [],
+      gs: raw[4] ?? null,
+      gyro: raw[5] ?? null,
+      cap: raw[6] ?? null,
+      temp: raw[7] ?? null,
+      flags: Array.isArray(raw[8]) ? raw[8] : [],
+      algo: Array.isArray(raw[9]) ? raw[9] : [],
+      tsMs: raw[10] ?? 0,
+    };
+  }
+  return raw;
+}
+
+function normalizeGh3220DataEvent(raw: any): Gh3220DataEvent {
+  const base = Array.isArray(raw)
+    ? { seq: raw[0], records: raw[1], dropped: raw[2] }
+    : raw;
+  return {
+    seq: base?.seq ?? 0,
+    records: Array.isArray(base?.records) ? base.records.map(normalizeGh3220Record) : [],
+    dropped: base?.dropped ?? 0,
+  };
+}
+
+function normalizeGh3220StatusEvent(raw: any): Gh3220StatusEvent {
+  const status = Array.isArray(raw) ? raw[0] : raw?.status;
+  return { status: normalizeGh3220Status(status) };
+}
+
+function normalizeGh3220EventPayload(raw: any): Gh3220EventPayload {
+  if (Array.isArray(raw)) {
+    return {
+      eventId: raw[0] ?? 0,
+      reportId: raw[1] ?? 0,
+      acked: Boolean(raw[2]),
+      tsMs: raw[3] ?? 0,
+    };
+  }
+  return raw;
+}
+
+function normalizeGh3220Stats(raw: any): Gh3220Stats {
+  if (Array.isArray(raw)) {
+    return {
+      frames: raw[0] ?? 0,
+      crcErrors: raw[1] ?? 0,
+      resyncs: raw[2] ?? 0,
+      badLen: raw[3] ?? 0,
+      packets: raw[4] ?? 0,
+      records: raw[5] ?? 0,
+      badPackets: raw[6] ?? 0,
+      spliceFragments: raw[7] ?? 0,
+      spliceAborts: raw[8] ?? 0,
+      lostFrames: raw[9] ?? 0,
+    };
+  }
+  return raw;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export function onGh3220Status(callback: (event: Gh3220StatusEvent) => void): Promise<UnlistenFn> {
-  return onTopic<Gh3220StatusEvent>(EventBusTopics.GH3220_STATUS, callback);
+  return onTopic<Gh3220StatusEvent>(EventBusTopics.GH3220_STATUS, (payload) =>
+    callback(normalizeGh3220StatusEvent(payload))
+  );
 }
 
 export function onGh3220Data(callback: (event: Gh3220DataEvent) => void): Promise<UnlistenFn> {
-  return onTopic<Gh3220DataEvent>(EventBusTopics.GH3220_DATA, callback);
+  return onTopic<Gh3220DataEvent>(EventBusTopics.GH3220_DATA, (payload) =>
+    callback(normalizeGh3220DataEvent(payload))
+  );
 }
 
 export function onGh3220Event(callback: (event: Gh3220EventPayload) => void): Promise<UnlistenFn> {
-  return onTopic<Gh3220EventPayload>(EventBusTopics.GH3220_EVENT, callback);
+  return onTopic<Gh3220EventPayload>(EventBusTopics.GH3220_EVENT, (payload) =>
+    callback(normalizeGh3220EventPayload(payload))
+  );
 }
 
 export function onGh3220Stats(callback: (event: Gh3220Stats) => void): Promise<UnlistenFn> {
-  return onTopic<Gh3220Stats>(EventBusTopics.GH3220_STATS, callback);
+  return onTopic<Gh3220Stats>(EventBusTopics.GH3220_STATS, (payload) =>
+    callback(normalizeGh3220Stats(payload))
+  );
 }
 
 export const eventBus = {

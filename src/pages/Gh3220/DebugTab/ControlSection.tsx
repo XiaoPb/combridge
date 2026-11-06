@@ -16,10 +16,16 @@ import { useTranslation } from 'react-i18next';
 import { gh3220Api } from '../../../api/gh3220';
 import { parseFuncMask } from '../../../types/gh3220';
 import { formatErrorMessage } from '../../../utils/errorMessage';
+import {
+  formatWorkModeLabel,
+  GH3220_WORK_MODE_LIST,
+  resolveGh3220Lang,
+} from '../../../constants/gh3220Functions';
 
 /** 调试页分区②：采样命令控制（原 ControlTab 主体） */
 const ControlSection: React.FC = () => {
-  const { t } = useTranslation('gh3220');
+  const { t, i18n } = useTranslation('gh3220');
+  const lang = resolveGh3220Lang(i18n.language);
 
   const [mode, setMode] = useState(0);
   const [funcMaskText, setFuncMaskText] = useState('hr');
@@ -150,7 +156,17 @@ const ControlSection: React.FC = () => {
         <Space wrap size="middle">
           <Space>
             <Typography.Text>{t('control.mode')}</Typography.Text>
-            <InputNumber min={0} max={255} value={mode} onChange={(v) => setMode(v ?? 0)} />
+            {/* U4：下拉显示语义名，下发给设备的仍是原始 mode 数值 */}
+            <Select
+              size="small"
+              style={{ width: 240 }}
+              value={mode}
+              onChange={setMode}
+              options={GH3220_WORK_MODE_LIST.map((info) => ({
+                value: info.mode,
+                label: formatWorkModeLabel(info.mode, lang),
+              }))}
+            />
           </Space>
           <Space>
             <Typography.Text>{t('control.funcMask')}</Typography.Text>
@@ -158,7 +174,7 @@ const ControlSection: React.FC = () => {
               style={{ width: 180 }}
               value={funcMaskText}
               onChange={(e) => setFuncMaskText(e.target.value)}
-              placeholder="hr,spo2 或 0x6"
+              placeholder={t('control.funcMaskHint')}
             />
           </Space>
           <Space>

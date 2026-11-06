@@ -3,9 +3,12 @@ import { Card, Form, InputNumber, Button, Space, Select, message, Input } from '
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useWaveformStore, DEFAULT_BUFFER_CONFIG } from '../../stores/waveformStore';
+import { formatBufferLabel, resolveGh3220Lang } from '../../constants/gh3220Functions';
 
 const BufferConfigPanel: React.FC = () => {
-  const { t } = useTranslation('waveform');
+  const { t, i18n } = useTranslation('waveform');
+  // U6：仅追加展示层语义名，缓冲 ID 本身保持 `gh3220:funcN` 不变
+  const lang = resolveGh3220Lang(i18n.language);
   const [form] = Form.useForm();
   const [newBufferId, setNewBufferId] = useState('');
   
@@ -53,7 +56,7 @@ const BufferConfigPanel: React.FC = () => {
           >
             {buffers.map((id) => (
               <Select.Option key={id} value={id}>
-                {id}
+                {formatBufferLabel(id, lang)}
               </Select.Option>
             ))}
           </Select>

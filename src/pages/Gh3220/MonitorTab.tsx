@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Card, Col, Empty, InputNumber, Row, Select, Space, Tag, Tooltip, Button } from 'antd';
+import { Card, Col, Empty, InputNumber, Row, Select, Space, Tag, Tooltip, Button, Typography } from 'antd';
 import {
   ApiOutlined,
   ClockCircleOutlined,
@@ -10,13 +10,20 @@ import {
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useGh3220Store } from '../../stores/gh3220Store';
+import {
+  formatFunctionLabel,
+  formatFunctionMaskNames,
+  resolveGh3220Lang,
+} from '../../constants/gh3220Functions';
 import MultiLineChart from '../Waveform/MultiLineChart';
 import { buildChartGroups, buildWaveformChartData } from './monitorChartData';
 
 const MonitorTab: React.FC = () => {
-  const { t } = useTranslation('gh3220');
+  const { t, i18n } = useTranslation('gh3220');
+  const lang = resolveGh3220Lang(i18n.language);
   const {
     status,
+    deviceInfo,
     stats,
     capture,
     frames,
@@ -33,13 +40,20 @@ const MonitorTab: React.FC = () => {
     clearWaveformData,
   } = useGh3220Store();
 
+  // U1：功能选择器显示「心率 HR (4 CH)」，未知 func 由语义层兜底为「功能 funcN」
   const functionOptions = useMemo(
     () =>
       Array.from(frames.entries()).map(([id, buffer]) => ({
         value: id,
-        label: `func${id} (${buffer.channelCount} CH)`,
+        label: formatFunctionLabel(id, buffer.channelCount, lang),
       })),
-    [frames]
+    [frames, lang]
+  );
+
+  // U2：deviceInfo.openedFunc 是设备回读的已开启功能位（WORK_MODE 下发结果）
+  const openedFunctions = useMemo(
+    () => (deviceInfo ? formatFunctionMaskNames(deviceInfo.openedFunc, lang) : []),
+    [deviceInfo, lang]
   );
 
   // 未选择功能时默认跟随第一个出现的功能
@@ -109,6 +123,25 @@ const MonitorTab: React.FC = () => {
 
       <Card
         size="small"
+        title={t('monitor.openedFunctions')}
+        style={{ flex: '0 0 auto' }}
+        styles={{ body: { padding: 8 } }}
+      >
+        {openedFunctions.length > 0 ? (
+          <Space size={[4, 4]} wrap>
+            {openedFunctions.map((name) => (
+              <Tag key={name} color="blue">
+                {name}
+              </Tag>
+            ))}
+          </Space>
+        ) : (
+          <Typography.Text type="secondary">{t('monitor.noOpenedFunctions')}</Typography.Text>
+        )}
+      </Card>
+
+      <Card
+        size="small"
         title={
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>{t('monitor.dataTitle')}</span>
@@ -153,7 +186,7 @@ const MonitorTab: React.FC = () => {
               />
               <Select
                 size="small"
-                style={{ width: 150 }}
+                style={{ width: 200 }}
                 value={activeFunctionId ?? undefined}
                 onChange={(value) => setSelectedFunctionId(value)}
                 options={functionOptions}

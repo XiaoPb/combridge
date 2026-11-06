@@ -1,16 +1,33 @@
-import React, { useEffect, useState } from 'react';
-import { Alert, Button, Card, Input, Space, Switch, Typography, message } from 'antd';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  Button,
+  Card,
+  Descriptions,
+  Input,
+  Space,
+  Switch,
+  Typography,
+  message,
+} from 'antd';
 import { useTranslation } from 'react-i18next';
 import { gh3220Api } from '../../../api/gh3220';
 import { useGh3220Store } from '../../../stores/gh3220Store';
 import { formatErrorMessage } from '../../../utils/errorMessage';
+import {
+  formatBitNames,
+  getFunctionName,
+  parseFrameHeader,
+  resolveGh3220Lang,
+} from '../../../constants/gh3220Functions';
 
 /**
- * 调试页分区④：TCP 调试通道 + 原始帧 / 回显测试
+ * 调试页分区④：TCP 调试通道 + 原始帧 / 回显测试 + 0x0B 帧头解析
  * （原 ConfigTab 的 DebugChannelCard 与独立 DebugTab 合并而来）
  */
 const ChannelSection: React.FC = () => {
-  const { t } = useTranslation('gh3220');
+  const { t, i18n } = useTranslation('gh3220');
+  const lang = resolveGh3220Lang(i18n.language);
   const { status, preferences, connect, disconnect, loadPreferences, savePreferences } =
     useGh3220Store();
 
@@ -19,6 +36,7 @@ const ChannelSection: React.FC = () => {
   const [rawHex, setRawHex] = useState('');
   const [testHex, setTestHex] = useState('0102');
   const [packageResult, setPackageResult] = useState<string>('');
+  const [headerHex, setHeaderHex] = useState('');
 
   useEffect(() => {
     void loadPreferences();
@@ -31,6 +49,8 @@ const ChannelSection: React.FC = () => {
   }, [preferences]);
 
   const connected = status.state !== 'disconnected' && status.state !== 'connecting';
+  const frameHeader = useMemo(() => parseFrameHeader(headerHex), [headerHex]);
+  const hexByte = (value: number) => `0x${(value & 0xff).toString(16).padStart(2, '0')}`;
 
   const handleSave = async () => {
     if (!preferences) return;
@@ -72,8 +92,52 @@ const ChannelSection: React.FC = () => {
     }
   };
 
+  // U7：把 0x0B 帧头的 data_type / package_type 位解析成可读名称，仅本地展示
+  const frameInspector = (
+    <Card size="small" title={t('debug.frameTitle')}>
+      <Space direction="vertical" size="small" style={{ width: '100%' }}>
+        <Input
+          value={headerHex}
+          onChange={(e) => setHeaderHex(e.target.value)}
+          addonBefore={t('debug.frameInput')}
+          placeholder={t('debug.framePlaceholder')}
+        />
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {t('debug.frameHint')}
+        </Typography.Text>
+        {headerHex.trim() && !frameHeader ? (
+          <Alert type="warning" showIcon message={t('debug.frameInvalid')} />
+        ) : null}
+        {frameHeader ? (
+          <Descriptions size="small" column={2} bordered>
+            <Descriptions.Item label={t('debug.frameFunction')}>
+              {getFunctionName(frameHeader.functionId, lang)}
+            </Descriptions.Item>
+            <Descriptions.Item label={t('debug.frameDataLen')}>
+              {frameHeader.dataLen}
+            </Descriptions.Item>
+            <Descriptions.Item label={t('debug.frameDataType')}>
+              {`${hexByte(frameHeader.dataType)} · ${formatBitNames(frameHeader.dataTypeItems, lang)}`}
+            </Descriptions.Item>
+            <Descriptions.Item label={t('debug.framePackageType')}>
+              {`${hexByte(frameHeader.packageType)} · ${formatBitNames(frameHeader.packageTypeItems, lang)}`}
+            </Descriptions.Item>
+            <Descriptions.Item label={t('debug.frameChannelMask')} span={2}>
+              {`0x${(frameHeader.channelMask >>> 0).toString(16).padStart(8, '0')} · ${frameHeader.channelCount} CH`}
+            </Descriptions.Item>
+          </Descriptions>
+        ) : null}
+      </Space>
+    </Card>
+  );
+
   if (!import.meta.env.DEV) {
-    return <Alert type="info" showIcon message={t('debug.devOnly')} />;
+    return (
+      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        <Alert type="info" showIcon message={t('debug.devOnly')} />
+        {frameInspector}
+      </Space>
+    );
   }
 
   return (
@@ -132,6 +196,8 @@ const ChannelSection: React.FC = () => {
           <Typography.Text>{packageResult || '--'}</Typography.Text>
         </Space>
       </Card>
+
+      {frameInspector}
     </Space>
   );
 };

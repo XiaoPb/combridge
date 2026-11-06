@@ -7,6 +7,7 @@ import {
   Divider,
   Input,
   InputNumber,
+  Select,
   Space,
   Switch,
   Table,
@@ -22,10 +23,17 @@ import { usePageTabsStore } from '../../../stores/pageTabsStore';
 import { parseFuncMask } from '../../../types/gh3220';
 import type { Gh3220Record } from '../../../types/gh3220';
 import { formatErrorMessage } from '../../../utils/errorMessage';
+import {
+  formatWorkModeLabel,
+  getFunctionName,
+  GH3220_WORK_MODE_LIST,
+  resolveGh3220Lang,
+} from '../../../constants/gh3220Functions';
 
 /** 调试页分区①：采集与 CSV（原 CaptureTab 主体） */
 const CaptureSection: React.FC = () => {
-  const { t } = useTranslation('gh3220');
+  const { t, i18n } = useTranslation('gh3220');
+  const lang = resolveGh3220Lang(i18n.language);
   const navigate = useNavigate();
   const { refreshBuffers, setCurrentBuffer, readData } = useWaveformStore();
   const { setWaveformActiveTab } = usePageTabsStore();
@@ -86,7 +94,12 @@ const CaptureSection: React.FC = () => {
   };
 
   const columns: ColumnsType<Gh3220Record> = [
-    { title: t('capture.table.func'), dataIndex: 'functionId', width: 70 },
+    {
+      title: t('capture.table.func'),
+      dataIndex: 'functionId',
+      width: 170,
+      render: (value: number) => getFunctionName(value, lang),
+    },
     { title: t('capture.table.frame'), dataIndex: 'frameId', width: 70 },
     {
       title: 'RAW',
@@ -140,7 +153,16 @@ const CaptureSection: React.FC = () => {
           </Space>
           <Space>
             <Typography.Text>{t('control.mode')}</Typography.Text>
-            <InputNumber min={0} max={255} value={mode} onChange={(v) => setMode(v ?? 0)} />
+            <Select
+              size="small"
+              style={{ width: 220 }}
+              value={mode}
+              onChange={setMode}
+              options={GH3220_WORK_MODE_LIST.map((info) => ({
+                value: info.mode,
+                label: formatWorkModeLabel(info.mode, lang),
+              }))}
+            />
           </Space>
           <Space>
             <Typography.Text>{t('control.slotEn')}</Typography.Text>
@@ -152,7 +174,7 @@ const CaptureSection: React.FC = () => {
               style={{ width: 160 }}
               value={funcMaskText}
               onChange={(e) => setFuncMaskText(e.target.value)}
-              placeholder="hr,spo2"
+              placeholder={t('control.funcMaskHint')}
             />
           </Space>
           <Space>
@@ -251,7 +273,7 @@ const CaptureSection: React.FC = () => {
                 size="small"
                 onClick={() => void openWaveform(functionId)}
               >
-                {t('capture.openWaveform', { name: `func${functionId}` })}
+                {t('capture.openWaveform', { name: getFunctionName(functionId, lang) })}
               </Button>
             ))}
             <Button size="small" onClick={clearRecords}>
@@ -266,7 +288,7 @@ const CaptureSection: React.FC = () => {
           columns={columns}
           dataSource={records}
           pagination={{ pageSize: 10, size: 'small' }}
-          scroll={{ x: 760 }}
+          scroll={{ x: 860 }}
           locale={{ emptyText: t('capture.empty') }}
         />
       </Card>

@@ -156,6 +156,9 @@ describe('V3 命令目录一致性', () => {
     expect(Object.keys(gh3220Api).filter((key) => !GH3220_COMMAND_API_KEYS.includes(key))).toEqual([
       'connect',
       'disconnect',
+      // §6.6 方案 B：后端命令目录（只读、不属于 22 条设备命令）
+      'getVersionTypes',
+      'getCommandCodes',
     ]);
   });
 

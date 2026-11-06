@@ -33,6 +33,7 @@ import {
   formatFunctionMaskPreview,
   functionOptions,
   GH3220_COMMAND_CODES,
+  GH3220_RAW_FRAME_TEMPLATES,
   isCustom,
   parseNumericText,
   versionTypeOptions,
@@ -454,7 +455,7 @@ export const GH3220_COMMAND_CATALOG: CommandDef[] = [
     key: 'sendRaw',
     cmd: hexCode(C.NEW_STRUCT_RAWDATA),
     group: 'debug',
-    params: [hex('AA 11 19 01 01')],
+    params: [hex(GH3220_RAW_FRAME_TEMPLATES[0].hex)],
     invoke: (e) => gh3220Api.sendRaw(s(e, 'hex')),
   },
 

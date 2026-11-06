@@ -515,6 +515,8 @@ pub fn run() {
             commands::gh3220::gh3220_clear_stats,
             commands::gh3220::gh3220_get_preferences,
             commands::gh3220::gh3220_update_preferences,
+            commands::gh3220::gh3220_get_version_types,
+            commands::gh3220::gh3220_get_command_codes,
             commands::ota::ota_list_protocols,
             commands::ota::ota_validate_package,
             commands::ota::ota_preflight,

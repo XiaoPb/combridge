@@ -90,6 +90,10 @@
     "send": "发送",
     "clear": "清空",
     "hint": "可枚举参数均为下拉/多选；勾选功能后掩码由代码自动计算，日志同时显示语义值与实际下发数值。仅 HEX 字节流、寄存器地址/值需要手动输入。",
+    "catalogSource": {
+      "backend": "命令目录：后端（{{count}} 项 CMD）",
+      "frontend": "命令目录：前端常量（{{count}} 项 CMD）"
+    },
     "notConnected": "设备未连接，除状态/配置类命令外可能无法得到响应。",
     "responseTitle": "最近一次响应",
     "logTitle": "收发日志（共 {{count}} 条）",

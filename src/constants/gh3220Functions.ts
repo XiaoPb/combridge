@@ -598,11 +598,55 @@ export const GH3220_BOUNDED_PRESETS = {
 export type Gh3220PresetKey = keyof typeof GH3220_BOUNDED_PRESETS;
 
 /** 常用帧模板（选模板自动填充 HEX 输入框） */
-export const GH3220_HEX_TEMPLATES: Array<{ key: string; nameZh: string; nameEn: string; hex: string }> = [
-  { key: 'raw', nameZh: '原始帧头示例', nameEn: 'Raw frame sample', hex: 'AA 11 19 01 01' },
+export interface Gh3220HexTemplate {
+  key: string;
+  nameZh: string;
+  nameEn: string;
+  hex: string;
+}
+
+/**
+ * 帧头解析 / 回显测试示例：不是完整 UProtocol 帧，**不能用于 sendRaw**。
+ * 调试页「0x0B 帧头解析」与「回显测试」输入框使用。
+ */
+export const GH3220_HEX_TEMPLATES: Gh3220HexTemplate[] = [
   { key: 'header', nameZh: '0x0B 帧头（4 CH）', nameEn: '0x0B header (4 CH)', hex: '01 03 00 00 00 0F 80 10' },
   { key: 'echo', nameZh: '回显测试', nameEn: 'Echo test', hex: '0102' },
 ];
+
+/**
+ * `sendRaw` 模板必须是**完整合法帧** `AA 11 CMD LEN PAYLOAD CRC8`：
+ * 后端 `manager.rs:531` 用 `Frame::decode()` 解析，长度必须恰好 `LEN+5` 且 CRC 正确。
+ * 历史上模板只有 5 字节（缺 CRC），下发会报 `unexpected payload length 1 for cmd 0x19`。
+ */
+export const GH3220_RAW_FRAME_TEMPLATES: Gh3220HexTemplate[] = [
+  { key: 'getVer', nameZh: 'GET_VER 请求（完整帧）', nameEn: 'GET_VER request (full frame)', hex: 'AA 11 19 01 01 EC' },
+  { key: 'packageTest', nameZh: 'PACKAGE_TEST（完整帧）', nameEn: 'PACKAGE_TEST (full frame)', hex: 'AA 11 05 03 02 01 02 91' },
+  { key: 'getMaxLen', nameZh: 'GET_MAX_LEN（完整帧）', nameEn: 'GET_MAX_LEN (full frame)', hex: 'AA 11 A0 01 00 3B' },
+];
+
+/** CRC8：poly 0x07、init 0xFF，与 `libs/gh-uprotocol/src/crc8.rs` 一致 */
+export function gh3220Crc8(bytes: number[]): number {
+  let crc = 0xff;
+  for (const byte of bytes) {
+    crc ^= byte & 0xff;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = crc & 0x80 ? ((crc << 1) ^ 0x07) & 0xff : (crc << 1) & 0xff;
+    }
+  }
+  return crc & 0xff;
+}
+
+/** 校验字符串是否为可被后端 `Frame::decode()` 接受的完整帧 */
+export function isValidUProtocolFrame(hex: string): boolean {
+  const clean = hex.replace(/[\s,:-]/g, '');
+  if (!/^[0-9a-fA-F]+$/.test(clean) || clean.length % 2 !== 0 || clean.length < 10) return false;
+  const bytes = clean.match(/../g)!.map((part) => Number.parseInt(part, 16));
+  if (bytes[0] !== 0xaa || bytes[1] !== 0x11) return false;
+  const len = bytes[3];
+  if (bytes.length !== len + 5) return false;
+  return gh3220Crc8(bytes.slice(0, len + 4)) === bytes[len + 4];
+}
 
 /** 与后端 `src-tauri/src/gh3220/types.rs` 一致的默认 GATT UUID */
 export const GH3220_DEFAULT_UUIDS = {

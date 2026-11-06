@@ -145,3 +145,16 @@ export function parseFuncMask(input: string): number {
 export function funcMaskToHex(mask: number): string {
   return `0x${(mask >>> 0).toString(16)}`;
 }
+
+/** §6.6 方案 B：后端目录返回的协议命令号 / 版本类型条目 */
+export interface Gh3220NamedValueDto {
+  key: string;
+  value: number;
+  nameZh: string;
+  nameEn: string;
+}
+
+export interface Gh3220CommandCodeDto {
+  key: string;
+  cmd: number;
+}

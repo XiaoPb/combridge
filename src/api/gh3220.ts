@@ -8,6 +8,8 @@ import type {
   Gh3220Preferences,
   Gh3220Stats,
   Gh3220Status,
+  Gh3220CommandCodeDto,
+  Gh3220NamedValueDto,
 } from '../types/gh3220';
 
 export const gh3220Api = {
@@ -105,5 +107,14 @@ export const gh3220Api = {
 
   updatePreferences(prefs: Gh3220Preferences): Promise<void> {
     return invoke<void>('gh3220_update_preferences', { prefs });
+  },
+
+  /** §6.6 方案 B：后端目录（旧版本二进制没有这两个命令，调用方需容错回退） */
+  getVersionTypes(): Promise<Gh3220NamedValueDto[]> {
+    return invoke<Gh3220NamedValueDto[]>('gh3220_get_version_types');
+  },
+
+  getCommandCodes(): Promise<Gh3220CommandCodeDto[]> {
+    return invoke<Gh3220CommandCodeDto[]>('gh3220_get_command_codes');
   },
 };

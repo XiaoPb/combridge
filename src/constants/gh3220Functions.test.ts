@@ -7,9 +7,13 @@ import {
   formatFunctionLabel,
   formatFunctionMaskNames,
   formatWorkModeLabel,
+  gh3220Crc8,
   GH3220_EVENT_MAP,
   GH3220_FUNCTION_MAP,
+  GH3220_HEX_TEMPLATES,
+  GH3220_RAW_FRAME_TEMPLATES,
   GH3220_WORK_MODE_MAP,
+  isValidUProtocolFrame,
   parseDataType,
   parseFrameHeader,
   parseFunctionMaskText,
@@ -94,5 +98,25 @@ describe('GH3220 展示层标注', () => {
     expect(resolveGh3220Lang('zh-CN')).toBe('zh');
     expect(resolveGh3220Lang('en-US')).toBe('en');
     expect(resolveGh3220Lang(undefined)).toBe('en');
+  });
+});
+
+describe('sendRaw 完整帧模板（真机回归）', () => {
+  it('CRC8 与 gh-uprotocol 一致', () => {
+    expect(gh3220Crc8([0xaa, 0x11, 0x16, 0x01, 0x02])).toBe(0xa2);
+  });
+
+  it('三条 sendRaw 模板都能被 Frame::decode 接受', () => {
+    expect(GH3220_RAW_FRAME_TEMPLATES.length).toBe(3);
+    for (const template of GH3220_RAW_FRAME_TEMPLATES) {
+      expect(isValidUProtocolFrame(template.hex)).toBe(true);
+    }
+  });
+
+  it('历史缺 CRC 的模板与帧头/回显示例被识别为非法完整帧', () => {
+    expect(isValidUProtocolFrame('AA 11 19 01 01')).toBe(false);
+    for (const template of GH3220_HEX_TEMPLATES) {
+      expect(isValidUProtocolFrame(template.hex)).toBe(false);
+    }
   });
 });

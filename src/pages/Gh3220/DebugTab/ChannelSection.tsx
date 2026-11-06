@@ -22,7 +22,9 @@ import {
   formatBitNames,
   getFunctionName,
   GH3220_HEX_TEMPLATES,
+  GH3220_RAW_FRAME_TEMPLATES,
   isCustom,
+  type Gh3220HexTemplate,
   parseFrameHeader,
   resolveGh3220Lang,
 } from '../../../constants/gh3220Functions';
@@ -67,19 +69,22 @@ const ChannelSection: React.FC = () => {
     return cleaned.length > 0 && cleaned.length % 2 === 0 && /^[0-9a-f]+$/i.test(cleaned);
   };
 
-  /** HEX 模板下拉：选中即自动填充输入框 */
-  const templateSelect = (onPick: (hex: string) => void) => (
+  /** HEX 模板下拉：sendRaw 用完整帧模板，帧头解析 / 回显用示例模板 */
+  const templateSelect = (
+    onPick: (hex: string) => void,
+    templates: Gh3220HexTemplate[] = GH3220_HEX_TEMPLATES
+  ) => (
     <Select
       size="small"
       style={{ width: 170 }}
       value={undefined}
       placeholder={t('debug.template')}
-      options={GH3220_HEX_TEMPLATES.map((item) => ({
+      options={templates.map((item) => ({
         value: item.key,
         label: lang === 'zh' ? item.nameZh : item.nameEn,
       }))}
       onChange={(key: string) => {
-        const template = GH3220_HEX_TEMPLATES.find((item) => item.key === key);
+        const template = templates.find((item) => item.key === key);
         if (template) onPick(template.hex);
       }}
     />
@@ -233,7 +238,7 @@ const ChannelSection: React.FC = () => {
             onChange={(e) => setRawHex(e.target.value)}
             placeholder="AA11A00100BF"
           />
-          {templateSelect(setRawHex)}
+          {templateSelect(setRawHex, GH3220_RAW_FRAME_TEMPLATES)}
           <Button onClick={handleRaw} disabled={!connected}>
             {t('debug.send')}
           </Button>

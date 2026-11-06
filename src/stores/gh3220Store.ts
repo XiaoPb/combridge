@@ -73,6 +73,13 @@ const EMPTY_CAPTURE: Gh3220CaptureStatus = {
 };
 
 let unlisteners: UnlistenFn[] = [];
+/**
+ * 订阅是异步的（Promise.all 之后才拿到 unlisten）。
+ * React StrictMode 会在 effect 里连续调用两次 subscribeEvents，
+ * 旧实现两次都看到 `unlisteners.length === 0`，会注册两套监听器，
+ * 造成每条 0x16 事件在事件表里出现两行。这里用进行中的 Promise 做幂等。
+ */
+let subscribePromise: Promise<void> | null = null;
 
 function errorMessage(error: unknown): string {
   if (typeof error === 'string') return error;
@@ -324,7 +331,10 @@ export const useGh3220Store = create<Gh3220Store>((set) => ({
   clearWaveformData: () => set({ frames: new Map() }),
 
   subscribeEvents: async () => {
-    if (unlisteners.length > 0) return;
+    if (subscribePromise) {
+      await subscribePromise;
+      return;
+    }
 
     const handlers: Array<Promise<UnlistenFn>> = [
       onGh3220Status((payload) => {
@@ -340,16 +350,32 @@ export const useGh3220Store = create<Gh3220Store>((set) => ({
         });
       }),
       onGh3220Event((payload) => {
-        set((state) => ({
-          events: [payload, ...state.events].slice(0, MAX_EVENTS),
-        }));
+        set((state) => {
+          // 防御性去重：后端若对同一事件重复发布，事件表不应出现两行
+          const duplicate = state.events.some(
+            (item) =>
+              item.eventId === payload.eventId &&
+              item.reportId === payload.reportId &&
+              item.tsMs === payload.tsMs
+          );
+          if (duplicate) return state;
+          return { events: [payload, ...state.events].slice(0, MAX_EVENTS) };
+        });
       }),
       onGh3220Stats((payload) => {
         set({ stats: payload });
       }),
     ];
 
-    unlisteners = await Promise.all(handlers);
+    subscribePromise = Promise.all(handlers)
+      .then((listeners) => {
+        unlisteners = listeners;
+      })
+      .catch((error) => {
+        subscribePromise = null;
+        throw error;
+      });
+    await subscribePromise;
   },
 
   unsubscribeEvents: () => {
@@ -357,6 +383,7 @@ export const useGh3220Store = create<Gh3220Store>((set) => ({
       unlisten();
     }
     unlisteners = [];
+    subscribePromise = null;
   },
 }));
 

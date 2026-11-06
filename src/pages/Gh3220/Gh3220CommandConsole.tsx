@@ -45,6 +45,7 @@ import {
   formatFunctionMaskPreview,
   functionOptions,
   GH3220_HEX_TEMPLATES,
+  GH3220_RAW_FRAME_TEMPLATES,
   isCustom,
   resolveGh3220Lang,
   workModeOptions,
@@ -56,6 +57,10 @@ import {
   type Gh3220Option,
 } from '../../constants/gh3220Functions';
 import type { Gh3220CaptureConfig } from '../../types/gh3220';
+import {
+  loadBackendCatalog,
+  type Gh3220CatalogSnapshot,
+} from '../../constants/gh3220BackendCatalog';
 import { formatErrorMessage } from '../../utils/errorMessage';
 
 const { Text } = Typography;
@@ -108,20 +113,32 @@ const Gh3220CommandConsole: React.FC = () => {
   const { t, i18n } = useTranslation('gh3220');
   const lang: Gh3220Lang = resolveGh3220Lang(i18n.language);
   const { token } = theme.useToken();
-  const { status, deviceInfo, preferences, capture } = useGh3220Store();
+  const { status, deviceInfo, preferences, capture, refreshStatus, refreshCapture } = useGh3220Store();
   const config = useGh3220CommandConfig();
   const syncFromDevice = useGh3220CommandConfig((state) => state.syncFromDevice);
 
   const [sendingKey, setSendingKey] = useState<string | null>(null);
   const [lastResponse, setLastResponse] = useState('');
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [advancedHex, setAdvancedHex] = useState(GH3220_HEX_TEMPLATES[0].hex);
+  const [advancedHex, setAdvancedHex] = useState(GH3220_RAW_FRAME_TEMPLATES[0].hex);
+  const [catalog, setCatalog] = useState<Gh3220CatalogSnapshot | null>(null);
   const logId = useRef(0);
 
   // 真机 / 偏好反向回填（用户手动改过的字段不会被覆盖）
   useEffect(() => {
     syncFromDevice(deviceInfo, preferences, status);
   }, [deviceInfo, preferences, status, syncFromDevice]);
+
+  // §6.6 方案 B：探测后端目录；旧二进制未注册命令时自动回退前端常量
+  useEffect(() => {
+    let alive = true;
+    void loadBackendCatalog().then((snapshot) => {
+      if (alive) setCatalog(snapshot);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const buildCtx = (values: Record<string, ParamRaw>): OptionContext => {
     const rawFunc = values.funcMask;
@@ -249,6 +266,9 @@ const Gh3220CommandConsole: React.FC = () => {
     const ctx = buildCtx(config.rowValues[def.key] ?? {});
     const options = resolveOptions(param, ctx);
     const label = t(`commands.fields.${param.key}`);
+    // sendRaw 需要完整 UProtocol 帧；packageTest / 帧头解析用回显与帧头示例
+    const hexTemplates =
+      def.key === 'sendRaw' ? GH3220_RAW_FRAME_TEMPLATES : GH3220_HEX_TEMPLATES;
 
     const common = (
       <Text key={`${param.key}-label`} style={{ fontSize: 11, color: token.colorTextTertiary }}>
@@ -332,14 +352,14 @@ const Gh3220CommandConsole: React.FC = () => {
             style={{ width: 140 }}
             value={undefined}
             placeholder={t('commands.advanced.template')}
-            options={GH3220_HEX_TEMPLATES.map((item) => ({
-              value: item.key,
-              label: lang === 'zh' ? item.nameZh : item.nameEn,
-            }))}
-            onChange={(key: string) => {
-              const template = GH3220_HEX_TEMPLATES.find((item) => item.key === key);
-              if (template) setField(def, param, template.hex);
-            }}
+              options={hexTemplates.map((item) => ({
+                value: item.key,
+                label: lang === 'zh' ? item.nameZh : item.nameEn,
+              }))}
+              onChange={(key: string) => {
+                const template = hexTemplates.find((item) => item.key === key);
+                if (template) setField(def, param, template.hex);
+              }}
           />
         </span>
       );
@@ -477,7 +497,11 @@ const Gh3220CommandConsole: React.FC = () => {
     },
   ];
 
-  const running = status.capturing || capture.active || config.isRunning;
+  /**
+   * 以真机/后端状态为准：断连重连或后端自行停止后，本地 isRunning 会粘住，
+   * 导致按钮错误显示「停止」。启动/停止后主动刷新 status/capture 保证即时切换。
+   */
+  const running = status.capturing || capture.active;
   const selectedMask = maskOf(config.selectedFunctions);
   const maskPreview = formatFunctionMaskPreview(selectedMask, lang);
 
@@ -512,6 +536,7 @@ const Gh3220CommandConsole: React.FC = () => {
     setSendingKey('combo');
     try {
       await gh3220Api.captureStart(encoded);
+      await Promise.all([refreshStatus(), refreshCapture()]);
       config.setConfig({ isRunning: true });
       setLastResponse(t('commands.combo.startSuccess'));
       pushLog({
@@ -552,6 +577,7 @@ const Gh3220CommandConsole: React.FC = () => {
       onOk: async () => {
         try {
           await gh3220Api.captureStop();
+          await Promise.all([refreshStatus(), refreshCapture()]);
           config.setConfig({ isRunning: false });
           setLastResponse(t('commands.combo.stopSuccess'));
           pushLog({
@@ -642,12 +668,12 @@ const Gh3220CommandConsole: React.FC = () => {
               style={{ width: 170 }}
               value={undefined}
               placeholder={t('commands.advanced.template')}
-              options={GH3220_HEX_TEMPLATES.map((item) => ({
+              options={GH3220_RAW_FRAME_TEMPLATES.map((item) => ({
                 value: item.key,
                 label: lang === 'zh' ? item.nameZh : item.nameEn,
               }))}
               onChange={(key: string) => {
-                const template = GH3220_HEX_TEMPLATES.find((item) => item.key === key);
+                const template = GH3220_RAW_FRAME_TEMPLATES.find((item) => item.key === key);
                 if (template) setAdvancedHex(template.hex);
               }}
             />
@@ -763,9 +789,17 @@ const Gh3220CommandConsole: React.FC = () => {
           pagination={false}
           scroll={{ y: 460, x: 1000 }}
         />
-        <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
-          {t('commands.hint')}
-        </Text>
+        <Space size={8} wrap style={{ marginTop: 8 }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {t('commands.hint')}
+          </Text>
+          {catalog ? (
+            <Tag color={catalog.source === 'backend' ? 'green' : 'default'}>
+              {t(`commands.catalogSource.${catalog.source}`, { count: catalog.commandCodes.length })}
+              {catalog.mismatches.length > 0 ? ` · ${catalog.mismatches.join(' / ')}` : ''}
+            </Tag>
+          ) : null}
+        </Space>
       </div>
 
       <div style={sectionStyle}>

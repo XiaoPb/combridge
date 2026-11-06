@@ -90,6 +90,10 @@
     "send": "Send",
     "clear": "Clear",
     "hint": "Enumerated parameters are all selects / multi-selects. Picking functions computes the mask in code; the log shows both semantic values and actual wire values. Only HEX byte streams and register addresses/values are free text.",
+    "catalogSource": {
+      "backend": "Command catalog: backend ({{count}} CMDs)",
+      "frontend": "Command catalog: frontend constants ({{count}} CMDs)"
+    },
     "notConnected": "Device is not connected; commands other than status/config may not get a response.",
     "responseTitle": "Latest response",
     "logTitle": "TX/RX log ({{count}} entries)",

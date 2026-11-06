@@ -3,9 +3,6 @@
     "config": "配置",
     "monitor": "监控",
     "version": "版本",
-    "capture": "采集",
-    "control": "控制",
-    "events": "事件",
     "debug": "调试"
   },
   "state": {
@@ -81,6 +78,8 @@
     "captureState": "采集状态",
     "recordCount": "记录总数",
     "qualityTitle": "解码质量",
+    "openedFunctions": "当前开启功能",
+    "noOpenedFunctions": "未读取到设备功能位（连接后刷新信息）",
     "dataTitle": "实时波形",
     "displayDurationTooltip": "波形窗口时长",
     "sampleRateTooltip": "采样率（用于时间轴换算）",
@@ -108,6 +107,7 @@
     "samplingTitle": "采样控制",
     "mode": "工作模式",
     "funcMask": "功能位",
+    "funcMaskHint": "hr, hrv, spo2, ecg, adt 或 0x6",
     "slotEn": "槽位使能",
     "workMode": "设置 WORK_MODE",
     "start": "启动采样",
@@ -171,7 +171,7 @@
     },
     "latestTitle": "最新记录",
     "clearRecords": "清空",
-    "openWaveform": "波形 func{{func}}",
+    "openWaveform": "波形 {{name}}",
     "openWaveformFailed": "打开波形失败",
     "table": {
       "func": "功能",
@@ -187,6 +187,7 @@
     "title": "事件日志",
     "time": "时间",
     "eventId": "事件 ID",
+    "meaning": "事件含义",
     "reportId": "上报 ID",
     "ack": "ACK",
     "clear": "清空",
@@ -194,8 +195,14 @@
     "count": "共 {{count}} 条"
   },
   "debug": {
-    "devOnly": "调试通道仅在开发构建中可用",
-    "warning": "调试通道用于连接本地 uprotocol-sim，默认关闭，仅限回环地址。",
+    "devOnly": "TCP 调试通道与原始帧发送仅在开发构建中可用",
+    "warning": "本页集中采集、采样控制、芯片事件与调试通道，仅供开发调试；真机 STOP 后通常需要复位才能再次 START。",
+    "sections": {
+      "capture": "采集与 CSV",
+      "control": "采样命令控制",
+      "events": "芯片事件",
+      "channel": "TCP 调试通道 / 原始帧"
+    },
     "channelTitle": "TCP 调试通道",
     "enable": "启用",
     "address": "地址",
@@ -211,6 +218,16 @@
     "packageTitle": "回显测试",
     "packageFailed": "回显测试失败",
     "saved": "调试配置已保存",
-    "saveFailed": "保存调试配置失败"
+    "saveFailed": "保存调试配置失败",
+    "frameTitle": "0x0B 帧头解析",
+    "frameInput": "帧头 HEX",
+    "framePlaceholder": "01 03 00 00 00 0F 80 10",
+    "frameHint": "输入至少 8 字节包头：[func][data_type][channel_mask 4B 大端][package_type][data_len]；以 0B 开头会自动跳过 CMD 字节。仅本地解析展示，不发送。",
+    "frameInvalid": "请输入至少 8 字节的有效 HEX",
+    "frameFunction": "功能",
+    "frameDataType": "data_type",
+    "frameChannelMask": "channel_mask",
+    "framePackageType": "package_type",
+    "frameDataLen": "data_len"
   }
 }

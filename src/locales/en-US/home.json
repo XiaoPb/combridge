@@ -38,9 +38,7 @@
         "config": "Config",
         "monitor": "Monitor",
         "version": "Version",
-        "capture": "Capture",
-        "control": "Control",
-        "events": "Events"
+        "debug": "Debug"
       }
     },
     "ota": {

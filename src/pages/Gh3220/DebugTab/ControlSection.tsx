@@ -13,11 +13,12 @@ import {
 } from 'antd';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
-import { gh3220Api } from '../../api/gh3220';
-import { parseFuncMask } from '../../types/gh3220';
-import { formatErrorMessage } from '../../utils/errorMessage';
+import { gh3220Api } from '../../../api/gh3220';
+import { parseFuncMask } from '../../../types/gh3220';
+import { formatErrorMessage } from '../../../utils/errorMessage';
 
-const ControlTab: React.FC = () => {
+/** 调试页分区②：采样命令控制（原 ControlTab 主体） */
+const ControlSection: React.FC = () => {
   const { t } = useTranslation('gh3220');
 
   const [mode, setMode] = useState(0);
@@ -288,4 +289,4 @@ const ControlTab: React.FC = () => {
   );
 };
 
-export default ControlTab;
+export default ControlSection;

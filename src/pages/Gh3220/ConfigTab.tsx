@@ -14,7 +14,6 @@ import {
 } from 'antd';
 import {
   ApiOutlined,
-  CodeOutlined,
   DisconnectOutlined,
   ReloadOutlined,
   SearchOutlined,
@@ -25,7 +24,6 @@ import { useGh3220Store } from '../../stores/gh3220Store';
 import { bleApi } from '../../api/tauri';
 import type { BleDeviceInfo } from '../../types/ble';
 import { formatErrorMessage } from '../../utils/errorMessage';
-import DebugChannelCard from './DebugChannelCard';
 
 const SERVICE_UUID = '0000190e-0000-1000-8000-00805f9b34fb';
 
@@ -278,20 +276,6 @@ const ConfigTab: React.FC = () => {
       ),
       children: <CapturePreferenceSection />,
     },
-    ...(import.meta.env.DEV
-      ? [
-          {
-            key: 'debug',
-            label: (
-              <span>
-                <CodeOutlined style={{ marginRight: 8 }} />
-                {t('debug.channelTitle')}
-              </span>
-            ),
-            children: <DebugChannelCard />,
-          },
-        ]
-      : []),
   ];
 
   return (

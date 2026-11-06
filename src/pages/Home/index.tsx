@@ -26,12 +26,11 @@ import {
   FileProtectOutlined,
   CloudUploadOutlined,
   HistoryOutlined,
-  ThunderboltOutlined,
-  AlertOutlined,
+  BugOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { usePageTabsStore } from '../../stores/pageTabsStore';
+import { usePageTabsStore, type Gh3220TabKey } from '../../stores/pageTabsStore';
 import { useDashboardStore } from '../../stores/dashboardStore';
 import { useMenuVisibilityStore, type HomeMenuKey } from '../../stores/menuVisibilityStore';
 
@@ -276,9 +275,7 @@ const HomePage: React.FC = () => {
         { key: 'config', label: t('modules.gh3220.tabs.config'), icon: <ApiOutlined /> },
         { key: 'monitor', label: t('modules.gh3220.tabs.monitor'), icon: <LineChartOutlined /> },
         { key: 'version', label: t('modules.gh3220.tabs.version'), icon: <InfoCircleOutlined /> },
-        { key: 'capture', label: t('modules.gh3220.tabs.capture'), icon: <ThunderboltOutlined /> },
-        { key: 'control', label: t('modules.gh3220.tabs.control'), icon: <SettingOutlined /> },
-        { key: 'events', label: t('modules.gh3220.tabs.events'), icon: <AlertOutlined /> },
+        { key: 'debug', label: t('modules.gh3220.tabs.debug'), icon: <BugOutlined /> },
       ],
     },
     {
@@ -365,7 +362,7 @@ const HomePage: React.FC = () => {
         const tab = getFirstVisibleTab('gh3220');
         if (tab) {
           setGh3220ActiveTab(
-            tab as 'config' | 'monitor' | 'version' | 'capture' | 'control' | 'events'
+            tab as Gh3220TabKey
           );
         }
         break;
@@ -411,7 +408,7 @@ const HomePage: React.FC = () => {
         break;
       case '/gh3220':
         setGh3220ActiveTab(
-          tabKey as 'config' | 'monitor' | 'version' | 'capture' | 'control' | 'events'
+          tabKey as Gh3220TabKey
         );
         break;
       case '/dashboard':

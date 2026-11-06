@@ -2,10 +2,11 @@ import React from 'react';
 import { Button, Card, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
-import { useGh3220Store } from '../../stores/gh3220Store';
-import type { Gh3220EventPayload } from '../../types/gh3220';
+import { useGh3220Store } from '../../../stores/gh3220Store';
+import type { Gh3220EventPayload } from '../../../types/gh3220';
 
-const EventTab: React.FC = () => {
+/** 调试页分区③：芯片事件（原 EventTab 主体） */
+const EventSection: React.FC = () => {
   const { t } = useTranslation('gh3220');
   const { events, clearEvents } = useGh3220Store();
 
@@ -63,4 +64,4 @@ const EventTab: React.FC = () => {
   );
 };
 
-export default EventTab;
+export default EventSection;

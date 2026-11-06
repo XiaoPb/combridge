@@ -38,9 +38,7 @@
         "config": "配置",
         "monitor": "监控",
         "version": "版本",
-        "capture": "采集",
-        "control": "控制",
-        "events": "事件"
+        "debug": "调试"
       }
     },
     "ota": {

@@ -16,14 +16,15 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { useGh3220Store } from '../../stores/gh3220Store';
-import { useWaveformStore } from '../../stores/waveformStore';
-import { usePageTabsStore } from '../../stores/pageTabsStore';
-import { parseFuncMask } from '../../types/gh3220';
-import type { Gh3220Record } from '../../types/gh3220';
-import { formatErrorMessage } from '../../utils/errorMessage';
+import { useGh3220Store } from '../../../stores/gh3220Store';
+import { useWaveformStore } from '../../../stores/waveformStore';
+import { usePageTabsStore } from '../../../stores/pageTabsStore';
+import { parseFuncMask } from '../../../types/gh3220';
+import type { Gh3220Record } from '../../../types/gh3220';
+import { formatErrorMessage } from '../../../utils/errorMessage';
 
-const CaptureTab: React.FC = () => {
+/** 调试页分区①：采集与 CSV（原 CaptureTab 主体） */
+const CaptureSection: React.FC = () => {
   const { t } = useTranslation('gh3220');
   const navigate = useNavigate();
   const { refreshBuffers, setCurrentBuffer, readData } = useWaveformStore();
@@ -250,7 +251,7 @@ const CaptureTab: React.FC = () => {
                 size="small"
                 onClick={() => void openWaveform(functionId)}
               >
-                {t('capture.openWaveform', { func: functionId })}
+                {t('capture.openWaveform', { name: `func${functionId}` })}
               </Button>
             ))}
             <Button size="small" onClick={clearRecords}>
@@ -273,4 +274,4 @@ const CaptureTab: React.FC = () => {
   );
 };
 
-export default CaptureTab;
+export default CaptureSection;

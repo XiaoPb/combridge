@@ -6,9 +6,6 @@ import { usePageTabsStore } from '../../stores/pageTabsStore';
 import ConfigTab from './ConfigTab';
 import MonitorTab from './MonitorTab';
 import VersionTab from './VersionTab';
-import CaptureTab from './CaptureTab';
-import ControlTab from './ControlTab';
-import EventTab from './EventTab';
 import DebugTab from './DebugTab';
 
 const Gh3220Page: React.FC = () => {
@@ -50,14 +47,8 @@ const Gh3220Page: React.FC = () => {
         return <MonitorTab />;
       case 'version':
         return <VersionTab />;
-      case 'capture':
-        return <CaptureTab />;
-      case 'control':
-        return <ControlTab />;
-      case 'events':
-        return <EventTab />;
       case 'debug':
-        return import.meta.env.DEV ? <DebugTab /> : null;
+        return <DebugTab />;
       default:
         return <MonitorTab />;
     }

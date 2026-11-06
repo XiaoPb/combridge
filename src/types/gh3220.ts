@@ -121,47 +121,25 @@ export interface Gh3220Preferences {
   debugTcp: Gh3220DebugTcpPreferences;
 }
 
+import {
+  GH3220_FUNCTION_BIT_ALIASES,
+  parseFunctionMaskText,
+} from '../constants/gh3220Functions';
+
+/**
+ * 语义文本 → bit 序号。全表与历史别名统一由语义层维护
+ * （见 constants/gh3220Functions.ts），此处保留导出以兼容既有引用。
+ */
 export const GH3220_FUNCTION_BITS: Record<string, number> = {
-  adt: 0,
-  hr: 1,
-  hrv: 2,
-  hsm: 3,
-  fpbp: 4,
-  bp: 4,
-  pwa: 5,
-  spo2: 6,
-  ecg: 7,
-  pwtt: 8,
-  green: 9,
-  soft_adt_green: 9,
-  bt: 10,
-  resp: 11,
-  af: 12,
-  test1: 13,
-  test2: 14,
-  ir: 15,
-  soft_adt_ir: 15,
+  ...GH3220_FUNCTION_BIT_ALIASES,
 };
 
-/** 与命令行工具保持一致：支持 `hr,spo2` 或 `0x6` */
+/**
+ * 与命令行工具保持一致：支持 `hr,spo2`、`hr hrv lead_det`、`0x6` 或十进制数值。
+ * 未知文本按数值 mask 解析，无法解析时抛错由调用方提示。
+ */
 export function parseFuncMask(input: string): number {
-  const text = input.trim();
-  if (!text) return 0;
-  if (text.toLowerCase().startsWith('0x')) {
-    const value = Number.parseInt(text.slice(2), 16);
-    if (Number.isNaN(value)) throw new Error(`无法解析功能位: ${input}`);
-    return value >>> 0;
-  }
-
-  let mask = 0;
-  for (const part of text.split(',')) {
-    const name = part.trim().toLowerCase();
-    if (!name) continue;
-    const bit = GH3220_FUNCTION_BITS[name];
-    if (bit === undefined) throw new Error(`未知功能: ${part.trim()}`);
-    mask |= 1 << bit;
-  }
-  return mask >>> 0;
+  return parseFunctionMaskText(input);
 }
 
 export function funcMaskToHex(mask: number): string {

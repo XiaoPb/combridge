@@ -1,282 +1,81 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Button,
+  Collapse,
   Input,
+  InputNumber,
   Modal,
   Select,
   Space,
   Table,
   Tag,
+  Tooltip,
   Typography,
   message,
   theme,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { SendOutlined, ClearOutlined, ReloadOutlined } from '@ant-design/icons';
+import { SendOutlined, ClearOutlined, ReloadOutlined, FolderOpenOutlined } from '@ant-design/icons';
+import { open } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
 import { gh3220Api } from '../../api/gh3220';
 import { useGh3220Store } from '../../stores/gh3220Store';
+import { useGh3220CommandConfig } from '../../stores/gh3220CommandConfig';
 import {
-  GH3220_WORK_MODE_LIST,
-  formatWorkModeLabel,
-  parseFunctionMaskText,
+  DEFAULT_COMMAND_VALUES,
+  describeCommand,
+  encodeBoundedNumber,
+  encodeCommand,
+  encodeHex,
+  GH3220_COMMAND_CATALOG,
+  needsConfirm,
+  resolveOptions,
+  validateCommand,
+  type CommandDef,
+  type OptionContext,
+  type ParamDef,
+  type ParamRaw,
+} from '../../constants/gh3220CommandSchema';
+import {
+  customOption,
+  customValue,
+  encodeFunctionMask,
+  formatEventMaskPreview,
+  formatFunctionMaskPreview,
+  functionOptions,
+  GH3220_HEX_TEMPLATES,
+  isCustom,
   resolveGh3220Lang,
+  workModeOptions,
+  channelOptions,
+  boundedOptions,
+  boolOptions,
+  encodeEventMask,
   type Gh3220Lang,
+  type Gh3220Option,
 } from '../../constants/gh3220Functions';
 import type { Gh3220CaptureConfig } from '../../types/gh3220';
 import { formatErrorMessage } from '../../utils/errorMessage';
 
 const { Text } = Typography;
 
-type CommandValues = Record<string, string>;
-
-interface FieldOption {
-  value: string;
-  label: string;
-}
-
-interface CommandField {
-  key: string;
-  kind: 'text' | 'select';
-  defaultValue: string;
-  options?: FieldOption[] | ((lang: Gh3220Lang) => FieldOption[]);
-}
-
-interface CommandDef {
-  key: string;
-  /** UProtocol 命令号，`--` 表示复合命令或纯状态/配置命令 */
-  cmd: string;
-  fields: CommandField[];
-  /** 下发前需要二次确认（真机 STOP 后通常需复位才能再次 START） */
-  danger?: boolean;
-  run: (values: CommandValues) => Promise<unknown>;
-}
+/** 组合启动行与参数预览共用的功能位编码器 */
+const maskOf = encodeFunctionMask;
 
 interface LogEntry {
   id: number;
   time: string;
   key: string;
   cmd: string;
-  request: string;
+  semantic: string;
+  wire: string;
   response: string;
   ok: boolean;
   durationMs: number;
 }
 
-const toNumber = (text: string, fallback = 0): number => {
-  const value = text.trim();
-  if (!value) return fallback;
-  const parsed = value.toLowerCase().startsWith('0x')
-    ? Number.parseInt(value.slice(2), 16)
-    : Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
-
-const toValueList = (text: string): number[] =>
-  text
-    .split(/[,;\s]+/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => toNumber(part));
-
-const toBool = (text: string): boolean => text === 'true';
-
-const workModeOptions = (lang: Gh3220Lang): FieldOption[] =>
-  GH3220_WORK_MODE_LIST.map((info) => ({
-    value: String(info.mode),
-    label: formatWorkModeLabel(info.mode, lang),
-  }));
-
-const boolOptions = (lang: Gh3220Lang): FieldOption[] => [
-  { value: 'true', label: lang === 'zh' ? '是' : 'Yes' },
-  { value: 'false', label: lang === 'zh' ? '否' : 'No' },
-];
-
-const chipActions: FieldOption[] = [
-  { value: 'wakeup', label: 'wakeup' },
-  { value: 'sleep', label: 'sleep' },
-  { value: 'soft-reset', label: 'soft-reset' },
-  { value: 'hard-reset', label: 'hard-reset' },
-  { value: 'rx-reset', label: 'rx-reset' },
-];
-
-const maskField = (): CommandField => ({
-  key: 'funcMask',
-  kind: 'text',
-  defaultValue: 'hr',
-});
-
-/** 后端 `gh3220_*` 命令的完整目录；与 src/api/gh3220.ts 一一对应 */
-const COMMANDS: CommandDef[] = [
-  // —— 状态与信息 ——
-  { key: 'getStatus', cmd: '--', fields: [], run: () => gh3220Api.getStatus() },
-  { key: 'getDeviceInfo', cmd: '0x19', fields: [], run: () => gh3220Api.getDeviceInfo() },
-  { key: 'getStats', cmd: '--', fields: [], run: () => gh3220Api.getStats() },
-  { key: 'getCaptureStatus', cmd: '--', fields: [], run: () => gh3220Api.getCaptureStatus() },
-  { key: 'getPreferences', cmd: '--', fields: [], run: () => gh3220Api.getPreferences() },
-  { key: 'clearStats', cmd: '--', fields: [], run: () => gh3220Api.clearStats() },
-  // —— 采样控制 ——
-  {
-    key: 'setWorkMode',
-    cmd: '0x10',
-    fields: [
-      { key: 'mode', kind: 'select', defaultValue: '2', options: workModeOptions },
-      maskField(),
-    ],
-    run: (v) => gh3220Api.setWorkMode(toNumber(v.mode), parseFunctionMaskText(v.funcMask)),
-  },
-  {
-    key: 'start',
-    cmd: '0x0C',
-    fields: [maskField(), { key: 'slotEn', kind: 'text', defaultValue: '0' }],
-    run: (v) => gh3220Api.start(parseFunctionMaskText(v.funcMask), toNumber(v.slotEn)),
-  },
-  {
-    key: 'stop',
-    cmd: '0x0C',
-    danger: true,
-    fields: [maskField()],
-    run: (v) => gh3220Api.stop(parseFunctionMaskText(v.funcMask)),
-  },
-  {
-    key: 'switchSlotFunc',
-    cmd: '0x0F',
-    fields: [
-      { key: 'slot', kind: 'text', defaultValue: '0' },
-      { key: 'extra', kind: 'text', defaultValue: '0' },
-      maskField(),
-      { key: 'on', kind: 'select', defaultValue: 'true', options: boolOptions },
-    ],
-    run: (v) =>
-      gh3220Api.switchSlotFunc(
-        toNumber(v.slot),
-        toNumber(v.extra),
-        parseFunctionMaskText(v.funcMask),
-        toBool(v.on)
-      ),
-  },
-  {
-    key: 'captureStart',
-    cmd: '--',
-    fields: [
-      { key: 'autoStart', kind: 'select', defaultValue: 'true', options: boolOptions },
-      { key: 'autoStop', kind: 'select', defaultValue: 'false', options: boolOptions },
-      { key: 'mode', kind: 'select', defaultValue: '2', options: workModeOptions },
-      { key: 'slotEn', kind: 'text', defaultValue: '0' },
-      maskField(),
-      { key: 'channelsOverride', kind: 'text', defaultValue: '' },
-      { key: 'csvEnabled', kind: 'select', defaultValue: 'true', options: boolOptions },
-    ],
-    run: (v) => {
-      const config: Gh3220CaptureConfig = {
-        autoStart: toBool(v.autoStart),
-        autoStop: toBool(v.autoStop),
-        mode: toNumber(v.mode),
-        slotEn: toNumber(v.slotEn),
-        funcMask: parseFunctionMaskText(v.funcMask),
-        channelsOverride: v.channelsOverride ? toNumber(v.channelsOverride) : null,
-        csvEnabled: toBool(v.csvEnabled),
-      };
-      return gh3220Api.captureStart(config);
-    },
-  },
-  {
-    key: 'captureStop',
-    cmd: '--',
-    fields: [],
-    run: () => gh3220Api.captureStop(),
-  },
-  // —— 寄存器与芯片 ——
-  {
-    key: 'regRead',
-    cmd: '0x03',
-    fields: [
-      { key: 'addr', kind: 'text', defaultValue: '0x00' },
-      { key: 'count', kind: 'text', defaultValue: '1' },
-    ],
-    run: (v) => gh3220Api.regRead(toNumber(v.addr), toNumber(v.count, 1)),
-  },
-  {
-    key: 'regWrite',
-    cmd: '0x03',
-    fields: [
-      { key: 'addr', kind: 'text', defaultValue: '0x00' },
-      { key: 'values', kind: 'text', defaultValue: '0x0000' },
-    ],
-    run: (v) => gh3220Api.regWrite(toNumber(v.addr), toValueList(v.values)),
-  },
-  {
-    key: 'loadRegList',
-    cmd: '--',
-    fields: [{ key: 'filePath', kind: 'text', defaultValue: '' }],
-    run: (v) => gh3220Api.loadRegList(v.filePath.trim()),
-  },
-  {
-    key: 'chipCtrl',
-    cmd: '0x17',
-    fields: [{ key: 'action', kind: 'select', defaultValue: 'wakeup', options: chipActions }],
-    run: (v) => gh3220Api.chipCtrl(v.action),
-  },
-  {
-    key: 'setFifoThr',
-    cmd: '--',
-    fields: [{ key: 'value', kind: 'text', defaultValue: '0' }],
-    run: (v) => gh3220Api.setFifoThr(toNumber(v.value)),
-  },
-  {
-    key: 'setReportEvent',
-    cmd: '--',
-    fields: [{ key: 'mask', kind: 'text', defaultValue: '0x0000' }],
-    run: (v) => gh3220Api.setReportEvent(toNumber(v.mask)),
-  },
-  // —— 调试与原始帧 ——
-  {
-    key: 'debugStatus',
-    cmd: '0xA2',
-    fields: [{ key: 'kind', kind: 'text', defaultValue: '0' }],
-    run: (v) => gh3220Api.debugStatus(v.kind.trim()),
-  },
-  {
-    key: 'packageTest',
-    cmd: '0x05',
-    fields: [{ key: 'hex', kind: 'text', defaultValue: '0102' }],
-    run: (v) => gh3220Api.packageTest(v.hex.trim()),
-  },
-  {
-    key: 'sendRaw',
-    cmd: '--',
-    fields: [{ key: 'hex', kind: 'text', defaultValue: 'AA 11 19 01 01' }],
-    run: (v) => gh3220Api.sendRaw(v.hex.trim()),
-  },
-  // —— 配置 ——
-  {
-    key: 'updatePreferences',
-    cmd: '--',
-    fields: [],
-    run: async () => {
-      const prefs = useGh3220Store.getState().preferences ?? (await gh3220Api.getPreferences());
-      await gh3220Api.updatePreferences(prefs);
-      return prefs;
-    },
-  },
-];
-
 const QUICK_KEYS = ['getDeviceInfo', 'getStatus', 'getStats', 'getCaptureStatus', 'packageTest'];
-
-function defaultValues(def: CommandDef): CommandValues {
-  return def.fields.reduce<CommandValues>((acc, field) => {
-    acc[field.key] = field.defaultValue;
-    return acc;
-  }, {});
-}
-
-function initialRowValues(): Record<string, CommandValues> {
-  return COMMANDS.reduce<Record<string, CommandValues>>((acc, def) => {
-    acc[def.key] = defaultValues(def);
-    return acc;
-  }, {});
-}
 
 function formatResponse(value: unknown): string {
   if (value === undefined) return '(void)';
@@ -296,37 +95,60 @@ function formatResponse(value: unknown): string {
   }
 }
 
+const asArray = (raw: ParamRaw | undefined): string[] =>
+  Array.isArray(raw) ? (raw as string[]) : raw === undefined ? [] : [String(raw)];
+
 /**
- * GH3220 命令收发控制台：
- * 命令目录按 GH3036「RPC 命令」页的行式表格排布——每条命令一行，
- * 左为命令名/命令号，中间为参数控件，右侧为行内发送按钮；
- * 下方保留最近一次响应与 TX/RX 收发日志。
+ * GH3220 命令收发控制台（V3）：
+ * - 参数全部由 `GH3220_COMMAND_CATALOG` 元数据驱动，可枚举项一律下拉 / 多选；
+ * - 顶部「功能组合启动」行对齐 GH3036：只勾选功能名，掩码与细节由代码层补完；
+ * - 日志同时显示语义值与实际下发数值。
  */
 const Gh3220CommandConsole: React.FC = () => {
   const { t, i18n } = useTranslation('gh3220');
-  const lang = resolveGh3220Lang(i18n.language);
+  const lang: Gh3220Lang = resolveGh3220Lang(i18n.language);
   const { token } = theme.useToken();
-  const { status } = useGh3220Store();
+  const { status, deviceInfo, preferences, capture } = useGh3220Store();
+  const config = useGh3220CommandConfig();
+  const syncFromDevice = useGh3220CommandConfig((state) => state.syncFromDevice);
 
-  const [rowValues, setRowValues] = useState<Record<string, CommandValues>>(initialRowValues);
   const [sendingKey, setSendingKey] = useState<string | null>(null);
   const [lastResponse, setLastResponse] = useState('');
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [advancedHex, setAdvancedHex] = useState(GH3220_HEX_TEMPLATES[0].hex);
   const logId = useRef(0);
 
-  const setField = (commandKey: string, fieldKey: string, value: string) =>
-    setRowValues((prev) => ({
-      ...prev,
-      [commandKey]: { ...(prev[commandKey] ?? {}), [fieldKey]: value },
-    }));
+  // 真机 / 偏好反向回填（用户手动改过的字段不会被覆盖）
+  useEffect(() => {
+    syncFromDevice(deviceInfo, preferences, status);
+  }, [deviceInfo, preferences, status, syncFromDevice]);
 
-  const execute = async (def: CommandDef, requestValues: CommandValues) => {
-    const started = performance.now();
+  const buildCtx = (values: Record<string, ParamRaw>): OptionContext => {
+    const rawFunc = values.funcMask;
+    return {
+      lang,
+      selectedFunctions: Array.isArray(rawFunc) ? (rawFunc as string[]) : config.selectedFunctions,
+    };
+  };
+
+  const pushLog = (entry: Omit<LogEntry, 'id' | 'time'>) => {
     logId.current += 1;
+    setLogs((prev) =>
+      [{ ...entry, id: logId.current, time: new Date().toLocaleTimeString() }, ...prev].slice(0, 100)
+    );
+  };
+
+  const execute = async (
+    def: CommandDef,
+    encoded: Record<string, unknown>,
+    semantic: string,
+    wire: string
+  ) => {
+    const started = performance.now();
     let ok = true;
     let responseText = '';
     try {
-      const result = await def.run(requestValues);
+      const result = await def.invoke(encoded);
       responseText = formatResponse(result);
       message.success(`${t(`commands.list.${def.key}`)} · ${t('commands.success')}`);
     } catch (err) {
@@ -334,73 +156,229 @@ const Gh3220CommandConsole: React.FC = () => {
       responseText = formatErrorMessage(err, t('commands.failed'));
       message.error(`${t(`commands.list.${def.key}`)} · ${responseText}`);
     }
-    const entry: LogEntry = {
-      id: logId.current,
-      time: new Date().toLocaleTimeString(),
+    setLastResponse(responseText);
+    pushLog({
       key: def.key,
       cmd: def.cmd,
-      request: Object.keys(requestValues).length > 0 ? JSON.stringify(requestValues) : '—',
+      semantic,
+      wire,
       response: responseText,
       ok,
       durationMs: Math.round(performance.now() - started),
-    };
-    setLastResponse(responseText);
-    setLogs((prev) => [entry, ...prev].slice(0, 100));
+    });
     setSendingKey(null);
   };
 
-  const handleSend = (def: CommandDef, requestValues?: CommandValues) => {
-    const payload = requestValues ?? rowValues[def.key] ?? defaultValues(def);
-    setSendingKey(def.key);
-    if (def.danger) {
-      Modal.confirm({
-        title: t('commands.stopConfirmTitle'),
-        content: t('commands.stopConfirmContent'),
-        okText: t('commands.confirm'),
-        cancelText: t('commands.cancel'),
-        okButtonProps: { danger: true },
-        onOk: () => execute(def, payload),
-        onCancel: () => setSendingKey(null),
-      });
+  const confirmAndExecute = (
+    def: CommandDef,
+    encoded: Record<string, unknown>,
+    semantic: string,
+    wire: string,
+    confirmKey: string
+  ) => {
+    Modal.confirm({
+      title: t(`commands.confirmTitles.${confirmKey}`),
+      content: t(`commands.confirmContents.${confirmKey}`),
+      okText: t('commands.confirm'),
+      cancelText: t('commands.cancel'),
+      okButtonProps: { danger: true },
+      onOk: () => void execute(def, encoded, semantic, wire),
+      onCancel: () => setSendingKey(null),
+    });
+  };
+
+  const handleSend = (def: CommandDef, overrides?: Record<string, ParamRaw>) => {
+    const values = overrides ?? config.rowValues[def.key] ?? DEFAULT_COMMAND_VALUES[def.key];
+    const ctx = buildCtx(values);
+    const error = validateCommand(def, values, ctx);
+    if (error) {
+      message.error(error);
       return;
     }
-    void execute(def, payload);
+    const encoded = encodeCommand(def, values, ctx);
+    const { semantic, wire } = describeCommand(def, values, ctx);
+    setSendingKey(def.key);
+    if (needsConfirm(def, encoded)) {
+      const confirmKey = def.confirmKey ?? (def.danger ? 'stop' : 'chipReset');
+      confirmAndExecute(def, encoded, semantic, wire, confirmKey);
+      return;
+    }
+    void execute(def, encoded, semantic, wire);
   };
 
   const handleQuick = (key: string) => {
-    const def = COMMANDS.find((item) => item.key === key);
-    if (def) handleSend(def, defaultValues(def));
+    const def = GH3220_COMMAND_CATALOG.find((item) => item.key === key);
+    if (def) handleSend(def);
   };
 
-  const renderField = (def: CommandDef, field: CommandField) => {
-    const options = typeof field.options === 'function' ? field.options(lang) : field.options;
-    const value = rowValues[def.key]?.[field.key] ?? field.defaultValue;
-    const wide = field.key === 'mode' || field.key === 'filePath' || field.key === 'hex';
-    const controlStyle: React.CSSProperties = { width: wide ? 230 : 100 };
+  const setField = (def: CommandDef, param: ParamDef, value: ParamRaw) => {
+    config.setRowValue(def.key, param.key, value);
+    if (param.kind === 'functionMask') {
+      config.setSelectedFunctions(asArray(value));
+    }
+    if (param.kind === 'bitmask') {
+      config.setEventMaskKeys(asArray(value));
+    }
+  };
+
+  /** 未知位（如设备回读的 0x…）补成可显示的选项，避免丢数据 */
+  const withUnknownOptions = (options: Gh3220Option[], selected: string[]): Gh3220Option[] => {
+    const known = new Set(options.map((item) => item.value));
+    return [
+      ...options,
+      ...selected.filter((value) => !known.has(value)).map((value) => ({ value, label: value })),
+    ];
+  };
+
+  const customEditor = (param: ParamDef, value: ParamRaw, onChange: (next: ParamRaw) => void) => {
+    if (!isCustom(value)) return null;
     return (
-      <span
-        key={field.key}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
-      >
-        <Text style={{ fontSize: 11, color: token.colorTextTertiary }}>
-          {t(`commands.fields.${field.key}`)}
-        </Text>
-        {field.kind === 'select' && options ? (
+      <InputNumber
+        size="small"
+        min={param.min ?? 0}
+        max={param.max ?? 65535}
+        value={Number(customValue(value, '0'))}
+        onChange={(next) => onChange(customOption(next ?? 0))}
+        style={{ width: 92 }}
+      />
+    );
+  };
+
+  const renderField = (def: CommandDef, param: ParamDef) => {
+    const raw = config.rowValues[def.key]?.[param.key] ?? param.defaultValue;
+    const ctx = buildCtx(config.rowValues[def.key] ?? {});
+    const options = resolveOptions(param, ctx);
+    const label = t(`commands.fields.${param.key}`);
+
+    const common = (
+      <Text key={`${param.key}-label`} style={{ fontSize: 11, color: token.colorTextTertiary }}>
+        {label}
+      </Text>
+    );
+
+    if (param.kind === 'functionMask' || param.kind === 'bitmask') {
+      const selected = asArray(raw);
+      const mask =
+        param.kind === 'functionMask' ? maskOf(selected) : encodeEventMask(selected);
+      const preview =
+        param.kind === 'functionMask'
+          ? formatFunctionMaskPreview(mask, lang)
+          : formatEventMaskPreview(mask, lang);
+      return (
+        <span key={param.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          {common}
           <Select
             size="small"
-            style={controlStyle}
-            value={value}
-            onChange={(next: string) => setField(def.key, field.key, next)}
-            options={options}
+            mode="multiple"
+            maxTagCount={1}
+            allowClear
+            style={{ minWidth: 190 }}
+            value={selected}
+            onChange={(next: string[]) => setField(def, param, next)}
+            options={withUnknownOptions(options, selected)}
+            placeholder={t(
+              param.kind === 'bitmask'
+                ? 'commands.preview.selectEvents'
+                : 'commands.preview.selectFunctions'
+            )}
           />
-        ) : (
+          <Tooltip title={preview}>
+            <Tag color="blue" style={{ margin: 0, maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {preview}
+            </Tag>
+          </Tooltip>
+        </span>
+      );
+    }
+
+    if (param.kind === 'file') {
+      return (
+        <span key={param.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          {common}
           <Input
             size="small"
-            style={controlStyle}
-            value={value}
-            onChange={(e) => setField(def.key, field.key, e.target.value)}
+            readOnly
+            style={{ width: 200 }}
+            value={String(raw)}
+            placeholder={t('commands.preview.selectFile')}
           />
-        )}
+          <Button
+            size="small"
+            icon={<FolderOpenOutlined />}
+            onClick={async () => {
+              const selected = await open({
+                multiple: false,
+                filters: [{ name: 'Register list', extensions: ['csv', 'txt'] }],
+              });
+              if (selected && typeof selected === 'string') setField(def, param, selected);
+            }}
+          />
+        </span>
+      );
+    }
+
+    if (param.kind === 'hex') {
+      return (
+        <span key={param.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          {common}
+          <Input
+            size="small"
+            style={{ width: 170 }}
+            value={String(raw)}
+            onChange={(e) => setField(def, param, e.target.value)}
+          />
+          <Select
+            size="small"
+            style={{ width: 140 }}
+            value={undefined}
+            placeholder={t('commands.advanced.template')}
+            options={GH3220_HEX_TEMPLATES.map((item) => ({
+              value: item.key,
+              label: lang === 'zh' ? item.nameZh : item.nameEn,
+            }))}
+            onChange={(key: string) => {
+              const template = GH3220_HEX_TEMPLATES.find((item) => item.key === key);
+              if (template) setField(def, param, template.hex);
+            }}
+          />
+        </span>
+      );
+    }
+
+    if (param.kind === 'numberList') {
+      return (
+        <span key={param.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          {common}
+          <Input
+            size="small"
+            style={{ width: 140 }}
+            value={String(raw)}
+            onChange={(e) => setField(def, param, e.target.value)}
+          />
+        </span>
+      );
+    }
+
+    // enum / bool / boundedNumber：一律 Select（可枚举即下拉）
+    const text = String(raw);
+    return (
+      <span key={param.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        {common}
+        <Select
+          size="small"
+          style={{ width: param.key === 'mode' ? 210 : 132 }}
+          value={isCustom(raw) ? 'custom' : text}
+          options={withUnknownOptions(options, [text])}
+          onChange={(next: string) => {
+            if (next === 'custom') {
+              const fallback = customValue(raw, '') || String(param.defaultValue) || '0';
+              setField(def, param, customOption(fallback));
+            } else {
+              setField(def, param, next);
+            }
+          }}
+        />
+        {customEditor(param, raw, (next) => setField(def, param, next))}
       </span>
     );
   };
@@ -426,13 +404,13 @@ const Gh3220CommandConsole: React.FC = () => {
       title: t('commands.params'),
       key: 'params',
       render: (_, def) =>
-        def.fields.length === 0 ? (
+        def.params.length === 0 ? (
           <Text type="secondary" style={{ fontSize: 12 }}>
             {t('commands.noParams')}
           </Text>
         ) : (
           <Space size={[8, 4]} wrap>
-            {def.fields.map((field) => renderField(def, field))}
+            {def.params.map((param) => renderField(def, param))}
           </Space>
         ),
     },
@@ -462,33 +440,134 @@ const Gh3220CommandConsole: React.FC = () => {
     {
       title: t('commands.command'),
       key: 'command',
-      width: 190,
+      width: 180,
       render: (_, row) => `${row.cmd === '--' ? '—' : row.cmd} · ${t(`commands.list.${row.key}`)}`,
     },
-    { title: t('commands.request'), dataIndex: 'request', ellipsis: true, width: 180 },
+    {
+      title: t('commands.semanticColumn'),
+      dataIndex: 'semantic',
+      ellipsis: true,
+      width: 230,
+      render: (text: string) => <Text style={{ fontSize: 12 }}>{text}</Text>,
+    },
+    {
+      title: t('commands.wireColumn'),
+      dataIndex: 'wire',
+      ellipsis: true,
+      width: 230,
+      render: (text: string) => <Text code style={{ fontSize: 11 }}>{text}</Text>,
+    },
     {
       title: t('commands.result'),
       dataIndex: 'response',
       ellipsis: true,
+      width: 180,
       render: (text: string) => <Text style={{ fontSize: 12 }}>{text.replace(/\s+/g, ' ')}</Text>,
     },
-    {
-      title: t('commands.duration'),
-      dataIndex: 'durationMs',
-      width: 80,
-      render: (ms: number) => `${ms} ms`,
-    },
+    { title: t('commands.duration'), dataIndex: 'durationMs', width: 80, render: (ms: number) => `${ms} ms` },
     {
       title: t('commands.status'),
       dataIndex: 'ok',
       width: 76,
       render: (ok: boolean) => (
-        <Tag color={ok ? 'success' : 'error'}>
-          {ok ? t('commands.success') : t('commands.failed')}
-        </Tag>
+        <Tag color={ok ? 'success' : 'error'}>{ok ? t('commands.success') : t('commands.failed')}</Tag>
       ),
     },
   ];
+
+  const running = status.capturing || capture.active || config.isRunning;
+  const selectedMask = maskOf(config.selectedFunctions);
+  const maskPreview = formatFunctionMaskPreview(selectedMask, lang);
+
+  /** 组合启动：只勾选功能，其余细节由代码层补完（对齐 GH3036 bitMap.reduce） */
+  const handleComboStart = async () => {
+    if (config.selectedFunctions.length === 0) {
+      message.warning(t('commands.preview.functionRequired'));
+      return;
+    }
+    const encoded: Gh3220CaptureConfig = {
+      autoStart: true,
+      autoStop: false,
+      mode: Number(config.workMode),
+      slotEn: encodeBoundedNumber(config.slotEn) ?? 0,
+      funcMask: selectedMask,
+      channelsOverride: encodeBoundedNumber(config.channelsOverride),
+      csvEnabled: config.csvEnabled === 'true',
+    };
+    const semantic = describeCommand(
+      GH3220_COMMAND_CATALOG.find((def) => def.key === 'captureStart')!,
+      {
+        autoStart: 'true',
+        autoStop: 'false',
+        mode: config.workMode,
+        slotEn: config.slotEn,
+        funcMask: config.selectedFunctions,
+        channelsOverride: config.channelsOverride,
+        csvEnabled: config.csvEnabled,
+      },
+      { lang, selectedFunctions: config.selectedFunctions }
+    );
+    setSendingKey('combo');
+    try {
+      await gh3220Api.captureStart(encoded);
+      config.setConfig({ isRunning: true });
+      setLastResponse(t('commands.combo.startSuccess'));
+      pushLog({
+        key: 'captureStart',
+        cmd: '0x10+0x0C',
+        semantic: semantic.semantic,
+        wire: `captureStart(funcMask:0x${selectedMask.toString(16).toUpperCase()}, mode:${encoded.mode}, slotEn:${encoded.slotEn})`,
+        response: t('commands.combo.startSuccess'),
+        ok: true,
+        durationMs: 0,
+      });
+      message.success(t('commands.combo.startSuccess'));
+    } catch (err) {
+      const text = formatErrorMessage(err, t('commands.failed'));
+      setLastResponse(text);
+      pushLog({
+        key: 'captureStart',
+        cmd: '0x10+0x0C',
+        semantic: semantic.semantic,
+        wire: `captureStart(funcMask:0x${selectedMask.toString(16).toUpperCase()})`,
+        response: text,
+        ok: false,
+        durationMs: 0,
+      });
+      message.error(text);
+    } finally {
+      setSendingKey(null);
+    }
+  };
+
+  const handleComboStop = () => {
+    Modal.confirm({
+      title: t('commands.confirmTitles.captureStop'),
+      content: t('commands.confirmContents.captureStop'),
+      okText: t('commands.confirm'),
+      cancelText: t('commands.cancel'),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await gh3220Api.captureStop();
+          config.setConfig({ isRunning: false });
+          setLastResponse(t('commands.combo.stopSuccess'));
+          pushLog({
+            key: 'captureStop',
+            cmd: '--',
+            semantic: t('commands.combo.stop'),
+            wire: 'captureStop()',
+            response: t('commands.combo.stopSuccess'),
+            ok: true,
+            durationMs: 0,
+          });
+          message.success(t('commands.combo.stopSuccess'));
+        } catch (err) {
+          message.error(formatErrorMessage(err, t('commands.failed')));
+        }
+      },
+    });
+  };
 
   const sectionStyle: React.CSSProperties = {
     padding: '12px 16px',
@@ -501,12 +580,151 @@ const Gh3220CommandConsole: React.FC = () => {
     marginBottom: 8,
     color: token.colorTextSecondary,
   };
+  const rowLabel: React.CSSProperties = {
+    width: 82,
+    fontSize: 12,
+    color: token.colorTextSecondary,
+    flex: '0 0 auto',
+  };
+
+  const comboRow = (label: string, control: React.ReactNode, action?: React.ReactNode) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <span style={rowLabel}>{label}</span>
+      {control}
+      {action}
+    </div>
+  );
+
+  const advancedItems = [
+    {
+      key: 'advanced',
+      label: t('commands.advanced.title'),
+      children: (
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          <Space wrap>
+            <Text style={{ fontSize: 12 }}>{t('commands.fields.slotEn')}</Text>
+            <Select
+              size="small"
+              style={{ width: 120 }}
+              value={isCustom(config.slotEn) ? 'custom' : config.slotEn}
+              options={boundedOptions('slotEn', lang)}
+              onChange={(next: string) => config.setConfig({ slotEn: next })}
+            />
+            {customEditor({ key: 'slotEn', kind: 'boundedNumber', defaultValue: '0', min: 0, max: 255, encode: () => 0 } as ParamDef, config.slotEn, (next) =>
+              config.setConfig({ slotEn: String(next) })
+            )}
+            <Text style={{ fontSize: 12 }}>{t('commands.fields.channelsOverride')}</Text>
+            <Select
+              size="small"
+              style={{ width: 160 }}
+              value={isCustom(config.channelsOverride) ? 'custom' : config.channelsOverride}
+              options={channelOptions(config.selectedFunctions, lang)}
+              onChange={(next: string) => config.setConfig({ channelsOverride: next })}
+            />
+            <Text style={{ fontSize: 12 }}>{t('commands.fields.csvEnabled')}</Text>
+            <Select
+              size="small"
+              style={{ width: 90 }}
+              value={config.csvEnabled}
+              options={boolOptions(lang)}
+              onChange={(next: string) => config.setConfig({ csvEnabled: next })}
+            />
+          </Space>
+          <Space wrap>
+            <Text style={{ fontSize: 12 }}>{t('commands.advanced.template')}</Text>
+            <Select
+              size="small"
+              style={{ width: 170 }}
+              value={undefined}
+              placeholder={t('commands.advanced.template')}
+              options={GH3220_HEX_TEMPLATES.map((item) => ({
+                value: item.key,
+                label: lang === 'zh' ? item.nameZh : item.nameEn,
+              }))}
+              onChange={(key: string) => {
+                const template = GH3220_HEX_TEMPLATES.find((item) => item.key === key);
+                if (template) setAdvancedHex(template.hex);
+              }}
+            />
+            <Input
+              size="small"
+              style={{ width: 220 }}
+              value={advancedHex}
+              onChange={(e) => setAdvancedHex(e.target.value)}
+            />
+            <Button
+              size="small"
+              icon={<SendOutlined />}
+              onClick={() => {
+                const def = GH3220_COMMAND_CATALOG.find((item) => item.key === 'sendRaw')!;
+                handleSend(def, { hex: encodeHex(advancedHex) });
+              }}
+            >
+              {t('commands.advanced.rawSend')}
+            </Button>
+          </Space>
+        </Space>
+      ),
+    },
+  ];
 
   return (
     <Space direction="vertical" size={10} style={{ width: '100%' }}>
       {status.state === 'disconnected' && (
         <Alert type="warning" showIcon message={t('commands.notConnected')} />
       )}
+
+      {/* 功能组合启动行：对齐 GH3036 的 functionSelect 单行 */}
+      <div style={sectionStyle}>
+        <div style={labelStyle}>{t('commands.combo.title')}</div>
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          {comboRow(
+            t('commands.combo.functions'),
+            <>
+              <Select
+                size="small"
+                mode="multiple"
+                maxTagCount={2}
+                allowClear
+                style={{ minWidth: 330, flex: 1 }}
+                value={config.selectedFunctions}
+                options={withUnknownOptions(functionOptions(lang), config.selectedFunctions)}
+                onChange={(keys: string[]) => config.setSelectedFunctions(keys)}
+                placeholder={t('commands.preview.selectFunctions')}
+              />
+              <Tooltip title={maskPreview}>
+                <Tag color="blue" style={{ margin: 0 }}>{maskPreview}</Tag>
+              </Tooltip>
+            </>,
+            <Button
+              size="small"
+              type={running ? 'default' : 'primary'}
+              danger={running}
+              loading={sendingKey === 'combo'}
+              style={{ width: 90 }}
+              onClick={() => (running ? handleComboStop() : void handleComboStart())}
+            >
+              {running ? t('commands.combo.stop') : t('commands.combo.start')}
+            </Button>
+          )}
+          {comboRow(
+            t('commands.combo.mode'),
+            <Select
+              size="small"
+              style={{ width: 300 }}
+              value={config.workMode}
+              options={workModeOptions(lang)}
+              onChange={(next: string) => config.setConfig({ workMode: next })}
+            />
+          )}
+          {config.lastUpdatedFromDevice && !config.manualEdited.selectedFunctions ? (
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {t('commands.preview.fromDevice')}
+            </Text>
+          ) : null}
+          <Collapse size="small" items={advancedItems} />
+        </Space>
+      </div>
 
       <div style={sectionStyle}>
         <div style={labelStyle}>{t('commands.quick')}</div>
@@ -536,9 +754,9 @@ const Gh3220CommandConsole: React.FC = () => {
           size="small"
           bordered
           columns={commandColumns}
-          dataSource={COMMANDS}
+          dataSource={GH3220_COMMAND_CATALOG}
           pagination={false}
-          scroll={{ y: 460, x: 860 }}
+          scroll={{ y: 460, x: 1180 }}
         />
         <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
           {t('commands.hint')}
@@ -572,7 +790,7 @@ const Gh3220CommandConsole: React.FC = () => {
           columns={logColumns}
           dataSource={logs}
           pagination={false}
-          scroll={{ y: 220, x: 900 }}
+          scroll={{ y: 220, x: 1150 }}
           locale={{ emptyText: t('commands.empty') }}
         />
       </div>

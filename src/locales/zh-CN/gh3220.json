@@ -75,7 +75,10 @@
     "restoreDefaults": "恢复默认",
     "csvSave": "CSV 保存",
     "saveCsvConfig": "保存 CSV 配置",
-    "csvSaved": "CSV 配置已保存"
+    "csvSaved": "CSV 配置已保存",
+    "discovered": "设备发现的特征",
+    "customValue": "自定义值",
+    "fromDevice": "已按真机链路信息自动填充"
   },
   "commands": {
     "quick": "快捷命令",
@@ -86,7 +89,7 @@
     "noParams": "无参数",
     "send": "发送",
     "clear": "清空",
-    "hint": "功能位支持 hr,spo2 或 0x6；数值支持 0x 前缀。所有请求与响应都会记录在下方日志。",
+    "hint": "可枚举参数均为下拉/多选；勾选功能后掩码由代码自动计算，日志同时显示语义值与实际下发数值。仅 HEX 字节流、寄存器地址/值需要手动输入。",
     "notConnected": "设备未连接，除状态/配置类命令外可能无法得到响应。",
     "responseTitle": "最近一次响应",
     "logTitle": "收发日志（共 {{count}} 条）",
@@ -94,6 +97,8 @@
     "time": "时间",
     "command": "命令",
     "request": "请求参数",
+    "semanticColumn": "语义值",
+    "wireColumn": "实际下发",
     "result": "响应",
     "duration": "耗时",
     "status": "结果",
@@ -103,6 +108,37 @@
     "cancel": "取消",
     "stopConfirmTitle": "确认下发 STOP？",
     "stopConfirmContent": "真机 STOP 后通常无法直接再次 START，需要复位芯片。请确认已了解该副作用。",
+    "confirmTitles": {
+      "stop": "确认下发 STOP？",
+      "captureStop": "确认停止采集？",
+      "chipReset": "确认复位芯片？"
+    },
+    "confirmContents": {
+      "stop": "真机 STOP 后通常无法直接再次 START，需要复位芯片。请确认已了解该副作用。",
+      "captureStop": "将停止本地采集与 CSV 写入；若采集偏好开启了 autoStop，后端还会向设备下发 STOP，之后通常需要复位才能再次 START。",
+      "chipReset": "复位会清空 WORK_MODE 并中断当前采集，请确认已了解该副作用。"
+    },
+    "preview": {
+      "selectFunctions": "勾选功能",
+      "selectEvents": "勾选上报事件",
+      "selectFile": "点击选择寄存器表文件",
+      "functionRequired": "请至少选择一个功能",
+      "fromDevice": "已根据真机回读的功能位自动回填"
+    },
+    "combo": {
+      "title": "功能组合启动（只选功能，细节代码层处理）",
+      "functions": "功能选择",
+      "mode": "工作模式",
+      "start": "启动",
+      "stop": "停止",
+      "startSuccess": "已按所选功能启动采集",
+      "stopSuccess": "采集已停止"
+    },
+    "advanced": {
+      "title": "高级（数值细节 / 原始帧，均有默认值）",
+      "template": "选模板自动填充",
+      "rawSend": "发送原始帧"
+    },
     "fields": {
       "mode": "工作模式",
       "funcMask": "功能位",
@@ -164,7 +200,9 @@
     "version": "版本",
     "action": "操作",
     "noDevice": "请先连接设备",
-    "readFailed": "版本读取失败"
+    "readFailed": "版本读取失败",
+    "typeSelect": "版本类型（定位）",
+    "locateHint": "选择类型仅定位/高亮对应行；读取仍使用一次完整 GET_VER，不改变后端行为。"
   },
   "monitor": {
     "statusTitle": "运行状态",
@@ -185,6 +223,7 @@
     "rawMode": "RAW",
     "agcMode": "AGC",
     "selectFunction": "选择功能",
+    "customValue": "自定义值",
     "clearData": "清空数据",
     "noData": "暂无数据，开始采集后显示波形",
     "rawGroup": "RAW 通道",
@@ -203,7 +242,7 @@
     "samplingTitle": "采样控制",
     "mode": "工作模式",
     "funcMask": "功能位",
-    "funcMaskHint": "hr, hrv, spo2, ecg, adt 或 0x6",
+    "funcMaskHint": "勾选功能即可，掩码自动计算",
     "slotEn": "槽位使能",
     "workMode": "设置 WORK_MODE",
     "start": "启动采样",
@@ -277,7 +316,7 @@
     "started": "采集已开始",
     "stopped": "采集已停止",
     "startFailed": "开始采集失败",
-    "maskRequired": "自动启动需要填写功能位"
+    "maskRequired": "请至少选择一个功能"
   },
   "events": {
     "title": "事件日志",
@@ -324,6 +363,7 @@
     "frameDataType": "data_type",
     "frameChannelMask": "channel_mask",
     "framePackageType": "package_type",
-    "frameDataLen": "data_len"
+    "frameDataLen": "data_len",
+    "template": "选模板自动填充"
   }
 }

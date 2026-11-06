@@ -75,7 +75,10 @@
     "restoreDefaults": "Restore defaults",
     "csvSave": "CSV recording",
     "saveCsvConfig": "Save CSV config",
-    "csvSaved": "CSV config saved"
+    "csvSaved": "CSV config saved",
+    "discovered": "Discovered characteristics",
+    "customValue": "Custom value",
+    "fromDevice": "Auto-filled from the live link"
   },
   "commands": {
     "quick": "Quick commands",
@@ -86,7 +89,7 @@
     "noParams": "No parameters",
     "send": "Send",
     "clear": "Clear",
-    "hint": "Function mask accepts hr,spo2 or 0x6; numbers accept 0x prefix. Every request and response is logged below.",
+    "hint": "Enumerated parameters are all selects / multi-selects. Picking functions computes the mask in code; the log shows both semantic values and actual wire values. Only HEX byte streams and register addresses/values are free text.",
     "notConnected": "Device is not connected; commands other than status/config may not get a response.",
     "responseTitle": "Latest response",
     "logTitle": "TX/RX log ({{count}} entries)",
@@ -94,6 +97,8 @@
     "time": "Time",
     "command": "Command",
     "request": "Request",
+    "semanticColumn": "Semantic values",
+    "wireColumn": "Wire values",
     "result": "Response",
     "duration": "Duration",
     "status": "Result",
@@ -103,6 +108,37 @@
     "cancel": "Cancel",
     "stopConfirmTitle": "Send STOP to the device?",
     "stopConfirmContent": "On real hardware a STOP usually prevents a subsequent START until the chip is reset. Confirm you accept this side effect.",
+    "confirmTitles": {
+      "stop": "Send STOP to the device?",
+      "captureStop": "Stop capture?",
+      "chipReset": "Reset the chip?"
+    },
+    "confirmContents": {
+      "stop": "On real hardware a STOP usually prevents a subsequent START until the chip is reset. Confirm you accept this side effect.",
+      "captureStop": "This stops local capture and CSV writing. If autoStop is enabled, the backend also sends STOP to the device, after which a reset is usually required before START again.",
+      "chipReset": "A reset clears WORK_MODE and interrupts the running capture. Confirm you accept this side effect."
+    },
+    "preview": {
+      "selectFunctions": "Pick functions",
+      "selectEvents": "Pick report events",
+      "selectFile": "Click to pick a register list file",
+      "functionRequired": "Select at least one function",
+      "fromDevice": "Auto-filled from the function mask read back from the device"
+    },
+    "combo": {
+      "title": "Function combo start (pick functions only; details handled in code)",
+      "functions": "Functions",
+      "mode": "Work mode",
+      "start": "Start",
+      "stop": "Stop",
+      "startSuccess": "Capture started with the selected functions",
+      "stopSuccess": "Capture stopped"
+    },
+    "advanced": {
+      "title": "Advanced (numeric details / raw frame, all with defaults)",
+      "template": "Pick a template",
+      "rawSend": "Send raw frame"
+    },
     "fields": {
       "mode": "Work mode",
       "funcMask": "Function mask",
@@ -164,7 +200,9 @@
     "version": "Version",
     "action": "Action",
     "noDevice": "Connect the device first",
-    "readFailed": "Failed to read version"
+    "readFailed": "Failed to read version",
+    "typeSelect": "Version type (locate)",
+    "locateHint": "Selecting a type only highlights the matching row; reading still uses one full GET_VER, no backend change."
   },
   "monitor": {
     "statusTitle": "Run Status",
@@ -185,6 +223,7 @@
     "rawMode": "RAW",
     "agcMode": "AGC",
     "selectFunction": "Select function",
+    "customValue": "Custom value",
     "clearData": "Clear data",
     "noData": "No data yet, start capture to see waveform",
     "rawGroup": "RAW channels",
@@ -203,7 +242,7 @@
     "samplingTitle": "Sampling Control",
     "mode": "Work mode",
     "funcMask": "Function mask",
-    "funcMaskHint": "hr, hrv, spo2, ecg, adt or 0x6",
+    "funcMaskHint": "Pick functions; the mask is computed automatically",
     "slotEn": "Slot enable",
     "workMode": "Set WORK_MODE",
     "start": "Start sampling",
@@ -277,7 +316,7 @@
     "started": "Capture started",
     "stopped": "Capture stopped",
     "startFailed": "Failed to start capture",
-    "maskRequired": "Function mask is required for auto start"
+    "maskRequired": "Select at least one function"
   },
   "events": {
     "title": "Event Log",
@@ -324,6 +363,7 @@
     "frameDataType": "data_type",
     "frameChannelMask": "channel_mask",
     "framePackageType": "package_type",
-    "frameDataLen": "data_len"
+    "frameDataLen": "data_len",
+    "template": "Pick a template"
   }
 }

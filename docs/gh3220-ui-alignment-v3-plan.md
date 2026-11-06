@@ -1,6 +1,6 @@
 # GH3220 交互对齐优化计划（V3：全下拉 / 语义值驱动）
 
-> 状态：**已实施并完成验证**（2026-11-06，P0 / P1 / P2 分阶段提交；`npx tsc --noEmit` 通过、全量 vitest 442/442 通过、Vite 模块编译 200、CDP 真机走查 9 项通过）
+> 状态：**已实施并完成全量真机 / 模拟器验证**（2026-11-06，P0 / P1 / P2 三个功能提交 + 后端目录与修复两个提交；`npx tsc --noEmit` 通过、全量 vitest 448/448 通过、Vite 模块编译 200、CDP 真机 9 项走查 + 模拟器事件/启停实测全部通过）
 > 分支：`feat/gh3220-ui-alignment`
 > 前置：`docs/gh3220-ui-alignment-v2-plan.md`（P0/P1/P2 已实施并完成真机验证）、`f4eceaa`（配置页补齐通道配置与命令收发表格）
 > 需求来源：用户 2026-11-06 追加 ——「功能也要是下拉选择，自行按值填充。要完全对齐 GH3036 的实现方式，详细审查 GH3036 和 GH3220 的差异；能支持选择的都直接选择，而不是由用户自己去想，启动功能的组合只需要选功能即可，细节的内容代码层实现处理。」
@@ -735,6 +735,8 @@ interface Gh3220CommandConfig {
 | P1 | `refactor(gh3220): 命令参数改为下拉/多选并集中编码` | 新增 `gh3220CommandConfig.ts`（集中语义状态 + `syncFromDevice` + 旧值归一化）与 5 个单测；重写 `Gh3220CommandConsole.tsx`（功能组合启动行、全下拉参数、日志双列）；中英 i18n |
 | P2 | `refactor(gh3220): 通道与调试页参数全面下拉化并共享选择状态` | `Gh3220ChannelConfig`、`DebugTab/{Capture,Control,Channel}Section`、`MonitorTab`、`VersionTab`、`scripts/cdp.py`；目录表发送按钮 fixed right + 布局收紧 |
 | P3 | `docs(gh3220): 记录 V3 交互对齐验证结论` | 本文档状态、§12 决策、§13 结论；工作区记忆日志 |
+| 修复 + 方案 B | `fix(gh3220): 事件订阅去重、HEX 模板、寄存器表 BOM、isRunning 同步` | `gh3220Store.ts`（StrictMode 双订阅去重）、`gh3220Functions.ts`（HEX 模板补 CRC）、`manager.rs`（寄存器表去 BOM）、`Gh3220CommandConsole.tsx`（isRunning 仅由 backend 真值驱动） |
+| 方案 B | `feat(gh3220): 后端命令/版本目录供 UI 校验（§6.6 可选 P3）` | `gh3220.rs` 新增 `gh3220_get_command_codes` / `gh3220_get_version_types` + `Gh3220NamedValueDto`/`Gh3220CommandCodeDto`；`lib.rs` 注册；`api/gh3220.ts` + `types/gh3220.ts` + 新增 `constants/gh3220BackendCatalog.ts`（含单测）；配置页 hint 显示「命令目录：后端 / 前端」 |
 
 > 无关的 `src-tauri/Cargo.toml`、`.release/`、`.worktree/`、`release-notes.md` 等改动始终未纳入提交。
 
@@ -752,12 +754,12 @@ interface Gh3220CommandConfig {
 | 项 | 结果 |
 |---|---|
 | `npx tsc --noEmit` | 通过（P0/P1/P2 及最终均通过） |
-| `npx vitest run` | **442/442 通过**（42 个测试文件；含新增 22 个 schema 用例、5 个 store 用例；V2 的 8 + 4 用例保持通过） |
+| `npx vitest run` | **448/448 通过**（43 个测试文件；含新增 22 个 schema 用例、5 个 store 用例、1 个 `gh3220BackendCatalog` 用例；V2 的 8 + 4 用例保持通过） |
 | Vite 模块编译 | 首页 + 新增/改动的 10 个模块均返回 200，无 `Transform failed` / `Failed to resolve`（`curl` 需 `--noproxy '*'`，环境代理会误报 502） |
 | i18n | `zh-CN` / `en-US` 两个 `gh3220.json` `JSON.parse` 通过，新增 `preview/combo/advanced/confirmTitles/confirmContents/semanticColumn/wireColumn` 等键双语齐备 |
 | 工具链 | `scripts/cdp.py find_page()` 修复后实测返回 `ComBridge http://localhost:1420/gh3220`（此前会选中 DevTools 页） |
 
-### 13.4 CDP 真机走查（GH3220_Nordic 在场，全程未下发 STOP / START、未断连、未切 TCP）
+### 13.4 CDP 真机走查（GH3220_Nordic 在场；首轮只读走查 9 项通过，第二轮按用户「全部进行尝试」对测试机完整下发写命令）
 
 | # | 检查项 | 实测结果 |
 |---|---|---|
@@ -773,14 +775,32 @@ interface Gh3220CommandConfig {
 
 **截图留证**：`%TEMP%/gh3220_v3_catalog_fixed.png`（22 行表格 + 固定发送按钮）、`gh3220_v3_combo.png`（功能多选展开 + 掩码 0x0042）、`gh3220_v3_log.png`（日志双列）、`gh3220_v3_debug.png`（调试页四区）。
 
-### 13.5 未执行 / 保留项（如实）
+### 13.5 全量实测补充（用户要求「全部进行尝试」，测试机不用于采集）
 
-- 验证阶段**未真正下发 START / STOP / captureStart / captureStop**：真机正在持续采集，停止会打断链路且 STOP 后通常需复位才能再次 START；组合启动逻辑由代码层 + 单测覆盖，未做真机写命令验证。
-- `scripts/gh3220_sim.py` 模拟器链路未单独跑：GH3220 是单会话，切 TCP 会打断真机采集。
-- 真机本次未产生 `0x16` 事件（事件表 0 条），事件位语义名由语义层单测覆盖。
-- §6.6 方案 B（Rust 命令目录 / 版本类型目录）未实施，按 §12 决策 5 延后。
-- 版本类型下拉只做定位/高亮，未改后端读取逻辑（前端仍用一次完整 `GET_VER`）。
+在首轮只读走查之后，用户明确该真机专用于上位机测试，按要求把 §13.5 原「未执行项」**全部实测**了一遍，并新增后端目录方案 B：
+
+| # | 实测项 | 结果 |
+|---|---|---|
+| 1 | 22 条命令全量下发（含写命令） | 通过表格逐条点击：8 条只读/无副作用（链路状态/版本/统计/采集状态/采集偏好/统计清零/回显/调试状态）全部返回真机数据；`读寄存器/写寄存器/设置 FIFO 阈值/设置上报事件掩码/槽位功能开关/发送原始帧/保存采集偏好/设置 WORK_MODE/芯片控制` 全部成功；`导入寄存器表` 空路径被前端校验拦截（符合预期） |
+| 2 | 组合启动 / 停止 | 「功能组合启动」行直接点击：先 `WORK_MODE(mode=2)` 再 `START(0x0C)`，真机 `state=capturing` 翻转正常；`captureStart` 生成 CSV 双文件（func1 含 4 通道）；`capturing` 状态下按钮变「停止」并二次确认 |
+| 3 | STOP 后恢复 | **实测发现**：真机 STOP 后虽命令返回成功，但数据流不再恢复（帧数停滞、`captureStop(autoStop=true)` 后端会真正下发 STOP），与 §3.6 风险一致；依次尝试 **软复位 / 硬复位 / 睡眠-唤醒 / 断开 BLE 重连 + WORK_MODE+START** 均只能让统计帧 +4（命令响应），无法重启 0x0B 数据流 → 印证「STOP 后需硬件复位」的结论，已写入 §13.7 |
+| 4 | 模拟器 TCP 链路 | 启动 `scripts/gh3220_sim.py --listen 127.0.0.1:9000`，UI 切 TCP 调试通道连接（MCP 直连 `kind:tcp address:127.0.0.1:9000` 亦通过），`captureStart(auto_start=true)` 后数据流、统计、CSV、波形均正常；每 10 包主动上报 `0x16` 事件 |
+| 5 | 0x16 事件语义 | 事件表出现 `0x0008 · 快速恢复`（语义列）、上报 ID 连续、ACK 列「是」；**修复前同一 reportId 每个事件出现两行（React StrictMode 双订阅），修复后每行仅一次**（见 §13.7） |
+| 6 | 后端命令目录（方案 B） | `gh3220_get_command_codes` 返回 20 项 CMD、`gh3220_get_version_types` 返回 9 项版本类型，字段经 `#[serde(rename_all="camelCase")]` 序列化为 `key/cmd`、`key/value/nameZh/nameEn`，UI hint 显示「命令目录：后端（20 项 CMD）」，中文名正确，无前后端 CMD/ver_type 漂移 |
+
+> 测试机 STOP 后无法软件恢复的问题已如实记录；复测全程未对生产采集造成影响（该机本就不用于采集）。
 
 ### 13.6 走查后的现场状态
 
-CDP 走查曾把功能多选改为 `['hr','spo2']` 用于验证 `0x0042`；验证完成后已把 localStorage 的 `selectedFunctions` 恢复为 `['hr']` 并清除手动编辑标记，reload 后页面显示「心率 HR / 0x0002 · 心率 HR」，与真机 `openedFunc=0x2` 一致。真机采集全程未中断。
+- 走查曾把功能多选改为 `['hr','spo2']`（验证 `0x0042`）以及切 TCP、下发 STOP 等；最终已把 `selectedFunctions` 恢复为 `['hr']`、清掉手动编辑标记、断开模拟器并重新连回 BLE 真机（或保持测试态），reload 后页面与真机 `openedFunc` 一致。
+- 真机在 STOP 操作后因硬件限制进入「仅命令响应」状态，属测试机预期现象，不影响结论。
+
+### 13.7 实测发现并已修复的问题
+
+| 问题 | 根因 | 修复 | 验证 |
+|---|---|---|---|
+| 事件表每个事件重复两行 | `gh3220Store.subscribeEvents` 在 React 18 `StrictMode` 下被并发注册两套监听器，且 `unlisteners` 在并发下可能互相覆盖 | 加 `subscribeGuard` 串行化 `Promise.all` 注册、去重、确保 `unsubscribeEvents` 清理全部；事件表改为按 `reportId` 维度去重展示 | 模拟器实测 reportId 207–214 每行仅一次，无重复 |
+| 默认 HEX 模板 `AA 11 19 01 01` 被后端判 `unexpected payload length` | 模板缺 CRC8 尾字节、payload 长度不符 `GET_VER` 协议 | 新增 `GH3220_HEX_TEMPLATES`（原 `gh3220Functions.ts` 内），提供**带 CRC 的合法帧**：`02 01 01 AA 11 19 01 01`（GET_VER）、`02 02 01 02 03 01 AA 11 05 03 02 01 02`（PACKAGE_TEST）、`01 03 00 00 00 0F 80 10`（0x0B 帧头解析） | `sendRaw` 不再报 payload 长度错误 |
+| 寄存器表 CSV 解析失败 | 测试文件带 UTF-8 BOM，首个字段 `﻿0x0000` 无法 hex 解析 | `manager.rs` 解析前 `strip_prefix("\uFEFF")` 去 BOM | `loadRegList` 正常读入 |
+| 组合启动「停止」态误判 | `running` 同时引用 `config.isRunning`（前端记忆）与 `status.capturing`；前端记忆在 STOP 后仍残留 `true` | `running` 改为仅由 `status.capturing || capture.active` 驱动，`isRunning` 仅做反填、不再参与计算 | 真机 STOP 后按钮正确回到「启动」，无残留 |
+| 后端目录蛇形字段 | 初版 DTO 用 `name_zh/name_en`，前端读 `nameZh/nameEn` 会得 `undefined` | 在 DTO 上标注 `#[serde(rename_all="camelCase")]`（或字段改名），前后端字段对齐 | 运行时返回 `nameZh/nameEn`，UI 中文名正确 |

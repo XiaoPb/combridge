@@ -370,3 +370,338 @@ export function formatBufferLabel(bufferId: string, lang: Gh3220Lang): string {
   if (!match) return bufferId;
   return `${bufferId} · ${getFunctionName(Number(match[1]), lang)}`;
 }
+
+/* ==========================================================================
+ * V3：语义值编解码与选项工厂
+ *
+ * 设计约定（对齐 GH3036 的 `bitMap.reduce` 范式）：
+ * - UI 状态只存语义键（'hr' / 'spo2' / 'int' / 'wakeup'），不存数值文本；
+ * - 数值编码（多选 → u32 / u16）集中在下面这些函数，组件不得自行 parse；
+ * - 未知位保留 `0x…` 占位项，保证设备回读值不丢失。
+ * ========================================================================== */
+
+/** 下拉/多选选项；`value` 一律是字符串（多选为 string[]） */
+export interface Gh3220Option {
+  value: string;
+  label: string;
+  note?: string;
+}
+
+/** 把任意 UI 原始值收敛成单个字符串（多选时取首项，仅用于非多选字段） */
+export function asText(raw: string | string[]): string {
+  return Array.isArray(raw) ? (raw[0] ?? '') : raw;
+}
+
+/** 解析数值字面量：支持 `0x` 前缀、十进制、空值兜底 */
+export function parseNumericText(text: string, fallback = 0): number {
+  const value = text.trim();
+  if (!value) return fallback;
+  const parsed = /^0x[0-9a-f]+$/i.test(value)
+    ? Number.parseInt(value.slice(2), 16)
+    : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/**
+ * 多选语义键 → u32 功能位掩码。
+ * 兼容历史别名（bp/ir/sadt_g…）、`0x…` 占位项与十进制/十六进制字面量，
+ * 与 `parseFunctionMaskText()` 共用同一张别名表，保证两种入口结果一致。
+ */
+export function encodeFunctionMask(keys: string[]): number {
+  let mask = 0;
+  for (const raw of keys) {
+    const name = raw.trim().toLowerCase();
+    if (!name) continue;
+    const bit = GH3220_FUNCTION_BIT_ALIASES[name];
+    if (bit !== undefined) {
+      mask |= 1 << bit;
+      continue;
+    }
+    if (/^0x[0-9a-f]+$/i.test(name)) {
+      const value = Number.parseInt(name.slice(2), 16);
+      if (!Number.isFinite(value)) throw new Error(`未知功能: ${raw}`);
+      mask |= value;
+      continue;
+    }
+    if (/^\d+$/.test(name)) {
+      mask |= Number.parseInt(name, 10);
+      continue;
+    }
+    throw new Error(`未知功能: ${raw}`);
+  }
+  return mask >>> 0;
+}
+
+/** 设备回读的 mask → 多选语义键；未定义的位生成 `0x…` 占位项 */
+export function decodeFunctionMask(mask: number): string[] {
+  const value = mask >>> 0;
+  const keys: string[] = [];
+  let knownMask = 0;
+  for (const info of GH3220_FUNCTION_LIST) {
+    if ((value & info.mask) !== 0) {
+      keys.push(info.key);
+      knownMask |= info.mask;
+    }
+  }
+  const unknown = (value & ~knownMask) >>> 0;
+  if (unknown !== 0) keys.push(`0x${unknown.toString(16)}`);
+  return keys;
+}
+
+/** `0x0042 · 心率 HR / 血氧 SPO2`；未知位由 formatFunctionMaskNames 兜底 */
+export function formatFunctionMaskPreview(mask: number, lang: Gh3220Lang): string {
+  const hex = `0x${(mask >>> 0).toString(16).padStart(4, '0')}`;
+  const names = formatFunctionMaskNames(mask, lang);
+  return names.length > 0 ? `${hex} · ${names.join(' / ')}` : `${hex} · ${lang === 'zh' ? '未选择功能' : 'No functions'}`;
+}
+
+/** 15 项功能多选选项（value = 语义键） */
+export function functionOptions(lang: Gh3220Lang): Gh3220Option[] {
+  return GH3220_FUNCTION_LIST.map((info) => ({
+    value: info.key,
+    label: `${lang === 'zh' ? info.nameZh : info.nameEn} ${info.abbr}`,
+  }));
+}
+
+/** 14 项事件位多选选项（value = 位掩码十进制字符串，便于直接 OR） */
+export function eventMaskOptions(lang: Gh3220Lang): Gh3220Option[] {
+  return GH3220_EVENT_LIST.map((info) => ({
+    value: String(info.bit),
+    label: `0x${info.bit.toString(16).padStart(4, '0')} · ${lang === 'zh' ? info.nameZh : info.nameEn}`,
+    note: info.note,
+  }));
+}
+
+/** 事件位多选键 → u16 掩码；未知位以 `0x…` / 十进制字符串形式保留 */
+export function encodeEventMask(keys: string[]): number {
+  let mask = 0;
+  for (const raw of keys) {
+    const name = raw.trim().toLowerCase();
+    if (!name) continue;
+    const known = GH3220_EVENT_LIST.find((info) => info.key === name || String(info.bit) === name);
+    if (known) {
+      mask |= known.bit;
+      continue;
+    }
+    if (!/^(0x[0-9a-f]+|\d+)$/i.test(name)) throw new Error(`未知事件位: ${raw}`);
+    mask |= parseNumericText(name);
+  }
+  const result = mask >>> 0;
+  if (!Number.isFinite(result) || result > 0xffff) {
+    throw new Error(`事件掩码超出 u16 范围: ${keys.join(',')}`);
+  }
+  return result;
+}
+
+/** 事件掩码 → 多选键（未知位生成 0x 占位项） */
+export function decodeEventMask(mask: number): string[] {
+  const value = mask >>> 0;
+  const keys: string[] = [];
+  let knownMask = 0;
+  for (const info of GH3220_EVENT_LIST) {
+    if ((value & info.bit) !== 0) {
+      keys.push(String(info.bit));
+      knownMask |= info.bit;
+    }
+  }
+  const unknown = (value & ~knownMask) >>> 0;
+  if (unknown !== 0) keys.push(`0x${unknown.toString(16)}`);
+  return keys;
+}
+
+export function formatEventMaskPreview(mask: number, lang: Gh3220Lang): string {
+  const hex = `0x${(mask >>> 0).toString(16).padStart(4, '0')}`;
+  const names = GH3220_EVENT_LIST.filter((info) => (mask & info.bit) !== 0).map((info) =>
+    lang === 'zh' ? info.nameZh : info.nameEn
+  );
+  const knownMask = GH3220_EVENT_LIST.reduce((acc, info) => acc | ((mask & info.bit) !== 0 ? info.bit : 0), 0);
+  const unknown = (mask & ~knownMask) >>> 0;
+  if (unknown !== 0) names.push(`0x${unknown.toString(16)}`);
+  return names.length > 0 ? `${hex} · ${names.join(' / ')}` : `${hex} · ${lang === 'zh' ? '无事件' : 'No events'}`;
+}
+
+/** 后端 `manager.rs:507-521` 的 debugStatus.kind 命名值 */
+export interface Gh3220NamedValue {
+  key: string;
+  value: number | string;
+  nameZh: string;
+  nameEn: string;
+}
+
+export const GH3220_DEBUG_STATUS_KINDS: Gh3220NamedValue[] = [
+  { key: 'int', value: 0x00, nameZh: '中断状态 int', nameEn: 'Interrupt status (int)' },
+  { key: 'rst', value: 0x01, nameZh: '复位状态 rst', nameEn: 'Reset status (rst)' },
+  { key: 'spcs', value: 0x02, nameZh: 'SPCS 状态', nameEn: 'SPCS status' },
+  { key: 'spdo', value: 0x03, nameZh: 'SPDO 状态', nameEn: 'SPDO status' },
+  { key: 'conn', value: 0x04, nameZh: '连接状态 conn', nameEn: 'Connection status (conn)' },
+  { key: 'status', value: 0x10, nameZh: '芯片总状态 status', nameEn: 'Chip status (status)' },
+];
+
+/** 后端 `manager.rs:487-497` 的芯片控制动作（key 即后端识别的字符串） */
+export const GH3220_CHIP_ACTIONS: Array<{ key: string; nameZh: string; nameEn: string; code: number }> = [
+  { key: 'wakeup', nameZh: '唤醒芯片', nameEn: 'Wake up', code: 0xc3 },
+  { key: 'sleep', nameZh: '芯片睡眠', nameEn: 'Sleep', code: 0xc4 },
+  { key: 'soft-reset', nameZh: '软复位', nameEn: 'Soft reset', code: 0xc2 },
+  { key: 'hard-reset', nameZh: '硬复位', nameEn: 'Hard reset', code: 0x5a },
+  { key: 'rx-reset', nameZh: '接收复位', nameEn: 'RX reset', code: 0x5b },
+];
+
+/** `libs/gh-uprotocol/src/lib.rs:42-52` 的 ver_type 全表（9 项） */
+export const GH3220_VERSION_TYPES: Gh3220NamedValue[] = [
+  { key: 'fw', value: 0x01, nameZh: '固件版本', nameEn: 'Firmware' },
+  { key: 'demo', value: 0x0a, nameZh: 'Demo 版本', nameEn: 'Demo' },
+  { key: 'virtual_reg', value: 0x0b, nameZh: '虚拟寄存器版本', nameEn: 'Virtual register' },
+  { key: 'bootloader', value: 0x0c, nameZh: 'Bootloader 版本', nameEn: 'Bootloader' },
+  { key: 'protocol', value: 0x0e, nameZh: '协议版本', nameEn: 'Protocol' },
+  { key: 'func_support', value: 0x0f, nameZh: '功能支持表版本', nameEn: 'Function support' },
+  { key: 'drv', value: 0x10, nameZh: '驱动版本', nameEn: 'Driver' },
+  { key: 'chip', value: 0x11, nameZh: '芯片版本', nameEn: 'Chip' },
+  { key: 'algo', value: 0x12, nameZh: '算法版本', nameEn: 'Algorithm' },
+];
+
+/** `libs/gh-uprotocol/src/lib.rs:18-38` 的 CMD 号（集中单一数据源） */
+export const GH3220_COMMAND_CODES = {
+  REG_RW: 0x03,
+  PACKAGE_TEST: 0x05,
+  NEW_STRUCT_RAWDATA: 0x0b,
+  START_CTRL: 0x0c,
+  WORK_MODE: 0x10,
+  FIFO_THR_CONFIG: 0x12,
+  REPORT_EVENT_SET: 0x13,
+  ECG_CLASSIFICATION: 0x14,
+  CHIP_EVENT_REPORT: 0x16,
+  CHIP_CTRL: 0x17,
+  GET_VER: 0x19,
+  GET_CONN_STATUS: 0x1a,
+  SWITCH_SLOT_FUNC: 0x1c,
+  GET_OPENED_FUNC: 0x25,
+  SET_ECG_CASCADE: 0x26,
+  BP_DATA_TRANS: 0x2b,
+  FUNCTION_INFO_UPDATE: 0x2c,
+  GET_MAX_LEN: 0xa0,
+  LOAD_REG_LIST: 0xa1,
+  DEBUG_STATUS: 0xa2,
+} as const;
+
+/** 常用数值档位；`custom` 由 UI 展开输入框并以 `custom:<value>` 形式存放 */
+export const GH3220_BOUNDED_PRESETS = {
+  slot: ['0', '1', '2', '3', '4', '5', '6', '7'],
+  slotEn: ['0', '1', '2', '4', '8'],
+  extra: ['0', '1', '2'],
+  fifoThr: ['0', '1', '2', '4', '8', '16', '32', '64', '128', '256', '512'],
+  idleCloseSecs: ['0', '5', '10', '30', '60', '300', '3600'],
+  count: ['1', '2', '4', '8', '16', '32', '64'],
+  sampleRate: ['5', '25', '50', '100', '200'],
+  displayDuration: ['1', '2', '5', '10', '20', '30', '60'],
+} as const;
+
+export type Gh3220PresetKey = keyof typeof GH3220_BOUNDED_PRESETS;
+
+/** 常用帧模板（选模板自动填充 HEX 输入框） */
+export const GH3220_HEX_TEMPLATES: Array<{ key: string; nameZh: string; nameEn: string; hex: string }> = [
+  { key: 'raw', nameZh: '原始帧头示例', nameEn: 'Raw frame sample', hex: 'AA 11 19 01 01' },
+  { key: 'header', nameZh: '0x0B 帧头（4 CH）', nameEn: '0x0B header (4 CH)', hex: '01 03 00 00 00 0F 80 10' },
+  { key: 'echo', nameZh: '回显测试', nameEn: 'Echo test', hex: '0102' },
+];
+
+/** 与后端 `src-tauri/src/gh3220/types.rs` 一致的默认 GATT UUID */
+export const GH3220_DEFAULT_UUIDS = {
+  service: '0000190e-0000-1000-8000-00805f9b34fb',
+  write: '00000004-0000-1000-8000-00805f9b34fb',
+  notify: '00000003-0000-1000-8000-00805f9b34fb',
+} as const;
+
+/** 后端仅允许回环地址，预置即合法值 */
+export const GH3220_TCP_ADDRESSES = ['127.0.0.1:9000', 'localhost:9000', '[::1]:9000'] as const;
+
+export const GH3220_MTU_PRESETS = ['20', '23', '64', '128', '244', '517'] as const;
+
+/** 所选功能中最大的通道数上限；无上限时默认 32（后端约束 1..32） */
+export function maxChannelsForFunctions(keys: string[]): number {
+  const limits = keys
+    .map((raw) => GH3220_FUNCTION_BIT_ALIASES[raw.trim().toLowerCase()])
+    .filter((bit): bit is number => bit !== undefined)
+    .map((bit) => GH3220_FUNCTION_MAP[bit]?.maxChannels)
+    .filter((limit): limit is number => typeof limit === 'number');
+  return Math.min(32, Math.max(1, ...(limits.length > 0 ? limits : [32])));
+}
+
+/** 通道覆盖选项：`auto` + 1..N，N 随已选功能动态变化 */
+export function channelOptions(keys: string[], lang: Gh3220Lang): Gh3220Option[] {
+  const max = maxChannelsForFunctions(keys);
+  return [
+    { value: 'auto', label: lang === 'zh' ? '自动（按帧头）' : 'Auto (from frame header)' },
+    ...Array.from({ length: max }, (_, i) => ({ value: String(i + 1), label: `${i + 1} CH` })),
+    { value: 'custom', label: lang === 'zh' ? '自定义…' : 'Custom…' },
+  ];
+}
+
+/** 生成带「自动 / 自定义…」的数值档位选项 */
+export function boundedOptions(
+  preset: Gh3220PresetKey,
+  lang: Gh3220Lang,
+  suffix = '',
+  withAuto = false
+): Gh3220Option[] {
+  const values = GH3220_BOUNDED_PRESETS[preset] as readonly string[];
+  const options: Gh3220Option[] = [];
+  if (withAuto) options.push({ value: 'auto', label: lang === 'zh' ? '自动' : 'Auto' });
+  for (const value of values) {
+    options.push({ value, label: `${value}${suffix}` });
+  }
+  options.push({ value: 'custom', label: lang === 'zh' ? '自定义…' : 'Custom…' });
+  return options;
+}
+
+/** 工作模式下拉（8 项，value 为数值字符串） */
+export function workModeOptions(lang: Gh3220Lang): Gh3220Option[] {
+  return GH3220_WORK_MODE_LIST.map((info) => ({
+    value: String(info.mode),
+    label: formatWorkModeLabel(info.mode, lang),
+  }));
+}
+
+export function boolOptions(lang: Gh3220Lang): Gh3220Option[] {
+  return [
+    { value: 'true', label: lang === 'zh' ? '是' : 'Yes' },
+    { value: 'false', label: lang === 'zh' ? '否' : 'No' },
+  ];
+}
+
+export function chipActionOptions(lang: Gh3220Lang): Gh3220Option[] {
+  return GH3220_CHIP_ACTIONS.map((item) => ({
+    value: item.key,
+    label: lang === 'zh' ? item.nameZh : item.nameEn,
+  }));
+}
+
+export function debugKindOptions(lang: Gh3220Lang): Gh3220Option[] {
+  return [
+    ...GH3220_DEBUG_STATUS_KINDS.map((item) => ({
+      value: item.key,
+      label: `0x${Number(item.value).toString(16).padStart(2, '0')} · ${lang === 'zh' ? item.nameZh : item.nameEn}`,
+    })),
+    { value: 'custom', label: lang === 'zh' ? '自定义数值…' : 'Custom value…' },
+  ];
+}
+
+export function versionTypeOptions(lang: Gh3220Lang): Gh3220Option[] {
+  return GH3220_VERSION_TYPES.map((item) => ({
+    value: `0x${Number(item.value).toString(16).padStart(2, '0')}`,
+    label: `0x${Number(item.value).toString(16).padStart(2, '0')} · ${lang === 'zh' ? item.nameZh : item.nameEn}`,
+  }));
+}
+
+/** `custom:<value>` 编码约定：把「自定义」选项的实际值读出 */
+export const CUSTOM_PREFIX = 'custom:';
+export function customValue(raw: string | string[], fallback = ''): string {
+  const text = asText(raw);
+  return text.startsWith(CUSTOM_PREFIX) ? text.slice(CUSTOM_PREFIX.length) : fallback;
+}
+export function isCustom(raw: string | string[]): boolean {
+  const text = asText(raw);
+  return text === 'custom' || text.startsWith(CUSTOM_PREFIX);
+}
+export function customOption(value: string | number): string {
+  return `${CUSTOM_PREFIX}${value}`;
+}
